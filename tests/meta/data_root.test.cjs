@@ -24,16 +24,16 @@ test('JSON の fetch は SPSP.data 経由 (SPSP.root は assets など配信フ�
   const bad = [];
   for (const f of [...jsFiles(path.join(ROOT, 'src')), ...jsFiles(path.join(ROOT, 'site'))]) {
     const src = fs.readFileSync(f, 'utf8');
-    for (const m of src.matchAll(/SPSP\.root\s*\+\s*['`](data\/|meta\.json|latest_|players|tournaments\/|history\/|news\.json|upcoming)/g)) {
+    for (const m of src.matchAll(/SPSP\.root\s*\+\s*['`](data\/|meta\.json|latest_|players|tournaments\/|history\/|upcoming)/g)) {   // news.json はフロントが持つ (2026-09-29) ので対象外
       // 例外: キャラ絵文字の表はフロント (spsp-web) が持ち、サイトと一緒に配信する (js/char_emoji.js、2026-09-28)
       if (/^SPSP\.root\s*\+\s*['`]data\/char_emoji\.json/.test(src.slice(m.index, m.index + 60))) continue;
       bad.push(path.relative(ROOT, f) + ': ' + m[0]);
     }
     for (const m of src.matchAll(/(loadMaster|loadCurrent|loadDiscriminators|loadGeo|defaultFetchers|cachedFetchers)\(SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
-    // 2026-09-28 に見落としていた形: 型注釈付きの loadGeo(/** … */ (SPSP.root))、DATA_BASE = SPSP.root、ナビの news.json
+    // 2026-09-28 に見落としていた形: 型注釈付きの loadGeo(/** … */ (SPSP.root))、DATA_BASE = SPSP.root、ナビの meta.json
     for (const m of src.matchAll(/loadGeo\([^)]*SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
     for (const m of src.matchAll(/DATA_BASE\s*=\s*SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
-    for (const m of src.matchAll(/assetPrefix\s*\+\s*['`](news\.json|meta\.json|data\/)/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
+    for (const m of src.matchAll(/assetPrefix\s*\+\s*['`](meta\.json|data\/)/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
   }
   assert.deepStrictEqual(bad, []);
 });

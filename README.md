@@ -66,6 +66,9 @@ node tests/frontend/snapshot_pages.cjs --data <deployed> --out /tmp/en --site di
 - 地域ディレクトリは地域の担当者が持つ (`site/regions/README.md`)。共通コードの変更は PR + tests。
 - `site/` の見た目を変えないリファクタは `tests/frontend/compare_with_ref.sh` で差分 0 を確認してから。
 
+## お知らせ
+サイトのお知らせ (ヘッダーのベルとお知らせページ) は `site/news.json` を編集して main に push する (サイトと一緒にデプロイされる)。2026-09-29 までは spsp_scripts 側にあった。
+
 ## ライセンス
 [SPSP Noncommercial License 1.0](LICENSE.md)。営利目的でない利用は自由。営利目的の利用と、他人が使える形でのホスティング (Web サイト・サービスとしての公開) には tosakazu の許可が要る。貢献したコードの扱いは [CONTRIBUTING.md](CONTRIBUTING.md)。
 

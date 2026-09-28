@@ -58,7 +58,7 @@ document.querySelectorAll('.filter-tab').forEach(t0 => {
   t.classList.toggle('active', t.dataset.filter === CURRENT_FILTER);
 });
 
-fetch(SPSP.data + 'news.json').then(r => r.json()).then(data => {
+fetch(SPSP.root + 'news.json').then(r => r.json()).then(data => {   // お知らせはサイトと一緒に配信 (spsp-web の site/news.json、2026-09-29 から)
   /** @type {NewsEntry[]} */
   const entries = [];
   (data.announcements || []).forEach((/** @type {NewsEntry} */ e) => entries.push({...e, type: 'announcement'}));

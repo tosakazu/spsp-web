@@ -438,7 +438,7 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
     };
     const entryWindowMs = (n) => Math.max(1, Number(n.days) || 1) * DAY_MS;
     const withinWindow = (n) => { const t = entryTs(n); return t > 0 && (nowMs - t) <= entryWindowMs(n); };
-    fetch((S.data != null ? S.data : assetPrefix) + 'news.json').then(r => r.json()).then(data => {   // データの置き場 (nightly が更新する方)
+    fetch(assetPrefix + 'news.json').then(r => r.json()).then(data => {   // お知らせはフロント (spsp-web の site/news.json) が持ち、サイトと一緒に配信する (2026-09-29)
       const today = (data.auto_news || []).filter(withinWindow);
       const ann = (data.announcements || []).filter(withinWindow);
       // 空セクションは非表示 (= ない時は出さない)

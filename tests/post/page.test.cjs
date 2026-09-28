@@ -310,11 +310,9 @@ test('シート列の定義がスキーマ (§7) どおり', () => {
     ['timestamp', 'user_id', 'user_slug', 'gamer_tag', 'char_id', 'char_name', 'status']);
 });
 
-test('GAS の資格判定データは gh-pages (公開 URL) から読む', () => {
+test('GAS の資格判定データは data.spsp.games (R2、公開 URL) から読む (2026-09-28 に gh-pages から変更。GAS は 09-29 に停止)', () => {
   const cfg = read('gas/config.gs');
-  assert.match(cfg, /DATA_BASE_URL = 'https:\/\/tosakazu\.github\.io\/spsp'/);
-  // spsp.games (検証用) を GAS からも参照しない
-  assert.ok(stripJsComments(cfg).indexOf('spsp.games') === -1);
+  assert.match(cfg, /DATA_BASE_URL = 'https:\/\/data\.spsp\.games\/jp'/);
 });
 
 test('appsscript.json が匿名アクセスの Web アプリ設定になっている', () => {
