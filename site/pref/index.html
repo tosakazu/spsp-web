@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.pref_index.title">都道府県別ランキング — SPSP</title>
+<meta name="description" content="SPSP: スマブラSP 都道府県別のプレイヤーランキング一覧。" data-i18n-attr="content:page.pref_index.description">
+<link rel="stylesheet" href="../css/site.css">
+<style>
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+  input {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  input[type="search"] { min-width: 280px; flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; background: #ffffff; color: #374151;
+    padding: 10px 8px; border-bottom: 2px solid #e5e7eb;
+    user-select: none; cursor: pointer; font-weight: 600;
+    position: sticky; top: var(--nav-height, 56px); z-index: 2;
+  }
+  th:hover { color: #dc2626; }
+  th.sortable::after { content: "↕"; opacity: 0.3; margin-left: 4px; font-size: 10px; }
+  th.sorted-asc::after { content: "↑"; opacity: 1; }
+  th.sorted-desc::after { content: "↓"; opacity: 1; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+  tr.pref-row { cursor: pointer; transition: background 0.1s; }
+  tr.pref-row:hover { background: #f9fafb; }
+  tr.pref-row td.col-name a { color: #dc2626; font-weight: 500; text-decoration: none; }
+  tr.pref-row:hover td.col-name a { text-decoration: underline; }
+
+  th.col-idx, td.col-idx {
+    width: 24px; text-align: left; color: #9ca3af; font-size: 11px;
+    font-variant-numeric: tabular-nums; padding-left: 2px; padding-right: 2px;
+  }
+  th.col-name, td.col-name { width: auto; min-width: 160px; }
+  th.col-num, td.col-num {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+    width: 110px;
+  }
+  th.col-top, td.col-top { width: auto; min-width: 200px; color: #374151; }
+  td.col-top a { color: #111827; text-decoration: none; }
+  td.col-top a:hover { color: #dc2626; text-decoration: underline; }
+  td.col-top .top-rank { color: #9ca3af; font-size: 11px; margin-left: 4px; }
+
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    th, td { padding: 8px 6px; font-size: 12px; }
+    th.col-idx, td.col-idx { width: 16px; padding-left: 0; padding-right: 3px; }
+    th.col-name, td.col-name { min-width: 0; width: auto; }
+    th.col-num, td.col-num { width: 56px; }
+    th.col-top, td.col-top { min-width: 100px; }
+    th { position: static; }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<div class="header">
+  <h1 data-i18n="pref_ranking.title">都道府県別ランキング</h1>
+  <p class="subtitle" data-i18n="pref_list.subtitle">居住地（都道府県）別のプレイヤーランキング</p>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="都道府県名で検索…" autocomplete="off" data-i18n-attr="placeholder:pref_list.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="preftable">
+    <thead>
+      <tr>
+        <th class="col-idx"></th>
+        <th class="col-name sortable" data-sort="name" data-i18n="pref_list.col.pref">都道府県</th>
+        <th class="col-num sortable" data-sort="n" data-i18n="common.col.count">人数</th>
+        <th class="col-top sortable sorted-asc" data-sort="top_rank" data-i18n="common.col.top">全一</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="4" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/pref_index.js"></script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.local_index.title">ローカルランキング — SPSP</title>
+<meta name="description" content="SPSP のローカルランキング: スマブラSP の大会シリーズごとに参加者集合内での順位を確認できる。" data-i18n-attr="content:page.local_index.description">
+<link rel="canonical" href="https://tosakazu.github.io/spsp/local/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:title" content="SPSP ローカルランキング" data-i18n-attr="content:page.local_index.og_title">
+<meta property="og:description" content="大会シリーズごとの参加者ローカルランキング" data-i18n-attr="content:page.local_index.og_description">
+<meta property="og:url" content="https://tosakazu.github.io/spsp/local/">
+<link rel="stylesheet" href="../css/site.css">
+<style>
+
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0;
+  }
+  input, button, select {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  input[type="search"] { min-width: 280px; flex: 1; }
+  button { cursor: pointer; }
+  button:hover { background: #f3f4f6; border-color: #dc2626; }
+
+  .filter-chips {
+    display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px;
+  }
+  .chip {
+    padding: 4px 10px; border-radius: 14px; font-size: 11px;
+    background: #f3f4f6; color: #6b7280; cursor: pointer; user-select: none;
+    border: 1px solid transparent;
+  }
+  .chip:hover { background: #e5e7eb; color: #111827; }
+  .chip.active { background: #dc2626; color: #fff; border-color: #dc2626; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; background: #ffffff; color: #374151;
+    padding: 10px 8px; border-bottom: 2px solid #e5e7eb;
+    user-select: none; cursor: pointer; font-weight: 600;
+    position: sticky; top: 56px; z-index: 2;
+  }
+  th:hover { color: #dc2626; }
+  th.sortable::after { content: "↕"; opacity: 0.3; margin-left: 4px; font-size: 10px; }
+  th.sorted-asc::after { content: "↑"; opacity: 1; }
+  th.sorted-desc::after { content: "↓"; opacity: 1; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+
+  tr.series-row { cursor: pointer; transition: background 0.1s; }
+  tr.series-row:hover { background: #f9fafb; }
+  tr.series-row td.col-name a { color: #dc2626; font-weight: 500; text-decoration: none; }
+  tr.series-row:hover td.col-name a { text-decoration: underline; }
+
+  th.col-name, td.col-name { width: auto; min-width: 240px; }
+  th.col-num, td.col-num {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+    width: 90px;
+  }
+  th.col-date, td.col-date { width: 110px; font-variant-numeric: tabular-nums; }
+  th.col-tags, td.col-tags { width: 140px; }
+
+  .tag {
+    display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 8px;
+    margin-right: 4px;
+  }
+  .tag-uchi { background: rgba(168, 85, 247, 0.12); color: #6b21a8; }
+  .tag-special { background: rgba(236, 72, 153, 0.10); color: #be185d; }
+  .tag-restr { background: rgba(217, 119, 6, 0.10); color: #d97706; }
+  .tag-allsmall { background: rgba(107, 114, 128, 0.12); color: #4b5563; }
+
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  /* Mobile */
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    .controls { gap: 6px; }
+    input[type="search"] { min-width: 0; width: 100%; flex: 1 1 100%; font-size: 14px; padding: 8px 10px; }
+    table, thead, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tr.series-row {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+      padding: 10px 8px; border-bottom: 1px solid #f3f4f6;
+    }
+    tr.series-row td { padding: 0; border: none; min-width: 0; text-align: left; }
+    tr.series-row td.col-name {
+      flex: 1 1 100%; font-size: 14px; font-weight: 500; word-break: break-all;
+    }
+    tr.series-row td.col-tags {
+      flex: 0 0 auto; order: 2; margin-left: auto; text-align: right;
+    }
+    tr.series-row td.col-date,
+    tr.series-row td.col-num {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280; white-space: nowrap;
+    }
+    tr.series-row td.col-date::before { content: "最新: "; color: #9ca3af; }
+    tr.series-row td.col-num:nth-child(3)::before { content: "回数: "; color: #9ca3af; }
+    tr.series-row td.col-num:nth-child(4)::before { content: "平均: "; color: #9ca3af; }
+    tr.series-row td.col-num:nth-child(5)::before { content: "参加: "; color: #9ca3af; }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<div class="header">
+  <h1 data-i18n="local_ranking.title">ローカルランキング</h1>
+  <p class="subtitle" data-i18n="local_list.subtitle">大会シリーズ別のローカルランキング</p>
+
+  <div class="filter-chips" id="filter-chips">
+    <span class="chip active" data-filter="all" data-i18n="common.all">すべて</span>
+    <span class="chip" data-filter="big" data-i18n="local_list.chip.big">大型 (avg≥80)</span>
+    <span class="chip" data-filter="mid" data-i18n="local_list.chip.mid">中型 (30-79)</span>
+    <span class="chip" data-filter="small" data-i18n="local_list.chip.small">小規模 (10-29)</span>
+    <span class="chip" data-filter="mini" data-i18n="local_list.chip.mini">ミニ (avg&lt;10)</span>
+    <span class="chip" data-filter="uchi" data-i18n="tags.uchi">身内</span>
+    <span class="chip" data-filter="special" data-i18n="tags.special">特殊ルール</span>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="シリーズ名で検索…" autocomplete="off" data-i18n-attr="placeholder:local_list.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="seriestable">
+    <thead>
+      <tr>
+        <th class="col-name sortable" data-sort="name" data-i18n="local_list.col.name">シリーズ名</th>
+        <th class="col-date sortable sorted-desc" data-sort="last_date" data-i18n="local_list.col.last_date">最新開催</th>
+        <th class="col-num sortable" data-sort="tour_count" data-i18n="local_list.col.tour_count">累計回数</th>
+        <th class="col-num sortable" data-sort="avg_entrants" data-i18n="local_list.col.avg_entrants">平均参加</th>
+        <th class="col-num sortable" data-sort="participant_count" data-i18n="local_list.col.participants">参加者数</th>
+        <th class="col-tags" data-i18n="common.col.tags">タグ</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="6" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/local_index.js"></script>
+</body>
+</html>

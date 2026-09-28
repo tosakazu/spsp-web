@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.pref_ranking.title">都道府県別ランキング — SPSP</title>
+<meta name="description" content="SPSP 都道府県別のプレイヤーランキング — 居住地ごとの順位。" data-i18n-attr="content:page.pref_ranking.description">
+<link rel="stylesheet" href="../ranking-table.css">
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<link rel="stylesheet" href="../css/site.css">
+<link rel="stylesheet" href="../css/detail.css">
+<style>
+
+  input { padding: 8px 12px; border: 1px solid #e5e7eb; background: #fff; color: #111827; border-radius: 6px; font-size: 13px; font-family: inherit; }
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  /* === Detail panel (大会別 / 直接対決) — c/ranking.html と同期 === */
+  .h2h-opp { border: 1px solid #f3f4f6; border-radius: 6px; padding: 8px 10px; background: #fafafa; transition: background 0.1s, border-color 0.1s; }
+  @media (max-width: 720px) {
+    .method-tabs { padding: 2px; gap: 2px; }
+  }
+  /* 展開行の大会タグ (player-detail.js が出す。index.html と同じ) */
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="header">
+  <h1 id="title-h1" data-i18n="pref_ranking.title">都道府県別ランキング</h1>
+
+  <div class="method-tabs" id="method-tabs">
+    <div class="method-tab active" data-method="ensemble" data-i18n="ranking.tab.ensemble">総合評価<span class="tab-desc" data-i18n="ranking.tab.ensemble_desc">推奨</span></div>
+    <div class="method-tab" data-method="tjpr" data-i18n="ranking.tab.tjpr">順位評価<span class="tab-desc" data-i18n="ranking.tab.tjpr_desc_short">大会順位ベース</span></div>
+    <div class="method-tab" data-method="bt_gated" data-i18n="ranking.tab.bt">直対評価<span class="tab-desc" data-i18n="ranking.tab.bt_desc_short">直接対決ベース</span></div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="プレイヤー名 / UID で検索…" autocomplete="off" data-i18n-attr="placeholder:ranking.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="ranktable">
+    <tbody id="tbody">
+      <tr><td colspan="11" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/pref_ranking.js"></script>
+</body>
+</html>

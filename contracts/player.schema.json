@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spsp.games/contracts/player.schema.json",
+  "title": "SPSP player record (players/<uid>.json)",
+  "description": "ビルド (spsp_scripts spsp/output.py build_detail_record → split_output) が出す選手 1 人の JSON のうち、フロントが読む部分の契約。ここに無いキーは自由 (additionalProperties: true) だが、ここにあるものは形を変えない。型は types/contracts.d.ts と対応 (tests/meta/contracts.test.cjs が実データと fixture を検証する)。",
+  "type": "object",
+  "required": [
+    "user_id",
+    "display",
+    "achievements",
+    "dynamic_badges",
+    "characters"
+  ],
+  "properties": {
+    "user_id": {
+      "type": "integer",
+      "description": "start.gg user id"
+    },
+    "display": {
+      "type": "string",
+      "description": "表示名 (gamerTag)"
+    },
+    "startgg_discriminator": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "start.gg の discriminator (選手 URL ?d=)"
+    },
+    "country": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "country_ja": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "achievements": {
+      "type": "array",
+      "description": "実績。priority 降順。表示は js/achievements.js (kind/params → 辞書)",
+      "items": {
+        "$ref": "#/$defs/achievement"
+      }
+    },
+    "dynamic_badges": {
+      "type": "array",
+      "description": "直近の動向 (登り調子など)。priority は無い",
+      "items": {
+        "$ref": "#/$defs/dynamicBadge"
+      }
+    },
+    "characters": {
+      "type": "array",
+      "description": "使用キャラ (主→副の順)。name は日本語 (表示は js/chars.js の char.<id> 辞書)",
+      "items": {
+        "$ref": "#/$defs/character"
+      }
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "scores": {
+      "type": "object"
+    },
+    "radar": {
+      "type": "object"
+    },
+    "tournaments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tournamentEntry"
+      }
+    },
+    "recent_matches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/matchEntry"
+      }
+    },
+    "top_tours": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/topTour"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "badgeBase": {
+      "type": "object",
+      "required": [
+        "label",
+        "cls"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "ビルドが組んだ日本語の文言 (kind が無い / 辞書に無いときの表示)"
+        },
+        "cls": {
+          "type": "string",
+          "enum": [
+            "",
+            "gold",
+            "silver",
+            "bronze",
+            "blue",
+            "green"
+          ],
+          "description": "badge の色クラス"
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "kind": {
+      "type": "string",
+      "description": "何の実績か (spsp/score.py と js/achievements.js の契約)",
+      "enum": [
+        "peak_rank",
+        "peak_tier",
+        "climb",
+        "uf",
+        "spr",
+        "losers_run",
+        "tours",
+        "matches",
+        "wins",
+        "same_opp",
+        "tour_series",
+        "tour",
+        "trend"
+      ]
+    },
+    "achievement": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/badgeBase"
+        },
+        {
+          "required": [
+            "priority"
+          ],
+          "properties": {
+            "priority": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/kindParams"
+        }
+      ]
+    },
+    "dynamicBadge": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/badgeBase"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "trend"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/kindParams"
+        }
+      ]
+    },
+    "kindParams": {
+      "description": "kind ごとの params の形 (kind が無ければ何も要求しない)",
+      "if": {
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "params"
+        ],
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "peak_rank"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "top"
+                ],
+                "properties": {
+                  "top": {
+                    "enum": [
+                      1,
+                      2,
+                      3,
+                      10,
+                      50,
+                      100,
+                      500,
+                      1000
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "peak_tier"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "lv",
+                  "tier"
+                ],
+                "properties": {
+                  "lv": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "tier": {
+                    "enum": [
+                      "crown",
+                      "gold",
+                      "silver",
+                      "bronze",
+                      "plus",
+                      "base"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "climb"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "n"
+                ],
+                "properties": {
+                  "n": {
+                    "enum": [
+                      50,
+                      100,
+                      200,
+                      500,
+                      1000
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "uf",
+                  "spr",
+                  "losers_run"
+                ]
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "v"
+                ],
+                "properties": {
+                  "v": {
+                    "type": "integer",
+                    "minimum": 5
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "tours"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "n"
+                ],
+                "properties": {
+                  "n": {
+                    "enum": [
+                      20,
+                      50,
+                      100,
+                      300,
+                      500
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "matches",
+                  "wins",
+                  "same_opp"
+                ]
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "n"
+                ],
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "tour_series"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "series",
+                  "bucket",
+                  "cls",
+                  "count"
+                ],
+                "properties": {
+                  "series": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "$ref": "#/$defs/bucket"
+                  },
+                  "cls": {
+                    "$ref": "#/$defs/classCode"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "tour"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "bucket",
+                  "cls"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "$ref": "#/$defs/bucket"
+                  },
+                  "cls": {
+                    "$ref": "#/$defs/classCode"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "trend"
+              },
+              "params": {
+                "type": "object",
+                "required": [
+                  "days",
+                  "n",
+                  "surge"
+                ],
+                "properties": {
+                  "days": {
+                    "enum": [
+                      30,
+                      90,
+                      180
+                    ]
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "surge": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "bucket": {
+      "enum": [
+        "win",
+        "2nd",
+        "3rd",
+        "4th",
+        "5th",
+        "top8",
+        "top16",
+        "top32",
+        "top64"
+      ]
+    },
+    "classCode": {
+      "enum": [
+        "B",
+        "C",
+        "D",
+        "E",
+        "casual",
+        null
+      ]
+    },
+    "character": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "start.gg character id (char_emoji.json / character_index.json / 辞書 char.<id> のキー)"
+        },
+        "name": {
+          "type": "string",
+          "description": "日本語名 (表示の fallback)"
+        },
+        "pct": {
+          "type": "number",
+          "description": "使用率。本人申告 (投票) 由来のキャラには無い"
+        },
+        "n": {
+          "type": "integer"
+        },
+        "games": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "src": {
+          "type": "string",
+          "description": "由来 (投票由来など)"
+        }
+      },
+      "additionalProperties": true
+    },
+    "tag": {
+      "type": "string",
+      "enum": [
+        "weekend",
+        "weekend_real",
+        "smapa",
+        "pre",
+        "gf_missing",
+        "awaiting_resume",
+        "restricted",
+        "lower_class",
+        "uchi",
+        "special_rules",
+        "dq"
+      ],
+      "description": "大会のタグ (is_* フラグの名前から is_ を取ったもの。ビルド feat/output-ids から。順序はこの enum の順)"
+    },
+    "tournamentEntry": {
+      "type": "object",
+      "required": [
+        "date"
+      ],
+      "properties": {
+        "event_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "クラス bracket の仮想大会などは null"
+        },
+        "date": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tag"
+          },
+          "description": "無ければ is_* フラグを見る (js/tags.js flag())"
+        }
+      },
+      "additionalProperties": true
+    },
+    "matchEntry": {
+      "type": "object",
+      "properties": {
+        "global_bracket_label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bracket_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "start.gg の phase bracket type (ROUND_ROBIN / SWISS / DOUBLE_ELIMINATION …)。global_bracket_label が日本語のカテゴリ名のとき js/match.js が辞書で出す"
+        }
+      },
+      "additionalProperties": true
+    },
+    "topTour": {
+      "type": "object",
+      "properties": {
+        "series": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "series_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "series の slug (安定 id。URL キーの候補、§6-4 未決)"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

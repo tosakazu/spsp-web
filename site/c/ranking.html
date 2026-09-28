@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.c_ranking.title">使い手ランキング — SPSP</title>
+<meta name="description" content="SPSP メインキャラ別の使い手ランキング — 特定キャラを主に使うプレイヤーの順位。" data-i18n-attr="content:page.c_ranking.description">
+<link rel="canonical" href="https://tosakazu.github.io/spsp/c/ranking.html">
+<link rel="stylesheet" href="../ranking-table.css">
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<link rel="stylesheet" href="../css/site.css">
+<link rel="stylesheet" href="../css/detail.css">
+<style>
+
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: #6b7280;
+    margin-bottom: 12px;
+  }
+  .meta-row b { color: #111827; font-weight: 600; margin-right: 4px; }
+
+  input, button {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  button { cursor: pointer; }
+  button:hover { background: #f3f4f6; border-color: #dc2626; }
+
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+  .share-icon-btn:hover { background: #fef2f2 !important; color: #dc2626 !important; border-color: #dc2626 !important; }
+
+  /* === Detail panel (大会別 / 直接対決) — local/ranking.html と同期 === */
+  /* H2H section */
+  .h2h-opp {
+    border: 1px solid #f3f4f6; border-radius: 6px;
+    padding: 8px 10px; background: #fafafa;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  /* tour-table / breakdown-table desktop */
+  #ranktable .tour-table tr.tour-main-row td { border-bottom: none; }
+  .tour-table tr.tour-main-row, .tour-table tr.tour-opp-row { transition: background 0.1s; }
+  .tour-table tr.tour-main-row:hover,
+  .tour-table tr.tour-main-row:hover + tr.tour-opp-row,
+  .tour-table tr.tour-opp-row:hover,
+  .tour-table tr.tour-main-row:has(+ tr.tour-opp-row:hover) {
+    background: #eef2f6 !important;
+  }
+  .tour-table tr.tour-main-row.counted:hover,
+  .tour-table tr.tour-main-row.counted:hover + tr.tour-opp-row,
+  .tour-table tr.tour-opp-row.counted:hover,
+  .tour-table tr.tour-main-row.counted:has(+ tr.tour-opp-row.counted:hover) {
+    background: rgba(220, 38, 38, 0.07) !important;
+  }
+  .tour-table tr.extra-row.hidden-row { display: none !important; }
+
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    .method-tabs { padding: 2px; gap: 2px; }
+
+    .detail-row .breakdown-table { display: table; table-layout: auto; width: 100%; }
+    .detail-row .breakdown-table thead { display: table-header-group; }
+    .detail-row .breakdown-table tbody { display: table-row-group; }
+    .detail-row .breakdown-table tfoot { display: table-footer-group; }
+    .detail-row .breakdown-table tr { display: table-row; }
+    .detail-row .breakdown-table td,
+    .detail-row .breakdown-table th { display: table-cell; }
+
+    .detail-explain { padding: 8px 10px; font-size: 12px; line-height: 1.55; word-wrap: break-word; }
+    .detail-section { margin-bottom: 16px; box-sizing: border-box; max-width: 100%; }
+    .detail-section h4 { font-size: 12px; }
+
+    .hscroll { overflow-x: visible; max-width: 100%; }
+    .tour-table { display: block !important; min-width: 0; font-size: 12px; }
+    .tour-table thead { display: none !important; }
+    .tour-table tbody { display: block !important; }
+    .tour-table tr {
+      display: grid !important;
+      grid-template-columns: auto auto auto 1fr auto auto;
+      column-gap: 0;
+      row-gap: 3px;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: #f9fafb;
+      border-radius: 6px;
+      border: 1px solid #f3f4f6;
+      align-items: baseline;
+    }
+    .tour-table td { padding: 0 !important; border: none; font-size: 11px; color: #374151; line-height: 1.3; min-width: 0; }
+    .tour-table td:nth-child(1) { grid-column: 1; grid-row: 1; color: #dc2626; font-weight: 500; font-size: 11px; margin-right: 8px; }
+    .tour-table td:nth-child(5) { grid-column: 2; grid-row: 1; margin-right: 4px; }
+    .tour-table td:nth-child(6) { grid-column: 3; grid-row: 1; }
+    .tour-table td:nth-child(2) {
+      grid-column: 1 / 5; grid-row: 2;
+      font-size: 12px; word-break: break-word; line-height: 1.35;
+    }
+    .tour-table td:nth-child(3) {
+      grid-column: 5; grid-row: 2;
+      font-size: 14px; font-weight: 700; color: #111827; text-align: right;
+    }
+    .tour-table td:nth-child(4) {
+      grid-column: 6; grid-row: 2;
+      font-size: 11px; color: #6b7280;
+    }
+    .tour-table td:nth-child(7) {
+      grid-column: 1 / 4; grid-row: 3;
+      font-size: 14px; font-weight: 700; color: #dc2626; margin-top: 3px;
+      text-align: left;
+    }
+    .tour-table td:nth-child(8) {
+      grid-column: 4 / 7; grid-row: 3;
+      font-size: 14px; font-weight: 700; color: #9ca3af; margin-top: 3px;
+      text-align: right;
+    }
+    .tour-table td:nth-child(8).pos { color: #16a34a; }
+    .tour-table td:nth-child(8).neg { color: #2563eb; }
+    .tour-table td:nth-child(4)::before { content: "/"; color: #9ca3af; }
+    .tour-table td:nth-child(7)::before { content: "順位評価 "; color: #9ca3af; font-size: 10px; font-weight: 400; margin-right: 2px; }
+    .tour-table td:nth-child(8)::before { content: "直対評価 "; color: #9ca3af; font-size: 10px; font-weight: 400; margin-right: 2px; }
+
+    .tour-table tr.tour-main-row {
+      margin-bottom: 0 !important;
+      border-radius: 6px 6px 0 0 !important;
+      border-bottom: none !important;
+    }
+    .tour-table tr.tour-opp-row {
+      display: block !important;
+      grid-template-columns: none !important;
+      border-top: none !important;
+      border-radius: 0 0 6px 6px !important;
+      padding: 0 8px 6px !important;
+      margin: 0 0 4px 0 !important;
+    }
+    .tour-table tr.tour-opp-row td {
+      display: block !important;
+      padding: 0 !important;
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+    .tour-table tr.tour-opp-row td::before { content: none !important; }
+
+    .breakdown-table { min-width: 0; max-width: 100% !important; width: 100%; }
+    .breakdown-table th, .breakdown-table td { white-space: normal; font-size: 11px; }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <h1 id="title-h1" style="margin:0" data-i18n="ranking.title_placeholder">ランキング</h1>
+    <button class="share-icon-btn" id="share-icon-btn" title="URL を共有" aria-label="URL を共有" data-i18n-attr="title:common.share_url,aria-label:common.share_url"
+      style="background:#fff;border:1px solid #e5e7eb;color:#6b7280;border-radius:8px;padding:6px 8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;transition:all 0.15s">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:block">
+        <circle cx="18" cy="5" r="3"></circle>
+        <circle cx="6" cy="12" r="3"></circle>
+        <circle cx="18" cy="19" r="3"></circle>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+      </svg>
+    </button>
+  </div>
+
+  <div class="method-tabs" id="method-tabs">
+    <div class="method-tab active" data-method="ensemble" data-i18n="ranking.tab.ensemble">総合評価<span class="tab-desc" data-i18n="ranking.tab.ensemble_desc">推奨</span></div>
+    <div class="method-tab" data-method="tjpr" data-i18n="ranking.tab.tjpr">順位評価<span class="tab-desc" data-i18n="ranking.tab.tjpr_desc_short">大会順位ベース</span></div>
+    <div class="method-tab" data-method="bt_gated" data-i18n="ranking.tab.bt">直対評価<span class="tab-desc" data-i18n="ranking.tab.bt_desc_short">直接対決ベース</span></div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="プレイヤー名 / UID で検索…" autocomplete="off" data-i18n-attr="placeholder:ranking.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="ranktable">
+    <tbody id="tbody">
+      <tr><td colspan="11" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/c_ranking.js"></script>
+</body>
+</html>

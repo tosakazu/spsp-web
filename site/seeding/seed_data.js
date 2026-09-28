@@ -1,0 +1,407 @@
+// seed_data.js — シード被り回避の「データ取得・集計」層。
+//   - fetch は行うが DOM には触れない。fetchPlayer / fetchPrefs / fetchGeo は注入可能（テスト・別環境用）。
+//   - 地域まとめ (南関東・京阪神) は site/data/geo.json の seed_groups から (setGeoCatalog / ensureGeoCatalog)。
+//   - 出力は seed_optimizer.optimize() の入力データ部（prefByUid / prefCounts / recentPair / recentMeta）。
+// 設計: docs/seed_collision_avoidance.md §3
+//
+// フォールバック方針（ユーザー合意済みのみ）:
+//   - 都道府県不明 → 地域罰則 0（prefByUid に載らない）。
+//   - 選手 JSON が DB 未登録(404) → 対戦履歴なし扱い（= 罰則 0）。これは「データが無い」事実であり
+//     黙った劣化ではない。呼び出し側に missing として返し UI で明示する。
+//   - 通信エラー(404 以外) → errors に積んで返す。黙ってスキップしない。
+import SPSPI18n from '../js/i18n.js';
+
+const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
+
+  const EPOCH_DAYS = 1 / 86400000;
+  // 'YYYY-MM-DD' → epoch days（UTC基準, 整数）。
+  function dateToDays(iso) {
+    const t = Date.parse(iso + 'T00:00:00Z');
+    return Number.isFinite(t) ? Math.floor(t * EPOCH_DAYS) : null;
+  }
+
+  function sizeWeightFn(kind) {
+    switch (kind) {
+      case 'sqrt': return (n) => Math.sqrt(Math.max(n, 2));
+      case 'linear': return (n) => Math.max(n, 2);
+      case 'log2':
+      default: return (n) => Math.log2(Math.max(n, 2));
+    }
+  }
+
+  // 日付減衰: 制御点 [[日, 重み], ...] の折れ線（線形補間）。
+  //   Δ ≤ 最初の点 → その重み（=1）。Δ ≥ 最後の点 → 0。間は線形補間。
+  //   既定で 0:1 / 30:0.9 / 91:0.7 / 182.5:0.5 / 273.75:0.12 / 365:0（1ヶ月・3ヶ月・半年に差、半年以降は急減）。
+  function recentDecayFn(points) {
+    const pts = (points && points.length ? points : [[0, 1], [365, 0]]).slice()
+      .map((p) => [Number(p[0]), Number(p[1])]).sort((a, b) => a[0] - b[0]);
+    return (delta) => {
+      if (delta <= pts[0][0]) return pts[0][1];
+      for (let i = 1; i < pts.length; i++) {
+        if (delta <= pts[i][0]) {
+          const d0 = pts[i - 1][0], w0 = pts[i - 1][1], d1 = pts[i][0], w1 = pts[i][1];
+          return w0 + (w1 - w0) * ((delta - d0) / Math.max(1e-9, d1 - d0));
+        }
+      }
+      return 0; // 最後の点より後は0
+    };
+  }
+
+  function pairKey(a, b) { return a < b ? a + ':' + b : b + ':' + a; }
+
+  // ── シリーズ判定 ────────────────────────────────────────────────
+  // シリーズ名は大会名から番号・サブタイトルを剥がして作られる (サーバ側 v3/v4/meta.py)。
+  // ブラウザ側でその剥がし規則を再実装すると二重管理で必ずズレるので、やらない。
+  // 代わりに tournaments.json (event_id → series) を正解表として使い、
+  //   1) 取り込み済みの大会は event_id で正確に引く
+  //   2) 未取り込み (= これから開催する大会) は「大会名に含まれる最長の既知シリーズ名」で推定する
+  // 2 は既存 5,399 大会での照合で 93.3% 一致。外れる余地があるので UI で判定結果を出し、
+  // 手で選び直せるようにしてある (黙って間違ったシリーズで罰則をかけない)。
+  const SERIES_QUOTES = '"\'‘’“”＂＇′″';
+  function normalizeSeriesName(name) {
+    let s = String(name == null ? '' : name);
+    if (s.normalize) s = s.normalize('NFKC');
+    let out = '';
+    for (const ch of s) { if (SERIES_QUOTES.indexOf(ch) < 0) out += ch; }
+    return out.replace(/[\s　]/g, '').toLowerCase();
+  }
+
+  // tournaments.json → { seriesOf: {event_id: series}, seriesNames: [...] }
+  function buildSeriesIndex(tournamentsJson) {
+    const list = (tournamentsJson && tournamentsJson.tournaments) || [];
+    const seriesOf = {};
+    const names = new Set();
+    for (const t of list) {
+      if (!t || t.event_id == null || !t.series) continue;
+      seriesOf[t.event_id] = t.series;
+      names.add(t.series);
+    }
+    // 長い名前を先に見る (「極冠ダブルス」を「極冠」より先に当てる)。
+    const seriesNames = Array.from(names).sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+    return { seriesOf, seriesNames };
+  }
+
+  // 対象大会のシリーズを決める。eventId が正解表にあればそれ、無ければ名前から推定。
+  // 戻り値 { series, source: 'event_id'|'name'|null }。判定できなければ series=null。
+  function detectSeries(index, eventId, tournamentName) {
+    if (!index) return { series: null, source: null };
+    if (eventId != null && index.seriesOf[eventId]) {
+      return { series: index.seriesOf[eventId], source: 'event_id' };
+    }
+    const nm = normalizeSeriesName(tournamentName);
+    if (!nm) return { series: null, source: null };
+    for (const s of index.seriesNames) {
+      const n = normalizeSeriesName(s);
+      if (n.length >= 2 && nm.indexOf(n) >= 0) return { series: s, source: 'name' };
+    }
+    return { series: null, source: null };
+  }
+
+  // ── 地理単位のカタログ (site/data/geo.json)。定義元は smash_database の scripts/<地域>/geo.py (契約 = docs/geo_json.md) ──
+  // 被り回避の地域まとめ (seed_groups: 南関東・京阪神 …) はここから読む。フロントに県名を書かない。
+  let GEO = null;
+  function setGeoCatalog(cat) {
+    if (!cat || !Array.isArray(cat.units) || !Array.isArray(cat.seed_groups)) {
+      throw new Error('geo.json の形が違います (units / seed_groups が無い)');
+    }
+    GEO = cat;
+    return GEO;
+  }
+  function geoCatalog() { return GEO; }
+  // 未読込なら fetchers.fetchGeo で読む (2 回目以降はキャッシュ)。無ければ throw (黙って空のまとめにしない)。
+  async function ensureGeoCatalog(fetchers) {
+    if (GEO) return GEO;
+    if (!fetchers || typeof fetchers.fetchGeo !== 'function') throw new Error('geo.json 未読込 (fetchGeo が無い)');
+    return setGeoCatalog(await fetchers.fetchGeo());
+  }
+  // まとめの定義 (geo.json の seed_groups: {id, name: {ja, en}, units, default})。未読込なら空
+  function regionGroupDefs() { return GEO ? GEO.seed_groups : []; }
+  // まとめの表示名 (集計・レポートで地域名として出る)。表示言語のもの
+  function regionGroupLabel(sg) { return SPSPI18n.pick(sg.name) || sg.id; }
+
+  // トグル指定 { <seed_group id>: bool } からグルーピング表 { 地域単位 → まとめ名 } を組み立てる。
+  // 指定の無いまとめは geo.json の default に従う。geo.json 未読込なら throw。
+  function buildRegionGroups(opts) {
+    opts = opts || {};
+    if (!GEO) throw new Error('geo.json 未読込: SeedData.setGeoCatalog / ensureGeoCatalog を先に呼ぶ');
+    const g = {};
+    for (const sg of GEO.seed_groups) {
+      const on = Object.prototype.hasOwnProperty.call(opts, sg.id) ? !!opts[sg.id] : !!sg.default;
+      if (!on) continue;
+      const label = regionGroupLabel(sg);
+      for (const u of sg.units) g[u] = label;
+    }
+    return g;
+  }
+
+  const DEFAULT_DATA_PARAMS = {
+    // 日付減衰の制御点 [[日, 重み], ...]（線形補間。最後の点より後は0）。
+    // 1ヶ月まではフル(1.0)＝直後の再戦を徹底回避、3ヶ月0.5/半年0.25/1年0。
+    recentDecayPoints: [[0, 1], [30, 1], [91, 0.5], [182.5, 0.25], [365, 0]],
+    sizeWeight: 'log2',          // 大会規模重み
+    todayDays: null,             // null なら実行時の現在日
+    // ペア内集計: 同じ2人が複数回対戦した分の罰則をどうまとめるか。
+    //   'max'(既定): そのペアの最も重い1試合だけ採用（対戦回数に依らず横並び）。
+    //   'sum'       : 全対戦の罰則を合算（頻度の高い常連カードほど重く＝強く分離）。
+    recentAgg: 'max',
+    // true なら平日扱いの大会 (is_weekend=false = 平日開催 + 実質平日 + プレ大会) での
+    // 対戦を直近対戦罰則の集計から除外する。休日/平日の判定は出場者全員の
+    // tournaments[] から作る event_id→is_weekend 表による。表に無い大会（is_weekend
+    // 不明）は除外しない（= 保守的に再対戦回避の対象に残す。件数は meta で明示）。
+    excludeWeekday: false,
+    // 同シリーズ再マッチ罰則の対象シリーズ名。null なら集計しない (seriesPair は空)。
+    // 「今回シードする大会と同じシリーズで既に当たっているペア」を別枠で集計する。
+    targetSeries: null,
+  };
+
+  // ── デフォルト fetch（ブラウザ用）。prefix は seed ページからの相対パス基準。
+  function defaultFetchers(prefix) {
+    prefix = prefix || ((typeof SPSP !== 'undefined' && SPSP.data != null) ? SPSP.data : '../');   // JSON の置き場 (config.dataRoot があれば別ホスト)
+    return {
+      fetchPlayer: async (uid) => {
+        const res = await fetch(`${prefix}players/${uid}.json`);
+        if (res.status === 404) return { __missing: true };
+        if (!res.ok) throw new Error(`players/${uid}.json HTTP ${res.status}`);
+        return res.json();
+      },
+      // 地理単位のカタログ (都道府県の一覧・地域まとめ)。docs/geo_json.md
+      fetchGeo: async () => {
+        const res = await fetch(`${prefix}data/geo.json`);
+        if (!res.ok) throw new Error(`geo.json の取得に失敗 (HTTP ${res.status})`);
+        return res.json();
+      },
+      fetchPrefs: async () => {
+        const res = await fetch(`${prefix}data/player_prefectures.json`);
+        if (!res.ok) throw new Error(`player_prefectures.json HTTP ${res.status}`);
+        return res.json();
+      },
+      // 大会一覧 (event_id → シリーズ名)。同シリーズ再マッチ罰則を使うときだけ取りに行く
+      // (3MB 前後あるので、既定 OFF の機能のために常時ロードはしない)。
+      fetchTournaments: async () => {
+        const res = await fetch(`${prefix}data/tournaments.json`);
+        if (!res.ok) throw new Error(`tournaments.json HTTP ${res.status}`);
+        return res.json();
+      },
+    };
+  }
+
+  // 同時実行数を制限して player JSON を取得。
+  async function fetchAllPlayers(uids, fetchPlayer, concurrency, onProgress) {
+    const players = {};           // uid -> json
+    const missing = [];           // DB 未登録(404)
+    const errors = [];            // 通信エラー
+    let done = 0;
+    const queue = uids.slice();
+    async function worker() {
+      while (queue.length) {
+        const uid = queue.shift();
+        try {
+          const j = await fetchPlayer(uid);
+          if (j && j.__missing) missing.push(uid);
+          else players[uid] = j;
+        } catch (e) {
+          errors.push({ uid, message: String(e && e.message || e) });
+        }
+        done++;
+        if (onProgress) onProgress({ phase: 'fetch', done, total: uids.length });
+      }
+    }
+    const workers = [];
+    for (let i = 0; i < Math.max(1, concurrency); i++) workers.push(worker());
+    await Promise.all(workers);
+    return { players, missing, errors };
+  }
+
+  // メイン: ランキング(uid配列) → optimizer 入力データ部。
+  async function buildSeedData(ranking, opts) {
+    opts = opts || {};
+    const params = Object.assign({}, DEFAULT_DATA_PARAMS, opts.params || {});
+    const fetchers = Object.assign(defaultFetchers(opts.prefix), opts);
+    const onProgress = opts.onProgress || null;
+    const concurrency = opts.concurrency || 8;
+
+    const attendeeSet = new Set(ranking);
+    const decayFn = recentDecayFn(params.recentDecayPoints);
+    const sw = sizeWeightFn(params.sizeWeight);
+    // 試合日付は JST のカレンダー日付なので「今日」も JST 基準で数える
+    // （UTC floor だと JST 朝9時まで前日扱いになり decay 境界が1日ずれる）。
+    const JST_OFFSET_MS = 9 * 3600000;
+    const todayDays = (params.todayDays != null)
+      ? params.todayDays : Math.floor((Date.now() + JST_OFFSET_MS) * EPOCH_DAYS);
+
+    // 都道府県（地域グルーピング適用。既定で南関東をまとめる）。
+    // prefsOptional=true（例: 地域被り回避 OFF でレポート表示にしか使わない）のときは
+    // 取得失敗を致命にせず meta.prefsError に積んで続行する。既定(false)は従来どおり throw。
+    if (!opts.regionGroups) await ensureGeoCatalog(fetchers);   // 既定のまとめは geo.json から (未読込なら fetchGeo で読む)
+    const regionGroups = opts.regionGroups || buildRegionGroups();   // 未指定 = geo.json の default
+    const prefByUid = {};
+    const prefCounts = {};
+    let prefsError = null;
+    let prefAll = {};
+    try {
+      prefAll = await fetchers.fetchPrefs();
+    } catch (e) {
+      if (opts.prefsOptional === true) prefsError = String(e && e.message || e);
+      else throw e;
+    }
+    for (const uid of ranking) {
+      const praw = prefAll[String(uid)] || prefAll[uid] || null;
+      const p = praw ? (regionGroups[praw] || praw) : null;
+      prefByUid[uid] = p;
+      if (p) prefCounts[p] = (prefCounts[p] || 0) + 1;
+    }
+
+    // 選手 JSON
+    const { players, missing, errors } = await fetchAllPlayers(
+      ranking, fetchers.fetchPlayer, concurrency, onProgress);
+
+    // 同シリーズ再マッチ用: event_id → シリーズ名。targetSeries 指定時のみ取りに行く。
+    // 呼び出し側が seriesIndex を渡していればそれを使う (二重取得を避ける)。
+    const targetSeries = params.targetSeries || null;
+    let seriesOf = null, seriesIndexError = null;
+    if (targetSeries) {
+      try {
+        const idx = opts.seriesIndex || buildSeriesIndex(await fetchers.fetchTournaments());
+        seriesOf = idx.seriesOf;
+      } catch (e) {
+        // fail-loud: 黙って「同シリーズ対戦なし」にはしない。呼び出し側が UI で明示する。
+        seriesIndexError = String((e && e.message) || e);
+      }
+    }
+
+    // 直近対戦罰則（疎）。両方向から走査する: 以前は a<opp の片側だけ集計していたが、
+    // 低 uid 側の JSON が DB 未登録(404)/欠損だと高 uid 側に記録があっても罰則が消え、
+    // どちらが消えるかが uid の大小という偶然で決まっていた。
+    // 同一試合が両者のファイルに載る通常ケースは試合キーで二重計上を防ぐ。
+    const recentPair = {};
+    const recentMeta = {};
+    // 同シリーズ分だけを同じ規則 (decay×規模, max/sum) で集計したもの。
+    // recentPair の部分集合ではなく「同シリーズ試合のみで組んだ recentPair」。
+    const seriesPair = {};
+    let seriesMatches = 0;          // 対象シリーズでの対戦数 (dedup 後)
+    let seriesUnknownEvents = 0;    // シリーズ不明の event_id を持つ試合数
+    const seenMatch = new Set();   // pair|event|phase|round|date（同一試合の両側記録デデュープ）
+    // excludeWeekday 用: event_id → is_weekend（計算上の休日扱い）。出場者全員の
+    // tournaments[] を先に走査して作る（片側の JSON にしか大会情報が無くても
+    // どちらの選手から処理しても同じ判定になる = 対称）。
+    const weekendOf = {};
+    if (params.excludeWeekday) {
+      for (const uid of ranking) {
+        const pj = players[uid];
+        if (!pj || !Array.isArray(pj.tournaments)) continue;
+        for (const t of pj.tournaments) {
+          if (t && t.event_id != null && typeof t.is_weekend === 'boolean') weekendOf[t.event_id] = t.is_weekend;
+        }
+      }
+    }
+    let weekdayExcludedMatches = 0;   // excludeWeekday で除外した試合数（UI 明示用）
+    for (const uid of ranking) {
+      const pj = players[uid];
+      if (!pj || !Array.isArray(pj.recent_matches)) continue;
+      // event_id -> nent（自分の tournaments[] から）
+      const nentOf = {};
+      if (Array.isArray(pj.tournaments)) {
+        for (const t of pj.tournaments) if (t && t.event_id != null) nentOf[t.event_id] = t.nent;
+      }
+      for (const m of pj.recent_matches) {
+        const opp = m.opp_uid;
+        if (opp == null || opp === uid) continue;
+        if (!attendeeSet.has(opp)) continue;
+        const dd = m.date ? dateToDays(m.date) : null;
+        if (dd == null) continue;
+        const matchKey = pairKey(uid, opp) + '|' + (m.event_id != null ? m.event_id : '') +
+          '|' + (m.phase_name || '') + '|' + (m.round != null ? m.round : '') +
+          '|' + (m.round_text || '') + '|' + m.date;
+        if (seenMatch.has(matchKey)) continue;   // 相手側ファイルで集計済みの同一試合
+        seenMatch.add(matchKey);
+        if (params.excludeWeekday && m.event_id != null && weekendOf[m.event_id] === false) {
+          weekdayExcludedMatches++;   // ユニーク試合単位（dedup 後）でカウント
+          continue;   // 平日扱いの大会（実質平日・プレ含む）は考慮しない
+        }
+        const decay = decayFn(todayDays - dd);
+        if (decay <= 0) continue;          // 365日超は罰則0
+        const nent = nentOf[m.event_id];
+        const sizeW = (nent != null) ? sw(nent) : sw(2);  // nent 不明時は最小規模(log2(2)=1)。要約: §3.2 で結合可を確認済
+        const val = decay * sizeW;
+        const key = pairKey(uid, opp);
+        const useMax = params.recentAgg !== 'sum';   // 既定 max
+        recentPair[key] = useMax
+          ? Math.max(recentPair[key] || 0, val)
+          : (recentPair[key] || 0) + val;
+        // この試合のシリーズ (seriesOf 未取得なら null = 判定しない)。
+        let mSeries = null;
+        if (seriesOf && m.event_id != null) {
+          mSeries = seriesOf[m.event_id] || null;
+          if (mSeries == null) seriesUnknownEvents++;
+        }
+        const isTargetSeries = !!(targetSeries && mSeries === targetSeries);
+        if (isTargetSeries) {
+          seriesMatches++;
+          seriesPair[key] = useMax
+            ? Math.max(seriesPair[key] || 0, val)
+            : (seriesPair[key] || 0) + val;
+        }
+        const meta = recentMeta[key] || (recentMeta[key] = {
+          penalty: 0, count: 0, lastDate: null, lastDeltaDays: null,
+          lastTournament: null, lastNent: null,
+          seriesCount: 0, seriesLastDate: null,   // 対象シリーズでの対戦回数 / 最終日
+          matches: [],   // 個別対戦履歴（レポートのペア展開表示用）。decay>0 の期間内のみ
+        });
+        meta.penalty = useMax ? Math.max(meta.penalty, val) : meta.penalty + val;
+        meta.count += 1;
+        if (isTargetSeries) {
+          meta.seriesCount += 1;
+          if (!meta.seriesLastDate || m.date > meta.seriesLastDate) meta.seriesLastDate = m.date;
+        }
+        meta.matches.push({
+          date: m.date,
+          tournament: m.tournament_name || null,
+          nent: (nent != null) ? nent : null,
+          series: mSeries,             // シリーズ名 (未判定なら null)
+          sameSeries: isTargetSeries,  // 対象シリーズでの対戦か
+        });
+        if (!meta.lastDate || m.date > meta.lastDate) {
+          meta.lastDate = m.date;
+          meta.lastTournament = m.tournament_name || null;
+          meta.lastNent = (nent != null) ? nent : null;
+        }
+        const delta = todayDays - dd;
+        if (meta.lastDeltaDays == null || delta < meta.lastDeltaDays) meta.lastDeltaDays = delta;
+      }
+    }
+    // ペアごとの対戦履歴を新しい順に整列（表示用）。
+    for (const key in recentMeta) {
+      recentMeta[key].matches.sort((x, y) => (x.date < y.date ? 1 : (x.date > y.date ? -1 : 0)));
+    }
+
+    return {
+      prefByUid, prefCounts, recentPair, recentMeta, seriesPair,
+      meta: {
+        targetSeries,                  // 対象シリーズ名 (null = 機能OFF)
+        seriesPairs: Object.keys(seriesPair).length,   // 同シリーズで当たっているペア数
+        seriesMatches,                 // 同シリーズでの対戦数 (dedup 後)
+        seriesUnknownEvents,           // シリーズ不明の event_id を持つ試合数
+        seriesIndexError,              // tournaments.json 取得失敗 (UI で明示)
+        attendees: ranking.length,
+        withPlayerJson: Object.keys(players).length,
+        missing,                 // DB 未登録 uid（履歴なし扱い）
+        errors,                  // 通信エラー（UI で明示すべき）
+        prefIdentified: Object.values(prefByUid).filter(Boolean).length,
+        prefsError,              // prefsOptional=true で取得失敗したときのメッセージ（UI で明示）
+        weekdayExcludedMatches,  // excludeWeekday=true で除外したユニーク試合数（false なら 0）
+      },
+    };
+  }
+
+  const API = {
+    buildSeedData, fetchAllPlayers, defaultFetchers,
+    dateToDays, sizeWeightFn, recentDecayFn, pairKey,
+    buildRegionGroups, buildSeriesIndex, detectSeries, normalizeSeriesName,
+    setGeoCatalog, geoCatalog, ensureGeoCatalog, regionGroupDefs, regionGroupLabel,
+    DEFAULT_DATA_PARAMS,
+  };
+  global.SeedData = API;
+  (global.SPSP = global.SPSP || {}).SeedData = API;   // window.SPSP.SeedData (名前空間。旧名 SeedData も残す)
+
+export default API;
+export { buildSeedData, fetchAllPlayers, defaultFetchers, dateToDays, sizeWeightFn, recentDecayFn, pairKey, buildRegionGroups, setGeoCatalog, geoCatalog, ensureGeoCatalog, regionGroupDefs, regionGroupLabel, buildSeriesIndex, detectSeries, normalizeSeriesName, DEFAULT_DATA_PARAMS };

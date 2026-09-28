@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.sim.title">スコアシミュレーション — SPSP</title>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+    background: #ffffff; color: #111827; font-size: 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .page-title { font-size: 18px; font-weight: 700; margin: 2px 0 12px; }
+  main { max-width: 440px; margin: 0 auto; padding: 16px; }
+
+  /* プレイヤーページの #share-card / rank-hero / subranks と同デザイン */
+  #sim-card {
+    background: linear-gradient(180deg, #fafafa 0%, #ffffff 30%, #ffffff 100%);
+    border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 14px;
+  }
+  .hero .display { font-size: 22px; font-weight: 700; line-height: 1.25; word-break: break-word; }
+  .hero .display a { color: #dc2626; text-decoration: none; }
+  .hero .display a:hover { text-decoration: underline; }
+  .hero .display .lv-pill { vertical-align: 4px; margin-left: 6px; }
+  .rank-hero {
+    text-align: center; background: #f9fafb; border-radius: 10px;
+    padding: 12px 8px; margin: 12px -2px; border: 1px solid #f3f4f6;
+  }
+  .rank-hero .label { font-size: 11px; color: #6b7280; letter-spacing: 0.1em; }
+  .rank-hero .big {
+    font-size: 48px; font-weight: 800; color: #dc2626; line-height: 1;
+    margin: 4px 0 2px; font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 24px rgba(220, 38, 38, 0.20);
+  }
+  .rank-hero .big .hash { font-size: 28px; color: #dc2626aa; vertical-align: 7px; margin-right: 2px; }
+  .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
+  .subrank-card {
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 8px 10px;
+  }
+  .subrank-card .label { font-size: 10px; color: #6b7280; letter-spacing: 0.06em; }
+  .subrank-card .value { font-size: 18px; color: #111827; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .subrank-card .subscore { font-size: 11px; color: #dc2626; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  /* シミュレーション中: 変動前 → 変動後 をヒーローに直接表示 */
+  .rank-hero .big.siming { font-size: 30px; text-shadow: none; }
+  .rank-hero .big.siming .hash { font-size: 18px; vertical-align: 4px; }
+  .hero-pre { color: #9ca3af; font-weight: 600; text-shadow: none; }
+  .hero-arw { color: #9ca3af; font-weight: 400; margin: 0 5px; font-size: 0.75em; }
+  #lv-slot .hero-arw { font-size: 11px; margin: 0 2px; vertical-align: 4px; }
+  .subrank-card .value.siming { font-size: 15px; }
+  .lv-pill {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; background: #e5e7eb; color: #6b7280;
+  }
+  .lv-pill.lv-5 { background: #fef3c7; color: #92400e; }
+  .lv-pill.lv-4 { background: #ede9fe; color: #6b21a8; }
+  .lv-pill.lv-3 { background: #dbeafe; color: #1d4ed8; }
+  .lv-pill.lv-2 { background: #dcfce7; color: #15803d; }
+  .lv-pill.lv-1 { background: #f3f4f6; color: #6b7280; }
+
+  .section { margin-top: 14px; }
+  .section h2 {
+    font-size: 12px; color: #374151; text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 0 0 8px; font-weight: 600;
+  }
+  .muted { color: #6b7280; font-size: 12px; }
+
+  /* 検索 */
+  .search-wrap { position: relative; margin-top: 8px; }
+  .search-wrap input, .opp-wrap input {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 8px;
+  }
+  .suggest {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    display: none;
+  }
+  .suggest.open { display: block; }
+  .suggest .item { padding: 7px 10px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .suggest .item:hover, .suggest .item.active { background: #f3f4f6; }
+  .suggest .item .meta { color: #9ca3af; font-size: 11px; white-space: nowrap; }
+
+  /* 大会ブロック (プレイヤーページ同様のフラットなセクション) */
+  .tour-card { margin-bottom: 12px; }
+  .tour-card .t-name { font-weight: 600; font-size: 14px; }
+  .tour-card .t-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 600; border-radius: 8px;
+    padding: 1px 6px; margin-left: 4px; vertical-align: 1px;
+  }
+  .badge.ok { background: #dcfce7; color: #15803d; }
+  .badge.ng { background: #fee2e2; color: #b91c1c; }
+  .badge.wk { background: #dbeafe; color: #1d4ed8; }
+  .badge.wd { background: #f3f4f6; color: #6b7280; }
+  .panel { margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 10px; }
+  .panel h3 {
+    font-size: 11px; color: #6b7280; letter-spacing: 0.06em; font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .place-sel {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+  }
+  .detail-box {
+    margin-top: 8px; background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
+    padding: 10px; font-size: 12px; line-height: 1.7; display: none;
+  }
+  .detail-box.show { display: block; }
+  .detail-box b { color: #dc2626; font-variant-numeric: tabular-nums; }
+  .detail-box .dim { color: #6b7280; }
+
+  /* 直対シミュ */
+  .opp-wrap { position: relative; margin-top: 6px; }
+  .sim-list { margin-top: 8px; }
+  .sim-row {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    border: 1px solid #f3f4f6; border-radius: 8px; margin-bottom: 4px;
+    background: #f9fafb; font-size: 12px;
+  }
+  .sim-row .rno { flex-shrink: 0; min-width: 40px; color: #6b7280; font-weight: 700; font-size: 11px; }
+  .sim-row .who { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+  .sim-row .who .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sim-row .who a.nm { color: inherit; text-decoration: underline; text-decoration-color: #d1d5db; text-underline-offset: 2px; }
+  .sim-row .who .orank { flex-shrink: 0; color: #9ca3af; font-size: 11px; }
+  .sim-row .wlseg { display: inline-flex; flex-shrink: 0; }
+  .sim-row .wlseg button {
+    border: 1px solid #d1d5db; background: #fff; color: #9ca3af;
+    font-size: 11px; font-weight: 700; padding: 2px 8px; cursor: pointer;
+    line-height: 1.5; white-space: nowrap;
+  }
+  .sim-row .wlseg button:first-child { border-radius: 6px 0 0 6px; }
+  .sim-row .wlseg button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+  .sim-row .wlseg button.on.win { background: #f0fdf4; color: #16a34a; border-color: #86efac; z-index: 1; }
+  .sim-row .wlseg button.on.loss { background: #eff6ff; color: #2563eb; border-color: #93c5fd; z-index: 1; }
+  .sim-row .delta { font-variant-numeric: tabular-nums; color: #374151; }
+  .sim-row .rm {
+    background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px; padding: 0 4px;
+  }
+  .sim-row .rm:hover { color: #dc2626; }
+  .sim-result {
+    margin-top: 8px; background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
+    padding: 10px; font-size: 12px; line-height: 1.8;
+  }
+  .sim-result b { font-variant-numeric: tabular-nums; }
+  .sim-result .up, .detail-box .up { color: #16a34a; }
+  .sim-result .down, .detail-box .down { color: #2563eb; }
+  .note {
+    margin-top: 16px; font-size: 11px; color: #9ca3af; line-height: 1.6;
+    border-top: 1px solid #f3f4f6; padding-top: 10px;
+  }
+  #loading { text-align: center; color: #6b7280; padding: 40px 0; }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<main>
+  <div class="page-title" data-i18n="sim.title">🔮 スコアシミュレーション</div>
+  <div id="loading" data-i18n="sim.loading">読み込み中… (プレイヤーデータ 約2MB)</div>
+  <div id="content" style="display:none">
+    <div id="sim-card">
+      <div class="hero">
+        <div class="display"><a id="display" href="#" title="プレイヤーページを開く" data-i18n-attr="title:sim.open_player"></a><span id="lv-slot"></span></div>
+      </div>
+      <div class="rank-hero">
+        <div class="label" data-i18n="ranking.tab.ensemble">総合評価</div>
+        <div class="big"><span class="hash">#</span><span id="cur-ens">—</span></div>
+      </div>
+      <div class="subranks">
+        <div class="subrank-card">
+          <div class="label" data-i18n="ranking.tab.tjpr">順位評価</div>
+          <div class="value">#<span id="cur-tjpr">—</span></div>
+          <div class="subscore" id="cur-tjpr-s"></div>
+        </div>
+        <div class="subrank-card">
+          <div class="label" data-i18n="ranking.tab.bt">直対評価</div>
+          <div class="value">#<span id="cur-bt">—</span></div>
+          <div class="subscore" id="cur-bt-s"></div>
+        </div>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <input id="psearch" type="search" placeholder="他のプレイヤーを検索 (名前 / UID)…" autocomplete="off" data-i18n-attr="placeholder:sim.search_placeholder">
+      <div class="suggest" id="psearch-suggest"></div>
+    </div>
+
+    <div class="section" id="tours-section">
+      <h2 data-i18n="sim.sec.target">📅 シミュレーション対象の大会</h2>
+      <div id="tours"></div>
+      <div class="search-wrap">
+        <input id="tsearch" type="search" placeholder="他の開催予定大会を選ぶ…" autocomplete="off" data-i18n-attr="placeholder:sim.tsearch_placeholder">
+        <div class="suggest" id="tsearch-suggest"></div>
+      </div>
+      <div class="muted" id="fresh" style="font-size:10px;margin-top:6px;color:#9ca3af"></div>
+    </div>
+
+  </div>
+</main>
+
+<script src="../assets/sim.js"></script>
+</body>
+</html>

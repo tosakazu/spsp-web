@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.events.title">大会一覧 — SPSP</title>
+<meta name="description" content="SPSP に集約されたスマブラSP の日本大会一覧。最新の大会から検索・絞り込みできる。" data-i18n-attr="content:page.events.description">
+<link rel="canonical" href="https://tosakazu.github.io/spsp/events/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:title" content="SPSP 大会一覧" data-i18n-attr="content:page.events.og_title">
+<meta property="og:description" content="スマブラSP 日本大会一覧" data-i18n-attr="content:page.events.og_description">
+<meta property="og:url" content="https://tosakazu.github.io/spsp/events/">
+<link rel="stylesheet" href="../css/site.css">
+<style>
+
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 10px; }
+
+  .filter-section {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 4px;
+  }
+  .filter-label { font-size: 11px; color: #6b7280; flex-shrink: 0; }
+  .filter-chips {
+    display: inline-flex; gap: 6px; flex-wrap: wrap; margin: 0;
+  }
+  .chip {
+    padding: 4px 10px; border-radius: 14px; font-size: 11px;
+    background: #f3f4f6; color: #6b7280; cursor: pointer; user-select: none;
+    border: 1px solid transparent;
+  }
+  .chip:hover { background: #e5e7eb; color: #111827; }
+  .chip.active { background: #dc2626; color: #fff; border-color: #dc2626; }
+
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0;
+  }
+  input, button, select {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  input[type="search"] { min-width: 280px; flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; background: #ffffff; color: #374151;
+    padding: 10px 8px; border-bottom: 2px solid #e5e7eb;
+    user-select: none; cursor: pointer; font-weight: 600;
+    position: sticky; top: 56px; z-index: 2;
+  }
+  th:hover { color: #dc2626; }
+  th.sortable::after { content: "↕"; opacity: 0.3; margin-left: 4px; font-size: 10px; }
+  th.sorted-asc::after { content: "↑"; opacity: 1; }
+  th.sorted-desc::after { content: "↓"; opacity: 1; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+
+  tr.event-row { transition: background 0.1s; }
+  tr.event-row:hover { background: #f9fafb; }
+  tr.event-row td.col-name a {
+    color: #dc2626; font-weight: 500; text-decoration: none;
+  }
+  tr.event-row td.col-name a:hover { text-decoration: underline; }
+  tr.event-row td.col-name .no-detail {
+    color: #6b7280; font-weight: 500;
+  }
+  /* 主な参加者 (top 3) 行 */
+  .top-players {
+    margin-top: 3px; font-size: 11px; color: #9ca3af;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .top-players a { color: #6b7280; text-decoration: none; }
+  .top-players a:hover { color: #dc2626; text-decoration: underline; }
+  .top-players .place {
+    color: #111827; font-weight: 600; margin-right: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .top-players .rank { color: #9ca3af; font-size: 10px; margin-left: 2px; }
+  .top-players .sep { color: #d1d5db; margin: 0 5px; }
+  @media (max-width: 720px) {
+    .top-players { font-size: 10px; white-space: normal; }
+  }
+  tr.event-row td.col-series a {
+    color: #6b7280; text-decoration: none;
+  }
+  tr.event-row td.col-series a:hover { color: #dc2626; text-decoration: underline; }
+
+  th.col-date, td.col-date {
+    width: 110px; font-variant-numeric: tabular-nums;
+  }
+  th.col-name, td.col-name {
+    width: auto; min-width: 220px;
+  }
+  td.col-name .event-suffix { color: #9ca3af; font-size: 11px; margin-left: 4px; }
+  th.col-nent, td.col-nent {
+    width: 80px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  th.col-city, td.col-city {
+    width: 110px; color: #6b7280; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  th.col-series, td.col-series { width: 160px; }
+  th.col-tags, td.col-tags { width: 240px; }
+
+  .tag {
+    display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 8px;
+    margin-right: 3px; margin-bottom: 2px; white-space: nowrap;
+  }
+  .tag-wk { background: rgba(220, 38, 38, 0.08); color: #dc2626; }
+  .tag-wd { background: rgba(107, 114, 128, 0.10); color: #6b7280; }
+  .tag-pre { background: rgba(168, 85, 247, 0.12); color: #6b21a8; }
+  .tag-restr { background: rgba(217, 119, 6, 0.10); color: #d97706; }
+  .tag-low { background: rgba(8, 145, 178, 0.10); color: #0e7490; }
+  .tag-uchi { background: rgba(168, 85, 247, 0.12); color: #6b21a8; }
+  .tag-special { background: rgba(236, 72, 153, 0.10); color: #be185d; }
+  .tag-small { background: rgba(107, 114, 128, 0.12); color: #4b5563; }
+  .tag-gf { background: #ffedd5; color: #9a3412; font-weight: 600; }
+  .tag-resume { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  /* Mobile */
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    .controls { gap: 6px; }
+    input[type="search"] { min-width: 0; width: 100%; flex: 1 1 100%; font-size: 14px; padding: 8px 10px; }
+    table, thead, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tr.event-row {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+      padding: 10px 8px; border-bottom: 1px solid #f3f4f6;
+    }
+    tr.event-row td { padding: 0; border: none; min-width: 0; text-align: left; }
+    tr.event-row td.col-date {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280; order: 1;
+    }
+    tr.event-row td.col-nent {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280; order: 2;
+      text-align: left;
+    }
+    tr.event-row td.col-nent::before { content: "👥 "; color: #9ca3af; }
+    tr.event-row td.col-name {
+      flex: 1 1 100%; font-size: 14px; font-weight: 500;
+      word-break: break-all; order: 3;
+    }
+    tr.event-row td.col-city {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280;
+      width: auto; order: 4;
+    }
+    tr.event-row td.col-city:empty { display: none; }
+    tr.event-row td.col-city::before { content: "📍 "; color: #9ca3af; }
+    tr.event-row td.col-series {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280;
+      width: auto; order: 5;
+    }
+    tr.event-row td.col-series::before { content: "📋 "; color: #9ca3af; }
+    tr.event-row td.col-tags {
+      flex: 1 1 100%; order: 6; width: auto;
+    }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<div class="header">
+  <h1 data-i18n="nav.ranking.events">大会一覧</h1>
+  <p class="subtitle" data-i18n="events.subtitle">SPSP に収録されているスマブラSP 日本大会の一覧</p>
+
+  <div class="filter-section">
+    <span class="filter-label" data-i18n="events.filter.nent">参加者数:</span>
+    <div class="filter-chips" id="filter-nent" style="display:inline-flex">
+      <span class="chip active" data-nent="0" data-i18n="common.all">すべて</span>
+      <span class="chip" data-nent="8">8+</span>
+      <span class="chip" data-nent="16">16+</span>
+      <span class="chip" data-nent="32">32+</span>
+      <span class="chip" data-nent="64">64+</span>
+      <span class="chip" data-nent="128">128+</span>
+    </div>
+  </div>
+
+  <div class="filter-section">
+    <span class="filter-label" data-i18n="events.filter.period">時期:</span>
+    <div class="filter-chips" id="filter-period" style="display:inline-flex">
+      <span class="chip active" data-period="0" data-i18n="common.all">すべて</span>
+      <span class="chip" data-period="180" data-i18n="common.period.180">6ヶ月以内</span>
+      <span class="chip" data-period="365" data-i18n="common.period.365">1年以内</span>
+      <span class="chip" data-period="730" data-i18n="common.period.730">2年以内</span>
+    </div>
+  </div>
+
+  <div class="filter-section">
+    <span class="filter-label" data-i18n="events.filter.tags">タグ:</span>
+    <div class="filter-chips" id="filter-tags" style="display:inline-flex">
+      <span class="chip" data-tag="weekend" data-i18n="events.tag.weekend_only">休日のみ</span>
+      <span class="chip" data-tag="weekday" data-i18n="events.tag.weekday_only">平日のみ</span>
+      <span class="chip" data-tag="pre" data-i18n="tags.pre">プレ大会</span>
+      <span class="chip" data-tag="restricted" data-i18n="tags.res">制限</span>
+      <span class="chip" data-tag="lower" data-i18n="tags.lc">下位クラス</span>
+      <span class="chip" data-tag="uchi" data-i18n="tags.uchi">身内</span>
+      <span class="chip" data-tag="special" data-i18n="tags.special">特殊ルール</span>
+      <span class="chip" data-tag="awaiting" data-i18n="tags.resume">再開待ち</span>
+      <span class="chip" data-tag="gfmissing" data-i18n="tags.gf">未完了</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="大会名・イベント名・シリーズ名で検索…" autocomplete="off" data-i18n-attr="placeholder:events.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="eventstable">
+    <thead>
+      <tr>
+        <th class="col-date sortable sorted-desc" data-sort="date" data-i18n="events.col.date">開催日</th>
+        <th class="col-name sortable" data-sort="name" data-i18n="events.col.name">大会名</th>
+        <th class="col-nent sortable" data-sort="nent" data-i18n="events.col.nent">参加者</th>
+        <th class="col-city sortable" data-sort="city" data-i18n="events.col.city">開催地</th>
+        <th class="col-series sortable" data-sort="series" data-i18n="events.col.series">シリーズ</th>
+        <th class="col-tags" data-i18n="common.col.tags">タグ</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="6" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/events.js"></script>
+</body>
+</html>

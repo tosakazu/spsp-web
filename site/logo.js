@@ -1,0 +1,276 @@
+// @ts-check
+// logo.js — SPSP ロゴ (背面ティア + ワードマーク + 正式名称)。
+//
+//   1. ヘッダーのブランド表示 (静止・アニメーション後の姿)
+//   2. データ読み込み中のオーバーレイ (アニメーション再生 → 消える)
+//
+// 両方が同じ組み立て関数を使うので、見た目がずれない。
+//
+// 注意:
+// - 外部フォントは読まない。全ページの nav から読まれるので、描画を止める
+//   リクエストを増やさない (callback.html の外部リソース禁止 INV-8 とも整合)。
+// - 背面のティアは 5 段 = レベル構造。上ほど短く・濃い (上位ほど少数)。
+import SPSPI18n from './js/i18n.js';
+const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
+
+  var WORD = 'SPSP';
+  // 正式名称は 2 行。[文字, アクセント色にするか]
+  /** @type {[string, boolean][]} */
+  var SUB_LINES = [['SAIKYO PLAYERS', false], ['SPECIAL', true]];
+  // 背面ティア (上 = 最上位)。w = 幅, a = 不透明度
+  var TIERS = [
+    { w: '21%', a: 0.30 },
+    { w: '41%', a: 0.15 },
+    { w: '61%', a: 0.12 },
+    { w: '80%', a: 0.09 },
+    { w: '100%', a: 0.07 },
+  ];
+
+  function el(tag, cls) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    return n;
+  }
+
+  /**
+   * ロゴ本体を root に組み立てる。
+   *   opts.sub : 正式名称を出すか (ヘッダーでは出さない)
+   */
+  function build(root, opts) {
+    var o = opts || {};
+    root.textContent = '';
+
+    var lockup = el('div', 'spsp__lockup');
+
+    var tiers = el('div', 'spsp__tiers');
+    tiers.setAttribute('aria-hidden', 'true');
+    TIERS.forEach(function (t, i) {
+      var b = el('b');
+      b.style.setProperty('--w', t.w);
+      b.style.setProperty('--a', t.a);
+      b.style.setProperty('--i', i);
+      tiers.appendChild(b);
+    });
+    lockup.appendChild(tiers);
+
+    var text = el('div', 'spsp__text');
+    text.setAttribute('aria-hidden', 'true');
+
+    var wrap = el('div', 'spsp__wordwrap');
+    var word = el('div', 'spsp__word');
+    word.textContent = WORD;
+    wrap.appendChild(word);
+    wrap.appendChild(el('i', 'spsp__scan'));
+    text.appendChild(wrap);
+
+    if (o.sub) {
+      var sub = el('div', 'spsp__sub');
+      var j = 0;
+      SUB_LINES.forEach(function (pair) {
+        var line = el('span', 'spsp__line' + (pair[1] ? ' spsp__line--accent' : ''));
+        line.dataset.line = pair[0];
+        var inner = el('span', 'spsp__linein');
+        pair[0].split('').forEach(function (ch) {
+          var u = document.createElement('u');
+          u.textContent = ch;
+          u.style.setProperty('--j', String(j++));
+          inner.appendChild(u);
+        });
+        line.appendChild(inner);
+        sub.appendChild(line);
+      });
+      text.appendChild(sub);
+    }
+
+    lockup.appendChild(text);
+    root.appendChild(lockup);
+    return root;
+  }
+
+  /**
+   * 正式名称の字間を詰め/広げて、2 行ともワードマークと同じ幅に揃える。
+   *
+   * 字間を CSS で固定すると行ごとに端がそろわない (文字数が違うため)。
+   * 実測してから 1 文字あたりの追加量を出す。フォント読み込み後と
+   * 画面幅変更後にもう一度呼ぶこと。
+   */
+  function fit(root) {
+    if (!root) return;
+    var word = root.querySelector('.spsp__word');
+    if (!word) return;
+    var target = word.getBoundingClientRect().width;
+    if (!target) return;                       // 非表示中は測れないので何もしない
+    root.querySelectorAll('.spsp__line').forEach(function (line) {
+      var inner = line.querySelector('.spsp__linein');
+      var n = (line.dataset.line || '').length;
+      if (!inner || !n) return;
+      line.style.letterSpacing = '0px';
+      line.style.textIndent = '0px';
+      var natural = inner.getBoundingClientRect().width;
+      var ls = (target - natural) / n;
+      if (ls > 0.5) {
+        line.style.letterSpacing = ls + 'px';
+        line.style.textIndent = (ls / 2) + 'px';   // 行末に出る余白ぶんを戻して中央をそろえる
+      } else {
+        line.style.letterSpacing = '.18em';
+        line.style.textIndent = '.09em';
+      }
+    });
+  }
+
+  // 一巡にかかる時間 (logo.css の遅延 + 再生時間の合計に合わせる)。
+  // これを過ぎても消えないときは繰り返しに入る。
+  var INTRO_MS = 1300;
+  var introEndsAt = 0;      // inline() が再生を始めたら「一巡が終わる時刻」が入る
+
+  // ── 読み込み中の差し込み ──
+  //
+  // 画面全体を覆うのではなく、「読み込み中…」と書いてあった場所にそのまま置く。
+  // データが届いたときページ側が中身を差し替えるので、後始末は要らない。
+
+  /** node の中身をロゴ (再生付き) に置き換える。 */
+  function inline(node, opts) {
+    if (!node || node.querySelector('.spsp')) return;    // 二重に入れない
+    var o = opts || {};
+    var box = el('div', 'spsp-inline');
+    var mark = el('div', 'spsp is-anim');
+    mark.setAttribute('role', 'img');
+    mark.setAttribute('aria-label', SPSPI18n.t('logo.s1'));
+    build(mark, { sub: o.sub !== false });
+    box.appendChild(mark);
+    node.textContent = '';
+    node.appendChild(box);
+    fit(mark);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { fit(mark); });
+    }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { mark.classList.add('is-on'); });
+    });
+    // 一巡が終わる時刻。introGate はここを見て待つ
+    // (差し込みより前に gate を作っても、再生の実時間に合わせられるように)。
+    introEndsAt = Date.now() + INTRO_MS;
+    // 一巡し終わっても読み込みが続いているときは、繰り返しに移る。
+    // (枠ごと差し替えられたら DOM から消えるので、後始末は要らない)
+    setTimeout(function () {
+      if (mark.isConnected !== false) mark.classList.add('is-loop');
+    }, INTRO_MS);
+    return mark;
+  }
+
+  // 「読み込み中」と書いてある枠を探して差し替える。
+  // 各ページに手を入れなくて済むよう、nav.js から 1 回呼ぶだけにしている。
+  // 表の空行や本文の読み込み枠だけ。行を開いたときの小さな
+  // 「詳細情報を取得中…」(.loading-msg) は対象外 — ロゴを出すには小さすぎる。
+  var LOADING_SEL = '.empty-msg, #loading';
+  var LOADING_RE = /読み込み中|ロード中|loading/i;   // 英語ページ (Loading…) でも同じ枠を差し替える (docs/frontend_i18n_review.md §2-10)
+
+  function autoInline(root) {
+    var scope = root || document;
+    var nodes = scope.querySelectorAll(LOADING_SEL);
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      // 文言一致 (日本語) か data-loading 属性 (文言に依らない印) のどちらか
+      if (!n.hasAttribute('data-loading') && !LOADING_RE.test(n.textContent || '')) continue;
+      // 「見つかりません」等の予備枠は display:none で置いてあるので触らない
+      if (n.style && n.style.display === 'none') continue;
+      inline(n, { sub: true });
+    }
+  }
+
+  /**
+   * 一巡し終わる (かタップで飛ばされる) まで待つ Promise を返す。
+   *
+   * トップのランキングだけは、データが早く届いてもアニメーションを最後まで
+   * 見せてから表を出したい。ただし待たされたくない人のために、
+   * どこかをタップ/クリック/キー操作したら即座に打ち切る。
+   *
+   * 差し込み (inline) より前に呼んでも動くよう、呼ばれた時刻を基準にする。
+   */
+  /**
+   * 直後の click / pointerup を 1 回だけ握りつぶす。
+   * スキップのタップが、その下に現れた要素の操作として二重に効くのを防ぐ。
+   * 取り逃したときのために短い時限で自動解除する (通常操作を巻き込まない)。
+   */
+  function swallowNextClick() {
+    var off = function () {
+      document.removeEventListener('click', block, true);
+      document.removeEventListener('pointerup', stop, true);
+      clearTimeout(t);
+    };
+    var block = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      off();
+    };
+    var stop = function (e) { e.stopPropagation(); };
+    var t = setTimeout(off, 700);
+    document.addEventListener('click', block, true);
+    document.addEventListener('pointerup', stop, true);
+  }
+
+  /** @returns {Promise<void>} */
+  function introGate() {
+    if (prefersReducedMotion()) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var done = false;
+      /** @type {number | null} */
+      var timer = null;
+      // 待ちすぎないための上限。差し込みが起きないページでも必ず解ける。
+      var deadline = Date.now() + INTRO_MS * 2;
+      var finish = function (ev) {
+        if (done) return;
+        done = true;
+        clearTimeout(/** @type {number} */ (timer));
+        document.removeEventListener('pointerdown', finish, true);
+        document.removeEventListener('keydown', finish, true);
+        // 指を離した先には、解除直後に描かれた表がある。そのままだと
+        // 続けて飛んでくる click が行に当たってプレイヤーページへ遷移してしまう。
+        // 「飛ばすためのタップ」の 1 回だけ食い止める。
+        if (ev && ev.type === 'pointerdown') swallowNextClick();
+        resolve();
+      };
+      var tick = function () {
+        if (done) return;
+        if (Date.now() >= deadline) return finish();
+        // 再生開始前は少し待って様子を見る (gate の方が先に作られることがある)
+        if (!introEndsAt) { timer = setTimeout(tick, 40); return; }
+        var remain = introEndsAt - Date.now();
+        if (remain <= 0) return finish();
+        timer = setTimeout(tick, remain);
+      };
+      tick();
+      document.addEventListener('pointerdown', finish, true);
+      document.addEventListener('keydown', finish, true);
+    });
+  }
+
+  /** ヘッダーのブランド枠に静止ロゴを入れる (アニメーションなし・正式名称なし)。 */
+  function mountHeader(node) {
+    if (!node) return;
+    node.className = 'spsp';
+    build(node, { sub: false });
+  }
+
+  function prefersReducedMotion() {
+    try {
+      return global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch (_) { return false; }
+  }
+
+  global.SPSPLogo = {
+    build: build,
+    fit: fit,
+    TIERS: TIERS,
+    SUB_LINES: SUB_LINES,
+    inline: inline,
+    autoInline: autoInline,
+    introGate: introGate,
+    INTRO_MS: INTRO_MS,
+    mountHeader: mountHeader,
+    prefersReducedMotion: prefersReducedMotion,
+  };
+  (global.SPSP = global.SPSP || {}).Logo = global.SPSPLogo;   // window.SPSP.Logo (名前空間。旧名 SPSPLogo も残す)
+
+export default global.SPSPLogo;
+export { build, fit, TIERS, SUB_LINES, inline, autoInline, introGate, INTRO_MS, mountHeader, prefersReducedMotion };

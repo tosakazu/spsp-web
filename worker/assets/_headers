@@ -1,0 +1,8 @@
+# Workers Static Assets の _headers (dist-cf/ の直下に置く。scripts/assemble_dist.sh が写す)。
+# Worker を通らずに配信されるアセットにもセキュリティヘッダを付けるため。
+# callback.html は wrangler.toml の run_worker_first で Worker を通るので、CSP は src/index.ts が付ける。
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

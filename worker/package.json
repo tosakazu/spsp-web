@@ -1,0 +1,15 @@
+{
+  "name": "spsp-web-worker",
+  "private": true,
+  "description": "spsp.games の Cloudflare Worker (静的配信 + /api = gas/*.gs の移植)。依存はリポジトリ直下の node_modules (wrangler, typescript, @cloudflare/workers-types)",
+  "type": "module",
+  "scripts": {
+    "test": "UV_THREADPOOL_SIZE=1 node --test --test-concurrency=1 test/*.test.mjs",
+    "typecheck": "GOMAXPROCS=1 ../node_modules/.bin/tsc --noEmit -p tsconfig.json",
+    "types": "GOMAXPROCS=1 ../node_modules/.bin/wrangler types",
+    "dev": "GOMAXPROCS=1 ../node_modules/.bin/wrangler dev",
+    "deploy": "GOMAXPROCS=1 ../node_modules/.bin/wrangler deploy",
+    "deploy:preview": "GOMAXPROCS=1 ../node_modules/.bin/wrangler deploy --env preview",
+    "deploy:na": "GOMAXPROCS=1 ../node_modules/.bin/wrangler deploy --env na"
+  }
+}

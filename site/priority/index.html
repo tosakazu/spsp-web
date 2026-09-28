@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.priority.title">優先枠作成 — SPSP</title>
+<meta name="robots" content="noindex">
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+    background: #ffffff; color: #111827; font-size: 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 700; margin: 2px 0 4px; }
+  .subtitle { color: #6b7280; font-size: 12px; margin: 0 0 12px; }
+
+  #card {
+    background: linear-gradient(180deg, #fafafa 0%, #ffffff 30%, #ffffff 100%);
+    border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 14px;
+  }
+  .section { margin-top: 14px; }
+  .section:first-child { margin-top: 0; }
+  .section h2 {
+    font-size: 12px; color: #374151; text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 0 0 8px; font-weight: 600;
+  }
+  .muted { color: #6b7280; font-size: 12px; }
+  .hint { color: #9ca3af; font-size: 11px; margin-top: 4px; }
+
+  input[type="text"], input[type="search"] {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 8px;
+  }
+  #count { width: 110px; font-variant-numeric: tabular-nums; }
+
+  .opt-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 13px; }
+  .opt-row input[type="checkbox"], .opt-row input[type="radio"] { accent-color: #dc2626; }
+
+  .search-wrap { position: relative; margin-top: 6px; }
+  .suggest {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    display: none;
+  }
+  .suggest.open { display: block; }
+  .suggest .item { padding: 7px 10px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .suggest .item:hover, .suggest .item.active { background: #f3f4f6; }
+  .suggest .item .meta { color: #9ca3af; font-size: 11px; white-space: nowrap; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 12px;
+    padding: 2px 8px; font-size: 12px;
+  }
+  .chip .x { cursor: pointer; color: #9ca3af; font-weight: 700; padding: 0 2px; }
+  .chip .x:hover { color: #dc2626; }
+
+  .radio-group { margin-top: 8px; }
+
+  #dl-btn {
+    display: block; width: 100%; margin-top: 14px; padding: 10px;
+    background: #dc2626; color: #fff; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  #dl-btn:hover { background: #b91c1c; }
+  #dl-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
+
+  /* プレビュー */
+  #preview-note { margin: 10px 0 6px; font-size: 12px; color: #6b7280; }
+  #preview-note .warn { color: #b45309; }
+  #ptable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #ptable th {
+    text-align: left; font-size: 11px; color: #6b7280; font-weight: 600;
+    border-bottom: 1px solid #e5e7eb; padding: 4px 6px;
+  }
+  #ptable td { padding: 4px 6px; border-bottom: 1px solid #f3f4f6; }
+  #ptable .col-no { width: 44px; text-align: right; color: #9ca3af; font-variant-numeric: tabular-nums; }
+  #ptable .col-rank { width: 52px; text-align: right; color: #6b7280; font-variant-numeric: tabular-nums; }
+  .prov-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+    font-size: 10px; font-weight: 600; background: #f3f4f6; color: #6b7280; vertical-align: 1px;
+  }
+  #ptable .col-disc { width: 90px; color: #6b7280; font-family: ui-monospace, monospace; font-size: 12px; }
+  #ptable .nodisc { color: #dc2626; }
+  .ovs-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+    font-size: 10px; font-weight: 600; background: #e5e7eb; color: #6b7280; vertical-align: 1px;
+  }
+  .manual-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+    font-size: 10px; font-weight: 600; background: #dbeafe; color: #1d4ed8; vertical-align: 1px;
+  }
+  .csv-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+    font-size: 10px; font-weight: 600; background: #fef3c7; color: #92400e; vertical-align: 1px;
+  }
+  .csv-btn {
+    display: inline-block; padding: 6px 10px; font-size: 12px; cursor: pointer;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+  }
+  .csv-btn:hover { background: #f3f4f6; }
+  .csv-note { font-size: 12px; color: #6b7280; margin-left: 8px; }
+  .csv-note .clear { color: #dc2626; cursor: pointer; margin-left: 6px; }
+  #loading { padding: 24px; text-align: center; color: #9ca3af; }
+</style>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+<main>
+  <h1 data-i18n="nav.seeding.priority">優先枠作成</h1>
+  <p class="subtitle" data-i18n="priority.subtitle">大会の優先参加枠リスト (プレイヤー名 + discriminator) を CSV で出力します。総合順位の上から取得します。</p>
+
+  <div id="loading" data-i18n="ranking.loading_data">データ読み込み中…</div>
+
+  <div id="card" style="display:none">
+    <div class="section">
+      <h2 data-i18n="priority.h.count">出力人数</h2>
+      <input type="text" id="count" inputmode="numeric" value="100" autocomplete="off">
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="priority.h.options">オプション</h2>
+      <label class="opt-row" data-i18n="priority.opt.excl_overseas"><input type="checkbox" id="excl-overseas" checked> 海外勢を除く</label>
+      <label class="opt-row" data-i18n="priority.opt.excl_prov"><input type="checkbox" id="excl-prov"> 計測中を除く</label>
+      <label class="opt-row"><input type="checkbox" id="recent-only"> <span data-i18n="priority.page.t1">直近</span>
+        <input type="text" id="recent-months" value="12" inputmode="numeric" autocomplete="off"
+               style="width:44px;padding:3px 6px;font-size:13px;text-align:right">
+        <span data-i18n="priority.page.t2">ヶ月以内に大会参加した人のみ</span></label>
+
+      <div style="margin-top:10px">
+        <div class="muted" data-i18n="priority.pref_limit">都道府県で限定</div>
+        <div class="search-wrap">
+          <input type="search" id="pref-input" placeholder="都道府県名を入力…" autocomplete="off" data-i18n-attr="placeholder:priority.pref_placeholder">
+          <div class="suggest" id="pref-suggest"></div>
+        </div>
+        <div class="chips" id="pref-chips"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted" data-i18n="priority.manual_add">手動追加</div>
+        <div class="search-wrap">
+          <input type="search" id="padd-input" placeholder="名前 / discriminator で検索…" autocomplete="off" data-i18n-attr="placeholder:priority.name_placeholder">
+          <div class="suggest" id="padd-suggest"></div>
+        </div>
+        <div class="chips" id="padd-chips"></div>
+        <div style="margin-top:8px">
+          <label class="csv-btn" data-i18n="priority.csv_add">CSV から一括追加<input type="file" id="csv-file" accept=".csv,text/csv,text/plain" hidden></label>
+          <button type="button" class="csv-btn" id="csv-tpl-btn" data-i18n="priority.template">テンプレート</button>
+          <span id="csv-note" class="csv-note"></span>
+        </div>
+        <div class="radio-group">
+          <label class="opt-row" data-i18n="priority.mode.include"><input type="radio" name="manual-mode" value="include" checked> 指定人数に含める</label>
+          <label class="opt-row" data-i18n="priority.mode.extra"><input type="radio" name="manual-mode" value="extra"> 指定人数とは別枠</label>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted" data-i18n="priority.manual_remove">手動除去</div>
+        <div class="search-wrap">
+          <input type="search" id="prem-input" placeholder="名前 / discriminator で検索…" autocomplete="off" data-i18n-attr="placeholder:priority.name_placeholder">
+          <div class="suggest" id="prem-suggest"></div>
+        </div>
+        <div class="chips" id="prem-chips"></div>
+        <div style="margin-top:8px">
+          <label class="csv-btn" data-i18n="priority.csv_remove">CSV から一括除去<input type="file" id="csv-rem-file" accept=".csv,text/csv,text/plain" hidden></label>
+          <button type="button" class="csv-btn" id="csv-rem-tpl-btn" data-i18n="priority.template">テンプレート</button>
+          <span id="csv-rem-note" class="csv-note"></span>
+        </div>
+      </div>
+    </div>
+
+    <button id="dl-btn" data-i18n="priority.download">CSV をダウンロード</button>
+
+    <div class="section">
+      <h2 data-i18n="priority.h.preview">プレビュー</h2>
+      <div id="preview-note"></div>
+      <table id="ptable">
+        <thead><tr><th class="col-no">No.</th><th class="col-rank" data-i18n="detail.th.place">順位</th><th data-i18n="priority.col.name">名前</th><th class="col-disc">disc</th></tr></thead>
+        <tbody id="ptbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="../assets/priority.js"></script>
+</body>
+</html>

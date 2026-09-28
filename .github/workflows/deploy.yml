@@ -1,0 +1,40 @@
+# フロント (HTML / JS / CSS) を Cloudflare Workers (static assets) にデプロイする。JSON は WING のビルドが R2 に同期する (spsp_scripts deploy/sync_r2.sh)。
+# main への push = 本番 (spsp.games)。workflow_dispatch で env を選べる (preview = spsp-web-preview)。
+# 必要な secrets (environment "production" に置く。リポジトリ直下の secrets には置かない): CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+name: deploy
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']   # 文書だけの変更では本番をデプロイし直さない
+  workflow_dispatch:
+    inputs:
+      env:
+        description: wrangler の環境 (空 = 本番, preview, na)
+        default: preview
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Cloudflare のトークンは environment "production" の secrets にだけ置く。production は main ブランチからの実行に限定してあるので、
+    # 他のブランチや PR (fork 含む) のワークフローからは読めない (2026-09-28、公開リポジトリ化)
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build:cf && bash worker/scripts/assemble_dist.sh   # _headers (assets 直配信分のセキュリティヘッダ) を dist-cf に
+      - name: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd worker
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.env }}" ]; then
+            npx wrangler deploy --env "${{ github.event.inputs.env }}"
+          else
+            npx wrangler deploy
+          fi

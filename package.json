@@ -1,0 +1,28 @@
+{
+  "name": "spsp-web",
+  "private": true,
+  "description": "SPSP ranking site — フロントエンド (site/) と投稿機能の Apps Script (gas/)。ビルド (spsp_scripts) が site/ に出力を書く",
+  "scripts": {
+    "test": "node --test tests/meta/*.cjs tests/post/*.cjs tests/seeding/*.cjs tests/frontend/*.test.cjs",
+    "test:sim": "node tests/sim/check.js",
+    "test:split": "node tests/split/test_assemble.mjs --legacy tests/split/fixtures/legacy --new tests/split/fixtures/new",
+    "test:all": "npm test && npm run test:sim && npm run test:split && npm run typecheck",
+    "build": "node tools/build/build_site.mjs",
+    "build:na": "node tools/build/build_site.mjs --region NA --out dist-na",
+    "typecheck": "GOMAXPROCS=1 tsc -p tsconfig.json",
+    "build:cf": "node tools/build/build_site.mjs --region JP --out dist-cf/jp --data-root https://data.spsp.games/jp/ --canonical https://spsp.games/jp/ --clean-urls --quiet && node tools/build/build_site.mjs --region NA --out dist-cf/na --data-root https://data.spsp.games/na/ --canonical https://spsp.games/na/ --clean-urls --quiet",
+    "worker:test": "UV_THREADPOOL_SIZE=1 node --test --test-concurrency=1 worker/test/*.test.mjs",
+    "build:cf:preview": "node tools/build/build_site.mjs --region JP --out dist-cf/jp --data-root https://data.spsp.games/jp/ --canonical https://spsp-web-preview.tosakazu.workers.dev/jp/ --clean-urls --quiet && node tools/build/build_site.mjs --region NA --out dist-cf/na --data-root https://data.spsp.games/na/ --canonical https://spsp-web-preview.tosakazu.workers.dev/na/ --clean-urls --quiet && bash worker/scripts/assemble_dist.sh --no-build"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
+    "ajv": "^8.20.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.136.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

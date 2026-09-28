@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.p.title">プレイヤー詳細 — SPSP</title>
+<meta name="description" content="SPSP プレイヤー詳細ページ。出場履歴、順位評価/直対評価、SPR/UF、過去最高ランク、レーダーチャートなど。日本のスマブラSP選手データ。" data-i18n-attr="content:page.p.description">
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:locale" content="ja_JP">
+<link rel="stylesheet" href="../css/player.css">
+<style>
+
+  /* The "shareable card" lives in this main container. html2canvas snapshots #share-card. */
+  main { max-width: 440px; margin: 0 auto; padding: 16px; }
+
+  /* Hero: display name + huge rank */
+  .hero .display-row {
+    display: flex; align-items: flex-start; gap: 8px; justify-content: space-between;
+  }
+  .hero .display {
+    font-size: 22px; font-weight: 700; color: #111827;
+    line-height: 1.25;
+    word-break: break-word;
+    flex: 1;
+  }
+  .hero .sub { font-size: 11px; color: #6b7280; margin-top: 4px; letter-spacing: 0.05em; }
+  .rank-hero {
+    text-align: center;
+    background: #f9fafb; border-radius: 10px;
+    padding: 16px 8px; margin: 14px -2px;
+    border: 1px solid #f3f4f6;
+  }
+  .rank-hero .label { font-size: 11px; color: #6b7280; letter-spacing: 0.1em; }
+  .rank-hero .badges-line {
+    display: flex; flex-wrap: wrap; gap: 4px 2px;
+    align-items: center; justify-content: center;
+    margin-bottom: 4px;
+  }
+  .rank-hero .badges-line:empty { display: none; }
+  .rank-hero .big {
+    font-size: 64px; font-weight: 800; color: #dc2626; line-height: 1;
+    margin: 4px 0 2px;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 24px rgba(220, 38, 38, 0.20);
+  }
+  .rank-hero .big .hash { font-size: 38px; color: #dc2626aa; vertical-align: 9px; margin-right: 2px; }
+  .rank-hero .of { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+  .rank-hero .meta-line { font-size: 12px; color: #374151; margin-top: 10px; }
+  .rank-hero .meta-line b { color: #dc2626; font-weight: 600; }
+
+  /* Sub ranks (順位評価/直対評価) */
+  .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
+  .subrank-card {
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .subrank-card .label-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .subrank-card .label { font-size: 10px; color: #6b7280; letter-spacing: 0.06em; }
+  .subrank-card .value { font-size: 18px; color: #111827; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .subrank-card .subscore { font-size: 11px; color: #dc2626; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  /* Lv badge (順位評価) */
+  .lv-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background: #e5e7eb; color: #6b7280; letter-spacing: 0.04em;
+  }
+  .lv-pill.lv-5 { background: #fef3c7; color: #92400e; }
+  .lv-pill.lv-4 { background: #ede9fe; color: #6b21a8; }
+  .lv-pill.lv-3 { background: #dbeafe; color: #1d4ed8; }
+  .lv-pill.lv-2 { background: #dcfce7; color: #15803d; }
+  .lv-pill.lv-1 { background: #f3f4f6; color: #6b7280; }
+  .lv-pill.lv-0 { background: #f9fafb; color: #9ca3af; }
+
+  /* Gating tag (直対評価: レア vs ベテラン) */
+  .gate-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    letter-spacing: 0.04em;
+  }
+  .gate-pill.rookie  { background: #dcfce7; color: #15803d; }
+  .gate-pill.veteran { background: #e0e7ff; color: #3730a3; }
+
+  /* 海外 / 全一 バッジ (= ranking-table.css と同じデザイン) */
+  .overseas-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    background: #e5e7eb; color: #6b7280;
+  }
+  .zenichi-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+    background: #dc2626; color: #fff;
+  }
+  .zenichi-badge.zenichi-1 { background: #dc2626; }  /* 赤 */
+  .zenichi-badge.zenichi-2 { background: #f97316; }  /* オレンジ */
+  .zenichi-badge.zenichi-3 { background: #ec4899; }  /* ピンク */
+
+  /* Sections */
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; font-size: 13px; color: #374151;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .v { color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat-row .v.pos { color: #16a34a; }
+  .stat-row .v.neg { color: #2563eb; }
+  .stat-row.hl-headline { border-bottom: none; padding-bottom: 2px; }
+  .hl-place {
+    display: inline-block; text-align: center; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .hl-place .num { display: block; font-size: 18px; font-weight: 700; color: #16a34a; }
+  .hl-place .frac { display: block; font-size: 10px; color: #9ca3af; font-weight: 400; }
+  .hl-detail {
+    padding: 0 0 6px; font-size: 11px; color: #6b7280;
+    border-bottom: 1px solid #f3f4f6; line-height: 1.5;
+  }
+  .hl-detail a { color: #dc2626; text-decoration: none; font-weight: 500; }
+  .hl-detail a:hover { text-decoration: underline; }
+  .hl-detail .sep { color: #d1d5db; margin: 0 6px; }
+  .hl-detail .dim { color: #9ca3af; }
+  /* タップで対戦履歴を展開できるハイライト (アップセット / シード超え / ルーザーズラン。1年以内に参加がある選手は1年窓、なければ全期間の最大) */
+  .hl-group > .stat-row { cursor: pointer; }
+  .hl-group .tour-matches { border-radius: 6px; margin-bottom: 4px; }
+  .hl-counts {
+    font-size: 11px; color: #374151; font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .hl-counts .period-label { color: #9ca3af; font-size: 10px; margin-right: 3px; }
+  .hl-counts .period-val { color: #111827; font-weight: 600; }
+  .hl-counts .sep { color: #d1d5db; margin: 0 5px; }
+  .hl-counts-unit { color: #9ca3af; font-size: 10px; margin-left: 4px; }
+  /* 大会行の簡略 stat chips */
+  /* 各行を固定高さ + flex 中央寄せにして、Latin/CJK の font-size 差で行間がズレないようにする. */
+  .v-stats .chip .lbl {
+    display: flex; align-items: center; justify-content: center;
+    height: 12px; font-size: 9px; color: #9ca3af; letter-spacing: 0.04em;
+  }
+  /* クリックで展開する大会行 */
+  .tour-clickable { cursor: pointer; }
+  .tour-clickable:hover { background: #fafafa; }
+  /* 最新の大会結果カード: 順位とパフォーマンスを統合したヒーロー表示 */
+  #latestres-section h2 { margin-bottom: 0; }
+  .latestres-card .lr-top { margin-top: -1px; }
+  .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
+  .latestres-card .lr-chev { display: inline-block; align-self: center; margin-left: 4px; }
+  .perf-hero .ph-perf-sub { font-size: 9px; color: #9ca3af; }
+  .latestres-card .lr-top { font-size: 13px; }
+  .lr-date { font-size: 11px; color: #9ca3af; font-weight: 400; margin-left: 6px; }
+  .lr-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
+  .lr-badge.ok { background: #dcfce7; color: #15803d; }
+  .lr-badge.ng { background: #fee2e2; color: #b91c1c; }
+  .lr-zen { font-size: 12.5px; color: #374151; margin-top: 1px; text-align: center; }
+  .lr-zen b { font-weight: 700; }
+  .lr-zen .lr-zen-up { color: #16a34a; font-weight: 700; }
+  .perf-hero { display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap; margin: 5px 0 2px; }
+  .perf-hero .ph-place { font-size: 24px; font-weight: 800; color: #111827; line-height: 1; }
+  .perf-hero .ph-place .ph-i { font-size: 14px; font-weight: 700; margin-left: 1px; }
+  .perf-hero .ph-place.gold { color: #d4a30f; }
+  .perf-hero .ph-place.silver { color: #9ca3af; }
+  .perf-hero .ph-place.bronze { color: #b45309; }
+  .perf-hero .ph-place.top8 { color: #ec4899; }
+  .perf-hero .ph-n { font-size: 11px; color: #6b7280; font-weight: 600; margin-left: -2px; align-self: flex-end; padding-bottom: 2px; }
+  .perf-hero .ph-spr { font-size: 18px; font-weight: 700; line-height: 1.2; }
+  .perf-hero .ph-spr.pos { color: #16a34a; }
+  .perf-hero .ph-spr.neg { color: #2563eb; }
+  .perf-hero .ph-spr.dim { color: #9ca3af; }
+  .perf-hero { align-items: center; }
+  .perf-hero .ph-sep { width: 1px; height: 28px; background: #e5e7eb; margin: 0 2px; align-self: center; }
+  .perf-hero .ph-perf { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+  .perf-hero .ph-perf-lbl { font-size: 9px; color: #9ca3af; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px; }
+  .perf-hero .ph-perf-val { display: flex; align-items: baseline; gap: 6px; }
+  .perf-hero .ph-rank { font-size: 16px; font-weight: 700; color: #111827; }
+  .perf-hero .ph-rank .ph-lbl { font-size: 10px; color: #6b7280; font-weight: 600; margin: 0 1px; }
+  .perf-hero .lv-pill { font-size: 10px; padding: 1px 6px; }
+  .perf-hero .ph-perf-val .lv-pill { align-self: center; }
+  .perf-hero .ph-help {
+    width: 14px; height: 14px; padding: 0; border-radius: 50%;
+    border: 1px solid #d1d5db; background: #fff; color: #9ca3af;
+    font-size: 9px; font-weight: 700; line-height: 1; cursor: pointer;
+  }
+  .perf-hero .ph-help:hover { color: #6b7280; border-color: #9ca3af; }
+  .lr-cap {
+    font-size: 10px; color: #6b7280; line-height: 1.6;
+    background: #f9fafb; border-radius: 8px; padding: 7px 10px; margin: 4px 0 6px;
+  }
+  /* ライバルプレイヤー */
+  .rivals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rival-cat { background: #f9fafb; border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .rival-cat .rc-title {
+    font-size: 10px; color: #6b7280; font-weight: 600; margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rival-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 12px; padding: 2px 0; min-width: 0; }
+  .rival-row .rr-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rival-row .rr-name a { color: #111827; text-decoration: none; font-weight: 500; }
+  .rival-row .rr-rank { color: #6b7280; flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .rival-row.me, .rival-row.me .rr-rank { color: #b91c1c; font-weight: 600; }
+  .rival-row.me { border-top: 1px dashed #e5e7eb; border-bottom: 1px dashed #e5e7eb; }
+  /* 出場履歴 行展開時のパフォーマンス表記 */
+  .tour-group .tour-perf {
+    display: none; font-size: 12px; color: #374151; text-align: center;
+    padding: 6px 0 2px; background: #fafafa;
+  }
+  .tour-group.expanded .tour-perf { display: block; }
+  .tour-perf .tp-lbl { font-size: 9px; color: #9ca3af; letter-spacing: 0.05em; margin-right: 4px; }
+  .tour-perf .lv-pill { font-size: 10px; padding: 1px 6px; }
+  /* SPR/順位評価/直対評価 chips + 対戦は ▶ 展開の中 */
+  .tour-group .lr-detail { display: none; }
+  .tour-group.expanded .lr-detail { display: block; }
+  .lr-detail .lr-stats { justify-content: center; padding: 8px 0 4px; }
+  .lr-detail .tour-matches { margin-top: 4px; }
+  .tour-group .chevron {
+    color: #d1d5db; font-size: 10px; margin-left: 6px;
+    transition: transform 0.15s;
+  }
+  /* 個別試合行 */
+  .match-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 12px; font-size: 12px; line-height: 1.4;
+  }
+  .match-row .m-bracket {
+    flex: 0 0 68px; font-size: 10px; color: #9ca3af;
+    text-align: left; white-space: nowrap;
+  }
+  .match-row .m-content {
+    flex: 1 1 auto; display: flex; align-items: baseline;
+    justify-content: center; gap: 8px; min-width: 0;
+  }
+  .match-row .m-player { text-align: right; color: #374151; }
+  .match-row .m-opp { text-align: left; color: #374151; }
+  .match-row .m-opp a { color: #dc2626; text-decoration: none; font-weight: 500; }
+  .match-row .m-opp a:hover { text-decoration: underline; }
+  .match-row .m-seed { color: #9ca3af; font-size: 10px; line-height: 1.2; margin-top: 1px; }
+  .match-row .m-score {
+    font-weight: 700; font-variant-numeric: tabular-nums;
+    font-size: 13px; flex: 0 0 auto;
+  }
+  .match-row .m-delta {
+    flex: 0 0 56px; text-align: right;
+    font-variant-numeric: tabular-nums; font-size: 11px;
+  }
+
+  /* Achievement badges */
+  .badges {
+    display: flex; flex-wrap: wrap; gap: 0;
+    max-width: 100%; min-width: 0;
+  }
+  .badge {
+    font-size: 10px; padding: 4px 9px; border-radius: 12px;
+    background: #f3f4f6; color: #374151;
+    border: 1px solid #e5e7eb;
+    font-weight: 600;
+    max-width: 100%;
+    white-space: nowrap;
+    line-height: 1.4;
+    margin: -2px -3px -2px 0;
+  }
+  .badge.gold { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border-color: #fbbf24; }
+  .badge.silver { background: linear-gradient(135deg, #f3f4f6, #f3f4f6); color: #4b5563; border-color: #9ca3af; }
+  .badge.bronze { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #6b21a8; border-color: #a78bfa; }
+  .badge.green { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #16a34a; border-color: #22c55e; }
+  .badge.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1e40af; border-color: #3b82f6; }
+
+  /* Tournament item */
+  .tour-item {
+    display: grid;
+    grid-template-columns: 46px 1fr auto;
+    gap: 8px; align-items: center;
+    padding: 8px 6px;
+    border-bottom: 1px solid #f3f4f6;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .tour-item:hover { background: #f9fafb; }
+  .tour-item.tour-item-nohover:hover { background: transparent; }
+  /* 最近の出場履歴: 大会結果 + 直対結果を 1 グループで hover */
+  .tour-group {
+    border-bottom: 1px solid #f3f4f6;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+    padding: 0 6px;
+  }
+  .tour-group:hover { background: #f9fafb; }
+  .tour-group:last-child { border-bottom: none; }
+  .tour-item .meta { font-size: 11px; color: #6b7280; }
+  .tour-item .meta a { color: #dc2626; text-decoration: none; font-weight: 500; }
+  .tour-item .meta .date { color: #9ca3af; font-size: 10px; margin-right: 4px; }
+  .tour-item .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #dc2626; font-size: 13px; }
+  .tour-item .v.pos { color: #16a34a; }
+  .tour-item .v.neg { color: #2563eb; }
+
+  /* Chart */
+  .chart-wrap {
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
+    padding: 8px; margin: 6px 0;
+  }
+  .chart-area { height: 200px; position: relative; }
+  /* Radar chart wrapper */
+  .radar-wrap {
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
+    padding: 12px; margin: 6px 0;
+    height: 320px; position: relative;
+  }
+  @media (max-width: 480px) { .radar-wrap { height: 280px; padding: 8px; } }
+  .chart-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+  .chart-tab {
+    padding: 3px 8px; font-size: 10px; cursor: pointer; user-select: none;
+    background: #ffffff; border-radius: 4px; color: #6b7280;
+    border: 1px solid #e5e7eb;
+  }
+  .chart-tab.active { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .chart-range-tab {
+    font-size: 10px; padding: 3px 9px; cursor: pointer;
+    border: 1px solid #e5e7eb; border-radius: 11px;
+    color: #6b7280; background: #ffffff;
+  }
+  .chart-range-tab.active { background: #374151; color: #fff; border-color: #374151; }
+  .chart-range-tab:hover:not(.active) { background: #f3f4f6; color: #111827; }
+
+  /* Share buttons */
+  .share-btn.save:hover { background: #15803d; }
+  .share-btn.share:hover { background: #b91c1c; }
+
+  .empty-msg { text-align: center; color: #6b7280; padding: 32px 16px; font-size: 13px; }
+  /* Filter buttons */
+  .filter-btn {
+    background: #ffffff; color: #6b7280; border: 1px solid #e5e7eb;
+    padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    font-family: inherit; margin-right: 4px;
+  }
+  .filter-btn:hover { background: #f3f4f6; color: #111827; }
+  .filter-btn.active { background: #dc2626; color: #fff; border-color: #dc2626; }
+  /* チャート直下の期間フィルタは chart-tab と同じサイズに揃える */
+  .filter-btn.chart-tab-size { padding: 3px 8px; font-size: 10px; margin-right: 0; }
+
+  /* Larger screen: keep the card narrow for screenshot consistency, but center it nicely */
+  @media (min-width: 600px) {
+    main { max-width: 480px; }
+    .rank-hero .big { font-size: 80px; }
+  }
+
+  /* date-top: tour-item の順位の上に日付を表示する用. デフォルトは非表示, 下記
+     .tour-group .tour-item .date-top で再表示 (= 最近の出場履歴のみ 2 列カード形式). */
+  .tour-item .date-top { display: none; }
+
+  /* 展開ブロック冒頭の "PlayerName #seed" ヘッダー (= match-row で本人<span data-i18n="player.page.t1"><span data-i18n="player.page.t1">名</span></span>を省略する代わり) */
+
+  /* ─── 最近の出場履歴 (= tour-group 内) 専用 2 列カード形式 (PC/スマホ共通) ───
+     他セクション (順位評価 影響の大きい大会 / 直対 / SPR / UF) はデフォルトの 3 列レイアウトのまま. */
+  .tour-group .tour-item {
+    grid-template-columns: 50px 1fr;
+    grid-template-rows: auto auto auto;
+    column-gap: 8px; row-gap: 4px;
+    padding: 10px 6px;
+  }
+  .tour-group .tour-item .date-top {
+    display: block; grid-column: 1; grid-row: 1;
+    text-align: center; font-size: 10px; color: #9ca3af;
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .tour-group .tour-item .place { grid-column: 1; grid-row: 2 / span 2; align-self: center; }
+  .tour-group .tour-item .meta { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+  .tour-group .tour-item .meta .date-inline { display: none; }
+  .tour-group .tour-item .meta br { display: none; }
+  .tour-group .tour-item .v, .tour-group .tour-item .v-stats {
+    grid-column: 2; grid-row: 3;
+    justify-self: stretch; justify-content: center; align-items: stretch;
+    flex-wrap: nowrap; gap: 10px;
+    position: relative; padding-right: 22px;
+  }
+  /* SPR/順位評価/直対評価 chip は横並び固定 (= 狭い画面でも改行しない) */
+  .tour-group .tour-item .v-stats .chip {
+    min-width: 0; flex: 0 1 auto;
+  }
+
+  /* match-row (展開時の各試合, PC/スマホ共通): 主役名 (m-player) は省略, bracket は左に残す.
+     bracket は固定幅 (= 大会内で score 列の x 座標が揃うように). */
+  .match-row { gap: 6px; padding: 5px 8px; }
+  .match-row .m-bracket {
+    flex: 0 0 65px; font-size: 10px; color: #9ca3af;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .match-row .m-content {
+    flex: 1 1 auto; display: flex; align-items: center;
+    justify-content: flex-start; gap: 8px; min-width: 0;
+  }
+  .match-row .m-player { display: none; }
+  .match-row .m-score {
+    flex: 0 0 auto; text-align: left; min-width: 36px;
+    font-size: 13px; font-weight: 700;
+  }
+  .match-row .m-opp {
+    flex: 1 1 0; text-align: left; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .match-row .m-delta { flex: 0 0 auto; min-width: 50px; }
+
+  /* ─── モバイル (max-width: 720px) ─── */
+  @media (max-width: 720px) {
+    /* 他セクション (= tour-group 外の tour-item) は最低限のはみ出し対策のみ:
+       meta が word-break で折り返し、v 列も縮む. */
+    .tour-item:not(.tour-group .tour-item) .v {
+      min-width: 0; font-size: 14px;
+    }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<main>
+  <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
+  <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
+
+  <div id="share-card" style="display:none">
+    <div id="share-top">
+    <div class="hero">
+      <div class="display-row">
+        <div class="display" id="display">—</div>
+        <a class="share-icon-btn" id="startgg-link" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h6v6"></path>
+            <path d="M10 14L21 3"></path>
+            <path d="M21 14v7H3V3h7"></path>
+          </svg>
+        </a>
+        <button class="share-icon-btn" id="share-icon-btn" title="URL を共有" aria-label="URL を共有" data-i18n-attr="title:common.share_url,aria-label:common.share_url">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </button>
+      </div>
+      <div id="char-line" style="display:none;margin-top:4px;font-size:13px;line-height:1.4">
+        <span id="char-line-body"></span>
+      </div>
+      <div id="pref-line" style="display:none;margin-top:4px;font-size:12px;color:#6b7280">
+        <span id="pref-body"></span>
+      </div>
+    </div>
+
+    <div class="rank-hero">
+      <div class="badges-line"><span id="lv-pill"></span> <span id="gate-pill"></span> <span id="overseas-pill"></span> <span id="zenichi-pill"></span></div>
+      <div class="label" data-i18n="ranking.tab.ensemble">総合評価</div>
+      <div class="big"><span class="hash">#</span><span id="big-rank">—</span></div>
+      <div class="of">/ <span id="total-n">—</span> 名 <span id="eval-date" style="color:#9ca3af;font-size:11px"></span></div>
+      <div class="meta-line" id="meta-line"></div>
+    </div>
+
+    <div class="subranks">
+      <div class="subrank-card">
+        <div class="label-row">
+          <span class="label" data-i18n="ranking.tab.tjpr">順位評価</span>
+        </div>
+        <div class="value">#<span id="rank-tjpr">—</span></div>
+        <div class="subscore" data-i18n="player.score">スコア <span id="score-tjpr">—</span></div>
+      </div>
+      <div class="subrank-card">
+        <div class="label-row">
+          <span class="label" data-i18n="ranking.tab.bt">直対評価</span>
+        </div>
+        <div class="value">#<span id="rank-bt">—</span></div>
+        <div class="subscore" data-i18n="player.score">スコア <span id="score-bt">—</span>
+          <span style="color:#9ca3af;font-size:10px">(<span id="score-bt-internal">—</span>)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.achievements">🏆 実績</h2>
+      <div class="badges" id="badges"></div>
+    </div>
+
+    <!-- 最新の大会結果 + パフォーマンス (SPSP シード基準の相当順位/相当Lv)
+         (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
+    <div class="section" id="latestres-section" style="display:none">
+      <h2 data-i18n="player.sec.latest">🎮 最新の大会結果 <span id="latestres-date" class="lr-date"></span></h2>
+      <div id="latestres-body"></div>
+    </div>
+
+    <!-- スコアシミュレーション: 次回出場予定の集計対象大会 + シミュレーションボタン
+         (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
+    <div class="section" id="yosou-section" style="display:none">
+      <h2 id="yosou-head" style="display:none" data-i18n="player.sec.upcoming">📅 次に出場予定の集計対象大会</h2>
+      <div id="yosou-tour" style="display:none;font-size:13px;color:#374151;margin-bottom:8px"></div>
+      <a id="yosou-link" href="#" style="display:block;text-align:center;padding:8px;border:1px solid #dc2626;border-radius:8px;color:#dc2626;font-weight:600;text-decoration:none;font-size:13px" data-i18n="player.simulate">🔮 スコアをシミュレーションする</a>
+    </div>
+
+    <div class="section">
+      <div id="highlights"></div>
+    </div>
+    </div><!-- /#share-top -->
+
+    <!-- ライバルプレイヤー: 4指標 × 上下2人 (重複なし) -->
+    <div class="section" id="rivals-section" style="display:none">
+      <h2 data-i18n="player.sec.rivals">👥 ライバルプレイヤー</h2>
+      <div id="rivals-body" class="rivals-grid"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.analysis">📊 プレイヤー分析 <span style="font-size:11px;color:#9ca3af;font-weight:400" data-i18n="player.sec.analysis_note">(直近 5 大会)</span></h2>
+      <div class="radar-wrap">
+        <canvas id="radar-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.history">📈 順位の推移</h2>
+      <div class="chart-wrap">
+        <div class="chart-tabs">
+          <div class="chart-tab active" data-chart="rank" data-i18n="player.chart.rank">順位</div>
+          <div class="chart-tab" data-chart="tjpr_score" data-i18n="player.chart.tjpr_score">順位スコア</div>
+          <div class="chart-tab" data-chart="bt_score" data-i18n="player.chart.bt_score">直対スコア</div>
+          <div class="chart-tab" data-chart="perf" data-i18n="player.performance">パフォーマンス</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 8px;align-items:center">
+          <button class="filter-btn chart-tab-size" data-filter-period="all" data-i18n="common.period.all">全期間</button>
+          <button class="filter-btn chart-tab-size" data-filter-period="3y" data-i18n="player.period.3y">3年</button>
+          <button class="filter-btn chart-tab-size" data-filter-period="1y" data-i18n="player.period.1y">1年</button>
+          <button class="filter-btn chart-tab-size active" data-filter-period="6m" data-i18n="player.period.6m">半年</button>
+          <button class="filter-btn chart-tab-size" data-filter-period="3m" data-i18n="player.period.3m">3ヶ月</button>
+        </div>
+        <div class="chart-area"><canvas id="chart-canvas"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section" id="kind-filter-section" style="background:#f9fafb;border-radius:6px;padding:10px 12px;font-size:11px;margin-top:14px;margin-bottom:14px">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+        <div>
+          <span style="color:#6b7280;margin-right:4px" data-i18n="player.filter.tournaments">大会:</span>
+          <button class="filter-btn active" data-filter-kind="all" data-i18n="common.all">すべて</button>
+          <button class="filter-btn" data-filter-kind="weekend" data-i18n="tags.wk">休日</button>
+          <button class="filter-btn" data-filter-kind="weekday" data-i18n="tags.wd">平日</button>
+          <button class="filter-btn" data-filter-kind="counted" data-i18n="player.counted">集計対象</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.top_tjpr">💎 順位評価 影響の大きい大会</h2>
+      <div class="pager" id="top-contribs-pager" data-target="top-contribs" style="display:none"></div>
+      <div id="top-contribs"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.top_bt">⚔️ 直対評価 影響の大きい対戦</h2>
+      <div class="pager" id="top-bt-pager" data-target="top-bt" style="display:none"></div>
+      <div id="top-bt"></div>
+    </div>
+
+    <div class="section" id="top-spr-section">
+      <h2 data-i18n="player.sec.top_spr">✨ 最大シード超え</h2>
+      <div class="pager" id="top-spr-pager" data-target="top-spr" style="display:none"></div>
+      <div id="top-spr"></div>
+    </div>
+
+    <div class="section" id="top-ufs-section">
+      <h2 data-i18n="player.sec.top_uf">⚡ 大きいアップセット</h2>
+      <div class="pager" id="top-ufs-pager" data-target="top-ufs" style="display:none"></div>
+      <div id="top-ufs"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="player.sec.recent">📅 出場履歴</h2>
+      <div class="pager" id="recent-pager" data-target="recent" style="display:none"></div>
+      <div id="recent"></div>
+    </div>
+
+  </div>
+
+  <div class="share-row" id="share-row" style="display:none">
+    <button class="share-btn save" id="save-btn" style="display:none" data-i18n="common.save_image">画像で保存</button>
+  </div>
+
+  <div class="footer" id="footer-info">
+    <span class="site-version" style="font-size:11px;color:#9ca3af">__SITE_VERSION__</span>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+<script src="../assets/p.js"></script>
+</body>
+</html>

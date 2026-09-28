@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.t.title">大会詳細 — SPSP</title>
+<meta name="description" content="SPSP 大会詳細ページ。全順位表、アップセット/順位評価上昇/シード超え/直対上昇/順位上昇ランキング。日本のスマブラSP大会データ。" data-i18n-attr="content:page.t.description">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:locale" content="ja_JP">
+<link rel="stylesheet" href="../css/player.css">
+<style>
+
+  main { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  /* Hero */
+  .hero .name-row {
+    display: flex; align-items: flex-start; gap: 8px; justify-content: space-between;
+  }
+  .hero .name {
+    font-size: 22px; font-weight: 700; color: #111827;
+    line-height: 1.25; word-break: break-word;
+    flex: 1;
+  }
+  .hero .event {
+    font-size: 13px; color: #6b7280; margin-top: 4px;
+  }
+  .hero .meta-line {
+    margin-top: 8px; font-size: 12px; color: #374151;
+  }
+  .hero .meta-line .chip {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: #f3f4f6; font-size: 11px; margin-right: 4px;
+  }
+  .hero .meta-line .chip.wk { background: #dbeafe; color: #1e40af; }
+  .hero .meta-line .chip.wd { background: #f3f4f6; color: #6b7280; }
+  .hero .meta-line .chip.sm { background: #fef3c7; color: #92400e; }
+  .hero .meta-line .chip.pre { background: #f3e8ff; color: #6b21a8; }
+  .hero .meta-line .chip.res { background: #ffe4e6; color: #be123c; }
+  .hero .meta-line .chip.lc  { background: #e0f2fe; color: #0369a1; }
+  .hero .meta-line .chip.gf  { background: #ffedd5; color: #9a3412; font-weight: 600; }
+  .chip.resume { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+
+  /* Podium (Top 3) */
+  .podium {
+    display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 6px;
+    align-items: end; margin: 16px 0;
+  }
+  .podium-card {
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 10px;
+    padding: 10px 6px; text-align: center;
+  }
+  .podium-card.gold { background: linear-gradient(135deg, #fde68a, #f9fafb); border-color: #fbbf24; }
+  .podium-card.silver { background: linear-gradient(135deg, #f3f4f6, #f9fafb); border-color: #9ca3af; }
+  .podium-card.bronze { background: linear-gradient(135deg, #ddd6fe, #f9fafb); border-color: #a78bfa; }
+  .podium-card { transition: background 0.15s, border-color 0.15s; }
+  .podium-card:hover { background: #f3f4f6; border-color: #d1d5db; }
+  .podium-card.gold:hover { background: linear-gradient(135deg, #fcd34d, #f3f4f6); }
+  .podium-card.silver:hover { background: linear-gradient(135deg, #e5e7eb, #f3f4f6); }
+  .podium-card.bronze:hover { background: linear-gradient(135deg, #c4b5fd, #f3f4f6); }
+  .podium-card .medal { font-size: 22px; line-height: 1; }
+  .podium-card .place { font-size: 11px; color: #6b7280; margin: 2px 0; }
+  .podium-card .player {
+    font-size: 12px; color: #111827; font-weight: 600;
+    word-break: break-word; line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .podium-card .player a { color: #111827; text-decoration: none; transition: color 0.1s; }
+  .podium-card .player a:hover { color: #dc2626; text-decoration: underline; }
+  .podium-card .grank { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+
+  /* Sections — player page と同じスタイル */
+  /* tour-item (player page と統一): 左 place 列 + center meta + 右 value */
+  .tour-item {
+    display: grid; grid-template-columns: 46px 1fr auto;
+    gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6;
+    align-items: center; transition: background 0.1s;
+  }
+  .tour-item:hover { background: #f3f4f6; }
+  .tour-item .meta { font-size: 12px; color: #374151; min-width: 0; word-break: break-word; }
+  .tour-item .meta a { color: #dc2626; text-decoration: none; font-weight: 500; font-size: 13px; }
+  .tour-item .meta .sub { color: #9ca3af; font-size: 10px; margin-top: 1px; }
+  .tour-item .v {
+    text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
+    color: #16a34a; font-size: 18px; line-height: 1.1; min-width: 56px;
+  }
+  .tour-item .v .frac { display: block; font-size: 10px; color: #9ca3af; font-weight: 400; }
+  .tour-item .v.dim { color: #9ca3af; }
+
+  /* match-row (アップセット用): プレイヤー名 score 相手名 — player page と統一 */
+  .match-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; font-size: 12px; line-height: 1.4;
+    border-bottom: 1px solid #f3f4f6; transition: background 0.1s;
+  }
+  .match-row:last-child { border-bottom: none; }
+  .match-row:hover { background: #f3f4f6; }
+  .match-row .m-content {
+    flex: 1 1 auto; display: flex; align-items: baseline;
+    justify-content: center; gap: 8px; min-width: 0;
+  }
+  .match-row .m-player { text-align: right; color: #374151; }
+  .match-row .m-opp { text-align: left; color: #374151; }
+  .match-row a { color: #dc2626; text-decoration: none; font-weight: 500; }
+  .match-row a:hover { text-decoration: underline; }
+  .match-row .m-seed { display: block; color: #9ca3af; font-size: 10px; line-height: 1.2; margin-top: 1px; }
+  .match-row .m-score {
+    font-weight: 700; font-variant-numeric: tabular-nums; font-size: 16px; flex: 0 0 auto;
+    text-align: center;
+  }
+  .match-row .m-uf {
+    flex: 0 0 60px; text-align: center;
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .match-row .m-uf .num { display: block; font-size: 18px; font-weight: 700; color: #16a34a; }
+  .match-row .m-uf .frac { display: block; font-size: 10px; color: #9ca3af; font-weight: 400; }
+
+  /* Pager (prev/next + page indicator) — player page と統一 */
+
+  /* Standings 検索 */
+  .standings-controls { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+  .standings-controls input {
+    flex: 1; min-width: 120px;
+    padding: 7px 10px;
+    background: #f9fafb; color: #111827;
+    border: 1px solid #e5e7eb; border-radius: 6px;
+    font-size: 12px; font-family: inherit;
+  }
+
+  /* クリックで展開する大会内 match list (standings の各 entry 下) */
+  .tour-group { border-bottom: 1px solid #f3f4f6; }
+  .tour-group .tour-item { border-bottom: none; cursor: pointer; transition: background 0.1s; }
+  .tour-group .tour-item:hover { background: #f3f4f6; }
+  .tour-group .tour-item .meta a { transition: color 0.1s; }
+  .tour-group .tour-item .meta a:hover { color: #b91c1c; text-decoration: underline; }
+  .tour-group .chevron {
+    color: #d1d5db; font-size: 10px; margin-left: 4px;
+    transition: transform 0.15s;
+  }
+  .match-row.t-match {
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 12px; font-size: 12px; line-height: 1.4;
+    border-bottom: none;
+  }
+  .match-row.t-match:hover { background: #f3f4f6; }
+  .match-row.t-match .m-bracket {
+    flex: 0 0 68px; font-size: 10px; color: #9ca3af; text-align: left; white-space: nowrap;
+  }
+  .match-row.t-match .m-content {
+    flex: 1 1 auto; display: flex; align-items: baseline; justify-content: center; gap: 8px; min-width: 0;
+  }
+  .match-row.t-match .m-player, .match-row.t-match .m-opp {
+    flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .match-row.t-match .m-player { text-align: right; }
+  .match-row.t-match .m-opp { text-align: left; }
+  .match-row.t-match .m-score { font-weight: 700; font-size: 13px; flex: 0 0 auto; text-align: center; min-width: 36px; }
+  .match-row.t-match .m-delta {
+    flex: 0 0 56px; text-align: right;
+    font-variant-numeric: tabular-nums; font-size: 11px;
+  }
+
+  /* Standings: tour-item ベース + v-stats chips (player page と統一) */
+  /* 各行を固定高さ + flex 中央寄せにして、Latin/CJK の font-size 差で行間がズレないようにする. */
+  .v-stats .chip .lbl {
+    display: flex; align-items: center; justify-content: center;
+    height: 12px; font-size: 9px; color: #9ca3af; letter-spacing: 0.04em; white-space: nowrap;
+  }
+
+  /* Share */
+
+  .empty-msg { text-align: center; color: #6b7280; padding: 24px 16px; font-size: 13px; }
+
+  /* 展開ブロック冒頭の "PlayerName #seed" ヘッダー (= モバイル match-row で本人名を省略する代わり) */
+
+  /* ─── 全順位表 (= tour-group 内) 専用 2 列カード形式 (PC/スマホ共通) ───
+     他セクション (順位上昇 / 直対上昇 / アップセット 等) はデフォルトレイアウトのまま. */
+  .tour-group .tour-item {
+    grid-template-columns: 50px 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 8px; row-gap: 4px;
+    padding: 8px 6px;
+  }
+  .tour-group .tour-item .place { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+  .tour-group .tour-item .meta { grid-column: 2; grid-row: 1; }
+  .tour-group .tour-item .v-stats {
+    grid-column: 2; grid-row: 2;
+    justify-self: stretch; justify-content: center;
+    flex-wrap: wrap; gap: 14px;
+    position: relative; padding-right: 22px;
+  }
+
+  /* match-row.t-match (大会内マッチ展開時, PC/スマホ共通): 主役名 (m-player) は省略,
+     bracket は左に残す. bracket は固定幅 (= 大会内で score 列の x 座標が揃うように). */
+  .match-row.t-match { gap: 6px; padding: 4px 8px; }
+  .match-row.t-match .m-bracket {
+    flex: 0 0 65px; font-size: 10px; color: #9ca3af;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .match-row.t-match .m-content {
+    flex: 1 1 auto; display: flex; align-items: center;
+    justify-content: flex-start; gap: 8px; min-width: 0;
+  }
+  .match-row.t-match .m-player { display: none; }
+  .match-row.t-match .m-score {
+    flex: 0 0 auto; text-align: left; min-width: 36px;
+    font-size: 13px; font-weight: 700;
+  }
+  .match-row.t-match .m-opp {
+    flex: 1 1 0; text-align: left; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .match-row.t-match .m-delta { flex: 0 0 auto; min-width: 50px; }
+
+  /* ─── モバイル (max-width: 720px) ─── */
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<main>
+  <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
+  <div id="not-found" class="empty-msg" style="display:none" data-i18n="tournament.not_found">大会が見つかりません。URL を確認してください。</div>
+
+  <div id="share-card" style="display:none">
+    <div id="share-top">
+    <div class="hero">
+      <div class="name-row">
+        <div class="name" id="name">—</div>
+        <a class="share-icon-btn" id="startgg-link" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h6v6"></path>
+            <path d="M10 14L21 3"></path>
+            <path d="M21 14v7H3V3h7"></path>
+          </svg>
+        </a>
+        <button class="share-icon-btn" id="share-icon-btn" title="URL を共有" aria-label="URL を共有" data-i18n-attr="title:common.share_url,aria-label:common.share_url">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="event" id="event">—</div>
+      <div class="meta-line" id="meta-line"></div>
+    </div>
+
+    <div class="podium" id="podium"></div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.upsets">💥 アップセットランキング</h2>
+      <div class="pager" id="top-upsets-pager" style="display:none"></div>
+      <div id="top-upsets"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.tjpr_gain">💎 順位評価上昇ランキング</h2>
+      <div class="pager" id="top-points-pager" style="display:none"></div>
+      <div id="top-points"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.spr">🚀 シード超えランキング</h2>
+      <div class="pager" id="top-spr-pager" style="display:none"></div>
+      <div id="top-spr"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.bt_gain">📈 直対上昇ランキング</h2>
+      <div class="pager" id="top-bt-pager" style="display:none"></div>
+      <div id="top-bt"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.losers_run">🏃‍♂️ ルーザーズランランキング</h2>
+      <div class="pager" id="top-losers-runs-pager" style="display:none"></div>
+      <div id="top-losers-runs"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.rank_gain_ens">⬆️ 順位上昇ランキング (総合)</h2>
+      <div class="pager" id="top-rank-ens-pager" style="display:none"></div>
+      <div id="top-rank-ens"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.rank_gain_tjpr">⬆️ 順位上昇ランキング (順位評価)</h2>
+      <div class="pager" id="top-rank-tjpr-pager" style="display:none"></div>
+      <div id="top-rank-tjpr"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.rank_gain_bt">⬆️ 順位上昇ランキング (直対評価)</h2>
+      <div class="pager" id="top-rank-bt-pager" style="display:none"></div>
+      <div id="top-rank-bt"></div>
+    </div>
+    </div><!-- /#share-top -->
+
+    <div class="section">
+      <h2 data-i18n="tournament.sec.standings">📋 全順位表</h2>
+      <div class="standings-controls">
+        <input type="search" id="std-search" placeholder="プレイヤー名で検索…" autocomplete="off" data-i18n-attr="placeholder:tournament.search_placeholder">
+      </div>
+      <div id="std-list"></div>
+    </div>
+  </div>
+
+  <div class="share-row" id="share-row" style="display:none">
+    <button class="share-btn save" id="save-btn" style="display:none" data-i18n="common.save_image">画像で保存</button>
+  </div>
+
+  <div class="footer" id="footer-info">
+    <span class="site-version" style="font-size:11px;color:#9ca3af">__SITE_VERSION__</span>
+  </div>
+</main>
+
+<script src="../assets/t.js"></script>
+</body>
+</html>

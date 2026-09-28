@@ -1,0 +1,126 @@
+/* player.css — 共通スタイル (tools/frontend/css_extract.cjs で p/index.html, t/index.html から抽出)。
+   ページ固有の上書きは各ページの <style> に残っている。見た目を変えるときは cascade の順 (この file → ページの <style>) に注意 */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+  background: #ffffff; color: #111827; font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
+.nav {
+  background: #ffffff; border-bottom: 1px solid #e5e7eb;
+  padding: 12px 24px; display: flex; gap: 24px; align-items: center;
+  position: sticky; top: 0; z-index: 10;
+}
+.nav a { color: #6b7280; text-decoration: none; font-size: 14px; padding: 4px 8px; border-radius: 4px; }
+.nav a:hover { color: #111827; background: #f3f4f6; }
+.nav .brand { font-size: 16px; color: #111827; font-weight: 600; margin-right: 16px; }
+.nav .brand a { color: #111827; font-size: 16px; padding: 0; }
+.nav .brand a:hover { background: transparent; }
+#share-card {
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 30%, #ffffff 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 14px;
+  overflow: hidden;
+}
+.share-icon-btn {
+  background: #ffffff; border: 1px solid #e5e7eb; color: #6b7280;
+  border-radius: 8px; padding: 6px 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; line-height: 1;
+  transition: all 0.15s;
+}
+.share-icon-btn:hover { background: #fef2f2; color: #dc2626; border-color: #dc2626; }
+.share-icon-btn svg { width: 16px; height: 16px; display: block; }
+.section { margin-top: 14px; }
+.section h2 {
+  font-size: 12px; color: #374151; text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 0 0 8px; font-weight: 600;
+}
+.v-stats {
+  display: flex; gap: 14px; align-items: center; justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.v-stats .chip { text-align: center; min-width: 48px; }
+.v-stats .chip .lbl.lbl-en { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; }
+.v-stats .chip .val {
+  display: flex; align-items: center; justify-content: center;
+  height: 16px; font-size: 13px; font-weight: 600;
+}
+.v-stats .chip .val.pos { color: #16a34a; }
+.v-stats .chip .val.neg { color: #2563eb; }
+.v-stats .chip .val.dim { color: #9ca3af; }
+.v-stats .chip .sub {
+  display: flex; align-items: center; justify-content: center;
+  height: 11px; font-size: 9px; color: #9ca3af; margin-top: 1px;
+}
+.tour-group.expanded .chevron { transform: rotate(90deg); color: #9ca3af; }
+.tour-matches { display: none; padding: 4px 0 8px; background: #fafafa; }
+.tour-group.expanded .tour-matches { display: block; }
+.match-row .m-player, .match-row .m-opp {
+  flex: 1 1 0; min-width: 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.tour-item:last-child { border-bottom: none; }
+.tour-item .place {
+  font-size: 18px; font-weight: 700; color: #111827; text-align: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  word-break: keep-all;
+}
+.tour-item .place .num { display: block; font-size: 18px; font-weight: 700; }
+.tour-item .place .frac { display: block; font-size: 10px; color: #9ca3af; font-weight: 400; }
+.tour-item .place.gold { color: #92400e; }
+.tour-item .place.silver { color: #4b5563; }
+.tour-item .place.bronze { color: #6b21a8; }
+.tour-item .meta a:hover { text-decoration: underline; }
+.share-row {
+  display: flex; gap: 8px; margin-top: 14px;
+}
+.share-btn {
+  flex: 1; padding: 10px 12px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.share-btn.save { background: #16a34a; color: #fff; }
+.share-btn.share { background: #dc2626; color: #fff; }
+.share-btn:disabled { background: #d1d5db; cursor: wait; }
+.footer { text-align: center; color: #9ca3af; font-size: 11px; padding: 22px 0 16px; }
+.pager { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 6px 0 10px; font-size: 12px; color: #374151; user-select: none; }
+.pager .page-btn {
+  font-size: 14px; line-height: 1; color: #374151; cursor: pointer;
+  background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 6px 12px; font-family: inherit; min-width: 36px;
+}
+.pager .page-btn:disabled { opacity: 0.35; cursor: default; }
+.pager .page-info { min-width: 56px; text-align: center; color: #6b7280; }
+.match-header {
+  padding: 8px 12px 4px; font-size: 12px; color: #111827; font-weight: 600;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.match-header .seed {
+  color: #9ca3af; font-size: 11px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.tour-group .tour-item .v-stats .chevron {
+  position: absolute; right: 0; top: 50%; margin: 0;
+  transform: translateY(-50%); line-height: 1;
+}
+.tour-group.expanded .tour-item .v-stats .chevron {
+  transform: translateY(-50%) rotate(90deg);
+}
+@media (max-width:720px) {
+  .nav { padding: 8px 12px; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+  .nav .brand { font-size: 14px; margin-right: 8px; }
+  .nav .brand a { font-size: 14px; }
+  .nav a { padding: 3px 6px; font-size: 12px; }
+  .tour-item:not(.tour-group .tour-item) .meta {
+    min-width: 0; word-break: break-word;
+  }
+}
+@media (max-width:380px) {
+  .nav .brand { font-size: 13px; }
+  .nav .brand a { font-size: 13px; }
+  .nav a { font-size: 11px; }
+}

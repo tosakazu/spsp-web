@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>実データでの方式比較 | SPSP ブログ</title>
+<meta name="description" content="篝火 4 シーズン 180 大会で、SPSP の方式を Glicko-2、Elo、JJPR、UltRank と対応付き検定で比べた結果、来季の設定変更の採点、実力帯別の判定。技術版。">
+<link rel="stylesheet" href="blog.css">
+<script>MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] } };</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+<main>
+<h1>実データでの方式比較</h1>
+<p class="meta">2026-09-07 · 技術版 · 簡易版は <a href="ranking-accuracy.html">「SPSP のランキングはどれくらい当たっているか」</a></p>
+<p class="lead"><a href="metrics-evaluation.html">「評価指標の評価と整理」</a> で決めた指標と運用規則を、篝火 4 シーズン 180 大会の実データに当てた結果です。方式の比較、UltRank との比較、来季の設定変更の採点、実力帯別の判定を、大会単位の対応付き検定の数値つきで書きます。指標の定義と記号はその記事の 2 節のとおりです。</p>
+
+<div class="abstract"><div class="t">概要</div><ul>
+<li>SPSP の組み合わせ方式 (ens) は、シードバイアスのない指標でも Glicko-2、Elo、最尤に有意に勝ちます。直対単体 (bt) とは全体では互角です。</li>
+<li>UltRank 2025 は、集計期間内の結果に対しては SPSP と同程度の説明精度がありますが、期間外の大会では季を問わず 3 指標とも SPSP を下回ります。予測ランキングとしては不向きです。</li>
+<li>来季の設定案は基準に対して ULG +3.9、FWR +1.3 です。</li>
+<li>実力帯別では、1〜16 位は直対単体、17〜64 位はどっこいから直対単体寄り、65〜1024 位はどっこいから SPSP 寄り、1025 位以下は SPSP 寄り (大会数 5 で単独では非有意) です。</li>
+</ul></div>
+
+<div class="toc">目次
+<ol>
+<li><a href="#s1">方式の比較</a>
+</li>
+<li><a href="#s2">UltRank との比較は、集計期間で分ける</a>
+</li>
+<li><a href="#s3">来季の設定変更を採点し直す</a>
+</li>
+<li><a href="#s4">実力帯別</a>
+</li>
+<li><a href="#s5">再現手順</a>
+</li>
+</ol></div>
+
+<p>対象は篝火 #11〜#15 で区切った 4 季 (2023 年 10 月〜2026 年 5 月) の 100 人以上の大会 180 件です。各大会の直前時点のランキングからシードを作り、比べたい 2 つの並びを同じ大会で採点して、大会単位の対応付き \(t\) を出します。以下の \(t\) は特に断らない限り「正 = 前者が良い」に揃えてあります。</p>
+
+<p>対象は篝火 #11〜#15 で区切った 4 季 (2023 年 10 月〜2026 年 5 月) の 100 人以上の大会 180 件です。各大会の直前時点のランキングからシードを作り、設定を変えた版と基準版を同じ大会で採点して、大会単位の対応付き \(t\) を出します。以下の \(t\) はすべて「正 = 変えた版が良い」に揃えてあります。</p>
+
+<h2 id="s1">1. 方式の比較</h2>
+<p>素の Glicko-2 などは過去データを見ていない状態から学習するので、学習が浅い最初の季を除いた 3 季で比べます。</p>
+<div class="tablewrap"><table>
+<tr><th>方式</th><th class="num">PA</th><th class="num">FWR</th><th class="num">ULG (低いほど良い)</th><th class="num">MASPR (低いほど良い)</th></tr>
+<tr><td>SPSP (ens)</td><td class="num">0.860</td><td class="num">0.784</td><td class="num">0.173</td><td class="num">0.988</td></tr>
+<tr><td>直対単体 (bt)</td><td class="num">0.854</td><td class="num">0.785</td><td class="num">0.169</td><td class="num">0.996</td></tr>
+<tr><td>順位単体 (tj)</td><td class="num">0.855</td><td class="num">0.772</td><td class="num">0.187</td><td class="num">1.020</td></tr>
+<tr><td>Glicko-2 (素)</td><td class="num">0.833</td><td class="num">0.765</td><td class="num">0.190</td><td class="num">1.059</td></tr>
+<tr><td>JJPR (参考)</td><td class="num">0.831</td><td class="num">0.745</td><td class="num">0.225</td><td class="num">1.145</td></tr>
+<tr><td>Elo (素)</td><td class="num">0.820</td><td class="num">0.752</td><td class="num">0.208</td><td class="num">1.111</td></tr>
+<tr><td>Bradley-Terry 最尤 (一括)</td><td class="num">0.796</td><td class="num">0.732</td><td class="num">0.237</td><td class="num">1.230</td></tr>
+</table></div>
+<p>SPSP の組み合わせ方式は、歪まない指標でも他の方式に有意に勝ちます (ULG の大会単位の対応付き \(t\): Glicko-2 で 7.4)。JJPR は参考値です。試合を学習しない方式であり、実際のシードの基準でもあるので、PA は <a href="metrics-evaluation.html#s4-4">指標の記事 4.4 節</a> の仕組みで高めに出ます。13 種類の指標で方式を並べると、11 種類で同じ順 (bt ≈ ens &gt; tj &gt; Glicko-2 &gt; Elo &gt; 最尤) になり、ずれたのは順位系だけでした。</p>
+
+<h2 id="s2">2. UltRank との比較は、集計期間で分ける</h2>
+<p>UltRank 2025 Japan は 200 人の順位表で、2024 年 12 月 17 日から 2025 年 12 月 15 日の結果をもとに後から作られています。掲載選手同士に絞ってシードを振り直し、期間の前・中・後で分けました (PA / FWR / ULG)。</p>
+<div class="tablewrap"><table>
+<tr><th></th><th>期間前 (69 大会)</th><th>期間中 (56 大会)</th><th>期間後 (23 大会)</th></tr>
+<tr><td>SPSP</td><td>0.774 / 0.674 / 0.327</td><td>0.723 / 0.661 / 0.380</td><td>0.741 / 0.678 / 0.380</td></tr>
+<tr><td>UltRank</td><td>0.701 / 0.660 / 0.369</td><td><strong>0.722 / 0.659 / 0.350</strong></td><td>0.714 / 0.651 / 0.401</td></tr>
+</table></div>
+<p>期間中だけ UltRank が SPSP と同程度に見えます。評価している結果そのものを見て作られたランキングだからです。純粋な予想になる期間後では、PA と FWR で 2.7 ポイント下、ULG も 0.02 悪い値でした。シーズン別に分けても同じです (PA / FWR / ULG)。</p>
+<div class="tablewrap"><table>
+<tr><th>シーズン (期間との関係)</th><th class="num">大会数</th><th class="num">SPSP</th><th class="num">UltRank</th></tr>
+<tr><td>11_12 期間前</td><td class="num">30</td><td class="num">0.781 / 0.677 / 0.305</td><td class="num">0.692 / 0.659 / 0.375</td></tr>
+<tr><td>12_13 期間前</td><td class="num">39</td><td class="num">0.768 / 0.672 / 0.342</td><td class="num">0.707 / 0.660 / 0.365</td></tr>
+<tr><td>12_13 期間内</td><td class="num">25</td><td class="num">0.721 / 0.657 / 0.393</td><td class="num">0.715 / 0.645 / 0.365</td></tr>
+<tr><td>13_14 期間内</td><td class="num">24</td><td class="num">0.721 / 0.668 / 0.364</td><td class="num">0.722 / 0.677 / 0.342</td></tr>
+<tr><td>14_15 期間内</td><td class="num">7</td><td class="num">0.736 / 0.650 / 0.395</td><td class="num">0.743 / 0.633 / 0.331</td></tr>
+<tr><td>14_15 期間後</td><td class="num">23</td><td class="num">0.741 / 0.678 / 0.380</td><td class="num">0.714 / 0.651 / 0.401</td></tr>
+</table></div>
+<p>UltRank は 1 年間の実績を集計する順位表であって、次の大会を予想する道具として作られてはいません。集計期間内の結果に対しては SPSP と同程度の説明精度があります (ULG では上回る) が、期間外の大会では季を問わず 3 指標とも SPSP を下回ります。予測ランキングとして、つまりシーディングの基準としては不向きです。逆に、逐次予測の SPSP が後知恵の UltRank と期間内で同程度だったことは、SPSP 側の好材料です。</p>
+
+<h2 id="s3">3. 来季の設定変更を採点し直す</h2>
+<p>来季に入れる予定だった 4 つの変更を、1 つずつ基準と比べました。</p>
+<div class="tablewrap"><table>
+<tr><th>変更</th><th>内容</th><th class="num">ULG</th><th class="num">FWR</th><th class="num">PA (参考)</th><th>読み</th></tr>
+<tr><td>FFIX</td><td>Glicko-2 ライブラリがレーティングの 2 乗を誤って使う箇所を直す</td><td class="num">−0.96</td><td class="num">+1.02</td><td class="num">−0.14</td><td>精度は変わらない (正しさのための修正)</td></tr>
+<tr><td>dk3</td><td>直対評価の 180 日ピークを古いほど減らす</td><td class="num">+0.72</td><td class="num">−0.77</td><td class="num">+2.52</td><td>多くの指標で良い方向 (FWR だけはほぼ変わらず)。4 つの中で一番筋が良い</td></tr>
+<tr><td>lv3wd</td><td>レベル 3 の順位評価に平日大会を含める</td><td class="num">+1.47</td><td class="num">−0.15</td><td class="num">+0.80</td><td>季によって良かったり悪かったり</td></tr>
+<tr><td>bo5k</td><td>3 本先取の試合の変動量を 1.25 倍</td><td class="num">−0.32</td><td class="num">−0.11</td><td class="num">+2.62</td><td>順位系だけが良い (要注意の形)</td></tr>
+</table></div>
+<p>bo5k は「順位系だけ改善」の形だったので、倍率 K を変えて調べました。基準 (K=1) との ULG の \(t\) は、K=0.8 で −0.40、1.1 で +1.27、1.25 で −0.32、1.5 で −1.79、1.75 で −2.61、2.0 で −3.51 でした。山は 1.1 付近で、1.5 以上は歪まない指標で単調に悪くなります。予定の 1.25 は山を過ぎていたので 1.1 に下げます。</p>
+<p>lv3wd は、平日大会の順位ポイントに係数 W (1 未満) を掛ける形に変えました。W=0.5 で ULG +1.63 (4 季すべて正)、FWR +0.59 となり、W=1 (そのまま含める) にあった季依存が消えました。W=0.25 と 0.75 も試しましたが 0.25〜0.75 の範囲では差がなく平らで、180 大会では優劣を付けられません。0.5 は「平日は半分」という解釈のしやすさで選びました。</p>
+<p>直対評価側でも、レベル 3 の選手の平日試合を 0.5 倍の変動量で学習する変更を試しました。単独では上位層でわずかに悪くなりましたが、他の変更と組み合わせると効果が上乗せされました。</p>
+<div class="tablewrap"><table>
+<tr><th>組み合わせ (現行との差)</th><th class="num">ULG</th><th class="num">FWR</th><th class="num">PA</th></tr>
+<tr><td>当初案 (4 変更をそのまま)</td><td class="num">+1.67</td><td class="num">+0.58</td><td class="num">+3.24</td></tr>
+<tr><td>改訂 (K=1.1, W=0.5)</td><td class="num">+2.54</td><td class="num">−0.08</td><td class="num">+4.49</td></tr>
+<tr><td>改訂 + 平日の直対を 0.5 倍</td><td class="num"><strong>+3.89</strong></td><td class="num"><strong>+1.32</strong></td><td class="num">+6.19</td></tr>
+</table></div>
+<p>最終案は ULG の季別が +1.55 / +2.12 / +2.15 / +1.95 と 4 季すべてで \(t \approx 2\)、改訂前との直接比較でも ULG +2.67、FWR +2.24 と、歪まない 2 指標で有意でした。指標を見直したことで、当初案より良い設定にたどり着けたことになります。</p>
+
+<h2 id="s4">4. 実力帯別</h2>
+<p>最終順位の帯 (1〜8 位、9〜16 位、…、2 のべき乗幅で 1025 位以下まで) ごとに、帯内の PA と、帯内の選手同士の試合の FWR / ULG を比べました。結論を先に書くと、トップは直対単体、中間はどっこい、裾野は組み合わせ寄り、です。</p>
+<p>帯を 1〜16 / 17〜64 / 65〜1024 / 1025 位以下の 4 つにまとめ、直対単体と SPSP を 4 つの判定で突き合わせました (<code>experiments/metrics/seed_metrics_band_boundary.py</code>)。勝敗系 2 本は、両者の予想の勝者が食い違った帯内試合だけでどちらが当たったかの二項 \(z\) と、帯内試合 ULG の大会単位の対応付き \(t\)。順位系 2 本は、上下の予想が食い違った帯内ペアの二項 \(z\) と、帯の選手の MASPR の対応付き \(t\) です。符号は正 = 直対単体が良い、括弧は 3 季の符号です。</p>
+<div class="tablewrap"><table>
+<tr><th>帯</th><th class="num">食い違い試合 \(z\)</th><th class="num">ULG \(t\)</th><th class="num">食い違いペア \(z\)</th><th class="num">MASPR \(t\)</th><th>判定 (勝敗系)</th></tr>
+<tr><td>1〜16</td><td class="num">+2.0 (+++)</td><td class="num">+3.1 (+++)</td><td class="num">+3.4 (+++)</td><td class="num">+2.7 (+++)</td><td>直対単体</td></tr>
+<tr><td>17〜64</td><td class="num">+1.2 (+−−)</td><td class="num">+3.5 (+++)</td><td class="num">+0.7 (−++)</td><td class="num">+0.8 (+++)</td><td>どっこい〜直対単体</td></tr>
+<tr><td>65〜1024</td><td class="num">+1.0 (+−+)</td><td class="num">−0.6 (−+−)</td><td class="num">−43.1 (−−−)</td><td class="num">−3.0 (−−−)</td><td>どっこい〜SPSP</td></tr>
+<tr><td>1025 以下</td><td class="num">−1.1 (−−−)</td><td class="num">−2.1 (−−−、5 大会)</td><td class="num">−74.2 (−−−)</td><td class="num">−2.2 (−−−、5 大会)</td><td>どっこい〜SPSP</td></tr>
+</table></div>
+<ul>
+<li>1〜16 位: 4 本すべて直対単体で、3 季とも同じ向き。</li>
+<li>17〜64 位: ULG だけ直対単体が有意 (\(t\) 3.5、3 季同方向) で、他の 3 本は差なし。どっこいから直対単体寄り。</li>
+<li>65〜1024 位: 勝敗系は差なし、順位系は SPSP。順位系の差は <a href="metrics-evaluation.html#s4-4">指標の記事 4.4 節</a> の歪みと同じ向きなので割り引くが、SPSP が下回る指標はない。どっこいから SPSP 寄り。細分すると 513〜1024 位は食い違い試合で SPSP (\(z\) −2.3、3 季同方向)、ULG は直対寄り (\(t\) +1.1、符号は季でばらつく) と割れる移行帯です。</li>
+<li>1025 位以下: 4 本とも SPSP で 3 季同方向。ただし 1025 人以上の大会は 5 つしかなく、ULG の \(t\) −2.1 は自由度 4 で \(p = 0.10\)、勝敗系単独では有意に届かない。513 位以下をまとめると食い違い試合で有意 (\(z\) −3.1、3 季同方向)。</li>
+<li>検定の前提について: 大会単位の差は平均なので正規に近いはずだが、裾の重い帯もある (差の尖度が 65〜1024 位の ULG で +5、+6)。分布を仮定しない符号検定と Wilcoxon の符号付き順位検定を同じ差に当てたところ、有意性の判定は上の表とすべて一致した (Glicko-2 対 SPSP の 17〜64 位 ULG だけ \(p\) 0.03 対 0.10 の境界)。数値は <code>band_boundary_robust.json</code>。</li>
+<li>9〜16 位の帯は、どの方式でも一番当てにくい帯でした。</li>
+</ul>
+<p>補足 (65〜512 位の差の出所): SPSP がシードに使われていない初期の季から +0.2 ポイント前後で一定だったので、SPSP 自身が表を組んだ効果ではありません。JJPR のシード列を実際のシードの代わりにして、SPSP と直対単体が逆の予想をした 7.9 万組を調べると、「JJPR と同じ側に付いた方が勝つ」構造 (SPSP が JJPR 側のとき 54.3%、直対単体が JJPR 側のとき 52.6%) でした。つまりこの帯の差は「JJPR に似た並びをする頻度の差」でほぼ説明できます。</p>
+
+<h2 id="s5">5. 再現手順</h2>
+<pre><code># 標準評価 (篝火 4 季) のシードダンプ。設定を変えた版は環境変数を付けて同じ手順
+SPSP_EVAL_DUMP_SEEDS=~/spsp-eval-dumps/seeds_14_15.jsonl python3 experiments/harness/eval_v4_ultrank_pertour.py 14_15.txt on
+# 変えた版と基準の対応付き比較 (全指標の t)
+python3 experiments/metrics/seed_metrics_arm.py --base ~/spsp-eval-dumps/seeds_1*.jsonl --arm ~/spsp-eval-dumps/seeds_arm_dk3_*.jsonl --label dk3 --out arm_dk3.json
+# 方式比較 (jjpr / Glicko-2 / Elo / 最尤を時系列で学習)
+python3 experiments/metrics/seed_metrics_methods.py --dump ... --phase jjpr ; ... --phase replay --ckpt ... --max-sec 240
+# UltRank の期間分割 (--group both で季×期間)
+python3 experiments/metrics/seed_metrics_ult_window.py --dump ... --jjpr-cache ... --seeds ... --group both
+# 帯別の指標値と、帯ごとの 4 判定 (不一致試合 z / ULG t / 不一致ペア z / MASPR t、符号検定と Wilcoxon つき)
+python3 experiments/metrics/seed_metrics_bands.py --dump ... --seeds ... --bands 1-16,17-64,65-1024,1025+
+python3 experiments/metrics/seed_metrics_band_boundary.py --dump ... --seeds ... --bands 1-16,17-64,65-1024,1025+</code></pre>
+<p>レポート本体は <code>experiments/metrics/reports/validated_metrics_202608/REPORT.md</code> (<a href="/b/simlab/realeval.html">公開版</a>) です。識別子との対応は <a href="metrics-evaluation.html#s5">指標の記事の再現手順</a> を参照してください。</p>
+
+<div class="navlinks"><a href="./">ブログ目次</a><a href="ranking-accuracy.html">簡易版: SPSP のランキングはどれくらい当たっているか</a><a href="metrics-evaluation.html">前: 評価指標の評価と整理</a></div>
+</main>
+<script src="../nav.js"></script>
+</body>
+</html>

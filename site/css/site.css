@@ -1,0 +1,20 @@
+/* site.css — 共通スタイル (tools/frontend/css_extract.cjs で index.html, c/ranking.html, local/ranking.html, pref/ranking.html, c/index.html, pref/index.html, local/index.html, events/index.html から抽出)。
+   ページ固有の上書きは各ページの <style> に残っている。見た目を変えるときは cascade の順 (この file → ページの <style>) に注意 */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+  background: #ffffff; color: #111827; font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
+.header { max-width: 1400px; margin: 0 auto; padding: 20px 24px 0; }
+h1 { font-size: 22px; color: #111827; margin: 0 0 4px; }
+.status { color: #6b7280; font-size: 12px; }
+.table-wrap { max-width: 1400px; margin: 0 auto; padding: 0 24px 32px; }
+.footer { text-align: center; color: #9ca3af; font-size: 12px; padding: 32px 0 16px; }
+@media (max-width:720px) {
+  body { font-size: 13px; }
+  .header { padding: 12px 12px 0; }
+  h1 { font-size: 18px; }
+  .table-wrap { padding: 0 8px 24px; max-width: 100vw; overflow-x: hidden; }
+}

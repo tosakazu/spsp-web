@@ -1,0 +1,898 @@
+{
+ "_note": "spsp_scripts feat/achievement-kinds (b7537e9) の tests/meta/test_achievement_kinds.py が組み立てた実績 / 動的バッチ。label はビルドの日本語、kind/params から同じ label が組めることを tests/frontend/achievements.test.cjs で確かめる",
+ "items": [
+  {
+   "label": "👑 最高 全国 1 位",
+   "cls": "gold",
+   "priority": 200000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 1
+   }
+  },
+  {
+   "label": "🥇 最高 Top 2",
+   "cls": "gold",
+   "priority": 180000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 2
+   }
+  },
+  {
+   "label": "🥈 最高 Top 3",
+   "cls": "gold",
+   "priority": 170000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 3
+   }
+  },
+  {
+   "label": "🌟 最高 Top 10",
+   "cls": "gold",
+   "priority": 150000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 10
+   }
+  },
+  {
+   "label": "🔥 最高 Top 50",
+   "cls": "silver",
+   "priority": 130000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 50
+   }
+  },
+  {
+   "label": "💪 最高 Top 100",
+   "cls": "bronze",
+   "priority": 110000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 100
+   }
+  },
+  {
+   "label": "🎯 最高 Top 500",
+   "cls": "blue",
+   "priority": 70000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 500
+   }
+  },
+  {
+   "label": "🎯 最高 Top 1000",
+   "cls": "",
+   "priority": 60000,
+   "kind": "peak_rank",
+   "params": {
+    "top": 1000
+   }
+  },
+  {
+   "label": "最高 Lv5👑 到達",
+   "cls": "gold",
+   "priority": 170000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "crown"
+   }
+  },
+  {
+   "label": "最高 Lv5🥇 到達",
+   "cls": "gold",
+   "priority": 160000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "gold"
+   }
+  },
+  {
+   "label": "最高 Lv5🥈 到達",
+   "cls": "silver",
+   "priority": 155000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "silver"
+   }
+  },
+  {
+   "label": "最高 Lv5🥉 到達",
+   "cls": "bronze",
+   "priority": 150000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "bronze"
+   }
+  },
+  {
+   "label": "最高 Lv5+ 到達",
+   "cls": "gold",
+   "priority": 145000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "plus"
+   }
+  },
+  {
+   "label": "🥇 最高 Lv5 到達",
+   "cls": "gold",
+   "priority": 140000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 5,
+    "tier": "base"
+   }
+  },
+  {
+   "label": "🥈 最高 Lv4+ 到達",
+   "cls": "silver",
+   "priority": 105000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 4,
+    "tier": "plus"
+   }
+  },
+  {
+   "label": "🥈 最高 Lv4 到達",
+   "cls": "silver",
+   "priority": 100000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 4,
+    "tier": "base"
+   }
+  },
+  {
+   "label": "🥉 最高 Lv3+ 到達",
+   "cls": "bronze",
+   "priority": 85000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 3,
+    "tier": "plus"
+   }
+  },
+  {
+   "label": "🥉 最高 Lv3 到達",
+   "cls": "bronze",
+   "priority": 80000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 3,
+    "tier": "base"
+   }
+  },
+  {
+   "label": "🎖 最高 Lv2+ 到達",
+   "cls": "",
+   "priority": 70000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 2,
+    "tier": "plus"
+   }
+  },
+  {
+   "label": "🎖 最高 Lv2 到達",
+   "cls": "",
+   "priority": 65000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 2,
+    "tier": "base"
+   }
+  },
+  {
+   "label": "🎖 最高 Lv1+ 到達",
+   "cls": "",
+   "priority": 60000,
+   "kind": "peak_tier",
+   "params": {
+    "lv": 1,
+    "tier": "plus"
+   }
+  },
+  {
+   "label": "🚀 1ヶ月で +1000 ランク上昇",
+   "cls": "gold",
+   "priority": 91000,
+   "kind": "climb",
+   "params": {
+    "n": 1000
+   }
+  },
+  {
+   "label": "🚀 1ヶ月で +500 ランク上昇",
+   "cls": "silver",
+   "priority": 90500,
+   "kind": "climb",
+   "params": {
+    "n": 500
+   }
+  },
+  {
+   "label": "🚀 1ヶ月で +200 ランク上昇",
+   "cls": "bronze",
+   "priority": 90200,
+   "kind": "climb",
+   "params": {
+    "n": 200
+   }
+  },
+  {
+   "label": "🚀 1ヶ月で +100 ランク上昇",
+   "cls": "blue",
+   "priority": 90100,
+   "kind": "climb",
+   "params": {
+    "n": 100
+   }
+  },
+  {
+   "label": "🚀 1ヶ月で +50 ランク上昇",
+   "cls": "",
+   "priority": 90050,
+   "kind": "climb",
+   "params": {
+    "n": 50
+   }
+  },
+  {
+   "label": "⚡ UF 5 達成",
+   "cls": "blue",
+   "priority": 52500,
+   "kind": "uf",
+   "params": {
+    "v": 5
+   }
+  },
+  {
+   "label": "✨ SPR 5 達成",
+   "cls": "blue",
+   "priority": 50500,
+   "kind": "spr",
+   "params": {
+    "v": 5
+   }
+  },
+  {
+   "label": "🏃‍♂️ ルーザーズラン 5 達成",
+   "cls": "blue",
+   "priority": 48500,
+   "kind": "losers_run",
+   "params": {
+    "v": 5
+   }
+  },
+  {
+   "label": "⚡ UF 6 達成",
+   "cls": "bronze",
+   "priority": 53000,
+   "kind": "uf",
+   "params": {
+    "v": 6
+   }
+  },
+  {
+   "label": "✨ SPR 6 達成",
+   "cls": "bronze",
+   "priority": 51000,
+   "kind": "spr",
+   "params": {
+    "v": 6
+   }
+  },
+  {
+   "label": "🏃‍♂️ ルーザーズラン 6 達成",
+   "cls": "bronze",
+   "priority": 49000,
+   "kind": "losers_run",
+   "params": {
+    "v": 6
+   }
+  },
+  {
+   "label": "⚡ UF 8 達成",
+   "cls": "silver",
+   "priority": 54000,
+   "kind": "uf",
+   "params": {
+    "v": 8
+   }
+  },
+  {
+   "label": "✨ SPR 8 達成",
+   "cls": "silver",
+   "priority": 52000,
+   "kind": "spr",
+   "params": {
+    "v": 8
+   }
+  },
+  {
+   "label": "🏃‍♂️ ルーザーズラン 8 達成",
+   "cls": "silver",
+   "priority": 50000,
+   "kind": "losers_run",
+   "params": {
+    "v": 8
+   }
+  },
+  {
+   "label": "⚡ UF 10 達成",
+   "cls": "gold",
+   "priority": 55000,
+   "kind": "uf",
+   "params": {
+    "v": 10
+   }
+  },
+  {
+   "label": "✨ SPR 10 達成",
+   "cls": "gold",
+   "priority": 53000,
+   "kind": "spr",
+   "params": {
+    "v": 10
+   }
+  },
+  {
+   "label": "🏃‍♂️ ルーザーズラン 10 達成",
+   "cls": "gold",
+   "priority": 51000,
+   "kind": "losers_run",
+   "params": {
+    "v": 10
+   }
+  },
+  {
+   "label": "⚡ UF 13 達成",
+   "cls": "gold",
+   "priority": 56500,
+   "kind": "uf",
+   "params": {
+    "v": 13
+   }
+  },
+  {
+   "label": "✨ SPR 13 達成",
+   "cls": "gold",
+   "priority": 54500,
+   "kind": "spr",
+   "params": {
+    "v": 13
+   }
+  },
+  {
+   "label": "🏃‍♂️ ルーザーズラン 13 達成",
+   "cls": "gold",
+   "priority": 52500,
+   "kind": "losers_run",
+   "params": {
+    "v": 13
+   }
+  },
+  {
+   "label": "🏆 大会出場 500+",
+   "cls": "gold",
+   "priority": 1400,
+   "kind": "tours",
+   "params": {
+    "n": 500
+   }
+  },
+  {
+   "label": "🎖️ 大会出場 300+",
+   "cls": "silver",
+   "priority": 1200,
+   "kind": "tours",
+   "params": {
+    "n": 300
+   }
+  },
+  {
+   "label": "🏅 大会出場 100+",
+   "cls": "bronze",
+   "priority": 1000,
+   "kind": "tours",
+   "params": {
+    "n": 100
+   }
+  },
+  {
+   "label": "🎫 大会出場 50+",
+   "cls": "blue",
+   "priority": 950,
+   "kind": "tours",
+   "params": {
+    "n": 50
+   }
+  },
+  {
+   "label": "🎟️ 大会出場 20+",
+   "cls": "",
+   "priority": 920,
+   "kind": "tours",
+   "params": {
+    "n": 20
+   }
+  },
+  {
+   "label": "⚔ 試合数 20000+",
+   "cls": "gold",
+   "priority": 20700,
+   "kind": "matches",
+   "params": {
+    "n": 20000
+   }
+  },
+  {
+   "label": "⚔ 試合数 10000+",
+   "cls": "gold",
+   "priority": 10700,
+   "kind": "matches",
+   "params": {
+    "n": 10000
+   }
+  },
+  {
+   "label": "⚔ 試合数 5000+",
+   "cls": "silver",
+   "priority": 5700,
+   "kind": "matches",
+   "params": {
+    "n": 5000
+   }
+  },
+  {
+   "label": "⚔ 試合数 3000+",
+   "cls": "bronze",
+   "priority": 3700,
+   "kind": "matches",
+   "params": {
+    "n": 3000
+   }
+  },
+  {
+   "label": "⚔ 試合数 1000+",
+   "cls": "blue",
+   "priority": 1700,
+   "kind": "matches",
+   "params": {
+    "n": 1000
+   }
+  },
+  {
+   "label": "⚔ 試合数 500+",
+   "cls": "",
+   "priority": 1200,
+   "kind": "matches",
+   "params": {
+    "n": 500
+   }
+  },
+  {
+   "label": "⚔ 試合数 200+",
+   "cls": "",
+   "priority": 900,
+   "kind": "matches",
+   "params": {
+    "n": 200
+   }
+  },
+  {
+   "label": "🏅 勝利数 10000+",
+   "cls": "gold",
+   "priority": 10500,
+   "kind": "wins",
+   "params": {
+    "n": 10000
+   }
+  },
+  {
+   "label": "🏅 勝利数 5000+",
+   "cls": "gold",
+   "priority": 5500,
+   "kind": "wins",
+   "params": {
+    "n": 5000
+   }
+  },
+  {
+   "label": "🏅 勝利数 3000+",
+   "cls": "silver",
+   "priority": 3500,
+   "kind": "wins",
+   "params": {
+    "n": 3000
+   }
+  },
+  {
+   "label": "🏅 勝利数 1500+",
+   "cls": "bronze",
+   "priority": 2000,
+   "kind": "wins",
+   "params": {
+    "n": 1500
+   }
+  },
+  {
+   "label": "🏅 勝利数 500+",
+   "cls": "blue",
+   "priority": 1000,
+   "kind": "wins",
+   "params": {
+    "n": 500
+   }
+  },
+  {
+   "label": "🏅 勝利数 200+",
+   "cls": "",
+   "priority": 700,
+   "kind": "wins",
+   "params": {
+    "n": 200
+   }
+  },
+  {
+   "label": "🏅 勝利数 100+",
+   "cls": "",
+   "priority": 600,
+   "kind": "wins",
+   "params": {
+    "n": 100
+   }
+  },
+  {
+   "label": "🤝 同一相手と対戦 50+",
+   "cls": "gold",
+   "priority": 350,
+   "kind": "same_opp",
+   "params": {
+    "n": 50
+   }
+  },
+  {
+   "label": "🤝 同一相手と対戦 30+",
+   "cls": "silver",
+   "priority": 330,
+   "kind": "same_opp",
+   "params": {
+    "n": 30
+   }
+  },
+  {
+   "label": "🤝 同一相手と対戦 20+",
+   "cls": "bronze",
+   "priority": 320,
+   "kind": "same_opp",
+   "params": {
+    "n": 20
+   }
+  },
+  {
+   "label": "🤝 同一相手と対戦 10+",
+   "cls": "blue",
+   "priority": 310,
+   "kind": "same_opp",
+   "params": {
+    "n": 10
+   }
+  },
+  {
+   "label": "🤝 同一相手と対戦 5+",
+   "cls": "",
+   "priority": 305,
+   "kind": "same_opp",
+   "params": {
+    "n": 5
+   }
+  },
+  {
+   "label": "🏆 Alpha 優勝 ×2",
+   "cls": "gold",
+   "priority": 10690,
+   "kind": "tour_series",
+   "params": {
+    "series": "Alpha",
+    "bucket": "win",
+    "cls": null,
+    "count": 2
+   }
+  },
+  {
+   "label": "🥉 Beta 3位",
+   "cls": "bronze",
+   "priority": 3320,
+   "kind": "tour_series",
+   "params": {
+    "series": "Beta",
+    "bucket": "3rd",
+    "cls": null,
+    "count": 1
+   }
+  },
+  {
+   "label": "🏆 Gamma Bクラス 優勝",
+   "cls": "gold",
+   "priority": 10400,
+   "kind": "tour_series",
+   "params": {
+    "series": "Gamma",
+    "bucket": "win",
+    "cls": "B",
+    "count": 1
+   }
+  },
+  {
+   "label": "🏆 Gamma Cクラス 優勝",
+   "cls": "gold",
+   "priority": 10400,
+   "kind": "tour_series",
+   "params": {
+    "series": "Gamma",
+    "bucket": "win",
+    "cls": "C",
+    "count": 1
+   }
+  },
+  {
+   "label": "🥈 Delta カジュアル 準優勝",
+   "cls": "silver",
+   "priority": 1079,
+   "kind": "tour_series",
+   "params": {
+    "series": "Delta",
+    "bucket": "2nd",
+    "cls": "casual",
+    "count": 1
+   }
+  },
+  {
+   "label": "🎖 Eps 5位",
+   "cls": "",
+   "priority": 1820,
+   "kind": "tour_series",
+   "params": {
+    "series": "Eps",
+    "bucket": "5th",
+    "cls": null,
+    "count": 1
+   }
+  },
+  {
+   "label": "🎖 Zeta 4位",
+   "cls": "bronze",
+   "priority": 2160,
+   "kind": "tour_series",
+   "params": {
+    "series": "Zeta",
+    "bucket": "4th",
+    "cls": null,
+    "count": 1
+   }
+  },
+  {
+   "label": "🏆 Big 1 優勝",
+   "cls": "gold",
+   "priority": 12000,
+   "kind": "tour",
+   "params": {
+    "name": "Big 1",
+    "bucket": "win",
+    "cls": null
+   }
+  },
+  {
+   "label": "🥈 Big 2 準優勝",
+   "cls": "silver",
+   "priority": 7000,
+   "kind": "tour",
+   "params": {
+    "name": "Big 2",
+    "bucket": "2nd",
+    "cls": null
+   }
+  },
+  {
+   "label": "🥉 Big 3 3位",
+   "cls": "bronze",
+   "priority": 5000,
+   "kind": "tour",
+   "params": {
+    "name": "Big 3",
+    "bucket": "3rd",
+    "cls": null
+   }
+  },
+  {
+   "label": "🎖 Big 4 4位",
+   "cls": "bronze",
+   "priority": 4000,
+   "kind": "tour",
+   "params": {
+    "name": "Big 4",
+    "bucket": "4th",
+    "cls": null
+   }
+  },
+  {
+   "label": "🎖 Big 5 5位",
+   "cls": "",
+   "priority": 3500,
+   "kind": "tour",
+   "params": {
+    "name": "Big 5",
+    "bucket": "5th",
+    "cls": null
+   }
+  },
+  {
+   "label": "🏅 Big 6 Top 8 以上達成",
+   "cls": "",
+   "priority": 2000,
+   "kind": "tour",
+   "params": {
+    "name": "Big 6",
+    "bucket": "top8",
+    "cls": null
+   }
+  },
+  {
+   "label": "🏅 Big 7 Top 16 以上達成",
+   "cls": "",
+   "priority": 1780,
+   "kind": "tour",
+   "params": {
+    "name": "Big 7",
+    "bucket": "top16",
+    "cls": null
+   }
+  },
+  {
+   "label": "🏅 Big 8 Top 32 以上達成",
+   "cls": "",
+   "priority": 2860,
+   "kind": "tour",
+   "params": {
+    "name": "Big 8",
+    "bucket": "top32",
+    "cls": null
+   }
+  },
+  {
+   "label": "🏅 Big 9 Top 64 以上達成",
+   "cls": "",
+   "priority": 5320,
+   "kind": "tour",
+   "params": {
+    "name": "Big 9",
+    "bucket": "top64",
+    "cls": null
+   }
+  },
+  {
+   "label": "🏆 Big 10 Dクラス 優勝",
+   "cls": "gold",
+   "priority": 11500,
+   "kind": "tour",
+   "params": {
+    "name": "Big 10",
+    "bucket": "win",
+    "cls": "D"
+   }
+  },
+  {
+   "label": "🏆 Big 11 Eクラス 優勝",
+   "cls": "gold",
+   "priority": 2300,
+   "kind": "tour",
+   "params": {
+    "name": "Big 11",
+    "bucket": "win",
+    "cls": "E"
+   }
+  },
+  {
+   "label": "🥈 Big 12 カジュアル 準優勝",
+   "cls": "silver",
+   "priority": 1300,
+   "kind": "tour",
+   "params": {
+    "name": "Big 12",
+    "bucket": "2nd",
+    "cls": "casual"
+   }
+  },
+  {
+   "label": "🏆 Big 13 優勝",
+   "cls": "gold",
+   "priority": 2300,
+   "kind": "tour",
+   "params": {
+    "name": "Big 13",
+    "bucket": "win",
+    "cls": null
+   }
+  },
+  {
+   "label": "⚡ UF 9 達成",
+   "cls": "silver",
+   "priority": 54500,
+   "kind": "uf",
+   "params": {
+    "v": 9
+   }
+  },
+  {
+   "label": "✨ SPR 7 達成",
+   "cls": "bronze",
+   "priority": 51500,
+   "kind": "spr",
+   "params": {
+    "v": 7
+   }
+  },
+  {
+   "label": "🚀 直近 1 ヶ月で +600 急上昇",
+   "cls": "gold",
+   "kind": "trend",
+   "params": {
+    "days": 30,
+    "n": 600,
+    "surge": true
+   }
+  },
+  {
+   "label": "📈 直近 1 ヶ月で +250 上昇",
+   "cls": "silver",
+   "kind": "trend",
+   "params": {
+    "days": 30,
+    "n": 250,
+    "surge": false
+   }
+  },
+  {
+   "label": "🚀 直近 3 ヶ月で +700 急上昇",
+   "cls": "silver",
+   "kind": "trend",
+   "params": {
+    "days": 90,
+    "n": 700,
+    "surge": true
+   }
+  },
+  {
+   "label": "📈 直近 3 ヶ月で +300 上昇",
+   "cls": "bronze",
+   "kind": "trend",
+   "params": {
+    "days": 90,
+    "n": 300,
+    "surge": false
+   }
+  },
+  {
+   "label": "📈 直近半年で +800 上昇",
+   "cls": "bronze",
+   "kind": "trend",
+   "params": {
+    "days": 180,
+    "n": 800,
+    "surge": false
+   }
+  }
+ ]
+}

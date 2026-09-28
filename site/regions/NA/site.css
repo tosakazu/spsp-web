@@ -1,0 +1,2 @@
+/* regions/NA/site.css — 北米版だけに効く CSS (ページからは region/site.css、各ページの最後の stylesheet)。
+   言語で変わる調整は共通 CSS に html[lang="en"] .x { … } で書く。ここは地域固有の見た目だけ。いまは空。 */

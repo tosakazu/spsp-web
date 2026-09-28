@@ -1,0 +1,122 @@
+# spsp-web — Cloudflare Worker (static assets + /api/*  = gas/*.gs の移植)。
+# 設計: docs/refactor/07_cloudflare_plan.md。使い方: worker/README.md。
+#
+# 秘密 (wrangler secret put <NAME> [--env preview|na]) — コードにも [vars] にも書かない:
+#   STARTGG_CLIENT_SECRET  start.gg アプリの client secret (code 交換 + エクスポート鍵の導出元)
+#   SESSION_SECRET         セッション / state の HMAC 鍵 (GAS のスクリプトプロパティの値を
+#                          そのまま入れると既存ログインが引き継げる。無ければ `openssl rand -hex 32`)
+#   EXPORT_KEY             (任意) エクスポート API の追加鍵。未設定なら GAS と同じ
+#                          HMAC(client secret, EXPORT_KEY_LABEL) の導出鍵だけを受け付ける
+#
+# Routes (DNS を Cloudflare に移してから有効化する):
+#   本番 = 下の routes (custom_domain)。
+#   [env.na]      routes = [ { pattern = "spsp.games/na/*", zone_name = "spsp.games" } ]   # 同じ Worker で受けるなら不要
+#   [env.preview] workers.dev の URL (spsp-web-preview.tosakazu.workers.dev) で確認する
+
+name = "spsp-web"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+# 本番の入口: spsp.games を Worker の custom domain に (DNS レコードと証明書は Cloudflare が自動で作る。2026-09-22、ゾーンはアクティブ)。
+# 外すと spsp.games は何も指さなくなる (WING には戻らない: 09-09 以降 spsp.games は WING に無い)
+routes = [{ pattern = "spsp.games", custom_domain = true }]
+
+[assets]
+# dist-cf/ = 地域ごとのビルド出力をまとめたもの (dist/ → dist-cf/jp/, dist-na/ → dist-cf/na/)。
+# scripts/assemble_dist.sh が作る。20,000 ファイル上限があるので JSON (players/ 等) は入れない (R2)。
+directory = "../dist-cf"
+binding = "ASSETS"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"
+# アセットに一致するパスは既定では Worker を通らない (= 無料・無制限)。
+# CSP を付けたい callback.html と API だけ Worker を先に通す。
+# 一致するアセットが無いパス (/ や旧 URL) は既定で Worker に来るので列挙不要。
+run_worker_first = ["/api/*", "/*/callback.html", "/*/callback"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "spsp"
+database_id = "17262f4f-acdf-401c-800c-80219e962851"
+migrations_dir = "migrations"
+
+[vars]
+# 公開値のみ。GAS の config.gs に対応する。
+STARTGG_CLIENT_ID = "619"
+# 認可時に使った redirect_uri と完全一致していないと token 交換が失敗する。
+# start.gg アプリ側の登録も同時に更新すること (README「フロントの切替」)。
+REDIRECT_URI = "https://spsp.games/callback.html"
+# 投票の資格判定・キャラ一覧の読み出し先 (= 公開データ)。GAS は gh-pages を読んでいた。
+#   "https://..."     → その URL 配下 (/players/<uid>.json, /data/char_emoji.json) を fetch する
+#   "assets:/jp"      → 同じ Worker の静的アセット (ASSETS binding) の /jp 配下を読む
+# R2 に移した後は "https://data.spsp.games/jp" にする。
+DATA_ORIGIN = "https://data.spsp.games/jp"
+VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
+# 配信の既定プレフィックス (/ → /jp/ の 301、旧 URL の付け替え先)。
+SITE_PREFIX = "/jp"
+# タイムスタンプの固定オフセット (GAS は Asia/Tokyo で書いていた)。
+TS_OFFSET = "+09:00"
+# セッションの有効期間 (180 日) と state の有効期間 (5 分)。ミリ秒。
+SESSION_TTL_MS = "15552000000"
+STATE_TTL_MS = "300000"
+
+# ── preview (workers.dev で確認する。本番と別の D1) ──
+[env.preview]
+# routes は継承されて本番の custom domain (spsp.games) を奪うので、環境ごとに空にする (2026-09-22 に preview が spsp.games を取ってしまった)
+routes = []
+name = "spsp-web-preview"
+workers_dev = true
+
+[env.preview.assets]
+directory = "../dist-cf"
+binding = "ASSETS"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"
+run_worker_first = ["/api/*", "/*/callback.html", "/*/callback"]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "spsp-preview"
+database_id = "0d43d87e-03ad-4af5-a938-fc5f4175fab8"
+migrations_dir = "migrations"
+
+[env.preview.vars]
+STARTGG_CLIENT_ID = "620"
+REDIRECT_URI = "https://spsp-web-preview.tosakazu.workers.dev/callback.html"
+DATA_ORIGIN = "https://data.spsp.games/jp"
+VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
+SITE_PREFIX = "/jp"
+TS_OFFSET = "+09:00"
+SESSION_TTL_MS = "15552000000"
+STATE_TTL_MS = "300000"
+
+# ── na (北米版。start.gg アプリ・データ・D1 を分ける) ──
+[env.na]
+# routes は継承されて本番の custom domain (spsp.games) を奪うので、環境ごとに空にする (2026-09-22 に preview が spsp.games を取ってしまった)
+routes = []
+name = "spsp-web-na"
+workers_dev = true
+
+[env.na.assets]
+directory = "../dist-cf"
+binding = "ASSETS"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"
+run_worker_first = ["/api/*", "/*/callback.html", "/*/callback"]
+
+[[env.na.d1_databases]]
+binding = "DB"
+database_name = "spsp-na"
+database_id = "<wrangler d1 create spsp-na の出力を貼る>"
+migrations_dir = "migrations"
+
+[env.na.vars]
+# 北米用の start.gg アプリを作ったら client_id を入れる (secret は wrangler secret put --env na)
+STARTGG_CLIENT_ID = "619"
+REDIRECT_URI = "https://spsp.games/callback.html"
+DATA_ORIGIN = "assets:/na"
+VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
+SITE_PREFIX = "/na"
+TS_OFFSET = "-05:00"
+SESSION_TTL_MS = "15552000000"
+STATE_TTL_MS = "300000"

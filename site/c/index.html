@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.c_index.title">使い手ランキング — SPSP</title>
+<meta name="description" content="SPSP: スマブラSP メインキャラ別のプレイヤーランキング一覧。" data-i18n-attr="content:page.c_index.description">
+<link rel="canonical" href="https://tosakazu.github.io/spsp/c/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:title" content="SPSP 使い手ランキング" data-i18n-attr="content:page.c_index.og_title">
+<meta property="og:description" content="メインキャラ別のプレイヤーランキング" data-i18n-attr="content:page.c_index.og_description">
+<link rel="stylesheet" href="../css/site.css">
+<style>
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+  input, button {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  input[type="search"] { min-width: 280px; flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; background: #ffffff; color: #374151;
+    padding: 10px 8px; border-bottom: 2px solid #e5e7eb;
+    user-select: none; cursor: pointer; font-weight: 600;
+    position: sticky; top: var(--nav-height, 56px); z-index: 2;
+  }
+  th:hover { color: #dc2626; }
+  th.sortable::after { content: "↕"; opacity: 0.3; margin-left: 4px; font-size: 10px; }
+  th.sorted-asc::after { content: "↑"; opacity: 1; }
+  th.sorted-desc::after { content: "↓"; opacity: 1; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+  tr.char-row { cursor: pointer; transition: background 0.1s; }
+  tr.char-row:hover { background: #f9fafb; }
+  tr.char-row td.col-name a { color: #dc2626; font-weight: 500; text-decoration: none; }
+  tr.char-row:hover td.col-name a { text-decoration: underline; }
+
+  th.col-idx, td.col-idx {
+    width: 24px; text-align: left; color: #9ca3af; font-size: 11px;
+    font-variant-numeric: tabular-nums; padding-left: 2px; padding-right: 2px;
+  }
+  th.col-name, td.col-name { width: auto; min-width: 200px; }
+  th.col-num, td.col-num {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+    width: 110px;
+  }
+  th.col-top, td.col-top { width: auto; min-width: 200px; color: #374151; }
+  td.col-top a { color: #111827; text-decoration: none; }
+  td.col-top a:hover { color: #dc2626; text-decoration: underline; }
+  td.col-top .top-rank { color: #9ca3af; font-size: 11px; margin-left: 4px; }
+
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  .share-icon-btn:hover { background: #fef2f2 !important; color: #dc2626 !important; border-color: #dc2626 !important; }
+
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    .controls { gap: 6px; }
+    input[type="search"] { min-width: 0; width: 100%; flex: 1 1 100%; font-size: 14px; padding: 8px 10px; }
+    th, td { padding: 8px 6px; font-size: 12px; }
+    /* 順位番号: モバイルでは更に詰めて左端に寄せ、キャラ名の幅を確保 */
+    th.col-idx, td.col-idx { width: 16px; padding-left: 0; padding-right: 3px; }
+    th.col-name, td.col-name { min-width: 0; width: auto; max-width: 56vw; word-break: break-word; }
+    th.col-num, td.col-num { width: 48px; }
+    th.col-top, td.col-top { min-width: 100px; }
+    /* モバイル: sticky thead を解除 (= 動的測定+nav 2-row wrap で位置ズレが起きるため,
+       カラムヘッダは普通の table row として表示). */
+    th { position: static; }
+  }
+</style>
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <h1 style="margin:0" data-i18n="nav.ranking.char">使い手ランキング</h1>
+    <button class="share-icon-btn" id="share-icon-btn" title="URL を共有" aria-label="URL を共有" data-i18n-attr="title:common.share_url,aria-label:common.share_url"
+      style="background:#fff;border:1px solid #e5e7eb;color:#6b7280;border-radius:8px;padding:6px 8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;transition:all 0.15s">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:block">
+        <circle cx="18" cy="5" r="3"></circle>
+        <circle cx="6" cy="12" r="3"></circle>
+        <circle cx="18" cy="19" r="3"></circle>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+      </svg>
+    </button>
+  </div>
+  <p class="subtitle" data-i18n="char_list.subtitle">メインキャラ別のプレイヤーランキング</p>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="キャラ名で検索…" autocomplete="off" data-i18n-attr="placeholder:char_list.search_placeholder">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table id="chartable">
+    <thead>
+      <tr>
+        <th class="col-idx"></th>
+        <th class="col-name sortable" data-sort="name" data-i18n="char_list.col.char">キャラ</th>
+        <th class="col-num sortable" data-sort="n_main" data-i18n="common.col.count">人数</th>
+        <th class="col-top sortable sorted-asc" data-sort="top_rank" data-i18n="common.col.top">全一</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="4" class="empty-msg" data-i18n="common.loading">読み込み中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer-info"></div>
+
+<script src="../assets/c_index.js"></script>
+</body>
+</html>

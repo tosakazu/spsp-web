@@ -1,0 +1,36 @@
+# ── 配信ディレクトリ (npm run build が site/ から作る。ビルドの生成物もここに入る) ──
+/dist
+/dist-*
+/dist-cf
+
+# ── ビルド生成物 (spsp_scripts のビルドが site/ に書く。git には入れない) ──
+site/players
+site/tournaments
+site/history
+site/players_current.json
+site/latest_*.jsonl
+site/meta.json
+site/sitemap.xml
+# site/data は生成物が多いので既定で無視し、手で管理する入力だけ追跡する
+site/data/*
+!site/data/char_emoji.json
+!site/data/overseas_manual.json
+site/seed_map.json
+site/demo/
+
+# ── 秘密 (INV-3: start.gg client secret は clasp push でだけ Apps Script に載せる) ──
+gas/secrets.gs
+gas/.clasp.json
+.env
+*.token
+
+# ── Node / エディタ / OS ──
+node_modules/
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.claude/
+*.png
+__pycache__/
+*.pyc

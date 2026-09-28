@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPSP のランキングはどれくらい当たっているか | SPSP ブログ</title>
+<meta name="description" content="篝火 4 シーズン 180 大会で、SPSP のランキングを Elo、Glicko-2、UltRank と比べた結果と、実力帯ごとの当たり具合。簡易版。">
+<link rel="stylesheet" href="blog.css">
+</head>
+<body>
+<main>
+<h1>SPSP のランキングはどれくらい当たっているか</h1>
+<p class="meta">2026-09-07 · 簡易版 · 技術版は <a href="real-data-comparison.html">「実データでの方式比較」</a></p>
+<p class="lead">前の記事 <a href="ranking-quality.html">「ランキングの良さはどうすれば測れる？」</a> で、ランキングの良さを測る 4 つの指標と、その使い分けを説明しました。この記事はその指標を実際のデータに当てて、SPSP のランキングが Elo、Glicko-2、UltRank などと比べてどれくらい当たっているか、実力帯ごとに見るとどうか、を確かめた結果です。</p>
+
+<div class="abstract"><div class="t">概要</div><ul>
+<li>篝火 4 シーズン 180 大会で比べると、SPSP の総合ランキングは Elo、Glicko-2 より当たり、UltRank に対しても、まだ結果を知らない大会の予想では上回っています。</li>
+<li>UltRank はその年の実績をまとめる順位表で、集計期間の結果に対してはある程度の説明精度がありますが、これからの強さの予想には向かず、シーディングには不向きです。</li>
+<li>実力帯で分けると、トップ層は直対評価だけが強く、裾野では順位評価を混ぜた総合が有利です。</li>
+</ul></div>
+
+<div class="toc">この記事の流れ
+<ol>
+<li><a href="#s1">比べ方</a>
+</li>
+<li><a href="#s2">方式の比較</a>
+</li>
+<li><a href="#s3">UltRank との比較 (掲載 200 人の中で)</a>
+</li>
+<li><a href="#s4">実力帯ごとに見ると</a>
+</li>
+<li><a href="#summary">まとめ</a>
+</li>
+</ol></div>
+
+<h2 id="s1">1. 比べ方</h2>
+<p>対象は篝火 (国内最大級の大会) で区切った 4 シーズン、100 人以上の大会 180 件です。各大会について「大会直前のランキング」で予想を作り、その大会の結果と突き合わせます。指標は前の記事の 4 つ、ペア一致率 (PA)、平均絶対 SPR (MASPR)、上位シード勝率 (FWR)、アップセット幅 (ULG) です。PA と FWR は高いほど、MASPR と ULG は低いほど良い値で、優劣の判定は ULG と FWR を軸に行い、PA と MASPR はシードバイアスを受けるので併せて見るだけにします。2 つのランキングの予想を同じ大会・同じ結果に当てて差を取り、その差が運の揺れより大きいかを見ます。</p>
+<div class="term"><div class="t">用語: 運の範囲</div><p>アップセットは実力が同じでも運で起きます。だから 1 大会だけでは差が本物か分かりません。2 つのランキングの差を大会ごとに取って平均し、その平均が運によるばらつきの何倍あるかを見ます。この記事で「運の範囲を超える」と書いたところは、運だけでその差が出る確率が 5% を切る場合です。大会を 4 倍集めると、同じ差でも運によるばらつきは半分になります。</p></div>
+
+<h2 id="s2">2. 方式の比較</h2>
+<p>同じ 180 大会で、いろいろな方式に同じ条件で予想させて比べました (素の Elo や Glicko-2 は過去のデータを見ていない状態から学習するので、学習が浅い最初のシーズンを除いた 3 シーズンで比べています)。値は、ペア一致率と上位シード勝率は高いほど良く、アップセット幅は低いほど良いです。</p>
+<div class="tablewrap"><table>
+<tr><th>方式</th><th>PA</th><th>FWR</th><th>ULG</th><th>読み</th></tr>
+<tr><td>SPSP 総合 (組み合わせ)</td><td>0.860</td><td>0.784</td><td>0.173</td><td>どの指標でも上位。ペア一致率では 1 位</td></tr>
+<tr><td>SPSP 直対評価だけ</td><td>0.854</td><td>0.785</td><td>0.169</td><td>勝敗を見る指標では 1 位。上位帯はこちらが強い</td></tr>
+<tr><td>SPSP 順位評価だけ</td><td>0.855</td><td>0.772</td><td>0.187</td><td>ペア一致率は高いが勝敗を見る指標では下 (シードバイアスの影響あり)</td></tr>
+<tr><td>Glicko-2 (素のまま)</td><td>0.833</td><td>0.765</td><td>0.190</td><td>計算式だけの方式では一番良いが、SPSP の調整には届かない</td></tr>
+<tr><td>Elo (素のまま)</td><td>0.820</td><td>0.752</td><td>0.208</td><td>Glicko-2 より一段下</td></tr>
+<tr><td>JJPR (参考)</td><td>0.831</td><td>0.745</td><td>0.225</td><td>参考値。試合の勝敗を学習しない方式なので、直接の比較対象ではない</td></tr>
+</table></div>
+<p>方式の順位は、13 種類の指標のうち 11 種類で同じ (SPSP の 2 つ &gt; 順位評価 &gt; Glicko-2 &gt; Elo) になり、ずれたのは順位を見る指標だけでした。SPSP の総合が他の方式より当たっているのは、シードバイアスのせいではないと言えます。</p>
+
+<h2 id="s3">3. UltRank との比較 (掲載 200 人の中で)</h2>
+<p>UltRank 2025 Japan の集計期間は 2024 年 12 月 17 日から 2025 年 12 月 15 日です。掲載選手 200 人の中だけで測るので、他の方式と同じ表には載せられません。集計期間の前・中・後とシーズンで分けたのが次の表です。太字は SPSP 総合と UltRank のうち良かった側です。</p>
+<div class="tablewrap"><table>
+<tr><th rowspan="2">シーズン</th><th rowspan="2">UltRank の集計期間との関係</th><th rowspan="2">大会数</th><th colspan="3">SPSP 総合</th><th colspan="3">UltRank 2025</th></tr>
+<tr><th>PA</th><th>FWR</th><th>ULG</th><th>PA</th><th>FWR</th><th>ULG</th></tr>
+<tr><td>篝火 11〜12 (2023-10〜2024-05)</td><td>期間前</td><td>30</td><td><strong>0.781</strong></td><td><strong>0.677</strong></td><td><strong>0.305</strong></td><td>0.692</td><td>0.659</td><td>0.375</td></tr>
+<tr><td>篝火 12〜13 (2024-05〜2025-04)</td><td>期間前</td><td>39</td><td><strong>0.768</strong></td><td><strong>0.672</strong></td><td><strong>0.342</strong></td><td>0.707</td><td>0.660</td><td>0.365</td></tr>
+<tr><td>篝火 12〜13</td><td>期間内</td><td>25</td><td><strong>0.721</strong></td><td><strong>0.657</strong></td><td>0.393</td><td>0.715</td><td>0.645</td><td><strong>0.365</strong></td></tr>
+<tr><td>篝火 13〜14 (2025-05〜2025-10)</td><td>期間内</td><td>24</td><td>0.721</td><td>0.668</td><td>0.364</td><td><strong>0.722</strong></td><td><strong>0.677</strong></td><td><strong>0.342</strong></td></tr>
+<tr><td>篝火 14〜15 (2025-11〜2026-05)</td><td>期間内</td><td>7</td><td>0.736</td><td><strong>0.650</strong></td><td>0.395</td><td><strong>0.743</strong></td><td>0.633</td><td><strong>0.331</strong></td></tr>
+<tr><td>篝火 14〜15</td><td>期間後</td><td>23</td><td><strong>0.741</strong></td><td><strong>0.678</strong></td><td><strong>0.380</strong></td><td>0.714</td><td>0.651</td><td>0.401</td></tr>
+</table></div>
+<p>集計期間の中では、UltRank は SPSP と同程度で、アップセット幅では上回っています。その期間の結果を見て作られた順位表なので、その期間の結果に対してはある程度の説明精度があります。これは UltRank の本来の目的に沿ったもので、UltRank は 1 年間の実績をまとめる順位表であって、次の大会を予想する道具ではありません。一方、期間の前と後、つまりまだ結果を知らない大会に対しては、どのシーズンでも 3 つの指標すべてで SPSP を下回りました。UltRank は「その年に何を成し遂げたか」の記録としてはある程度の説明精度がありますが、これからの強さの予想には向かず、シーディングに使うのは不向きです。逆に SPSP は、結果を知らずに予想しているのに、結果を知って作られた UltRank とその期間で同程度だった、ということでもあります。</p>
+
+<h2 id="s4">4. 実力帯ごとに見ると</h2>
+<p>ランキング全体の当たり具合は 2 節のとおりですが、「トップ層の並びは正しいか」「裾野は正しいか」は別の問いです。そこで大会の最終順位の帯 (1〜16 位、17〜64 位、…) ごとに、その帯の選手同士の試合と組だけを取り出して、4 つの指標で測りました (タブで切り替えられます)。前の記事で見たとおり、帯別の一次指標はアップセット幅です。深い帯ほどシード番号の近い選手同士の試合や組になるので、値そのものは帯によって変わります。帯をまたいで値を比べず、同じ帯の中で方式の間の差を見てください。</p>
+<div class="tabs"><button type="button" class="tab active" data-tab="band-ulg">ULG</button><button type="button" class="tab" data-tab="band-fwr">FWR</button><button type="button" class="tab" data-tab="band-pa">PA</button><button type="button" class="tab" data-tab="band-maspr">MASPR</button></div>
+<div class="tabpane" id="band-ulg"><p class="tabdesc">低いほど良い。帯別の一次指標。</p><div class="tablewrap"><table>
+<tr><th>方式</th><th>1〜16 位</th><th>17〜64 位</th><th>65〜1024 位</th><th>1025 位以下</th></tr>
+<tr><td>SPSP 総合</td><td>0.523</td><td>0.343</td><td><strong><em>0.137</em></strong></td><td><strong>0.128</strong></td></tr>
+<tr><td>SPSP 直対評価だけ</td><td><strong>0.507</strong></td><td><strong>0.334</strong></td><td><strong><em>0.135</em></strong></td><td>0.133</td></tr>
+<tr><td>SPSP 順位評価だけ</td><td>0.548</td><td>0.363</td><td>0.151</td><td>0.138</td></tr>
+<tr><td>Glicko-2 (素のまま)</td><td>0.521</td><td>0.353</td><td>0.159</td><td>0.181</td></tr>
+<tr><td>JJPR (参考)</td><td>0.570</td><td>0.413</td><td>0.197</td><td>0.179</td></tr>
+<tr><td>(試合数)</td><td>4046</td><td>7498</td><td>32935</td><td>3150</td></tr>
+</table></div></div>
+<div class="tabpane" id="band-fwr" hidden><p class="tabdesc">高いほど良い。帯に絞ると差を検出しにくい。</p><div class="tablewrap"><table>
+<tr><th>方式</th><th>1〜16 位</th><th>17〜64 位</th><th>65〜1024 位</th><th>1025 位以下</th></tr>
+<tr><td>SPSP 総合</td><td>0.645</td><td><strong><em>0.663</em></strong></td><td><strong><em>0.768</em></strong></td><td><strong><em>0.698</em></strong></td></tr>
+<tr><td>SPSP 直対評価だけ</td><td><strong>0.651</strong></td><td><strong><em>0.666</em></strong></td><td><strong><em>0.769</em></strong></td><td><strong><em>0.693</em></strong></td></tr>
+<tr><td>SPSP 順位評価だけ</td><td>0.638</td><td>0.655</td><td>0.754</td><td>0.685</td></tr>
+<tr><td>Glicko-2 (素のまま)</td><td>0.640</td><td>0.653</td><td>0.745</td><td>0.648</td></tr>
+<tr><td>JJPR (参考)</td><td>0.634</td><td>0.632</td><td>0.719</td><td>0.659</td></tr>
+<tr><td>(試合数)</td><td>4046</td><td>7498</td><td>32935</td><td>3150</td></tr>
+</table></div></div>
+<div class="tabpane" id="band-pa" hidden><p class="tabdesc">高いほど良い。シードバイアスを受ける。</p><div class="tablewrap"><table>
+<tr><th>方式</th><th>1〜16 位</th><th>17〜64 位</th><th>65〜1024 位</th><th>1025 位以下</th></tr>
+<tr><td>SPSP 総合</td><td>0.701</td><td><strong><em>0.718</em></strong></td><td><strong>0.838</strong></td><td><strong>0.726</strong></td></tr>
+<tr><td>SPSP 直対評価だけ</td><td><strong>0.707</strong></td><td><strong><em>0.719</em></strong></td><td>0.834</td><td>0.712</td></tr>
+<tr><td>SPSP 順位評価だけ</td><td>0.692</td><td>0.711</td><td>0.830</td><td>0.722</td></tr>
+<tr><td>Glicko-2 (素のまま)</td><td>0.700</td><td>0.711</td><td>0.813</td><td>0.682</td></tr>
+<tr><td>JJPR (参考)</td><td>0.693</td><td>0.687</td><td>0.798</td><td>0.704</td></tr>
+<tr><td>(組数)</td><td>14734</td><td>115616</td><td>4188852</td><td>1789608</td></tr>
+</table></div></div>
+<div class="tabpane" id="band-maspr" hidden><p class="tabdesc">低いほど良い。シードバイアスを受ける。</p><div class="tablewrap"><table>
+<tr><th>方式</th><th>1〜16 位</th><th>17〜64 位</th><th>65〜1024 位</th><th>1025 位以下</th></tr>
+<tr><td>SPSP 総合</td><td>2.303</td><td><strong><em>1.427</em></strong></td><td><strong>0.812</strong></td><td><strong>0.696</strong></td></tr>
+<tr><td>SPSP 直対評価だけ</td><td><strong>2.262</strong></td><td><strong><em>1.421</em></strong></td><td>0.825</td><td>0.720</td></tr>
+<tr><td>SPSP 順位評価だけ</td><td>2.384</td><td>1.478</td><td>0.837</td><td>0.715</td></tr>
+<tr><td>Glicko-2 (素のまま)</td><td>2.337</td><td>1.482</td><td>0.883</td><td>0.807</td></tr>
+<tr><td>JJPR (参考)</td><td>2.471</td><td>1.639</td><td>0.963</td><td>0.800</td></tr>
+<tr><td>(組数)</td><td>14734</td><td>115616</td><td>4188852</td><td>1789608</td></tr>
+</table></div></div>
+<p>装飾は総合と直対評価だけの比較です。太字は、その帯で相手より良い側 (目安で、運だけでこの差が出る確率がおよそ 7% 以下)。太字の斜体は、両者がほぼ同等のもの。他の方式は装飾していません。運の範囲を超えるかどうかの厳密な判定は、次の表を見てください。</p>
+<p>上の表の差が運の範囲を超えているかを、同じ 4 つの帯で厳密に判定した表です。勝敗を見る 2 つが判定材料で、順位を見る 2 つは参考です。各欄は良かった側で、太字は運の範囲を超えたものです。</p>
+<div class="tablewrap"><table>
+<tr><th>帯</th><th>FWR</th><th>ULG</th><th>PA</th><th>MASPR</th><th>判定</th></tr>
+<tr><td>1〜16 位</td><td>直対</td><td><strong>直対</strong></td><td><strong>直対</strong></td><td><strong>直対</strong></td><td><strong>直対評価だけが強い</strong></td></tr>
+<tr><td>17〜64 位</td><td>直対</td><td><strong>直対</strong></td><td>差なし</td><td>差なし</td><td><strong>互角〜直対有利</strong></td></tr>
+<tr><td>65〜1024 位</td><td>直対</td><td>差なし</td><td><strong>総合</strong></td><td><strong>総合</strong></td><td><strong>互角〜総合有利</strong></td></tr>
+<tr><td>1025 位以下</td><td>総合</td><td>総合</td><td><strong>総合</strong></td><td><strong>総合</strong></td><td><strong>総合有利</strong></td></tr>
+</table></div>
+<p>読み方と、分かったこと:</p>
+<ul>
+<li><strong>トップ帯 (1〜16 位) は直対評価だけのほうが強い。</strong> 4 つの指標すべてで直対が上で、3 シーズン同じ向きです。上位の選手は週末大会の試合が豊富で、試合の勝ち負けだけで十分に測れます。</li>
+<li><strong>17〜64 位は互角から直対有利。</strong> アップセット幅では直対が運の範囲を大きく超えて上で、3 シーズンとも同じ向きですが、他の 3 つの指標では差がありません。</li>
+<li><strong>65〜1024 位は互角から総合有利。</strong> 勝敗を見る指標では運の範囲の差しかなく、順位を見る指標では総合が上です。順位の差はシードバイアス (前の記事の軸 4) の向きと同じなので割り引いて読みますが、それでも総合が下回る指標はありません。</li>
+<li><strong>裾野 (1025 位以下) は総合有利。</strong> 4 つの指標すべてで総合が上で、3 シーズンとも同じ向きです。ただし 1025 人以上の大会は 5 つしかないので、勝敗を見る指標では単独では運の範囲を超えません。513 位以下をまとめると、上位シード勝率で総合が運の範囲を超えて上になります (これも 3 シーズンとも)。組み合わせる方式の利益が出ているのはここです。裾野の選手は対戦の記録が少なく、対戦の網も地域ごとに分かれているので、試合だけから強さを決めるのが難しく、大会の順位という別の情報を混ぜる意味があります。</li>
+<li><strong>裾野では順位評価だけでも Glicko-2 より当たる。</strong> 1025 位以下で順位評価だけ 0.138 に対し Glicko-2 は 0.181 で、素のレート方式は裾野に行くほど崩れます。</li>
+</ul>
+<p>この結果から、SPSP の総合ランキングは「トップ層は直対評価、裾野は順位評価も混ぜる」という今の組み合わせ方が、実力帯ごとの性質に合っていると言えます。</p>
+
+<h2 id="summary">まとめ</h2>
+<ul>
+<li>SPSP の総合ランキングは Elo、Glicko-2 より当たっている。</li>
+<li>UltRank はその年の実績をまとめる順位表で、集計期間の結果はある程度説明するが、まだ結果を知らない大会の予想では SPSP を下回る。シーディングには向かない。</li>
+<li>実力帯で分けると、トップ層は直対評価だけが強く、裾野では順位評価を混ぜた総合が有利。</li>
+</ul>
+<p>数値つきの検定結果と再現手順は <a href="real-data-comparison.html">「実データでの方式比較」</a> に、指標そのものの説明は <a href="ranking-quality.html">「ランキングの良さはどうすれば測れる？」</a> にあります。</p>
+
+<div class="navlinks"><a href="./">ブログ目次</a><a href="real-data-comparison.html">技術版: 実データでの方式比較</a><a href="ranking-quality.html">前: ランキングの良さはどうすれば測れる？</a></div>
+</main>
+<script>(function(){var tabs=document.querySelectorAll(".tabs .tab");tabs.forEach(function(b){b.addEventListener("click",function(){var g=b.parentNode;g.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});b.classList.add("active");var n=g.nextElementSibling;while(n&&n.classList&&n.classList.contains("tabpane")){n.hidden=(n.id!==b.getAttribute("data-tab"));n=n.nextElementSibling;}});});})();</script>
+<script src="../nav.js"></script>
+</body>
+</html>

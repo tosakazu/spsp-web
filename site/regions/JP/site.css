@@ -1,0 +1,3 @@
+/* regions/JP/site.css — 日本版だけに効く CSS (ページからは region/site.css、各ページの最後の stylesheet)。
+   言語で変わる調整 (英語だと文言が長い、フォント) はここではなく共通 CSS に html[lang="en"] .x { … } で書く
+   (js/i18n.js が決まった言語を <html lang> に入れる)。ここは地域固有の見た目 (地域ページの列幅など) だけ。いまは空。 */

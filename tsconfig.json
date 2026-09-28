@@ -1,0 +1,21 @@
+{
+  // TypeScript の設定 (docs/frontend_stack_review.md の A → B)。
+  // いまは JS のまま型検査 (checkJs) を段階的に入れる: `// @ts-check` を付けたファイルだけ検査される。
+  // 新しく書くものは .ts で。src/pages/*.ts と site/**/*.ts はビルド (esbuild) がそのまま扱う。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "types": [],
+    "typeRoots": ["./types"]
+  },
+  "include": ["src/**/*", "site/js/**/*", "site/*.js", "site/seeding/**/*", "site/bracket/**/*", "types/**/*"],
+  "exclude": ["node_modules", "dist", "dist-*", "site/seeding/seed_worker.js"]
+}

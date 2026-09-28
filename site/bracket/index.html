@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title data-i18n="page.bracket.title">トーナメントプレビュー | スマメイト以外の非公式レートSP (SPSP)</title>
+<link rel="stylesheet" href="bracket_app.css">
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+<div id="bp-root">
+  <header class="bp-header">
+    <h1 data-i18n="bracket.page.t1">🏆 トーナメントプレビュー</h1>
+    <div id="bp-event" class="bp-event"></div>
+    <div id="bp-version" class="bp-version" hidden></div>
+    <div class="bp-note" data-i18n="bracket.page.t2">
+      シード通りに勝ち上がった場合の予測ブラケットです (「敗者側も表示」で敗者側とグランドファイナルも出ます)。
+      アドレスバーの URL を共有すれば、誰でも同じ画面をそのまま開けます。
+    </div>
+    <details class="bp-caveat">
+      <summary data-i18n="bracket.page.t3">⚠️ start.gg の設定によっては、実際のブラケットと食い違うことがあります</summary>
+      <div class="bp-caveat-body">
+        <p data-i18n="bracket.page.t4">
+          このページは <b data-i18n="bracket.page.t32">start.gg の一般的な設定を前提に組み直したもの</b><span data-i18n="bracket.page.t33">で、実際の大会ページを
+          読み取っているわけではありません。次の場合はズレます。</span>
+        </p>
+        <ul>
+          <li>
+            <b data-i18n="bracket.page.t5">敗者側の初戦の組み合わせ</b> <span data-i18n="bracket.page.t6">— 同じ人数構成でも大会によって並びが違います
+            (start.gg 側で複数の配置が使われているため)。
+            「上位半分の選手と下位半分の選手が当たる」という形は共通ですが、</span>
+            <b data-i18n="bracket.page.t7">誰と誰が当たるかは入れ替わることがあります</b>。
+          </li>
+          <li>
+            <b data-i18n="bracket.page.t8">ブラケット形式</b> <span data-i18n="bracket.page.t9">— ダブルイリミネーション前提です。
+            シングルイリミネーション・総当たり・スイスドローは再現しません。</span>
+          </li>
+          <li>
+            <b data-i18n="bracket.page.t10">フェーズ構成・通過人数</b> <span data-i18n="bracket.page.t11">— このページの「⚙ フェーズ構成」で指定した内容で計算します。
+            start.gg 側の実際の設定と違えば、当然結果も変わります。</span>
+          </li>
+          <li>
+            <b data-i18n="bracket.page.t12">主催者が start.gg 上で直接シードを並べ替えた場合</b><span data-i18n="bracket.page.t13">は反映されません。</span>
+          </li>
+        </ul>
+        <p class="bp-caveat-foot" data-i18n="bracket.page.t14">
+          勝ち上がりは「シードが上の選手が勝つ」前提です。実際の勝敗・DQ・欠場は考慮しません。
+          <b data-i18n="bracket.page.t34">組み合わせの傾向を見るためのもの</b><span data-i18n="bracket.page.t35">とお考えください。
+          当日の正式なブラケットは必ず start.gg でご確認ください。</span>
+        </p>
+      </div>
+    </details>
+  </header>
+
+  <div id="bp-error" class="bp-error" hidden></div>
+
+  <div id="bp-controls" hidden>
+    <nav id="bp-phase-tabs" class="bp-tabs"></nav>
+    <div class="bp-row">
+      <label class="bp-poolpick" data-i18n="bracket.page.t15">プール
+        <button id="bp-pool-prev" class="bp-btn" title="前のプール" data-i18n-attr="title:bracket.page.t27">◀</button>
+        <select id="bp-pool-select"></select>
+        <button id="bp-pool-next" class="bp-btn" title="次のプール" data-i18n-attr="title:bracket.page.t28">▶</button>
+      </label>
+      <span id="bp-pool-info" class="bp-poolinfo"></span>
+      <label class="bp-check"><input type="checkbox" id="bp-lb"> <span data-i18n="bracket.page.t16">敗者側も表示</span></label>
+      <label class="bp-check"><input type="checkbox" id="bp-wd" checked> <span data-i18n="bracket.page.t17">平日大会の対戦も含める</span></label>
+      <button id="bp-copy-url" class="bp-btn" data-i18n="bracket.page.t18">🔗 URLをコピー</button>
+      <button id="bp-csv-save" class="bp-btn" title="現在の内容 (シード順・フェーズ構成・表示状態) を CSV に保存します。下の CSV 読み込みで復元できます" data-i18n-attr="title:bracket.page.t29" data-i18n="bracket.page.t19">💾 CSV保存</button>
+      <button id="bp-reload" class="bp-btn" title="取得に失敗した選手データを取り直します" data-i18n-attr="title:bracket.page.t30" hidden data-i18n="bracket.page.t20">🔄 選手データを再取得</button>
+      <span id="bp-url-len" class="bp-urllen"></span>
+    </div>
+    <details class="bp-panel" id="bp-phase-editor">
+      <summary data-i18n="bracket.page.t21">⚙ フェーズ構成 (予選→Top カットの区切り)</summary>
+      <div class="bp-panel-body">
+        <div id="bp-phase-rows"></div>
+        <div class="bp-row">
+          <button id="bp-phase-add" class="bp-btn" data-i18n="bracket.page.t22">+ フェーズ追加</button>
+          <button id="bp-phase-apply" class="bp-btn bp-btn-primary" data-i18n="bracket.page.t23">適用</button>
+          <span id="bp-phase-status" class="bp-inline-status"></span>
+        </div>
+        <div class="bp-hint" data-i18n="bracket.page.t24">
+          進出予測は「シード通り」前提です。次フェーズは進出者を全体シード順で組み直します
+          (start.gg の自動進出のデフォルトと同じ組み合わせになります)。
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <details class="bp-panel" id="bp-csv-panel">
+    <summary data-i18n="bracket.page.t25">📄 作業状況 CSV を読み込む (URL が長すぎる大会向け)</summary>
+    <div class="bp-panel-body">
+      <p class="bp-hint" data-i18n="bracket.page.t26">
+        シードページの「作業状況を保存 (CSV)」で書き出したファイルを読み込むと、
+        URL がなくてもプレビューできます (Discord 等でファイル共有する場合はこちら)。
+      </p>
+      <input type="file" id="bp-csv-file" accept=".csv,text/csv">
+      <span id="bp-csv-status" class="bp-inline-status"></span>
+    </div>
+  </details>
+
+  <div id="bp-status" class="bp-status"></div>
+  <div id="bp-bracket" class="bp-bracket"></div>
+  <div id="bp-pop" class="bp-pop" hidden></div>
+</div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<script src="../assets/bracket.js"></script>
+</body>
+</html>

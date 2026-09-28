@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.seed_upload.title">SPSP シードアップロード — CSV / Sheets からスマブラSP大会シーディング</title>
+<meta name="description" content="CSV や Google Sheets の順位を基準に start.gg のシードを作成。フェーズ自動作成・再対戦/地域被り回避の最適化・手動調整・CSV ダウンロードに対応。" data-i18n-attr="content:page.seed_upload.description">
+<link rel="canonical" href="https://tosakazu.github.io/spsp/seed-upload/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPSP">
+<meta property="og:title" content="SPSP シードアップロード" data-i18n-attr="content:page.seed_upload.og_title">
+<meta property="og:description" content="CSV / Google Sheets の順位から start.gg のシードを作成。被り回避最適化・手動調整付き。" data-i18n-attr="content:page.seed_upload.og_description">
+<meta property="og:url" content="https://tosakazu.github.io/spsp/seed-upload/">
+<meta property="og:locale" content="ja_JP">
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+<link rel="stylesheet" href="../ranking-table.css">
+<link rel="stylesheet" href="../seeding/seed_app.css">
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+
+<div id="seed-app-root"></div>
+
+<div class="footer" id="footer-info"></div>
+<div class="footer" style="margin-top:-12px"><span class="site-version" style="font-size:11px;color:#9ca3af">__SITE_VERSION__</span></div>
+
+<script>/* ページの設定 (本体 assets/seed_upload.js より前に要る) */ window.SEED_APP_CONFIG = { mode: 'csv' };</script>
+<script src="../assets/seed_upload.js"></script>
+</body>
+</html>
