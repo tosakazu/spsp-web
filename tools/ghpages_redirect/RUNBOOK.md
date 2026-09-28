@@ -12,7 +12,9 @@
 2. **旧サイトの JSON (players/ meta.json latest_tjpr_full.jsonl など)**: GitHub Pages は JSON を転送できない。
    - (a) 消す (404)。外部で使っている人がいなければこれ。
    - (b) 切り替え時点のものを残す (以後は更新されない)。手順 3 の「(b) の場合」を実行する。
-   - (c) data.spsp.games を誰からでも読めるように CORS を開け、新しい場所を案内する。**2026-09-28 に開けた** (R2 バケット spsp-data の CORS: origins "*"、GET/HEAD。以前の設定は ~/spsp-state/handoff/r2_cors_before_20260928.json)。旧サイトの JSON を使っていた人は `https://data.spsp.games/jp/…` (同じパス) に移れる。**移行時は (a) 消す (2026-09-28 ユーザー判断)。** 手順 3 の「(b) の場合」は実行しない。
+   - (c) data.spsp.games を誰からでも読めるように CORS を開け、新しい場所を案内する。**2026-09-28 に開けた** (R2 バケット spsp-data の CORS: origins "*"、GET/HEAD。以前の設定は ~/spsp-state/handoff/r2_cors_before_20260928.json)。旧サイトの JSON を使っていた人は `https://data.spsp.games/jp/…` (同じパス) に移れる。**移行時は (b) 残す (2026-09-28 ユーザー判断で (a) から変更: データを参照している人のため。GitHub Pages は JSON を data.spsp.games へ転送できない)。**
+   手順 3 の「(b) の場合」を実行する。残した JSON は切り替え時点のまま更新されない (旧サイトへの書き込みは止めるため)。更新し続けたくなったら、
+   正式ビルド (Actions) から gh-pages に JSON だけを出す工程が要る (未実装)。
 3. **お知らせ**: 事前告知はしない (2026-09-28 ユーザー判断: 切り替えは突然やる)。切り替え後に「移転しました」を spsp.games のお知らせに出してツイート。下書き = ~/spsp-state/handoff/2026-09-28_domain_move_announcement.md
 4. **ビルド**: 切り替えと同時に GitHub Actions を正式なビルドにする (3 時間ごとのスケジュール、本番 R2 へ書く、投票の取り込みも)。サーバの nightly は止めたまま (2026-09-28 17:35 から crontab で #PAUSED)。Actions 担当セッションの準備が済んでいることを先に確認する。
 
@@ -29,8 +31,8 @@ touch ~/spsp-state/ghpages_retired
 
 # 3. 転送ページを作る
 rm -rf ~/spsp-state/ghswitch_out && node ~/spsp-web/tools/ghpages_redirect/build.mjs --from ~/spsp-state/tosakazu.github.io/spsp --out ~/spsp-state/ghswitch_out/spsp
-#    (b) JSON を残す場合だけ: 今の旧サイトからデータを写す
-#    for x in players history tournaments data meta.json players_current.json latest_tjpr_full.jsonl news.json; do cp -r ~/spsp-state/tosakazu.github.io/spsp/$x ~/spsp-state/ghswitch_out/spsp/ 2>/dev/null; done
+#    (b) JSON を残す (2026-09-28 の判断): 今の旧サイトからデータを写す
+for x in players history tournaments data meta.json players_current.json latest_tjpr_full.jsonl news.json; do cp -r ~/spsp-state/tosakazu.github.io/spsp/$x ~/spsp-state/ghswitch_out/spsp/ 2>/dev/null; done
 
 # 4. 別の clone から push する (~/spsp-state/tosakazu.github.io は触らない: ConoHa の旧本番とプレビューがそこを symlink で見ている)。/tmp は使わない (掃除で壊れる)
 rm -rf ~/spsp-state/ghswitch && git clone --depth 1 -b gh-pages git@github.com:tosakazu/tosakazu.github.io.git ~/spsp-state/ghswitch
