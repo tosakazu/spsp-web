@@ -161,3 +161,12 @@ test('言語別の木だった URL → 同じページ + ?lang (他のクエリ�
   assert.strictEqual(langDirRedirectTarget('/jp/p/', '?d=1'), null);
   assert.strictEqual(langDirRedirectTarget('/jp/events/', ''), null);
 });
+
+test('旧サイトのドメインだけ差し替えた URL (/spsp/…) と /local/ も /jp/ へ', () => {
+  assert.strictEqual(legacyRedirectTarget('/spsp/', '/jp'), '/jp/');
+  assert.strictEqual(legacyRedirectTarget('/spsp', '/jp'), '/jp/');
+  assert.strictEqual(legacyRedirectTarget('/spsp/p/', '/jp'), '/jp/p/');
+  assert.strictEqual(legacyRedirectTarget('/spsp/c/ranking.html', '/jp'), '/jp/c/ranking.html');
+  assert.strictEqual(legacyRedirectTarget('/local/ranking.html', '/jp'), '/jp/local/ranking.html');
+  assert.strictEqual(legacyRedirectTarget('/spspx/', '/jp'), null);
+});

@@ -82,6 +82,9 @@ function lookup(lang, key) {
 // 日本語だけのページ (他言語の木では noindex、lang は既定言語)。長文の解説と、静的 HTML が辞書化されていない投稿系
 const JA_ONLY = new Set(['overview.html', 'details.html', 'math.html', 'eval.html', 'vote.html', 'post.html', 'callback.html']);
 const isJaOnly = (rel) => JA_ONLY.has(rel) || rel.startsWith('blog/');
+// クエリで中身が決まるページ: canonical は「ページの URL + ここに挙げたクエリ」(js/html.js updateCanonical が実行時に付ける)。
+// 静的な canonical をクエリ無しで書くと、検索エンジンが全選手・全大会を 1 ページに畳んでしまう (2026-09-28)
+const QUERY_PAGES = { 'p/index.html': ['d', 'uid'], 't/index.html': ['id'], 'c/ranking.html': ['char'], 'pref/ranking.html': ['pref'], 'local/ranking.html': ['series'] };
 
 // ── ファイル一覧 ──
 function walk(dir, rel = '') {
@@ -239,8 +242,13 @@ for (const p of pages) {
   if (origin) {
     const url = origin + base + pageUrlRel;
     for (const el of head.querySelectorAll('link[rel="canonical"], link[rel="alternate"][hreflang]')) el.remove();
-    const canon = doc.createElement('link'); canon.setAttribute('rel', 'canonical'); canon.setAttribute('href', url);
-    head.appendChild(canon);
+    if (QUERY_PAGES[p.rel]) {
+      html.setAttribute('data-canonical-base', url);
+      html.setAttribute('data-canonical-params', QUERY_PAGES[p.rel].join(','));
+    } else {
+      const canon = doc.createElement('link'); canon.setAttribute('rel', 'canonical'); canon.setAttribute('href', url);
+      head.appendChild(canon);
+    }
     const og = head.querySelector('meta[property="og:url"]');
     if (og) og.setAttribute('content', url);
     // 構造化データ (JSON-LD) のサイト URL と、別ホストで開いたときの「正規のページを開く」リンク (#vt-canonical / #post-canonical)。
@@ -251,7 +259,9 @@ for (const p of pages) {
       }
     }
     for (const a of doc.querySelectorAll('[id$="-canonical"] a[href]')) a.setAttribute('href', url);
-    sitemap.push({ url, lang, page: pageUrlRel, jaOnly });
+    // サイトマップ: クエリで中身が決まるページの素の URL (クエリ無し) と noindex のページは載せない
+    const noindex = !!head.querySelector('meta[name="robots"][content*="noindex"]');
+    if (!QUERY_PAGES[p.rel] && !noindex) sitemap.push({ url, lang, page: pageUrlRel, jaOnly });
   }
   const out = path.join(OUT, p.rel);
   const html5 = '<!DOCTYPE html>\n' + html.outerHTML + '\n';

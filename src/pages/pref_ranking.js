@@ -111,7 +111,7 @@ async function init() {
     const [prefRes, master] = await Promise.all([
       fetch(SPSP.data + 'data/player_prefectures.json'),
       RP.loadMaster(SPSP.data),
-      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.root)).catch(() => null),   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
+      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
     ]);
     // ?pref= は URL キー ('tokyo' / 北米 'CA')。旧 URL の '東京都' も引ける。読めたら URL を新しいキーに書き換える
     const prefId = SPSPGeo.unitFromUrlKey(STATE.pref);

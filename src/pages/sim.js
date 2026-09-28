@@ -21,7 +21,7 @@ window.SPSPCalc = calcApi;
   var i18n = SPSPI18n.t;   // 文言は i18n/ja.js (js/i18n.js)
   SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
   var C = SPSPCalc;
-  var DATA_BASE = SPSP.root;   // データ (JSON) の置き場。ページ間リンクは SPSP.langRoot
+  var DATA_BASE = SPSP.data;   // データ (JSON) の置き場 (config.dataRoot = data.spsp.games など)。ページ間リンクは SPSP.langRoot
   var params = new URLSearchParams(location.search);
   var UID = parseInt(params.get('uid') || location.hash.replace(/^#/, '') || '0', 10);
 

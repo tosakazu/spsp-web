@@ -13,6 +13,10 @@ on:
         default: preview
 permissions:
   contents: read
+# 続けて push したとき、古い方のデプロイが後から終わって上書きしないように 1 本ずつ (途中のものは止めない)
+concurrency:
+  group: deploy-${{ github.event.inputs.env || 'production' }}
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest

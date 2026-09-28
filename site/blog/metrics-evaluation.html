@@ -232,10 +232,13 @@ sh experiments/simlab/run_all.sh experiments/simlab/configs/basic.json
 python3 experiments/simlab/bias_metrics.py --run experiments/simlab/runs/selfens
 python3 experiments/simlab/favoritism_by_method.py --run experiments/simlab/runs/jjprseed</code></pre>
 <p>実装上の識別子との対応: PA = <code>pair_acc</code>、MASPR = <code>spr_abs</code>、FWR = <code>match_acc</code>、ULG = <code>upset_loggap_per_match</code>、UF = <code>uf_per_match</code>、対数順位差 = <code>logdiff_abs</code>、相対順位差 = <code>rankdiff_rel</code>、確信度 AUC = <code>conf_auc</code>、順位差 (生の目盛り) = <code>upset_gap_rel_per_match</code>、全試合の回戦差 = <code>match_w2wgap_per_match</code>。</p>
-<p>レポート本体は <code>experiments/metrics/reports/validated_metrics_202608/REPORT.md</code> (<a href="/b/simlab/realeval.html">公開版</a>)、合成世界の横断レポートは <a href="/b/simlab/">こちら</a> です。</p>
+<p>レポート本体は <code>experiments/metrics/reports/validated_metrics_202608/REPORT.md</code> です (合成世界の横断レポートとあわせて、現在は非公開)。</p>
 
 <div class="navlinks"><a href="./">ブログ目次</a><a href="ranking-quality.html">簡易版: ランキングの良さはどうすれば測れる？</a><a href="real-data-comparison.html">次: 実データでの方式比較</a><a href="simulation-theory.html">対戦シミュレーションの理論と分析</a></div>
 </main>
-<script src="../nav.js"></script>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<script src="../assets/blog.js"></script>
 </body>
 </html>

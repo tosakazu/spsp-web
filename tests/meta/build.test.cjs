@@ -105,7 +105,12 @@ test('ビルド: --clean-urls + --canonical で拡張子なしの canonical・�
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spsp-site-clean-'));
   execFileSync(process.execPath, [BUILD, '--out', out, '--canonical', 'https://x.test/jp/', '--clean-urls', '--quiet'], { cwd: ROOT, stdio: 'pipe' });
   const read = (r) => new JSDOM(fs.readFileSync(path.join(out, r), 'utf8')).window.document;
-  assert.strictEqual(read('c/ranking.html').querySelector('link[rel="canonical"]').getAttribute('href'), 'https://x.test/jp/c/ranking');
+  // クエリで中身が決まるページは静的な canonical を書かず、実行時に ?char= 付きで作る印を付ける
+  const cr = read('c/ranking.html');
+  assert.strictEqual(cr.querySelector('link[rel="canonical"]'), null);
+  assert.strictEqual(cr.documentElement.getAttribute('data-canonical-base'), 'https://x.test/jp/c/ranking');
+  assert.strictEqual(cr.documentElement.getAttribute('data-canonical-params'), 'char');
+  assert.strictEqual(read('overview.html').querySelector('link[rel="canonical"]').getAttribute('href'), 'https://x.test/jp/overview');
   assert.strictEqual(read('vote.html').querySelector('link[rel="canonical"]').getAttribute('href'), 'https://x.test/jp/vote');
   assert.match(fs.readFileSync(path.join(out, 'region/config.js'), 'utf8'), /cleanUrls: true/);
   const hrefs = [...read('blog/index.html').querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => !/^(https?:|\/|#)/.test(h));

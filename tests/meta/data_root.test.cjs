@@ -30,6 +30,10 @@ test('JSON の fetch は SPSP.data 経由 (SPSP.root は assets など配信フ�
       bad.push(path.relative(ROOT, f) + ': ' + m[0]);
     }
     for (const m of src.matchAll(/(loadMaster|loadCurrent|loadDiscriminators|loadGeo|defaultFetchers|cachedFetchers)\(SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
+    // 2026-09-28 に見落としていた形: 型注釈付きの loadGeo(/** … */ (SPSP.root))、DATA_BASE = SPSP.root、ナビの news.json
+    for (const m of src.matchAll(/loadGeo\([^)]*SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
+    for (const m of src.matchAll(/DATA_BASE\s*=\s*SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
+    for (const m of src.matchAll(/assetPrefix\s*\+\s*['`](news\.json|meta\.json|data\/)/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);
   }
   assert.deepStrictEqual(bad, []);
 });

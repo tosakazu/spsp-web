@@ -470,7 +470,7 @@ async function loadData() {
       fetch(SPSP.data + 'data/character_index.json').catch(() => null),
       fetch(SPSPCharEmoji.url()).catch(() => null),
       fetch(SPSP.data + 'data/player_prefectures.json').catch(() => null),
-      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.root)).catch(() => null),   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
+      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
       fetch(SPSP.data + 'data/player_subranks.json').catch(() => null),
     ]);
     if (subrankRes && subrankRes.ok) {

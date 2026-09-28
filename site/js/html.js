@@ -48,6 +48,38 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     return String(rel).replace(/(^|\/)index\.html(?=$|[?#])/, '$1').replace(/\.html(?=$|[?#])/, '');
   }
   global.SPSP.pageHref = pageHref;
+
+  // クエリで中身が決まるページ (選手 ?d= / 大会 ?id= / キャラ別 ?char= / 県別 ?pref= / シリーズ別 ?series=) の canonical と og:url。
+  // ビルドが <html data-canonical-base="https://spsp.games/jp/p/" data-canonical-params="d,uid"> を書き、ここで今の URL の該当クエリだけを付ける
+  // (?lang や表示の状態は付けない)。ページが URL を書き換えたら (history.replaceState) 付け直す。2026-09-28: 以前は全選手が /jp/p/ に畳まれていた
+  function updateCanonical() {
+    var d = global.document;
+    var h = d && d.documentElement;
+    var base = h && h.getAttribute('data-canonical-base');
+    if (!base) return;
+    var keys = String(h.getAttribute('data-canonical-params') || '').split(',').filter(Boolean);
+    var cur = new URLSearchParams(global.location.search);
+    var out = new URLSearchParams();
+    for (var i = 0; i < keys.length; i++) { var v = cur.get(keys[i]); if (v != null && v !== '') out.set(keys[i], v); }
+    var q = out.toString();
+    var href = base + (q ? '?' + q : '');
+    var link = d.querySelector('link[rel="canonical"]');
+    if (!link) { link = d.createElement('link'); link.setAttribute('rel', 'canonical'); d.head.appendChild(link); }
+    link.setAttribute('href', href);
+    var og = d.querySelector('meta[property="og:url"]');
+    if (og) og.setAttribute('content', href);
+  }
+  global.SPSP.updateCanonical = updateCanonical;
+  if (doc && doc.documentElement && doc.documentElement.hasAttribute('data-canonical-base')) {
+    try { updateCanonical(); } catch (e) { /* location / URLSearchParams が無い環境 (テストの vm) では何もしない */ }
+    /** @type {any} */
+    var hist = global.history;
+    if (hist && hist.replaceState && !hist.__spspCanonical) {
+      var orig = hist.replaceState;
+      hist.replaceState = function () { var r = orig.apply(hist, /** @type {any} */ (arguments)); try { updateCanonical(); } catch (e) { /* 表示には影響させない */ } return r; };
+      hist.__spspCanonical = true;
+    }
+  }
   global.pageHref = pageHref;   // テストの built() は named import をグローバルから引く
   api.pageHref = pageHref;
 

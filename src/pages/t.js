@@ -67,7 +67,7 @@ async function load() {
       fetch(SPSP.data + 'meta.json'),
       fetch(SPSP.data + `tournaments/${TID}.json`),
       fetch(SPSP.data + 'data/tournament_prefectures.json').catch(() => null),
-      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.root)).catch(() => null),   // 開催地の表示名 (英語ページでは Chiba)
+      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 開催地の表示名 (英語ページでは Chiba)
       fetch(SPSP.data + 'data/character_index.json').catch(() => null),
       fetch(SPSPCharEmoji.url()).catch(() => null),
       // 参加者の現在の全国順位 (大会 JSON には当時の値だけがある。../js/player_data.js)

@@ -21,7 +21,7 @@ function utcOffsetMs(off) {
   SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
   // 共有データは相対パスで取る (= GitHub Pages でもプレビュー配信でも動く)。
   // discriminators.json は build_discriminators_json.py が nightly で site/data/ に生成。
-  var DATA_BASE = SPSP.root;   // データ (JSON) の置き場。ページ間リンクは SPSP.langRoot
+  var DATA_BASE = SPSP.data;   // データ (JSON) の置き場 (config.dataRoot = data.spsp.games など)。ページ間リンクは SPSP.langRoot
   var DISC_URL = SPSP.data + 'data/discriminators.json';
 
   /** 選手 1 人分 (jsonl から要る分だけ) */

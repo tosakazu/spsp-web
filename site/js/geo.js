@@ -1,5 +1,5 @@
 // js/geo.js — 地理単位のカタログ (data/geo.json) を読み、単位 id (日本: 都道府県の漢字名、北米: 州コード) を表示言語の名前にする。
-//   loadGeo(root)         data/geo.json を 1 度だけ読む (Promise、キャッシュ)。root は SPSP.root
+//   loadGeo(root)         data/geo.json を 1 度だけ読む (Promise、キャッシュ)。root はデータの置き場 (SPSP.data)
 //   setGeoCatalog(cat)    読み込み済みのカタログを渡す (seed_data.js が読んだものを共有するときなど)
 //   geoCatalog()          読み込み済みのカタログ (無ければ null)
 //   unitName(id)          単位 id → 表示言語の名前 (units[].name)。未読込 / 未知の id はそのまま

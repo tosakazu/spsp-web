@@ -21,7 +21,7 @@ import { D1Store } from './db.ts';
  * 地域分離 (2026-09-14) より前のリンクが SNS 等に残っているため。
  */
 export const LEGACY_PREFIXES: readonly string[] = [
-  'p', 't', 'c', 'pref', 'en', 'seeding', 'seed', 'seed-upload', 'sim', 'priority', 'events', 'news', 'blog', 'bracket',
+  'p', 't', 'c', 'pref', 'local', 'en', 'seed', 'seed-upload', 'sim', 'priority', 'events', 'news', 'blog', 'bracket',
   'index.html', 'overview.html', 'details.html', 'math.html', 'eval.html', 'vote.html', 'post.html', 'callback.html',
 ];
 
@@ -30,6 +30,8 @@ const REGION_PREFIXES = ['/jp/', '/na/', '/b/'];
 
 /** 旧 URL なら付け替え先のパス、そうでなければ null。 */
 export function legacyRedirectTarget(pathname: string, sitePrefix: string): string | null {
+  // 旧サイト (tosakazu.github.io/spsp/…) のドメインだけ差し替えた URL: spsp.games/spsp/… → /jp/… (2026-09-28)
+  if (pathname === '/spsp' || pathname.startsWith('/spsp/')) return sitePrefix.replace(/\/+$/, '') + (pathname.slice(5) || '/');
   if (REGION_PREFIXES.some((p) => pathname.startsWith(p))) return null;
   const first = pathname.replace(/^\/+/, '').split('/')[0];
   if (!first || !LEGACY_PREFIXES.includes(first)) return null;
