@@ -10,6 +10,14 @@
  "auto_news": [],
  "announcements": [
   {
+   "date": "2026-09-29",
+   "datetime": "2026-09-29T01:20:00",
+   "days": 14,
+   "title": "ドメイン移転のお知らせ - spsp.games",
+   "body": "・SPSP のアドレスが **https://spsp.games/** に変わりました。\n\n・これまでのアドレス (tosakazu.github.io/spsp/) を開くと、新しいアドレスの同じページに自動で移動します。**ブックマークやリンクは新しいアドレスに変更をお願いします。**",
+   "signature": "SPSP運営\nとさかず"
+  },
+  {
    "date": "2026-08-14",
    "datetime": "2026-08-14T21:30:00",
    "days": 7,
