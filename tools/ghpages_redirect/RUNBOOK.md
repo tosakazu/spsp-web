@@ -13,7 +13,8 @@
    - (a) 消す (404)。外部で使っている人がいなければこれ。
    - (b) 切り替え時点のものを残す (以後は更新されない)。手順 3 の「(b) の場合」を実行する。
    - (c) data.spsp.games を誰からでも読めるように CORS を開け、新しい場所を案内する。**2026-09-28 に開けた** (R2 バケット spsp-data の CORS: origins "*"、GET/HEAD。以前の設定は ~/spsp-state/handoff/r2_cors_before_20260928.json)。旧サイトの JSON を使っていた人は `https://data.spsp.games/jp/…` (同じパス) に移れる。**移行時は (a) 消す (2026-09-28 ユーザー判断)。** 手順 3 の「(b) の場合」は実行しない。
-3. **お知らせ**: 切り替えの 1 回以上前の nightly で、旧サイトに「◯月◯日 ◯時に spsp.games に移転します」を出しておく (spsp_scripts の site/news.json を編集 → 次の nightly で旧サイト・spsp.games 両方に出る)。下書き = ~/spsp-state/handoff/2026-09-28_domain_move_announcement.md
+3. **お知らせ**: 事前告知はしない (2026-09-28 ユーザー判断: 切り替えは突然やる)。切り替え後に「移転しました」を spsp.games のお知らせに出してツイート。下書き = ~/spsp-state/handoff/2026-09-28_domain_move_announcement.md
+4. **ビルド**: 切り替えと同時に GitHub Actions を正式なビルドにする (3 時間ごとのスケジュール、本番 R2 へ書く、投票の取り込みも)。サーバの nightly は止めたまま (2026-09-28 17:35 から crontab で #PAUSED)。Actions 担当セッションの準備が済んでいることを先に確認する。
 
 ## 切り替え (所要 10 分ほど)
 ```sh
@@ -51,7 +52,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://tosakazu.github.io/          # 
 ブラウザで (スマホも): `https://tosakazu.github.io/spsp/`、`/spsp/p/?uid=1787719`、`/spsp/pref/ranking.html?pref=東京都`、`/spsp/c/ranking.html?char=1304`、`/spsp/callback.html?code=x` (投票ページへ、code は渡らない)。
 いずれも spsp.games の同じページに即時に移る。`?stay=1` を付けると転送ページの中身が見える。
 
-その後: お知らせを「移転しました」に直す (site/news.json)、ツイート。
+その後: お知らせ「移転しました」を出す (Actions のビルドが読む site/news.json に追加 → 次のビルドで spsp.games に出る。急ぐなら data.spsp.games/jp/news.json を直接更新)、ツイート。
 
 ## 切り戻し
 - **すぐ戻す**: 転送ページを取り消して、nightly の gh-pages 出力を再開する。
