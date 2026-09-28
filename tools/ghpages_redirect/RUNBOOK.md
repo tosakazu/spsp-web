@@ -12,7 +12,7 @@
 2. **旧サイトの JSON (players/ meta.json latest_tjpr_full.jsonl など)**: GitHub Pages は JSON を転送できない。
    - (a) 消す (404)。外部で使っている人がいなければこれ。
    - (b) 切り替え時点のものを残す (以後は更新されない)。手順 3 の「(b) の場合」を実行する。
-   - (c) data.spsp.games を誰からでも読めるように CORS を開け、新しい場所を案内する (R2 の CORS 設定。(a) か (b) と併用)。
+   - (c) data.spsp.games を誰からでも読めるように CORS を開け、新しい場所を案内する。**2026-09-28 に開けた** (R2 バケット spsp-data の CORS: origins "*"、GET/HEAD。以前の設定は ~/spsp-state/handoff/r2_cors_before_20260928.json)。旧サイトの JSON を使っていた人は `https://data.spsp.games/jp/…` (同じパス) に移れる。残りは (a) か (b) を選ぶ。
 3. **お知らせ**: 切り替えの 1 回以上前の nightly で、旧サイトに「◯月◯日 ◯時に spsp.games に移転します」を出しておく (spsp_scripts の site/news.json を編集 → 次の nightly で旧サイト・spsp.games 両方に出る)。下書き = ~/spsp-state/handoff/2026-09-28_domain_move_announcement.md
 
 ## 切り替え (所要 10 分ほど)
