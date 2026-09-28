@@ -1,6 +1,7 @@
 {
   "name": "spsp-web",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "description": "SPSP ranking site — フロントエンド (site/) と投稿機能の Apps Script (gas/)。ビルド (spsp_scripts) が site/ に出力を書く",
   "scripts": {
     "test": "node --test tests/meta/*.cjs tests/post/*.cjs tests/seeding/*.cjs tests/frontend/*.test.cjs",
