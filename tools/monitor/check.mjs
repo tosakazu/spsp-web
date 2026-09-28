@@ -1,11 +1,11 @@
 // tools/monitor/check.mjs — spsp.games の外形監視 (GitHub Actions の monitor.yml が 1 時間おきに実行、失敗すると GitHub がメールで知らせる)。
 // サーバ (ConoHa WING) の nightly は出力を捨てているので、止まっても誰も気づかない。外から「データが新しいか」「サイトが応答するか」を見る (2026-09-28)。
-//   node tools/monitor/check.mjs            (環境変数 MAX_DATA_AGE_H = データの古さの上限 (時間、既定 5)、MAX_TOUR_AGE_D = 最新大会の古さの上限 (日、既定 8))
+//   node tools/monitor/check.mjs            (環境変数 MAX_DATA_AGE_H = データの古さの上限 (時間、既定 8)、MAX_TOUR_AGE_D = 最新大会の古さの上限 (日、既定 8))
 // 見ること:
 //   1. データの鮮度: data.spsp.games/jp/meta.json の generated_at (nightly は 3 時間おき + 同期。全件の同期は 1.5 時間かかることがある)
 //   2. 大会の取り込み: data/tournaments.json の最新の大会日 (start.gg のトークン切れなどで取得だけ止まっても generated_at は新しいまま)
 //   3. サイト: /jp/ が 200、/ が /jp/ へ 301、一覧ファイルが 200、データの CORS、/api が応答する (Worker)
-const MAX_DATA_AGE_H = Number(process.env.MAX_DATA_AGE_H || 5);
+const MAX_DATA_AGE_H = Number(process.env.MAX_DATA_AGE_H || 8);   // 日本のビルドは 1 日 5 回 (0,6,12,18,21 時起動、間隔は最大 6 時間) + ビルドと同期の時間 (2026-09-29)
 const MAX_TOUR_AGE_D = Number(process.env.MAX_TOUR_AGE_D || 8);
 const SITE = 'https://spsp.games';
 const DATA = 'https://data.spsp.games/jp/';

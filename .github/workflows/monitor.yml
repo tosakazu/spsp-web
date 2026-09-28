@@ -1,4 +1,4 @@
-# spsp.games の外形監視 (tools/monitor/check.mjs)。1 時間おき。失敗すると GitHub がメールで知らせる (スケジュールを最後に変更した人に届く)。
+# spsp.games の外形監視 (tools/monitor/check.mjs)。1 時間おき (サーバの cron が tools/monitor/trigger.sh で起動する。GitHub の schedule は起動しなかったため、下の schedule は予備)。失敗すると GitHub がメールで知らせる (スケジュールを最後に変更した人に届く)。
 # 公開リポジトリは 60 日 push が無いとスケジュール実行が止まるので、そのときは Actions の画面から再度有効にする。
 name: monitor
 on:
