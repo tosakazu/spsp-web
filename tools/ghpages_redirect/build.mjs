@@ -3,7 +3,7 @@
 //   node tools/ghpages_redirect/build.mjs --from <旧サイトの spsp/ ディレクトリ> --out <出力ディレクトリ> [--to https://spsp.games/jp/] [--delay 3]
 //
 // 旧サイトにある HTML ページ (players/ tournaments/ history/ などのデータは除く) と同じパスに、転送ページを 1 枚ずつ置く。
-// どのページも同じ _moved.js を読み、自分の場所 (_moved.js のあるディレクトリ = 旧サイトのルート) からの相対パスを新しい URL に写す:
+// どのページも同じ moved.js を読み、自分の場所 (moved.js のあるディレクトリ = 旧サイトのルート) からの相対パスを新しい URL に写す:
 //   'index.html' → ''、'p/index.html' → 'p/'、'c/ranking.html' → 'c/ranking' (spsp.games は拡張子なし)。クエリ (?uid= ?pref= …) と # はそのまま渡す。
 // 既定は即時に移動する (--delay 0。<head> の中で判定して location.replace)。GitHub Pages は 301 を返せないので、即時の JS 転送 + canonical が
 // 検索エンジンにとって恒久的な移転の合図になる (待ち時間があると弱い: 2026-09-28 のレビュー)。?stay=1 で自動移動を止めて中身を確認できる (転送先には渡さない)。
@@ -86,7 +86,7 @@ function page(rel) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPSP は spsp.games に移転しました</title>
 ${queryPage ? '' : `<link rel="canonical" href="${esc(fallback)}">\n`}<noscript><meta http-equiv="refresh" content="${DELAY}; url=${esc(fallback)}"></noscript>
-<script src="${up}_moved.js"></script>
+<script src="${up}moved.js"></script>
 <style>
   :root { color-scheme: light dark; --fg: #111827; --sub: #4b5563; --bg: #ffffff; --accent: #dc2626; --card: #f9fafb; --line: #e5e7eb; }
   @media (prefers-color-scheme: dark) { :root { --fg: #f3f4f6; --sub: #9ca3af; --bg: #111827; --accent: #f87171; --card: #1f2937; --line: #374151; } }
@@ -123,6 +123,7 @@ for (const rel of list) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, page(rel));
 }
-fs.writeFileSync(path.join(OUT, '_moved.js'), JS);
-console.log(`ghpages_redirect: ${list.length} pages + _moved.js → ${OUT} (to ${TO}, delay ${DELAY}s)`);
+// 名前に _ を付けない: GitHub Pages (Jekyll) は _ で始まるファイルを配信しない (2026-09-29 の切り替えで _moved.js が 404 になった)
+fs.writeFileSync(path.join(OUT, 'moved.js'), JS);
+console.log(`ghpages_redirect: ${list.length} pages + moved.js → ${OUT} (to ${TO}, delay ${DELAY}s)`);
 for (const rel of list) console.log(`  ${rel} → ${TO}${rel === 'callback.html' ? 'vote (クエリは渡さない)' : urlRel(rel)}`);
