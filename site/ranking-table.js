@@ -208,7 +208,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
           ? `<span class="player-name">${escapeHtml(shown)}</span>`
           : SPSPLinks.playerLink(ctx.playerHrefPrefix, rec.user_id, escapeHtml(shown), ' class="player-name" onclick="event.stopPropagation()"');
         // メイン使用キャラの絵文字 (= 名前の左)。
-        const mainEmoji = SPSPCharEmoji ? SPSPCharEmoji.rowEmoji(rec) : (rec.main_char_emoji || '');   // main_char_id があれば表 (フロントが持つ) で、無ければ行の main_char_emoji
+        const mainEmoji = SPSPCharEmoji ? SPSPCharEmoji.rowEmoji(rec) : '';   // main_char_id を表 (フロントが持つ) で引く
         const charEmoji = mainEmoji
           ? `<span class="main-char-emoji" title="${i18n('table.main_char_title')}">${mainEmoji}</span>`
           : '';

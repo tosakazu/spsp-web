@@ -304,7 +304,7 @@ payload = { v:1, uid, slug, tag, iat, exp }     // exp = 発行から 180 日 (�
 | 反映先 | 読んでいる場所 |
 |---|---|
 | プレイヤーページの使用キャラ行 (先頭が赤字) | `site/p/index.html` |
-| ランキング行のメインキャラ絵文字 | `v4.overlay._build_main_char_emoji` |
+| ランキング行のメインキャラ絵文字 | ビルドの `spsp.overlay._build_main_char` が ID を出し、`js/char_emoji.js` が表で引く |
 | 使い手ランキング (`c/index.html`, `c/ranking.html`) | `v4/char_index.build_character_index` |
 
 経路:

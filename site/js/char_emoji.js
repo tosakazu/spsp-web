@@ -4,8 +4,8 @@
 //   url()                    表の URL
 //   load()                   表を 1 度だけ読む (Promise。読み込み時に自動で始める)。失敗しても null で解決する
 //   emojiOf(charId)          キャラ ID → 絵文字 (表が未読込 / 無い ID は '')
-//   rowEmoji(rec)            ランキング行のメインキャラ絵文字: main_char_id (ビルドが出すようになったら) を表で引き、
-//                            無ければ行に埋め込まれた main_char_emoji (今の出力と旧サイト用) を使う
+//   rowEmoji(rec)            ランキング行のメインキャラ絵文字: main_char_id を表で引く
+//                            (ビルドは絵文字を持たない。2026-09-29 に行の main_char_emoji を廃止し、表はここだけ)
 const global = typeof window !== 'undefined' ? window : globalThis;
 
 /** @type {Record<string, { name?: string, emoji?: string }> | null} */
@@ -36,11 +36,9 @@ export function emojiOf(charId) {
   return (e && e.emoji) || '';
 }
 
-/** @param {{ main_char_id?: number | string | null, main_char_emoji?: string | null }} rec */
+/** @param {{ main_char_id?: number | string | null }} rec */
 export function rowEmoji(rec) {
-  if (!rec) return '';
-  var byId = rec.main_char_id != null ? emojiOf(rec.main_char_id) : '';
-  return byId || rec.main_char_emoji || '';
+  return rec && rec.main_char_id != null ? emojiOf(rec.main_char_id) : '';
 }
 
 var api = { url: url, load: load, emojiOf: emojiOf, rowEmoji: rowEmoji };

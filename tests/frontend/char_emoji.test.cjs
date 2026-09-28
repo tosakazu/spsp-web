@@ -1,5 +1,5 @@
 'use strict';
-// js/char_emoji.js: キャラ絵文字の表はフロントが持つ (2026-09-28)。ランキング行は main_char_id を表で引き、無ければ埋め込みの main_char_emoji
+// js/char_emoji.js: キャラ絵文字の表はフロントが持つ (2026-09-28)。ランキング行は main_char_id を表で引く (行の main_char_emoji は 2026-09-29 に廃止)
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -21,18 +21,19 @@ test('表の URL はサイトのルート (データの置き場ではない)', 
   assert.strictEqual(E.url(), '../data/char_emoji.json');
 });
 
-test('main_char_id があれば表で引き、無ければ埋め込みの絵文字、どちらも無ければ空', async () => {
+test('main_char_id を表で引く。ID が無い・表に無い ID は空', async () => {
   const E = load(async () => ({ ok: true, json: async () => TABLE }));
   await E.load();
   assert.strictEqual(E.emojiOf(1304), TABLE['1304'].emoji);
-  assert.strictEqual(E.rowEmoji({ main_char_id: 1304, main_char_emoji: 'X' }), TABLE['1304'].emoji, 'ID を優先');
-  assert.strictEqual(E.rowEmoji({ main_char_emoji: '⛏️' }), '⛏️', 'ID が無い (今の出力)');
-  assert.strictEqual(E.rowEmoji({ main_char_id: 99999999, main_char_emoji: '⛏️' }), '⛏️', '表に無い ID');
+  assert.strictEqual(E.rowEmoji({ main_char_id: 1304 }), TABLE['1304'].emoji);
+  assert.strictEqual(E.rowEmoji({ main_char_id: '1304' }), TABLE['1304'].emoji, '文字列の ID');
+  assert.strictEqual(E.rowEmoji({ main_char_id: 99999999 }), '', '表に無い ID');
+  assert.strictEqual(E.rowEmoji({ main_char_id: null }), '');
   assert.strictEqual(E.rowEmoji({}), '');
 });
 
-test('表が読めなくても埋め込みの絵文字で出る', async () => {
+test('表が読めなければ空 (落ちない)', async () => {
   const E = load(async () => { throw new Error('offline'); });
   await E.load();
-  assert.strictEqual(E.rowEmoji({ main_char_id: 1304, main_char_emoji: '🗡️' }), '🗡️');
+  assert.strictEqual(E.rowEmoji({ main_char_id: 1304 }), '');
 });
