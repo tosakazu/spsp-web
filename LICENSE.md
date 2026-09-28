@@ -1,8 +1,15 @@
 Required Notice: Copyright tosakazu (https://github.com/tosakazu)
 
-# PolyForm Noncommercial License 1.0.0
+<!--
+日本語の要約 (参考。法的な効力は下の英語の本文にあり、食い違う場合は英語が優先する)
+- 営利目的でない利用 (個人の学習・研究・趣味、非営利団体での利用など) は、複製・改変・再配布を含めて自由。
+- 営利目的の利用には、ライセンサー (tosakazu) の許可が要る。
+- 本ソフトウェアやその改変版を、他人が使える形でホストして提供すること (Web サイト・サービスとしての公開など) は、目的にかかわらずライセンサーの事前の書面による許可が要る。自分だけが使う環境で動かすこと、ソースコードを配布することは構わない。
+- 配布するときは、この条文と下の Required Notice の行を一緒に渡すこと。
+- 無保証。違反の通知から 32 日以内に是正すればライセンスは続く。
+-->
 
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
+# SPSP Noncommercial License 1.0
 
 ## Acceptance
 
@@ -18,7 +25,7 @@ The licensor grants you an additional copyright license to distribute copies of 
 
 ## Notices
 
-You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them (<https://github.com/tosakazu/spsp-web/blob/main/LICENSE.md>), as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
 
 > Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
 
@@ -41,6 +48,10 @@ Personal use for research, experiment, and testing for the benefit of public kno
 ## Noncommercial Organizations
 
 Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## No Hosting Without Permission
+
+Even for a permitted purpose, you may not make the software, or any changes or new works based on it, available for anyone other than you to access or use over a network, such as a website, web application, or online service, without the licensor's prior written permission.  Running the software only for yourself, such as on your own computer or on a server that only you can access, to study, develop, or test it, is not prohibited by this section.  Distributing copies of the software's source code according to [Distribution License](#distribution-license) is not hosting for the purposes of this section.
 
 ## Fair Use
 
