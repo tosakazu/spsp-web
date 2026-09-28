@@ -33,11 +33,12 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
   window.gtag('js', new Date());
 
   const _p = location.pathname;
+  // .html の有無どちらも (spsp.games は拡張子なしの URL: c/ranking。旧サイトは c/ranking.html)
   const _isDynamic = (
     /\/p\/(index\.html)?$/.test(_p) ||
     /\/t\/(index\.html)?$/.test(_p) ||
-    /\/c\/ranking\.html$/.test(_p) ||
-    /\/local\/ranking\.html$/.test(_p)
+    /\/c\/ranking(\.html)?$/.test(_p) ||
+    /\/local\/ranking(\.html)?$/.test(_p)
   );
   // 表示言語 (閲覧者が切り替える) と表示地域 (デプロイ単位) は別の軸。どちらも全イベントに付ける。
   // GA4 側で カスタム ディメンション (イベント スコープ) として ui_lang と site_region を登録すること。
@@ -78,25 +79,25 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
   const pageHref = (rel) => (typeof S.pageHref === 'function' ? S.pageHref(rel) : rel);
   const p = location.pathname;
 
-  function currentPage() {
-    if (/\/overview\.html$/.test(p)) return 'overview';
-    if (/\/details\.html$/.test(p))  return 'details';
-    if (/\/eval\.html$/.test(p))     return 'eval';
-    if (/\/math\.html$/.test(p))     return 'math';
+  function currentPage() {   // .html の有無どちらも (拡張子なしの URL)
+    if (/\/overview(\.html)?$/.test(p)) return 'overview';
+    if (/\/details(\.html)?$/.test(p))  return 'details';
+    if (/\/eval(\.html)?$/.test(p))     return 'eval';
+    if (/\/math(\.html)?$/.test(p))     return 'math';
     if (/\/seed-upload\//.test(p))   return 'seed-upload';
     if (/\/seed\//.test(p))          return 'seed';
     if (/\/priority\//.test(p))      return 'priority';
-    if (/\/local\/ranking\.html$/.test(p)) return 'local-ranking';
+    if (/\/local\/ranking(\.html)?$/.test(p)) return 'local-ranking';
     if (/\/local\//.test(p))         return 'local-series';
-    if (/\/c\/ranking\.html$/.test(p)) return 'char-ranking';
+    if (/\/c\/ranking(\.html)?$/.test(p)) return 'char-ranking';
     if (/\/c\//.test(p))             return 'char-list';
-    if (/\/pref\/ranking\.html$/.test(p)) return 'pref-ranking';
+    if (/\/pref\/ranking(\.html)?$/.test(p)) return 'pref-ranking';
     if (/\/pref\//.test(p))          return 'pref-list';
     if (/\/events\//.test(p))        return 'events';
     if (/\/sim\//.test(p))           return 'sim';
     if (/\/blog\//.test(p))          return 'blog';
     if (/\/news\//.test(p))          return 'news';
-    if (/\/vote\.html$/.test(p))     return 'vote';
+    if (/\/vote(\.html)?$/.test(p))     return 'vote';
     if (/\/p\//.test(p))             return 'player';
     if (/\/t\//.test(p))             return 'tournament';
     return 'ranking';

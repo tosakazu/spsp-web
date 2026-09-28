@@ -152,7 +152,7 @@ test('ナビの選手メニューから vote.html に行ける', () => {
   const NAV = require('../helpers/built.cjs').src('nav.js');
   assert.ok(/class="nav-dropdown nav-user/.test(NAV), '選手メニューが無い');
   assert.ok(NAV.indexOf("pageHref('vote.html')") !== -1, 'キャラ投票へのリンクが無い');
-  assert.ok(/\/vote\\.html\$\/\.test\(p\)\)\s*return 'vote'/.test(NAV),
+  assert.ok(/\/vote\(\\\.html\)\?\$\/\.test\(p\)\)\s*return 'vote'/.test(NAV),   // .html の有無どちらも (拡張子なしの URL)
     'currentPage() が vote を返さない (= 現在地のハイライトが効かない)');
   // post.html はまだ公開していないのでリンクしない
   assert.ok(NAV.indexOf('post.html') === -1, 'post.html は未公開なのでナビに出さない');
