@@ -5,8 +5,11 @@
 // 旧サイトにある HTML ページ (players/ tournaments/ history/ などのデータは除く) と同じパスに、転送ページを 1 枚ずつ置く。
 // どのページも同じ _moved.js を読み、自分の場所 (_moved.js のあるディレクトリ = 旧サイトのルート) からの相対パスを新しい URL に写す:
 //   'index.html' → ''、'p/index.html' → 'p/'、'c/ranking.html' → 'c/ranking' (spsp.games は拡張子なし)。クエリ (?uid= ?pref= …) と # はそのまま渡す。
-// 表示: 移転したこと、新しい URL へのリンク (押せばすぐ移動)、数秒後に自動で移動。?stay=1 で自動移動を止める (確認用、転送先には渡さない)。
-// JS が無い環境は <noscript> の meta refresh で新しいページ (クエリ無し) へ。旧サイトの置き場を問わない (/spsp/ でも /b/<name>/spsp/ でも動く)。
+// 既定は即時に移動する (--delay 0。<head> の中で判定して location.replace)。GitHub Pages は 301 を返せないので、即時の JS 転送 + canonical が
+// 検索エンジンにとって恒久的な移転の合図になる (待ち時間があると弱い: 2026-09-28 のレビュー)。?stay=1 で自動移動を止めて中身を確認できる (転送先には渡さない)。
+// 本文 (移転の案内と新しい URL へのリンク) は、JS が無い環境と ?stay=1 のため。JS が無い環境は <noscript> の meta refresh でクエリ無しの新しいページへ。
+// canonical: クエリで中身が決まるページ (選手・大会・キャラ別・県別・シリーズ別) は JS がクエリ付きで付け、それ以外は静的に書く。
+// 旧サイトの置き場を問わない (/spsp/ でも /b/<name>/spsp/ でも動く)。
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,7 +18,7 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && i + 1 < args
 const FROM = opt('--from', '');
 const OUT = opt('--out', '');
 const TO = opt('--to', 'https://spsp.games/jp/');
-const DELAY = Number(opt('--delay', '3'));
+const DELAY = Number(opt('--delay', '0'));
 if (!FROM || !OUT) { console.error('usage: --from <旧サイトの spsp/> --out <出力>'); process.exit(2); }
 if (!/^https:\/\/[^/]+\/.*\/$/.test(TO)) throw new Error('--to は https://…/ (末尾 /) で: ' + TO);
 
@@ -30,10 +33,12 @@ function pages(dir, rel = '') {
   }
   return out.sort();
 }
+// クエリで中身が決まるページ (canonical は転送先と同じくクエリ付きで JS が付ける)
+const QUERY_PAGES = new Set(['p/index.html', 't/index.html', 'c/ranking.html', 'pref/ranking.html', 'local/ranking.html']);
 const urlRel = (rel) => rel.replace(/(^|\/)index\.html$/, '$1').replace(/\.html$/, '');
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const JS = `// 旧サイト (tosakazu.github.io/spsp/) → spsp.games の転送 (tools/ghpages_redirect/build.mjs が生成)
+const JS = `// 旧サイト (tosakazu.github.io/spsp/) → spsp.games の転送 (tools/ghpages_redirect/build.mjs が生成。<head> で読む)
 (function () {
   var TO = ${JSON.stringify(TO)};
   var DELAY = ${DELAY};
@@ -49,18 +54,23 @@ const JS = `// 旧サイト (tosakazu.github.io/spsp/) → spsp.games の転送 
   // 旧サイトのログインの戻り先 (callback.html) は認可コードを載せているので渡さない。投票ページへ (クエリ無し)
   if (rel === 'callback') { rel = 'vote'; q = ''; hash = ''; }
   var target = TO + rel + (q ? '?' + q : '') + hash;
-  var a = document.getElementById('moved-link');
-  if (a) { a.href = target; a.textContent = target; }
-  var link = document.createElement('link'); link.rel = 'canonical'; link.href = target; document.head.appendChild(link);
-  var cd = document.getElementById('moved-count');
-  if (stay) { if (cd) cd.textContent = '(確認用の表示です。自動では移動しません / Preview: no automatic redirect)'; return; }
-  var left = DELAY;
-  var tick = function () {
-    if (cd) cd.textContent = left + ' 秒後に自動で移動します / Redirecting in ' + left + ' s…';
-    if (left <= 0) { location.replace(target); return; }
-    left--; setTimeout(tick, 1000);
-  };
-  tick();
+  if (!document.querySelector('link[rel="canonical"]')) {
+    var link = document.createElement('link'); link.rel = 'canonical'; link.href = target.split('#')[0]; document.head.appendChild(link);
+  }
+  if (!stay && DELAY <= 0) { location.replace(target); return; }
+  document.addEventListener('DOMContentLoaded', function () {
+    var a = document.getElementById('moved-link');
+    if (a) { a.href = target; a.textContent = target; }
+    var cd = document.getElementById('moved-count');
+    if (stay) { if (cd) cd.textContent = '(確認用の表示です。自動では移動しません / Preview: no automatic redirect)'; return; }
+    var left = DELAY;
+    var tick = function () {
+      if (cd) cd.textContent = left + ' 秒後に自動で移動します / Redirecting in ' + left + ' s…';
+      if (left <= 0) { location.replace(target); return; }
+      left--; setTimeout(tick, 1000);
+    };
+    tick();
+  });
 })();
 `;
 
@@ -68,13 +78,15 @@ function page(rel) {
   const depth = rel.split('/').length - 1;
   const up = '../'.repeat(depth);
   const fallback = TO + (rel === 'callback.html' ? 'vote' : urlRel(rel));
+  const queryPage = QUERY_PAGES.has(rel);
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPSP は spsp.games に移転しました</title>
-<noscript><meta http-equiv="refresh" content="${DELAY}; url=${esc(fallback)}"></noscript>
+${queryPage ? '' : `<link rel="canonical" href="${esc(fallback)}">\n`}<noscript><meta http-equiv="refresh" content="${DELAY}; url=${esc(fallback)}"></noscript>
+<script src="${up}_moved.js"></script>
 <style>
   :root { color-scheme: light dark; --fg: #111827; --sub: #4b5563; --bg: #ffffff; --accent: #dc2626; --card: #f9fafb; --line: #e5e7eb; }
   @media (prefers-color-scheme: dark) { :root { --fg: #f3f4f6; --sub: #9ca3af; --bg: #111827; --accent: #f87171; --card: #1f2937; --line: #374151; } }
@@ -95,11 +107,10 @@ function page(rel) {
     <p class="label">新しいアドレス</p>
     <a id="moved-link" href="${esc(fallback)}">${esc(fallback)}</a>
   </div>
-  <p id="moved-count">${DELAY} 秒後に自動で移動します。</p>
+  <p id="moved-count">${DELAY > 0 ? `${DELAY} 秒後に自動で移動します。` : '自動で移動します。移動しない場合は上のリンクを押してください。'}</p>
   <p class="note">ブックマークやリンクは新しいアドレスに変更してください。</p>
   <p class="en">SPSP has moved to <strong>spsp.games</strong>. You will be redirected automatically. Please update your bookmarks.</p>
 </main>
-<script src="${up}_moved.js"></script>
 </body>
 </html>
 `;
