@@ -27,7 +27,7 @@ routes = [{ pattern = "spsp.games", custom_domain = true }]
 # scripts/assemble_dist.sh が作る。20,000 ファイル上限があるので JSON (players/ 等) は入れない (R2)。
 directory = "../dist-cf"
 binding = "ASSETS"
-not_found_handling = "404-page"
+not_found_handling = "none"   # 404 ページは Worker が返す (静的層に 404.html を置くと / や旧 URL の転送より先に 404 を返してしまう)
 html_handling = "auto-trailing-slash"
 # アセットに一致するパスは既定では Worker を通らない (= 無料・無制限)。
 # CSP を付けたい callback.html と API だけ Worker を先に通す。
@@ -70,7 +70,7 @@ workers_dev = true
 [env.preview.assets]
 directory = "../dist-cf"
 binding = "ASSETS"
-not_found_handling = "404-page"
+not_found_handling = "none"   # 404 ページは Worker が返す (静的層に 404.html を置くと / や旧 URL の転送より先に 404 を返してしまう)
 html_handling = "auto-trailing-slash"
 run_worker_first = ["/api/*", "/*/callback.html", "/*/callback"]
 
@@ -100,7 +100,7 @@ workers_dev = true
 [env.na.assets]
 directory = "../dist-cf"
 binding = "ASSETS"
-not_found_handling = "404-page"
+not_found_handling = "none"   # 404 ページは Worker が返す (静的層に 404.html を置くと / や旧 URL の転送より先に 404 を返してしまう)
 html_handling = "auto-trailing-slash"
 run_worker_first = ["/api/*", "/*/callback.html", "/*/callback"]
 

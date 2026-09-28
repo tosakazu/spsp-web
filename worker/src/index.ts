@@ -50,6 +50,9 @@ export function langDirRedirectTarget(pathname: string, search: string): string 
   return '/' + m[1] + (m[3] || '/') + '?' + params.toString();
 }
 
+/** 404 ページ (静的ファイル。worker/assets/404.html を assemble_dist.sh が /_errors/404.html に置く。拡張子なしで引く) */
+export const NOT_FOUND_PAGE = '/_errors/404';
+
 /** callback.html の CSP。site/callback.html の meta と同じで、connect-src だけ自分自身 (= /api)。 */
 export const CALLBACK_CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'";
 
@@ -147,8 +150,14 @@ export default {
       return Response.redirect(new URL(langTarget, url).toString(), 301);
     }
 
-    // 4. 静的アセット
+    // 4. 静的アセット。無ければ 404 ページ (静的層の 404.html 自動配信は使わない: 使うと上の転送より先に 404 を返すため)
     const res = await env.ASSETS.fetch(request);
+    if (res.status === 404 && (request.method === 'GET' || request.method === 'HEAD')) {
+      const page = await env.ASSETS.fetch(new Request(new URL(NOT_FOUND_PAGE, url).toString(), { method: 'GET' }));
+      if (page.ok) {
+        return withSecurityHeaders(new Response(request.method === 'HEAD' ? null : page.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }), url.pathname);
+      }
+    }
     return withSecurityHeaders(res, url.pathname);
   },
 } satisfies ExportedHandler<Env>;

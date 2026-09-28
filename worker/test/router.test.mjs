@@ -170,3 +170,17 @@ test('旧サイトのドメインだけ差し替えた URL (/spsp/…) と /loca
   assert.strictEqual(legacyRedirectTarget('/local/ranking.html', '/jp'), '/jp/local/ranking.html');
   assert.strictEqual(legacyRedirectTarget('/spspx/', '/jp'), null);
 });
+
+test('静的ファイルに無いパスは 404 ページ (状態 404)、/ と旧 URL の転送はそれより先', async () => {
+  const assets = { '/_errors/404': '<h1>ページが見つかりません</h1>', '/jp/': '<html>top' };
+  const env = { SITE_PREFIX: '/jp', DB: {}, ASSETS: { fetch: async (req) => { const p = new URL(req.url).pathname; return assets[p] ? new Response(assets[p], { status: 200, headers: { 'Content-Type': 'text/html' } }) : new Response('', { status: 404 }); } } };
+  const nf = await worker.fetch(new Request('https://spsp.games/jp/nope'), env, {});
+  assert.strictEqual(nf.status, 404);
+  assert.match(await nf.text(), /ページが見つかりません/);
+  const root = await worker.fetch(new Request('https://spsp.games/'), env, {});
+  assert.strictEqual(root.status, 301);
+  const legacy = await worker.fetch(new Request('https://spsp.games/p/?uid=1'), env, {});
+  assert.strictEqual(legacy.status, 301);
+  const ok = await worker.fetch(new Request('https://spsp.games/jp/'), env, {});
+  assert.strictEqual(ok.status, 200);
+});

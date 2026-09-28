@@ -13,8 +13,10 @@ if [ "${1:-}" != "--no-build" ]; then
 fi
 [ -d "$OUT/jp" ] || { echo "dist-cf/jp が無い (npm run build:cf)" >&2; exit 1; }
 cp "$ROOT/worker/assets/_headers" "$OUT/_headers"
-# 404 ページ (Workers assets の not_found_handling = 404-page は、要求されたパスから上へ一番近い 404.html を返す) と robots.txt (サイトマップの場所)
-for d in "$OUT" "$OUT"/jp "$OUT"/na; do if [ -d "$d" ]; then cp "$ROOT/worker/assets/404.html" "$d/404.html"; fi; done
+# 404 ページは Worker が返す (/_errors/404.html)。404.html という名前で置くと静的層が自動で返し、/ や旧 URL の転送が効かなくなる (2026-09-28 に一時発生)
+rm -f "$OUT/404.html" "$OUT"/jp/404.html "$OUT"/na/404.html
+mkdir -p "$OUT/_errors" && cp "$ROOT/worker/assets/404.html" "$OUT/_errors/404.html"
+# robots.txt (サイトマップの場所)
 cp "$ROOT/worker/assets/robots.txt" "$OUT/robots.txt"
 rm -f "$OUT/_redirects" "$OUT"/*/_redirects.part   # 言語別の木の旧 URL は Worker が ?lang= へ 301 する (2026-09-28)。静的な _redirects は使わない
 echo "dist-cf: $(find "$OUT" -type f | wc -l) files (limit 20,000)"
