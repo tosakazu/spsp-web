@@ -49,9 +49,10 @@ var VOTES_HEADER = ['timestamp', 'user_id', 'user_slug', 'gamer_tag', 'char_id',
 
 /**
  * 資格判定・キャラ一覧の読み出し先 (= 公開データ)。
- * gh-pages は 3h おきに追随するので、ビルド反映と同じ鮮度で判定される。
+ * 2026-09-28: 旧サイト (gh-pages) は spsp.games への転送ページに切り替えるので、spsp.games と同じデータの置き場 (R2) を読む。
+ * nightly が 3h おきに同期するので、ビルド反映と同じ鮮度で判定される。
  */
-var DATA_BASE_URL = 'https://tosakazu.github.io/spsp';
+var DATA_BASE_URL = 'https://data.spsp.games/jp';
 
 /**
  * ダブルメイン圏の判定閾値。players/<uid>.json の characters[].pct (使用率, 0..1) で、
