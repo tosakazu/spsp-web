@@ -188,8 +188,8 @@ function fitAll(root) {
   const perf = q('.pc-perf');
   if (perf) fitWidth(perf, 106, 15, 8);
   const pills = q('.pc-pills');
-  if (pills) fitWidth(pills, 186, 18, 9);
-  // キャラ名は 12px まで詰めて、それでも入らなければ 2 行にして 14px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
+  if (pills) fitWidth(pills, 186, 14, 9);
+  // キャラ名は 12px (デザインの 14px より小さめ) から 10px まで詰めて、それでも入らなければ 2 行にして 12px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
   // 2 行のキャラがあって帯の下にはみ出すなら、キャラの列を上へずらす (評価日の下まで)
   // 折り返しは自分で改行を入れる (CSS の折り返しだと名前の箱が最大幅のままになり、■ と文字が離れる)
   //   切れ目の無い名前 (「ドンキーコング」) は 1 行のまま 8px まで詰める。
@@ -199,13 +199,13 @@ function fitAll(root) {
   const wrapped = [];
   for (const c of charEls) {
     const nameEl = /** @type {HTMLElement | null} */ (c.querySelector('.pc-char-name'));
-    if (!nameEl || fitWidth(c, 108, 14, 12)) continue;
+    if (!nameEl || fitWidth(c, 108, 12, 10)) continue;
     const text = nameEl.textContent || '';
     const parts = splitTwo(text);
-    if (!parts) { fitWidth(c, 108, 12, 8); continue; }
+    if (!parts) { fitWidth(c, 108, 10, 8); continue; }
     nameEl.innerHTML = escapeHtml(parts[0]) + '<br>' + escapeHtml(parts[1]);
     c.classList.add('pc-wrap');
-    fitWidth(c, 108, 14, 8);   // 2 行にしたら 14px (デザインの大きさ) から詰め直す
+    fitWidth(c, 108, 12, 8);   // 2 行にしたら 12px から詰め直す
     wrapped.push({ el: c, nameEl, text });
   }
   const chars = q('.pc-chars');
@@ -215,10 +215,10 @@ function fitAll(root) {
       const last = /** @type {{ el: HTMLElement, nameEl: HTMLElement, text: string }} */ (wrapped[wrapped.length - 1]);
       last.nameEl.textContent = last.text;
       last.el.classList.remove('pc-wrap');
-      fitWidth(last.el, 108, 11, 7);
+      fitWidth(last.el, 108, 10, 7);
     }
     // メインとサブで文字の大きさがちぐはぐにならないよう、小さい方に揃える
-    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 14);
+    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 12);
     const common = Math.min(...sizes);
     charEls.forEach(c => { c.style.fontSize = common + 'px'; });
     chars.style.top = Math.max(29, Math.min(41, 85 - chars.offsetHeight)) + 'px';
@@ -226,7 +226,14 @@ function fitAll(root) {
   // 実績: 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
   const list = q('.pc-ach-list');
   if (list && list.querySelector('.pc-ach-manual')) placeManual(list);
-  else if (list) {
+  else if (list) placeAuto(list);
+  if (list) finishAch(list);
+}
+
+/** 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
+ * @param {HTMLElement} list */
+function placeAuto(list) {
+  {
     const ROW_W = 206, GAP = 3;
     const rows = /** @type {HTMLElement[]} */ (Array.from(list.querySelectorAll('.pc-ach-row')));
     rows.forEach(r => { const p = /** @type {HTMLElement | null} */ (r.firstElementChild); if (p) fitWidth(p, ROW_W, 10, 8); });
@@ -242,6 +249,21 @@ function fitAll(root) {
       spare.remove();
     }
   }
+}
+
+/** 実績の箱の仕上げ: 行に 2 つ以上詰めたら左ぞろえ (1 行 1 つなら右ぞろえのまま)。「主な実績」と並びを箱の上下の真ん中に置く
+ * (箱の中の高さ 105 = 110 から下の線 5 を引いたもの)
+ * @param {HTMLElement} list */
+function finishAch(list) {
+  const rows = Array.from(list.querySelectorAll('.pc-ach-row'));
+  list.classList.toggle('pc-ach-left', rows.some(r => r.children.length > 1));
+  const box = list.parentElement;
+  const label = /** @type {HTMLElement | null} */ (box && box.querySelector('.pc-label'));
+  if (!label) return;
+  const GAP = 3, INNER_H = 105;
+  const top = Math.max(4, Math.round((INNER_H - (label.offsetHeight + GAP + list.offsetHeight)) / 2));
+  label.style.top = top + 'px';
+  list.style.top = (top + label.offsetHeight + GAP) + 'px';
 }
 
 const ACH_ROW_W = 206, ACH_GAP = 3, ACH_ROWS = 3;

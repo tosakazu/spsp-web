@@ -558,6 +558,9 @@ function render() {
     SPSPTrackPage(document.title, `/p/uid${UID}`);
   }
 
+  // 見出しの選手名 (登録名のまま。カードの中はチームタグ無し)
+  const displayEl = document.getElementById('display');
+  if (displayEl) displayEl.textContent = MAIN_REC.display;
   // start.gg link (if discriminator known)
   const discr = PLAYER.startgg_discriminator;
   if (discr) {
@@ -1909,7 +1912,8 @@ function onCardImage(btn, fn) {
     }
   });
 }
-onCardImage(document.getElementById('pc-save-btn'), blob => downloadBlob(blob, cardFileName() + '.png'));
+// 保存・共有は見出しの横のアイコンと、カードをタップして出るボタンの 2 か所
+for (const id of ['pc-save-btn', 'pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
 const shareData = () => MAIN_REC ? {
@@ -1924,14 +1928,27 @@ function canShareImage() {
   try { return !!(typeof File === 'function' && nav.canShare && nav.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] })); }
   catch (e) { return false; }
 }
-const shareBtn = document.getElementById('pc-share-btn');
-if (shareBtn && !canShareImage()) {
-  SPSPShare.setup(shareBtn, shareData);
-} else {
-  onCardImage(shareBtn, async blob => {
-    const d = shareData();
-    const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-    await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n${d.url}` });   // URL は次の行に
+for (const id of ['pc-share-btn', 'pc-ov-share']) {
+  const shareBtn = document.getElementById(id);
+  if (shareBtn && !canShareImage()) {
+    SPSPShare.setup(shareBtn, shareData);
+  } else {
+    onCardImage(shareBtn, async blob => {
+      const d = shareData();
+      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
+      await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n${d.url}` });   // URL は次の行に
+    });
+  }
+}
+// カードをタップすると右上に保存・共有・編集が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+{
+  const wrap = document.getElementById('pcard-wrap');
+  document.addEventListener('click', e => {
+    if (!wrap) return;
+    const el = /** @type {Element} */ (e.target);
+    if (el.closest('#pc-overlay')) return;
+    if (el.closest('#pcard') && !el.closest('a')) wrap.classList.toggle('show');
+    else wrap.classList.remove('show');
   });
 }
 
