@@ -15,12 +15,14 @@ worker/
   src/api/login.ts         action login
   src/api/oauth.ts         start.gg の code 交換と currentUser (gas/oauth.gs)
   src/api/vote.ts          キャラ投票の規則・資格判定 (gas/vote.gs)
+  src/api/card.ts          ログインの確認 (me) とプレイヤーカードの設定 (card_get / card_put)。GAS には無い
   src/api/post.ts          投稿 (gas/main.gs handlePost_。未公開だが移植)
   src/api/errlog.ts        失敗の記録 (gas/errlog.gs)
   src/api/export.ts        ビルド向けエクスポート (gas/export.gs)
   src/api/ratelimit.ts     連投判定 (gas/sheet.gs)
   src/api/time.ts          固定オフセットの ISO 時刻
   migrations/0001_init.sql D1 のテーブル
+  migrations/0002_card_settings.sql プレイヤーカードの設定 (card_settings / card_writes)
   scripts/import_votes.mjs シートの内容 → D1 の INSERT
   scripts/assemble_dist.sh npm run build:cf の後に assets/_headers を dist-cf/ に写す
   assets/_headers          Worker を通らないアセット用のセキュリティヘッダ
@@ -52,6 +54,9 @@ cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
 | `login` (session.gs) | `POST /api` `{action:"login"}` / `POST /api/login` | `code`, `state` | `{token, user:{id,slug,gamerTag}, exp}` / `bad_request` `state_invalid` `auth_failed` |
 | `vote` (vote.gs) | `POST /api` `{action:"vote"}` / `POST /api/vote` | `token`, `charId` | `{user, charId, charName}` / `auth_failed` `bad_request` `internal` `bad_char` `not_player` `char_exists` `not_candidate` `rate_limited` |
 | `post` (main.gs) | `POST /api` `{action:"post"}` / `POST /api/post` | `code`, `state`, `body` | `{user}` / `bad_request` `body_invalid` `state_invalid` `auth_failed` `rate_limited` |
+| `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
+| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach}|null, updated_at|null}` / `bad_request` |
+| `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (10 秒に 1 回・1 日 100 回) |
 | `client_error` (errlog.gs) | `POST /api` `{action:"client_error"}` / `POST /api/client_error` | `kind` (白リスト), `flow`, `note`, `token?` | `{logged: true|false}` |
 | `export_votes` (export.gs) | `POST /api` `{action:"export_votes"}` **または** `GET /api/export/votes?key=&since=` | `key`, `since?` | `{votes:[{ts,userId,charId,charName,status}], total, since}` / `auth_failed` `internal` |
 | `export_errors` (export.gs) | `POST /api` `{action:"export_errors"}` **または** `GET /api/export/errors?key=&limit=` | `key`, `limit?` (既定 100 / 上限 1000) | `{errors:[{ts,source,action,code,userId,note}], total}` |
@@ -75,6 +80,11 @@ GAS と同じく `base64url(HMAC-SHA256(key=STARTGG_CLIENT_SECRET, msg="spsp:exp
 | `posts` | `id`, `ts`, `ts_ms`, `day`, `user_id`, `user_slug`, `gamer_tag`, `body`, `status` | = `posts` シート |
 | `errors` | `id`, `ts`, `source`, `action`, `code`, `user_id`, `note` | = `errors` シート。3,000 行を超えたら古い行から削って 2,000 行にする (errlog.gs と同じ) |
 | `used_states` | `key` (署名の先頭 100 文字), `expires_ms` | 署名 state の単回使用。GAS は CacheService (揮発) に置いていた。期限切れは検証時に掃除 |
+| `card_settings` (0002) | `uid` (INTEGER PK), `settings` (検証済み JSON), `updated_at` | プレイヤーカードの設定。本人 (token の uid) だけが書く |
+| `card_writes` (0002) | `id`, `uid`, `ts_ms`, `day` | card_put の連投判定用。2 日より古い行は書き込みのたびに消す |
+
+**マイグレーションはデプロイ (Actions) では当たらない。** 0002 を足した版を本番に出すときは、先に
+`npx wrangler d1 migrations apply spsp --remote` を打つ (当てないと card_get / card_put が internal になる)。
 
 セッショントークンは署名のみ (stateless) なのでテーブルは無い。
 

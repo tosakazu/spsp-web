@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow } from './store.ts';
+import type { CardRow, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
 const POST_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, body, status';
@@ -104,5 +104,35 @@ export class D1Store implements Store {
       this.db.prepare('INSERT OR IGNORE INTO used_states (key, expires_ms) VALUES (?, ?)').bind(key, expiresMs),
     ]);
     return (ins.meta?.changes ?? 0) > 0;
+  }
+
+  async getCardSettings(uid: string): Promise<CardRow | null> {
+    const r = await this.db.prepare('SELECT settings, updated_at FROM card_settings WHERE uid = ?')
+      .bind(Number(uid)).first<CardRow>();
+    return r ? { settings: String(r.settings), updated_at: String(r.updated_at) } : null;
+  }
+
+  async putCardSettings(uid: string, settings: string | null, updatedAt: string, g: RateGuard): Promise<boolean> {
+    // 1. 連投条件つきで書き込みを記録 (votes / posts と同じ条件付き INSERT)。記録できなければ連投
+    const w = await this.db.prepare(
+      `INSERT INTO card_writes (uid, ts_ms, day)
+       SELECT ?1, ?2, ?4
+       WHERE NOT EXISTS (SELECT 1 FROM card_writes WHERE uid = ?1 AND ts_ms > ?2 - ?3)
+         AND (SELECT COUNT(*) FROM card_writes WHERE uid = ?1 AND day = ?4) < ?5`)
+      .bind(g.userId, g.nowMs, g.minIntervalMs, g.dayKey, g.maxPerDay)
+      .run();
+    if ((w.meta?.changes ?? 0) === 0) return false;
+    // 2. 設定を置き換える (null なら消す)。古い書き込み記録 (2 日より前) の掃除も同時に
+    const put = settings === null
+      ? this.db.prepare('DELETE FROM card_settings WHERE uid = ?').bind(Number(uid))
+      : this.db.prepare(
+        `INSERT INTO card_settings (uid, settings, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (uid) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at`)
+        .bind(Number(uid), settings, updatedAt);
+    await this.db.batch([
+      put,
+      this.db.prepare('DELETE FROM card_writes WHERE ts_ms < ?').bind(g.nowMs - 2 * 24 * 3600 * 1000),
+    ]);
+    return true;
   }
 }
