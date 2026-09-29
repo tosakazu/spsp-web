@@ -18,6 +18,7 @@ import { charName } from '../../site/js/chars.js';
 import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
+import SpspLogin from '../../site/js/login.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchApplied } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -607,7 +608,14 @@ function render() {
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
-  if (editBtn) editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
+  if (editBtn) {
+    editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
+    // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
+    const showEdit = () => { editBtn.style.display = (SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
+    showEdit();
+    SpspLogin.onChange(showEdit);
+    SpspLogin.verify().then(showEdit).catch(() => {});
+  }
 
   // Achievements: priority 順、上位 N 件のみデフォルト表示、それ以降は折りたたみ
   const ach = PLAYER.achievements || [];
@@ -1912,8 +1920,7 @@ function onCardImage(btn, fn) {
     }
   });
 }
-// 保存・共有は見出しの横のアイコンと、カードをタップして出るボタンの 2 か所
-for (const id of ['pc-save-btn', 'pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
+for (const id of ['pc-save-btn']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
 const shareData = () => MAIN_REC ? {
@@ -1928,7 +1935,7 @@ function canShareImage() {
   try { return !!(typeof File === 'function' && nav.canShare && nav.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] })); }
   catch (e) { return false; }
 }
-for (const id of ['pc-share-btn', 'pc-ov-share']) {
+for (const id of ['pc-share-btn', 'pc-ov-share']) {   // 見出しの横と、カードをタップして出るボタン
   const shareBtn = document.getElementById(id);
   if (shareBtn && !canShareImage()) {
     SPSPShare.setup(shareBtn, shareData);
@@ -1940,7 +1947,8 @@ for (const id of ['pc-share-btn', 'pc-ov-share']) {
     });
   }
 }
-// カードをタップすると右上に保存・共有・編集が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+
+// カードをタップすると、カードの上に共有ボタンが出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
 {
   const wrap = document.getElementById('pcard-wrap');
   document.addEventListener('click', e => {
