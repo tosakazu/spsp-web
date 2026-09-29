@@ -5,6 +5,8 @@ export class MemStore {
     this.posts = [];
     this.errors = [];
     this.used = new Map();   // key → expires_ms
+    this.cards = new Map();  // uid → { settings, updated_at }
+    this.cardWrites = [];    // { uid, ts_ms, day }
   }
 
   async recentActivity(table, userId, dayKey) {
@@ -51,6 +53,22 @@ export class MemStore {
     for (const [k, exp] of this.used) if (exp <= nowMs) this.used.delete(k);
     if (this.used.has(key)) return false;
     if (consume) this.used.set(key, expiresMs);
+    return true;
+  }
+
+  async getCardSettings(uid) {
+    const r = this.cards.get(String(uid));
+    return r ? { ...r } : null;
+  }
+
+  async putCardSettings(uid, settings, updatedAt, g) {
+    const rows = this.cardWrites.filter((r) => r.uid === g.userId);
+    if (rows.some((r) => r.ts_ms > g.nowMs - g.minIntervalMs)) return false;
+    if (rows.filter((r) => r.day === g.dayKey).length >= g.maxPerDay) return false;
+    this.cardWrites.push({ uid: g.userId, ts_ms: g.nowMs, day: g.dayKey });
+    if (settings === null) this.cards.delete(String(uid));
+    else this.cards.set(String(uid), { settings, updated_at: updatedAt });
+    this.cardWrites = this.cardWrites.filter((r) => r.ts_ms >= g.nowMs - 2 * 24 * 3600 * 1000);
     return true;
   }
 }

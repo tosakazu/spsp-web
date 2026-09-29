@@ -53,6 +53,12 @@ export interface RateGuard {
   maxPerDay: number;
 }
 
+/** card_settings の 1 行。settings は検証済みの JSON 文字列。 */
+export interface CardRow {
+  settings: string;
+  updated_at: string;
+}
+
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
@@ -70,4 +76,11 @@ export interface Store {
    * consume=true のときは同時に「使用済み」として記録する (expiresMs まで保持)。
    */
   checkState(key: string, consume: boolean, expiresMs: number, nowMs: number): Promise<boolean>;
+  /** プレイヤーカードの設定。無ければ null。 */
+  getCardSettings(uid: string): Promise<CardRow | null>;
+  /**
+   * 連投条件 (card_writes で判定) を満たすときだけ、書き込みを記録して設定を置き換える
+   * (settings が null なら行を消す)。書いたら true、連投で弾いたら false。
+   */
+  putCardSettings(uid: string, settings: string | null, updatedAt: string, guard: RateGuard): Promise<boolean>;
 }

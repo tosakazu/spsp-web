@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  db.exec(fs.readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -74,4 +74,24 @@ test('used_states: 単回使用と期限切れの掃除', { skip: !DatabaseSync 
   assert.strictEqual(await store.checkState('st:a', true, 2000, 1000), false);
   assert.strictEqual(await store.checkState('st:b', true, 2000, 2500), true);    // 期限切れの a を掃除
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM used_states').get().n, 1);
+});
+
+test('card_settings: 連投条件つきの置き換え・削除と、古い書き込み記録の掃除', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store, db } = fresh();
+  const t0 = Date.parse('2026-09-30T03:00:00Z');
+  const g = (now, max = 100) => ({ userId: '4242', nowMs: now, minIntervalMs: 10000, dayKey: dayOf(now), maxPerDay: max });
+  assert.strictEqual(await store.getCardSettings('4242'), null);
+  assert.strictEqual(await store.putCardSettings('4242', '{"a":1}', 'U1', g(t0)), true);
+  assert.deepStrictEqual(await store.getCardSettings('4242'), { settings: '{"a":1}', updated_at: 'U1' });
+  assert.strictEqual(await store.putCardSettings('4242', '{"a":2}', 'U2', g(t0 + 5000)), false);     // 5 秒後は連投
+  assert.deepStrictEqual(await store.getCardSettings('4242'), { settings: '{"a":1}', updated_at: 'U1' });
+  assert.strictEqual(await store.putCardSettings('4242', '{"a":3}', 'U3', g(t0 + 11000)), true);     // 置き換え
+  assert.deepStrictEqual(await store.getCardSettings('4242'), { settings: '{"a":3}', updated_at: 'U3' });
+  assert.strictEqual(await store.putCardSettings('4242', '{"a":4}', 'U4', g(t0 + 30000, 2)), false); // 当日 2 件で上限
+  assert.strictEqual(await store.putCardSettings('4242', null, 'U5', g(t0 + 40000)), true);          // 削除
+  assert.strictEqual(await store.getCardSettings('4242'), null);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM card_writes').get().n, 3);
+  assert.strictEqual(await store.putCardSettings('4242', '{"a":6}', 'U6', g(t0 + 3 * 24 * 3600e3)), true);   // 3 日後: 古い記録は消える
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM card_writes').get().n, 1);
+  assert.strictEqual(typeof db.prepare('SELECT uid FROM card_settings').get().uid, 'number', 'uid は INTEGER で入る');
 });

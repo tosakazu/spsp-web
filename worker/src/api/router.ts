@@ -9,11 +9,13 @@
  *   POST /api/<action>   body に action が無ければパスから補う
  *   GET  /api/export/votes?key=&since=   = action export_votes
  *   GET  /api/export/errors?key=&limit=  = action export_errors
+ *   GET  /api/card?uid=                  = action card_get (だれでも読める。60 秒キャッシュ可)
  *   GET  それ以外        doGet と同じ bad_request
  * 応答は常に HTTP 200 の JSON (ビルド側の urllib が非 2xx を例外にするため)。
  */
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
+import { handleCardGet, handleCardPut, handleMe } from './card.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin } from './login.ts';
@@ -63,6 +65,13 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'vote':
         res = await handleVote(ctx.cfg, ctx.store, ctx.dataFetch, r, now); break;
+      case 'me':
+        // ページを開くたびに呼ばれる確認。期限切れは普通に起きるので記録しない。
+        return (await handleMe(ctx.cfg, r, now)).body;
+      case 'card_get':
+        return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+      case 'card_put':
+        res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
       case 'export_votes':
         // ビルドサーバーの定期取得。失敗しても人手の出番は無いので記録しない。
         return (await handleExportVotes(ctx.cfg, ctx.store, r)).body;
@@ -113,12 +122,13 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Max-Age': '86400',
 };
 
-export function jsonResponse(body: ApiBody): Response {
+/** cacheControl は GET /api/card の成功応答だけ public にする (それ以外は no-store)。 */
+export function jsonResponse(body: ApiBody, cacheControl: string = 'no-store'): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
+      'Cache-Control': cacheControl,
       'X-Content-Type-Options': 'nosniff',
       ...CORS_HEADERS,
     },
@@ -147,6 +157,10 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
         action: 'export_errors', key: url.searchParams.get('key') || '',
         limit: url.searchParams.get('limit') || '',
       }));
+    }
+    if (sub === 'card') {
+      const body = await dispatch(ctx, { action: 'card_get', uid: url.searchParams.get('uid') || '' });
+      return jsonResponse(body, body.ok ? 'public, max-age=60' : 'no-store');
     }
     return jsonResponse(getOnlyPostBody());
   }
