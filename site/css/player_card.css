@@ -118,17 +118,17 @@
 /* 画像にするときの原寸の複製 (画面の外に置く) */
 .pcard.pc-offscreen { position: fixed; left: -10000px; top: 0; width: 514px; height: 333px; margin: 0; aspect-ratio: auto; }
 
-/* カードをタップすると出る共有ボタン (カードの右上)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
+/* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
-.pc-overlay { position: absolute; top: 8px; right: 8px; display: none; z-index: 2; }
+.pc-overlay { position: absolute; top: 8px; right: 8px; display: none; gap: 6px; z-index: 2; }
 .pcard-wrap.show .pc-overlay { display: flex; }
 .pc-ov-btn {
-  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 50%;
   border: 0; background: rgba(255, 255, 255, .95); color: #111827; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer;
 }
 .pc-ov-btn svg { width: 17px; height: 17px; }
 .pc-ov-btn:disabled { opacity: .6; cursor: default; }
-/* 見出しの横のアイコン (編集・保存・start.gg・共有) */
+/* 見出しの横のアイコン (start.gg・共有) */
 .hero { margin-bottom: 10px; }
 .hero .share-icon-btn svg { width: 16px; height: 16px; }

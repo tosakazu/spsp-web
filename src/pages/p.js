@@ -1920,7 +1920,8 @@ function onCardImage(btn, fn) {
     }
   });
 }
-for (const id of ['pc-save-btn']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
+// 保存はカードをタップして出るボタン
+for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
 const shareData = () => MAIN_REC ? {
@@ -1935,7 +1936,7 @@ function canShareImage() {
   try { return !!(typeof File === 'function' && nav.canShare && nav.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] })); }
   catch (e) { return false; }
 }
-for (const id of ['pc-share-btn', 'pc-ov-share']) {   // 見出しの横と、カードをタップして出るボタン
+for (const id of ['pc-share-btn']) {   // 見出しの横
   const shareBtn = document.getElementById(id);
   if (shareBtn && !canShareImage()) {
     SPSPShare.setup(shareBtn, shareData);
@@ -1948,7 +1949,7 @@ for (const id of ['pc-share-btn', 'pc-ov-share']) {   // 見出しの横と、�
   }
 }
 
-// カードをタップすると、カードの上に共有ボタンが出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+// カードをタップすると、カードの上に編集 (本人のページだけ)・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
 {
   const wrap = document.getElementById('pcard-wrap');
   document.addEventListener('click', e => {
