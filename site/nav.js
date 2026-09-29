@@ -7,6 +7,7 @@ import SPSPI18n from './js/i18n.js';
 import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
+import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
 
 // ── Google Analytics 4 (gtag.js) ──
 // 全ページに含まれる nav.js から inject することで <head> 編集を省略.
@@ -191,7 +192,7 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
         <button type="button" class="nav-trigger nav-user-trigger${cur === 'vote' ? ' current' : ''}" aria-haspopup="true" aria-expanded="false" aria-label="${t('nav.user_aria')}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
-        <div class="nav-menu" role="menu">
+        <div class="nav-menu" role="menu" id="__nav_user_menu">
           <a href="${assetPrefix}${pageHref('vote.html')}"${cur === 'vote' ? ' class="current"' : ''} role="menuitem">${t('nav.user.vote')}</a>
         </div>
       </div>
@@ -274,6 +275,15 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
          はみ出して切れる。アイコンの右端に揃えて左へ開く。 */
       .nav-user .nav-menu { min-width:160px; left:auto; right:0;
                             max-width:calc(100vw - 24px); }
+      /* アカウントメニュー: ログイン中はアイコンの代わりに名前の頭文字の丸 */
+      .nav-avatar { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%;
+                    background:#111827; color:#fff; font-size:11px; font-weight:700; line-height:1; }
+      .nav-user-name { padding:8px 14px 6px; font-size:12px; color:#6b7280; border-bottom:1px solid #f3f4f6; margin-bottom:4px;
+                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; font:inherit; font-size:13px; padding:7px 14px; color:#374151; cursor:pointer; }
+      .nav-user .nav-menu button:hover { background:#f3f4f6; }
+      .nav-login { color:#111827 !important; font-weight:600; }
+      .nav-logout { color:#6b7280 !important; border-top:1px solid #f3f4f6 !important; margin-top:4px; }
       .nav-news-panel { display:none; position:absolute; top:100%; right:0;
                         background:#fff; border:1px solid #e5e7eb;
                         border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.08);
@@ -345,7 +355,47 @@ import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的�
     }
     mountBrandLogo(navEl);
     measureNavHeight(navEl);
+    renderAccount();
   }
+
+  // ── アカウントメニュー (人型アイコン) ──
+  //   ログアウト中: start.gg でログイン / キャラ投票
+  //   ログイン中:   アイコンが名前の頭文字の丸になり、名前・マイページ・カードを編集・キャラ投票・ログアウト
+  //   ログインできない場所 (API の無い ConoHa のプレビュー) では「ログイン」を出さない
+  const USER_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  function renderAccount() {
+    const menu = document.getElementById('__nav_user_menu');
+    const trigger = document.querySelector('.nav-user-trigger');
+    if (!menu || !trigger) return;
+    const sess = SpspLogin.session();
+    const cls = (/** @type {string} */ k) => (cur === k ? ' class="current"' : '');
+    const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
+    if (!sess) {
+      trigger.innerHTML = USER_SVG;
+      menu.innerHTML = (SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '') + vote;
+      return;
+    }
+    const name = sess.user.gamerTag || sess.user.slug || String(sess.user.id);
+    const uid = encodeURIComponent(String(sess.user.id));
+    trigger.innerHTML = `<span class="nav-avatar" aria-hidden="true">${escHTML(Array.from(name)[0] || '?')}</span>`;
+    menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
+      `<a href="${prefix}${pageHref('p/index.html')}?uid=${uid}" role="menuitem">${t('nav.user.mypage')}</a>` +
+      `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
+      vote +
+      `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
+  }
+  SpspLogin.onChange(renderAccount);
+  SpspLogin.verify().then(renderAccount).catch(() => {});
+  document.addEventListener('click', (e) => {
+    const el = /** @type {Element} */ (e.target);
+    const login = el.closest && el.closest('.nav-login');
+    if (login) {
+      /** @type {HTMLButtonElement} */ (login).disabled = true;
+      SpspLogin.startLogin().then(ok => { if (!ok) /** @type {HTMLButtonElement} */ (login).disabled = false; });
+      return;
+    }
+    if (el.closest && el.closest('.nav-logout')) { SpspLogin.logout(); renderAccount(); }
+  });
 
   // ブランド枠にロゴを組み立てる。logo.js は import で束ねてあるので通常は即 put()。無ければ (古い読み方) 動的に読む。
   // 旧:

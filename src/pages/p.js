@@ -18,7 +18,7 @@ import { charName } from '../../site/js/chars.js';
 import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
-import { buildCardModel, perfInfoOf, achievementBadge, loadApplied } from '../../site/js/player_card_model.js';
+import { buildCardModel, perfInfoOf, achievementBadge, fetchApplied } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -587,8 +587,12 @@ function render() {
 
   // ── 選手カード (最上部。../js/player_card.js) ──
   const card = document.getElementById('pcard');
-  // 設定 (テンプレート・色・実績の選択) は編集ページで「適用」したもの (いまはこのブラウザに保存。本人確認とサーバ保存は後で)
-  if (card) SPSPPlayerCard.render(card, buildCardModel(cardData(), loadApplied(UID)));
+  // 設定 (テンプレート・色・実績の選択) は本人が編集ページで「適用」したもの (サーバ。docs/login_design.md)。
+  // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
+  if (card) {
+    SPSPPlayerCard.render(card, buildCardModel(cardData(), null));
+    fetchApplied(UID).then(s => { if (s) SPSPPlayerCard.render(card, buildCardModel(cardData(), s)); }).catch(() => {});
+  }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
   if (editBtn) editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);

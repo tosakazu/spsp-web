@@ -1,20 +1,17 @@
 // @ts-check
 // src/pages/p_edit.js — site/p/edit.html (プレイヤーカードの編集、2026-09-30)。
 //   選べるもの: テンプレート (今は 1 種類)・色 (js/player_card.js COLORS)・カードに出す実績 (選んだ順に入る。入りきらないものは選べない)。
-//   編集中の状態はこのブラウザに自動で保存し (下書き)、「適用」でカードに出す設定にする (js/player_card_model.js)。
-//   本人確認: start.gg でログインし、ログインした人がこの選手のときだけ編集できる。いまはサーバ側が無いので
-//   ブラウザのセッションで見るだけ・保存もブラウザだけ (サーバへの保存と検証は後で)。ログインは spsp.games でしか通らないので、
-//   確認用のプレビュー (それ以外のドメイン) では本人確認を飛ばす。
+//   編集中の状態はこのブラウザに自動で保存し (下書き)、「適用」でサーバに保存してカードに出す (js/player_card_model.js)。
+//   本人確認: start.gg でログインし (js/login.js)、ログインした人がこの選手のときだけ編集できる (サーバも token の本人の分しか書かない)。
+//   API の無い ConoHa のプレビューでは本人確認を飛ばし、保存もこのブラウザ (見た目の確認用)。docs/login_design.md
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
-import SPSP_POST_CONFIG from '../../site/js/post_config.js';
-import SpspAuth from '../../site/js/auth.js';
-import SpspOAuthState from '../../site/js/oauth_state.js';
+import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
-import { loadCardData, buildCardModel, cardAchievements, DEFAULT_SETTINGS, loadApplied, saveApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import { loadCardData, buildCardModel, cardAchievements, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -35,32 +32,11 @@ function notFound(msg) {
 }
 
 // ── 本人確認 (ログイン) ──
-const CFG = SPSP_POST_CONFIG;
-const S = SpspOAuthState;
-/** 確認用のプレビューなど spsp.games 以外では本人確認をしない (ログインがそこでしか通らないため) */
-const checkOwner = () => S.isCanonicalOrigin(CFG, location.origin);
 /** @param {number} uid @returns {'ok' | 'login' | 'other'} */
 function ownerState(uid) {
-  if (!checkOwner()) return 'ok';
-  const sess = SpspAuth.load();
-  if (!sess) return 'login';
-  return String(sess.user.id) === String(uid) ? 'ok' : 'other';
-}
-// start.gg へ (投票ページと同じ流れ: state はサーバに署名してもらい、戻り先はこのページ)
-function startLogin() {
-  const btn = /** @type {HTMLButtonElement} */ ($('ce-login-btn'));
-  let nonce;
-  try { nonce = crypto.randomUUID(); } catch (e) { return; }
-  S.saveNonce(nonce);
-  try { sessionStorage.setItem(S.INTENT_KEY, 'login'); } catch (e) { /* 続行 */ }
-  btn.disabled = true;
-  fetch(CFG.GAS_ENDPOINT, {
-    method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'begin_login', flow: 'login', nonce, returnPath: location.pathname + location.search }),
-  }).then(r => r.json()).then(json => {
-    if (!json || !json.ok || !json.state) { btn.disabled = false; return; }
-    location.assign(S.buildAuthorizeUrl(CFG, json.state));
-  }).catch(() => { btn.disabled = false; });
+  if (!SpspLogin.apiAvailable()) return 'ok';   // ConoHa のプレビュー (ログインできない) では確認しない
+  if (!SpspLogin.session()) return 'login';
+  return SpspLogin.isSelf(uid) ? 'ok' : 'other';
 }
 
 // ── 本体 ──
@@ -81,8 +57,11 @@ async function main() {
   $('loading').style.display = 'none';
   $('ce-root').style.display = '';
 
+  await SpspLogin.verify();   // 無効なトークンはここで消える
+  /** 適用済み (サーバ) — 「適用」を押せるかの比較にも使う @type {CardSettings | null} */
+  let applied = await fetchApplied(uid);
   /** @type {CardSettings} */
-  let st = loadDraft(uid) || loadApplied(uid) || { ...DEFAULT_SETTINGS };
+  let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
   const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st));
@@ -91,8 +70,8 @@ async function main() {
   const owner = ownerState(uid);
   if (owner !== 'ok') {
     $('ce-gate').style.display = '';
-    const btn = $('ce-login-btn');
-    btn.addEventListener('click', startLogin);
+    const btn = /** @type {HTMLButtonElement} */ ($('ce-login-btn'));
+    btn.addEventListener('click', () => { btn.disabled = true; SpspLogin.startLogin().then(ok => { if (!ok) btn.disabled = false; }); });
     if (owner === 'other') { $('ce-gate-msg').textContent = i18n('card_edit.not_owner'); }
     return;
   }
@@ -135,7 +114,7 @@ async function main() {
         (n >= 0 ? `<span class="ce-ach-n">${n + 1}</span>` : '') + `<span>${escapeHtml(a.label)}</span></button>`;
     }).join('');
     const apply = /** @type {HTMLButtonElement} */ ($('ce-apply'));
-    const done = same(st, loadApplied(uid) || DEFAULT_SETTINGS);   // 適用済みと同じなら押せない
+    const done = same(st, applied || DEFAULT_SETTINGS);   // 適用済みと同じなら押せない
     apply.disabled = done;
     apply.textContent = done ? i18n('card_edit.applied') : i18n('card_edit.apply');
     ($('ce-reset')).style.visibility = picked.length ? '' : 'hidden';
@@ -157,9 +136,12 @@ async function main() {
     update({ ach: cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key] });
   });
   $('ce-reset').addEventListener('click', () => update({ ach: null }));
-  $('ce-apply').addEventListener('click', () => {
-    saveApplied(uid, st);
-    clearDraft(uid);
+  $('ce-apply').addEventListener('click', async () => {
+    const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
+    btn.disabled = true;
+    const r = await putApplied(uid, st);
+    if (r.ok) { applied = { ...st }; clearDraft(uid); }
+    else alert(i18n('card_edit.apply_failed'));
     paint();
   });
 

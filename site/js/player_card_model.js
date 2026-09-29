@@ -4,9 +4,9 @@
 //   buildCardModel(data, settings) カードの model。settings (テンプレート・色・実績の選択) は無ければ既定 (自動)
 //   cardAchievements(data)         カードに出せる実績の全部 (既定の並び = 大会の成績を順位評価のポイント順、残りはビルドの優先度順)
 //   perfInfoOf(t) / achievementBadge(a)  プレイヤーページの他の欄でも使う
-//   設定の保存 (いまはブラウザだけ。本人確認とサーバへの保存は後で):
-//     loadApplied(uid) / saveApplied(uid, s)  適用済み = カードに出る設定
-//     loadDraft(uid) / saveDraft(uid, s) / clearDraft(uid)  編集ページの途中の状態 (自動保存)
+//   設定 (docs/login_design.md):
+//     fetchApplied(uid) / putApplied(uid, s)  適用済み = カードに出る設定。API (/api/card・card_put) があればサーバ、無い所 (ConoHa のプレビュー) はこのブラウザ
+//     loadDraft(uid) / saveDraft(uid, s) / clearDraft(uid)  編集ページの途中の状態 (このブラウザに自動保存)
 import SPSPI18n from './i18n.js';
 import SPSPFormat from './format.js';
 import SPSPLinks from './links.js';
@@ -15,6 +15,8 @@ import SPSPPlayerData from './player_data.js';
 import SPSPCharEmoji from './char_emoji.js';
 import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
+import SpspLogin from './login.js';
+import SPSP_POST_CONFIG from './post_config.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -243,11 +245,30 @@ function normalize(s) {
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null };
 }
-/** @param {number} uid */ export const loadApplied = uid => normalize(readMap(APPLIED_KEY)[String(uid)]);
-/** @param {number} uid @param {CardSettings} s */ export const saveApplied = (uid, s) => writeOne(APPLIED_KEY, uid, s);
+const loadLocalApplied = (/** @type {number} */ uid) => normalize(readMap(APPLIED_KEY)[String(uid)]);
+
+/** 適用済みの設定。サーバ (だれでも読める) から。読めなければ null (= 既定のカード)
+ * @param {number} uid @returns {Promise<CardSettings | null>} */
+export async function fetchApplied(uid) {
+  if (!SpspLogin.apiAvailable()) return loadLocalApplied(uid);
+  try {
+    const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)));
+    const j = r.ok ? await r.json() : null;
+    return j && j.ok ? normalize(j.settings) : null;
+  } catch (e) { return null; }
+}
+/** 適用 (本人のログインが要る)。settings が null なら既定に戻す。{ ok, code? }
+ * @param {number} uid @param {CardSettings | null} s @returns {Promise<{ ok: boolean, code?: string }>} */
+export async function putApplied(uid, s) {
+  if (!SpspLogin.apiAvailable()) { writeOne(APPLIED_KEY, uid, s); return { ok: true }; }
+  const sess = SpspLogin.session();
+  if (!sess || !SpspLogin.isSelf(uid)) return { ok: false, code: 'not_owner' };
+  const r = await SpspLogin.api({ action: 'card_put', token: sess.token, settings: s });
+  return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
+}
 /** @param {number} uid */ export const loadDraft = uid => normalize(readMap(DRAFT_KEY)[String(uid)]);
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
 export default { buildCardModel, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
-                 loadApplied, saveApplied, loadDraft, saveDraft, clearDraft };
+                 fetchApplied, putApplied, loadDraft, saveDraft, clearDraft };
