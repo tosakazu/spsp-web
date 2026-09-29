@@ -380,6 +380,9 @@ let RANK_CHART = null;
 let OVERSEAS_UIDS = null;  // Set<number> from data/overseas.json (loadData で fetch)
 /** @type {SpspCharacterIndex | null} */
 let CHAR_IDX = null;       // character_index.json (loadData で fetch)
+/** カードの設定 (本人が編集ページで適用したもの)。選手データと並行して読み始め、カードはこれを待ってから 1 回だけ描く
+ * (既定のカードを先に出すと、設定のあるカードに描き直すときに一瞬ちらつくため) @type {Promise<any> | null} */
+let CARD_SETTINGS = null;
 /** @type {Record<string, CharEmoji> | null} */
 let CHAR_EMOJI = null;     // data/char_emoji.json { char_id: {name, emoji} } (loadData で fetch)
 /** @type {Record<string, string> | null} */
@@ -421,6 +424,7 @@ async function loadData() {
     if (!UID) { showNotFound(i18n('player.disc_not_found', { d: DISC_PARAM })); return; }
   }
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
+  CARD_SETTINGS = fetchApplied(UID).catch(() => null);
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
     // SPSPPlayerData.load が以前の 1 ファイルと同じ形に組み立てる (../js/player_data.js)
@@ -589,9 +593,14 @@ function render() {
   const card = document.getElementById('pcard');
   // 設定 (テンプレート・色・実績の選択) は本人が編集ページで「適用」したもの (サーバ。docs/login_design.md)。
   // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
+  // 設定の読み込みは loadData で選手データと一緒に始めてある。待つのは 2 秒まで (遅ければ既定のカードを出し、届いたら描き直す)。
+  // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
   if (card) {
-    SPSPPlayerCard.render(card, buildCardModel(cardData(), null));
-    fetchApplied(UID).then(s => { if (s) SPSPPlayerCard.render(card, buildCardModel(cardData(), s)); }).catch(() => {});
+    const settingsP = CARD_SETTINGS || Promise.resolve(null);
+    let drawn = false;
+    const draw = (/** @type {any} */ st) => { drawn = true; SPSPPlayerCard.render(card, buildCardModel(cardData(), st)); };
+    const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
+    settingsP.then(st => { clearTimeout(timer); if (!drawn || st) draw(st); });
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
