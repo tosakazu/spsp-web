@@ -276,8 +276,10 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       .nav-user .nav-menu { min-width:160px; left:auto; right:0;
                             max-width:calc(100vw - 24px); }
       /* アカウントメニュー: ログイン中はアイコンの代わりに名前の頭文字の丸 */
-      .nav-avatar { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%;
-                    background:#111827; color:#fff; font-size:11px; font-weight:700; line-height:1; }
+      /* 人型アイコン (18px) と同じ大きさにする (大きいとナビゲーションバーからはみ出す) */
+      .nav-avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; box-sizing:border-box;
+                    width:18px; height:18px; border-radius:50%; overflow:hidden;
+                    background:#111827; color:#fff; font-size:10px; font-weight:700; line-height:1; }
       .nav-user-name { padding:8px 14px 6px; font-size:12px; color:#6b7280; border-bottom:1px solid #f3f4f6; margin-bottom:4px;
                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; font:inherit; font-size:13px; padding:7px 14px; color:#374151; cursor:pointer; }

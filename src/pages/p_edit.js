@@ -140,8 +140,13 @@ async function main() {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;
     const r = await putApplied(uid, st);
-    if (r.ok) { applied = { ...st }; clearDraft(uid); }
-    else alert(i18n('card_edit.apply_failed'));
+    if (r.ok) {
+      // 適用したら編集ページを閉じてプレイヤーページへ (新しい設定のカードがすぐ出る)
+      applied = { ...st }; clearDraft(uid);
+      location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href);
+      return;
+    }
+    alert(i18n('card_edit.apply_failed'));
     paint();
   });
 
