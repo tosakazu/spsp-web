@@ -24,7 +24,12 @@ declare global {
     kind?: SpspAchievementKind;
     params?: SpspAchievementParams;
   }
-  interface SpspAchievement extends SpspBadge { priority: number }
+  interface SpspAchievement extends SpspBadge {
+    priority: number;
+    /** 大会の実績 (kind: tour / tour_series) だけ: もとになった大会ごとの [日付, 順位評価の素点 tjpr_raw] (集計対象外は除く)。
+     *  カードの並び順 = 素点 × 0.5^(経過年数) の最大 (2026-09-30〜) */
+    tjpr_pts?: [string, number][];
+  }
   interface SpspDynamicBadge extends SpspBadge { kind?: 'trend' }
   interface SpspCharacterUse {
     /** start.gg character id (辞書 char.<id> のキー) */

@@ -1,0 +1,59 @@
+/* card_edit.css — プレイヤーカードの編集ページ (p/edit.html)。プレビューは上に固定、選ぶものはその下、「適用」は下に固定 */
+main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
+.ce-back { display: inline-flex; align-items: center; gap: 4px; color: #374151; text-decoration: none; font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+.ce-back svg { width: 18px; height: 18px; }
+.ce-back:hover { color: #111827; }
+
+/* プレビュー: スクロールしても見えるように上に固定 */
+.ce-preview { position: sticky; top: 0; z-index: 5; background: #fff; padding: 6px 0 10px; }
+.ce-preview .pcard { margin: 0; }
+
+.ce-sec { margin-top: 18px; }
+.ce-sec h2 { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #6b7280; margin: 0 0 8px; }
+
+/* テンプレート: 小さなカードの絵 */
+.ce-templates { display: flex; gap: 8px; }
+.ce-tpl {
+  position: relative; width: 92px; height: 60px; padding: 0; border: 2px solid #e5e7eb; border-radius: 8px; background: #f3f3f3; cursor: pointer; overflow: hidden;
+}
+.ce-tpl.on { border-color: #111827; }
+.ce-tpl-head { position: absolute; left: 0; top: 0; right: 0; height: 26%; background: var(--c); }
+.ce-tpl-box { position: absolute; left: 6%; top: 34%; width: 38%; height: 26%; border: 2px solid var(--c); border-top: 0; box-sizing: border-box; }
+.ce-tpl-side { position: absolute; right: 4%; top: 30%; width: 50%; bottom: 6%; background: var(--c); }
+
+/* 色: 丸い見本。選んだものは外側に輪 */
+.ce-colors { display: flex; gap: 12px; }
+.ce-color {
+  width: 34px; height: 34px; border-radius: 50%; padding: 0; cursor: pointer; background: var(--c);
+  border: 3px solid #fff; box-shadow: 0 0 0 1px #e5e7eb;
+}
+.ce-color.on { box-shadow: 0 0 0 2px var(--c); }
+
+/* 実績: 選んだものは色つきで順番の数字。入りきらないものは薄く (押せない) */
+.ce-achs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ce-ach {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 3px 10px; border-radius: 16px; cursor: pointer;
+  border: 1.5px solid #e5e7eb; background: #fff; color: #374151; font: inherit; font-size: 12px; font-weight: 600; text-align: left;
+}
+.ce-ach.on { border-color: var(--c); color: var(--c); background: color-mix(in srgb, var(--c) 8%, #fff); }
+.ce-ach:disabled { opacity: .35; cursor: default; }
+.ce-ach-n {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--c); color: #fff; font-size: 11px; font-weight: 700;
+}
+.ce-reset { margin-left: auto; display: inline-flex; padding: 4px; border: 0; background: none; color: #9ca3af; cursor: pointer; border-radius: 6px; }
+.ce-reset svg { width: 16px; height: 16px; }
+.ce-reset:hover { color: #374151; background: #f3f4f6; }
+
+/* 適用: 下に固定 */
+.ce-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(255, 255, 255, .96); border-top: 1px solid #e5e7eb; padding: 10px 16px; display: flex; justify-content: center; }
+.ce-apply {
+  width: 100%; max-width: 488px; height: 44px; border: 0; border-radius: 10px; background: #111827; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.ce-apply:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
+
+/* 本人確認 (ログイン) */
+.ce-gate { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 24px; }
+.ce-login { height: 42px; padding: 0 20px; border: 0; border-radius: 10px; background: #111827; color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ce-login:disabled { opacity: .6; }
+.ce-gate-msg { font-size: 12px; color: #6b7280; }

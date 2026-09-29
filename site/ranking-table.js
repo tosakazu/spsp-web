@@ -45,20 +45,13 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
    *
    * - チームタグ (「ZETA | あcola」の「ZETA |」部分) は落とす。
    *   一覧では場所を食うわりに情報が薄く、選手名の視認性を下げるため。
-   *   プレイヤーページ側はタグ付きのまま (所属が見たい場面なので)。
+   *   (処理は js/format.js stripTeamTag。プレイヤーページ最上部のカードも同じ)
    * - 末尾の空白 (半角・全角) を落とす。start.gg の登録名に紛れており、
    *   そのまま出すと右側が不自然に空く。
    *
    * 並べ替え・絞り込みは元の表記で行う (タグで検索したい人がいるため)。
    */
-  function displayName(name) {
-    const raw = String(name ?? '');
-    const trim = (x) => x.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
-    const bar = raw.lastIndexOf('|');
-    const cut = bar >= 0 ? trim(raw.slice(bar + 1)) : trim(raw);
-    // 「|」だけ、あるいはタグしか無い名前で空にしない
-    return cut || trim(raw) || raw;
-  }
+  const displayName = SPSPFormat.stripTeamTag;
 
   // === Format helpers ===
   function getRank(rec, method) {

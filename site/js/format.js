@@ -27,9 +27,19 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
   function fmtRank(r) { return r != null && r > 0 ? r.toLocaleString() : '—'; }
 
-  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, PLUS_CUTOFF: PLUS_CUTOFF };
+  // 選手名からチームタグ (「ZETA | あcola」の「ZETA |」) と前後の空白 (半角・全角) を落とす。
+  // ランキング一覧と、プレイヤーページ最上部のカードで使う。タグしか無い名前は空にせず元の表記を返す
+  function stripTeamTag(name) {
+    var raw = String(name == null ? '' : name);
+    var trim = function (x) { return x.replace(/^[\s\u3000]+|[\s\u3000]+$/g, ''); };
+    var bar = raw.lastIndexOf('|');
+    var cut = bar >= 0 ? trim(raw.slice(bar + 1)) : trim(raw);
+    return cut || trim(raw) || raw;
+  }
+
+  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, stripTeamTag: stripTeamTag, PLUS_CUTOFF: PLUS_CUTOFF };
   global.SPSPFormat = api;
   (global.SPSP = global.SPSP || {}).Format = api;   // window.SPSP.Format (名前空間。旧名 SPSPFormat も残す)
 
 export default api;
-export { lvSuffix, lvLabel, fmtRank, PLUS_CUTOFF };
+export { lvSuffix, lvLabel, fmtRank, stripTeamTag, PLUS_CUTOFF };

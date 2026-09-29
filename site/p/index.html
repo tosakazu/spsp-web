@@ -9,6 +9,10 @@
 <meta property="og:site_name" content="SPSP">
 <meta property="og:locale" content="ja_JP">
 <link rel="stylesheet" href="../css/player.css">
+<link rel="stylesheet" href="../css/player_card.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap">
 <style>
 
   /* The "shareable card" lives in this main container. html2canvas snapshots #share-card. */
@@ -423,42 +427,31 @@
   <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
   <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
 
-  <div id="share-card" style="display:none">
+  <div id="share-card" class="has-pcard" style="display:none">
     <div id="share-top">
-    <div class="hero">
-      <div class="display-row">
-        <div class="display" id="display">—</div>
-        <a class="share-icon-btn" id="startgg-link" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h6v6"></path>
-            <path d="M10 14L21 3"></path>
-            <path d="M21 14v7H3V3h7"></path>
-          </svg>
-        </a>
-        <button class="share-icon-btn" id="share-icon-btn" title="URL を共有" aria-label="URL を共有" data-i18n-attr="title:common.share_url,aria-label:common.share_url">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="18" cy="5" r="3"></circle>
-            <circle cx="6" cy="12" r="3"></circle>
-            <circle cx="18" cy="19" r="3"></circle>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-          </svg>
-        </button>
-      </div>
-      <div id="char-line" style="display:none;margin-top:4px;font-size:13px;line-height:1.4">
-        <span id="char-line-body"></span>
-      </div>
-      <div id="pref-line" style="display:none;margin-top:4px;font-size:12px;color:#6b7280">
-        <span id="pref-body"></span>
-      </div>
-    </div>
-
-    <div class="rank-hero">
-      <div class="badges-line"><span id="lv-pill"></span> <span id="gate-pill"></span> <span id="overseas-pill"></span> <span id="zenichi-pill"></span></div>
-      <div class="label" data-i18n="ranking.tab.ensemble">総合評価</div>
-      <div class="big"><span class="hash">#</span><span id="big-rank">—</span></div>
-      <div class="of">/ <span id="total-n">—</span> 名 <span id="eval-date" style="color:#9ca3af;font-size:11px"></span></div>
-      <div class="meta-line" id="meta-line"></div>
+    <!-- 選手カード (Figma「submit」を再現。中身は js/player_card.js が作る) -->
+    <div class="pcard" id="pcard"></div>
+    <div class="pc-actions">
+      <button type="button" class="pc-btn pc-btn-save" id="pc-save-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>
+        <span data-i18n="player.card.save">保存</span>
+      </button>
+      <button type="button" class="pc-btn pc-btn-share" id="pc-share-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+        <span data-i18n="player.card.share">共有</span>
+      </button>
+      <a class="pc-btn pc-btn-edit" id="pc-edit-btn" href="edit.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>
+        <span data-i18n="player.card.edit">編集</span>
+      </a>
+      <span class="pc-act-spacer"></span>
+      <a class="share-icon-btn" id="startgg-link" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h6v6"></path>
+          <path d="M10 14L21 3"></path>
+          <path d="M21 14v7H3V3h7"></path>
+        </svg>
+      </a>
     </div>
 
     <div class="subranks">

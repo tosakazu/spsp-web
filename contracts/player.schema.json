@@ -152,6 +152,23 @@
           "properties": {
             "priority": {
               "type": "integer"
+            },
+            "tjpr_pts": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "大会の実績 (kind: tour / tour_series) だけ: もとになった大会ごとの [日付, 順位評価の素点 tjpr_raw] (集計対象外は除く)。プレイヤーカードの並び順 = 素点 × 0.5^(経過年数) の最大 (2026-09-30〜)"
             }
           }
         },

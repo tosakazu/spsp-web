@@ -1,6 +1,6 @@
 'use strict';
 // ランキング表に出す名前の整形。
-// チームタグは一覧では落とす (プレイヤーページは付いたまま)。末尾の空白も落とす。
+// チームタグは一覧とプレイヤーカードでは落とす。末尾の空白も落とす。整形は js/format.js stripTeamTag (ranking-table.js の displayName はそれ)。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -10,10 +10,12 @@ const SITE = path.resolve(__dirname, '../../site');
 const SRC = require('../helpers/built.cjs').built('ranking-table.js');
 
 // 実ソースから関数だけ取り出して動かす (定義が変わったら落ちる)
-const fnSrc = SRC.match(/function displayName\(name\) \{[\s\S]*?\n  \}/);
-assert.ok(fnSrc, 'displayName が見つからない');
+const FMT = fs.readFileSync(path.join(SITE, 'js', 'format.js'), 'utf8');
+const fnSrc = FMT.match(/function stripTeamTag\(name\) \{[\s\S]*?\n  \}/);
+assert.ok(fnSrc, 'stripTeamTag が見つからない');
+assert.ok(/const displayName = SPSPFormat\.stripTeamTag;/.test(SRC), 'ranking-table.js の displayName は stripTeamTag');
 // eslint-disable-next-line no-eval
-const displayName = eval('(' + fnSrc[0].replace(/^function displayName/, 'function') + ')');
+const displayName = eval('(' + fnSrc[0].replace(/^function stripTeamTag/, 'function') + ')');
 
 test('チームタグを落とす', () => {
   assert.strictEqual(displayName('ZETA | あcola'), 'あcola');

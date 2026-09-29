@@ -1,0 +1,134 @@
+/* player_card.css — プレイヤーページ最上部の選手カード (js/player_card.js)。
+   Figma「submit」(514×333) の座標をそのまま使い、.pc-in を表示幅に合わせて transform: scale で縮める。
+   文字の top はデザインの字面 (cap) 上端から font-size × 0.2 ほど上にずらしている (line-height: 1 の箱の上端) */
+.pcard {
+  position: relative; margin: 0 -14px 10px; aspect-ratio: 514 / 333; overflow: hidden;
+  --pc-red: #df1b1b; --pc-gray: #626262; --pc-light: #eaeaea;
+}
+#share-card.has-pcard { padding-top: 0; border-top: 0; border-radius: 0 0 12px 12px; }
+.pc-in {
+  position: absolute; left: 0; top: 0; width: 514px; height: 333px; transform-origin: 0 0;
+  background: #f3f3f3; overflow: hidden; color: #000;
+  font-family: "IBM Plex Sans JP", "Hiragino Sans", sans-serif; line-height: 1;
+}
+.pc-in::after { content: ""; position: absolute; inset: 0; border: 5px solid var(--pc-red); pointer-events: none; }
+.pc-in a { color: inherit; text-decoration: none; }
+.pc-in a:hover { text-decoration: underline; }
+.pc-lat, .pc-in .z { font-family: "Zalando Sans", sans-serif; }
+
+/* ── 上の帯 ── */
+.pc-head { position: absolute; left: 0; top: 0; width: 514px; height: 89px; background: var(--pc-red); color: #fff; }
+.pc-loc { position: absolute; left: 12px; top: 12px; height: 14.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.pc-pin { width: 9.37px; height: 14.5px; fill: var(--pc-light); flex: none; }
+.pc-loc-name { font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 15px; color: var(--pc-light); text-transform: uppercase; }
+.pc-loc-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 13px; color: var(--pc-light); opacity: .81; margin-left: -3px; align-self: flex-end; margin-bottom: 1px; }
+.pc-name { position: absolute; left: 12px; top: 28px; width: 377px; height: 54px; display: flex; align-items: flex-end; font-size: 43px; }
+.pc-name-t { display: block; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.pc-name.pc-wrap .pc-name-t, .pc-tour.pc-wrap .pc-tour-a {
+  white-space: normal; line-height: 1.12; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pc-date { position: absolute; right: 12px; top: 13px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
+.pc-date-lbl { font-size: 10px; }
+.pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 11px; }
+.pc-chars { position: absolute; right: 12px; top: 41px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.pc-char { display: flex; align-items: center; gap: 3px; height: 13px; font-size: 14px; white-space: nowrap; text-transform: uppercase; }
+.pc-char-sq { width: 10px; height: 13px; background: #fff; flex: none; }   /* 絵文字の無いキャラだけ (デザインの ■) */
+.pc-char-emoji { font-size: 1em; line-height: 1; flex: none; }   /* キャラの絵文字 (data/char_emoji.json) */
+.pc-char-name { font-weight: 500; }
+.pc-char.main .pc-char-name { font-weight: 700; }
+.pc-char.pc-wrap { height: auto; align-items: flex-start; }
+.pc-char.pc-wrap .pc-char-name { text-align: left; line-height: 1.08; }   /* 改行は js が入れる (幅は長い方の行に合う) */
+.pc-char-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: .786em; opacity: .9; margin-left: -1px; align-self: flex-end; }
+
+/* ── 主な実績 (左上の箱) ── */
+/* Figma の Rectangle 5 は線が外側 (OUTSIDE): 中身 (5,89)-(231,194) の左・右・下に 5px。左の線は外枠と重なる */
+.pc-ach { position: absolute; left: 0; top: 89px; width: 236px; height: 110px; box-sizing: border-box; border: 5px solid var(--pc-red); border-top: 0; }
+.pc-label { position: absolute; font-weight: 600; font-size: 11px; color: var(--pc-gray); white-space: nowrap; }
+.pc-ach .pc-label { left: 11px; top: 9px; }
+.pc-ach-list { position: absolute; left: 10px; top: 21px; width: 206px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+/* 1 行ごとの並び: 上位の実績がいちばん右、空いた左に控えの実績 (js が詰める) */
+.pc-ach-row { display: flex; justify-content: flex-end; gap: 3px; max-width: 206px; }
+.pc-ach-spare { display: flex; gap: 3px; position: absolute; visibility: hidden; left: 0; top: 0; }
+.pc-ach-pill {
+  display: inline-flex; align-items: center; gap: 3px; height: 23px; padding: 0 8px; box-sizing: border-box;
+  border: 2px solid var(--pc-red); border-radius: 30px; background: rgba(255, 255, 255, .7);
+  color: var(--pc-red); font-weight: 700; font-size: 10px; white-space: nowrap; max-width: 206px;
+}
+.pc-ach-emoji { font-size: 1.3em; color: #000; }
+.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
+.pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
+
+/* ── 最新の大会結果 (左下) ── */
+.pc-latest { position: absolute; left: 5px; top: 194px; width: 226px; height: 134px; }
+.pc-latest-lbl { left: 10px; top: 14px; }
+.pc-latest-date { position: absolute; right: 9px; top: 14px; font-family: "Zalando Sans Expanded", sans-serif; font-size: 10px; color: var(--pc-gray); white-space: nowrap; }
+.pc-tour { position: absolute; left: 10px; top: 29px; width: 207px; height: 34px; display: flex; align-items: center; font-size: 18px; color: var(--pc-red); font-weight: 700; }
+.pc-tour-a { display: block; min-width: 0; white-space: nowrap; line-height: 1.2; }
+.pc-tour .pc-lat { font-weight: 700; font-size: 1.055em; }
+.pc-place { position: absolute; left: 2px; top: 69px; width: 85px; text-align: right; }
+.pc-place-row { display: inline-block; white-space: nowrap; font-size: 30px; }
+.pc-place-num { font-family: "Zalando Sans", sans-serif; font-weight: 600; }
+.pc-place-unit { font-weight: 700; font-size: .567em; margin-left: 1px; }
+.pc-place-n { position: absolute; right: 0; top: 31px; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 16px; color: var(--pc-gray); white-space: nowrap; }
+.pc-vbar { position: absolute; left: 95.5px; top: 61px; width: 5px; height: 68px; background: var(--pc-red); }
+.pc-perf-box { position: absolute; left: 112px; top: 61px; width: 106px; height: 68px; }
+.pc-perf-lbl, .pc-upd-lbl { position: absolute; left: 0; font-family: "Zalando Sans Expanded", sans-serif; font-size: 7px; color: var(--pc-gray); text-transform: uppercase; white-space: nowrap; }
+.pc-perf-lbl { top: 3px; }
+.pc-upd-lbl { top: 37px; }
+.pc-perf-lv { position: absolute; right: 0; top: 3px; padding: 1.5px 4px; border: 1px solid var(--pc-red); border-radius: 19px; font-weight: 600; font-size: 9px; color: var(--pc-red); white-space: nowrap; }
+.pc-perf, .pc-upd { position: absolute; left: 1px; width: 106px; display: flex; align-items: baseline; white-space: nowrap; font-size: 15px; }
+.pc-perf { top: 13px; gap: 2px; }
+.pc-upd { top: 46px; gap: 1px; }
+.pc-sm { font-weight: 500; font-size: .6em; }
+.pc-perf-num, .pc-upd-num { font-family: "Zalando Sans", sans-serif; font-weight: 500; }
+.pc-upd-h { font-weight: 700; font-size: .733em; }
+.pc-arrow { width: .8em; height: .289em; margin: 0 1px; align-self: center; flex: none; }
+
+/* ── 総合評価 (右の赤い箱) ── */
+.pc-overall { position: absolute; left: 231px; top: 94px; width: 280px; height: 236px; background: var(--pc-red); color: #fff; overflow: hidden; }
+.pc-bgword {
+  position: absolute; left: 7px; top: 49px; width: 282px; text-align: center;
+  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 57px; line-height: 61px;
+  text-transform: uppercase; color: #c3c3c3; opacity: .45; white-space: nowrap; pointer-events: none;
+}
+.pc-overall-lbl { position: absolute; left: 14px; top: 14px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
+.pc-pills { position: absolute; right: 8px; top: 12px; display: flex; gap: 2px; font-size: 18px; white-space: nowrap; }
+.pc-pill {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: 3.5em; height: 1.28em; padding: 0 .25em; border: 2px solid #fff; border-radius: 19px;
+  font-weight: 600; font-size: 1em;
+}
+.pc-big {
+  position: absolute; left: 139px; top: 111px; transform: translate(-50%, -50%);
+  display: flex; align-items: baseline; white-space: nowrap; font-family: "Zalando Sans", sans-serif; font-size: 91px; line-height: 1;
+}
+.pc-big-h { font-weight: 900; font-size: .55em; }
+.pc-big-n { font-weight: 800; }
+.pc-tot { position: absolute; inset: 0; pointer-events: none; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 500; color: var(--pc-light); text-transform: uppercase; }
+.pc-tot-lbl { position: absolute; left: 15px; width: 118px; font-size: 9px; line-height: 11px; }
+.pc-tot-v { position: absolute; right: 11px; font-size: 11px; line-height: 11px; white-space: nowrap; }
+.pc-tot-line { position: absolute; height: 1px; background: var(--pc-light); opacity: .85; }
+.pc-tot-t .pc-tot-lbl { top: 186px; }
+.pc-tot-t .pc-tot-v { top: 191px; }
+.pc-tot-t .pc-tot-line { left: 129px; width: 80px; top: 199px; }
+.pc-tot-m .pc-tot-lbl { top: 212px; }
+.pc-tot-m .pc-tot-v { top: 210px; }
+.pc-tot-m .pc-tot-line { left: 138px; width: 71px; top: 219px; }
+
+/* 画像にするときの原寸の複製 (画面の外に置く) */
+.pcard.pc-offscreen { position: fixed; left: -10000px; top: 0; width: 514px; height: 333px; margin: 0; aspect-ratio: auto; }
+
+/* カードの下: 左 = カードの保存・共有・編集、右 = start.gg (以前は名前の横) */
+.pc-actions { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; flex-wrap: wrap; }
+.pc-actions .pc-act-spacer { flex: 1; }
+.pc-actions .share-icon-btn svg { width: 16px; height: 16px; }
+.pc-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 8px;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid transparent;
+}
+.pc-btn svg { width: 15px; height: 15px; flex: none; }
+.pc-btn:disabled { cursor: default; opacity: .6; }
+/* 3 つとも白地で控えめに (ページ内の他のボタンと同じ灰色の枠)。編集は編集ページへのリンク */
+.pc-btn-save, .pc-btn-share, .pc-btn-edit { background: #fff; color: #374151; border-color: #e5e7eb; text-decoration: none; box-sizing: border-box; }
+.pc-btn-save:hover:not(:disabled), .pc-btn-share:hover:not(:disabled), .pc-btn-edit:hover { background: #f9fafb; color: #111827; }

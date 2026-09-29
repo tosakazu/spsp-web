@@ -17,6 +17,8 @@ import SPSPShare from '../../site/share.js';
 import { charName } from '../../site/js/chars.js';
 import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
+import SPSPPlayerCard from '../../site/js/player_card.js';
+import { buildCardModel, perfInfoOf, achievementBadge, loadApplied } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -86,20 +88,6 @@ const params = new URLSearchParams(location.search);
 // ?d= は data/discriminators.json (js/links.js が読む) で uid に解決してから読み込む。
 const DISC_PARAM = (params.get('d') || '').trim().toLowerCase();
 let UID = parseInt(params.get('uid') || location.hash.replace(/^#/, '') || '0');
-
-// パフォーマンス = 実際に獲得した順位帯が SPSP 換算で全国何位/Lvいくつ相当か。
-// 計算は build 側 (v4/output.py _perf_map_for_t) が行い perf_rank として
-// tournaments[] にエクスポート済み。ここでは相当 Lv と接尾辞を導出するだけ。
-/** @param {PTour} t @returns {{ eq: number, eqLv: number, lvSfx: string } | null} */
-function perfInfoOf(t) {
-  if (t.perf_rank == null || t.is_dq || t.place == null) return null;
-  const eq = t.perf_rank;
-  // 全国順位 (非 gray) 空間での Lv 境界は cascade 定数 (256/512/1024/2048) に一致
-  const eqLv = eq <= 256 ? 5 : eq <= 512 ? 4 : eq <= 1024 ? 3 : eq <= 2048 ? 2 : 1;
-  // 接尾辞はヒーローの lvLabel と同じカットオフ (../js/format.js)
-  const lvSfx = SPSPFormat.lvSuffix(eqLv, eq);
-  return { eq, eqLv, lvSfx };
-}
 
 // 最新の大会結果 + パフォーマンス。
 function buildLatestResultSection() {
@@ -422,33 +410,6 @@ let FILTER = { period: '6m', kind: 'all' };  // 共通フィルタ state (render
 // 期間 → 日数. 'all' は無制限 (Infinity), 他は最大日数.
 const PERIOD_DAYS = { 'all': Infinity, '3y': 1095, '1y': 365, '6m': 183, '3m': 91 };
 
-// Legacy mapping (for old string-format achievements)
-/** @type {Record<string, { readonly label: string, cls: string }>} */
-const ACHIEVEMENT_LABELS = {
-  lv5_reached:  { get label() { return i18n('player.ach.lv5'); },    cls: 'gold'   },
-  lv4_reached:  { get label() { return i18n('player.ach.lv4'); },    cls: 'silver' },
-  lv3_reached:  { get label() { return i18n('player.ach.lv3'); },    cls: 'bronze' },
-  top10:        { label: '🌟 Top 10 in Japan', cls: 'gold' },
-  top50:        { label: '🔥 Top 50 in Japan', cls: 'silver' },
-  top100:       { label: '💪 Top 100 in Japan', cls: 'bronze' },
-  top1000:      { label: '🎯 Top 1000', cls: '' },
-  veteran50:    { get label() { return i18n('player.ach.veteran50'); },    cls: 'blue'   },
-  regular20:    { get label() { return i18n('player.ach.regular20'); }, cls: 'blue' },
-};
-/** @param {SpspAchievement | string} item @returns {{ label: string, cls: string }} */
-function achievementBadge(item) {
-  if (typeof item === 'object' && (item.label || item.kind)) return { label: achievementLabel(item), cls: item.cls || '' };  // ビルド出力 (kind/params から表示言語で組む。無ければ label)
-  if (typeof item === 'string') {
-    if (ACHIEVEMENT_LABELS[item]) return ACHIEVEMENT_LABELS[item];
-    if (item.startsWith('climb_30d_+')) {
-      const n = parseInt(item.slice('climb_30d_+'.length));
-      return { label: i18n('player.ach.rank_up_month', { n }), cls: 'green' };
-    }
-    return { label: item, cls: '' };
-  }
-  return { label: '', cls: '' };
-}
-
 const ACH_INITIAL_VISIBLE = 6;
 
 const fmtRank = SPSPFormat.fmtRank;   // ../js/format.js
@@ -570,6 +531,13 @@ function tournamentItem(t, valueHtml) {
 
 // escapeHtml は ../js/html.js (サイト共通)
 
+// 最上部の選手カード (../js/player_card.js) に渡すデータ (中身の組み立ては ../js/player_card_model.js。編集ページと共有)
+/** @returns {import('../../site/js/player_card_model.js').CardData} */
+function cardData() {
+  return { uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
+           overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI };
+}
+
 function render() {
   if (!PLAYER || !MAIN_REC || !META) return;
   // 試合の並び・ブラケット表記・W2W とページ送りはサイト共通 (../js/match.js, ../js/pager.js)
@@ -586,9 +554,6 @@ function render() {
     SPSPTrackPage(document.title, `/p/uid${UID}`);
   }
 
-  // Hero
-  const displayEl = document.getElementById('display');
-  if (displayEl) displayEl.textContent = MAIN_REC.display;
   // start.gg link (if discriminator known)
   const discr = PLAYER.startgg_discriminator;
   if (discr) {
@@ -606,14 +571,6 @@ function render() {
       }
     } catch (e) { /* URL を触れない環境では何もしない */ }
   }
-  const bigRank = document.getElementById('big-rank');
-  if (bigRank) bigRank.textContent = fmtRank(MAIN_REC.ranks.ensemble);
-  const totalN = document.getElementById('total-n');
-  if (totalN) totalN.textContent = META.n_players.toLocaleString();
-  const evalDateEl = document.getElementById('eval-date');
-  if (evalDateEl) evalDateEl.textContent = i18n('player.eval_date', { date: META.eval_date });
-  const metaLine = document.getElementById('meta-line');
-  if (metaLine) metaLine.innerHTML = '';
   const rankTjpr = document.getElementById('rank-tjpr');
   if (rankTjpr) rankTjpr.textContent = fmtRank(MAIN_REC.ranks.tjpr);
   const rankBt = document.getElementById('rank-bt');
@@ -627,121 +584,14 @@ function render() {
   const scoreBtInternal = document.getElementById('score-bt-internal');
   if (scoreBtInternal) scoreBtInternal.textContent =
     MAIN_REC.scores.bt_internal_elo != null ? MAIN_REC.scores.bt_internal_elo.toFixed(2) : '—';
-  // 現在の Lv ピル
-  // LV は共通 cascade 由来 (= shared_cascade_lv)。fallback として旧 tjpr_level を見る
-  const lvNow = (MAIN_REC.scores && (MAIN_REC.scores.shared_cascade_lv || MAIN_REC.scores.tjpr_level)) || 0;
-  // レベル接尾辞 (👑/メダル/+) は ../js/format.js
-  const rankNow = (MAIN_REC.ranks && MAIN_REC.ranks.ensemble) || 0;
-  const lvSfx = SPSPFormat.lvSuffix(lvNow, rankNow);
-  const lvLabel = lvNow ? `Lv${lvNow}${lvSfx}` : i18n('player.lv_none');
-  const lvPill = document.getElementById('lv-pill');
-  if (lvPill) lvPill.innerHTML =
-    `<span class="lv-pill lv-${lvNow}">${lvLabel}</span>`;
-  // 計測中 (= 2年で集計対象大会 3 未満. build が metadata.provisional に出力)
-  // 海外バッジと同居可.
-  const provNow = !!(MAIN_REC.metadata && MAIN_REC.metadata.provisional);
-  const gatePill = document.getElementById('gate-pill');
-  if (gatePill) gatePill.innerHTML =
-    provNow ? `<span class="gate-pill rookie">${i18n('table.provisional')}</span>` : '';
 
-  // 海外 / 全一 バッジ (= ranking-table と同じ pill スタイル)
-  const overseasEl = document.getElementById('overseas-pill');
-  const zenichiEl = document.getElementById('zenichi-pill');
-  if (overseasEl) {
-    overseasEl.innerHTML = (OVERSEAS_UIDS && OVERSEAS_UIDS.has(UID))
-      ? `<span class="overseas-badge">${i18n('table.overseas')}</span>` : '';
-  }
-  if (zenichiEl) {
-    // {1: [chars], 2: [chars], 3: [chars]} を組み立てる. main_by_char は
-    // chars[0] (= メインキャラ) で集計済みなので、ここでサブキャラは数えない.
-    /** @type {Record<number, string[]>} */
-    const zenichi = {};
-    if (CHAR_IDX && CHAR_IDX.characters && CHAR_IDX.main_by_char) {
-      for (const c of CHAR_IDX.characters) {
-        const uids = CHAR_IDX.main_by_char[String(c.id)] || [];
-        let rank = 0;
-        for (const u of uids) {
-          if (OVERSEAS_UIDS && OVERSEAS_UIDS.has(u)) continue;
-          rank += 1;
-          if (u === UID) {
-            if (!zenichi[rank]) zenichi[rank] = [];
-            zenichi[rank].push(charName(c.id, c.name));   // 表示言語のキャラ名
-            break;
-          }
-          if (rank >= 3) break;
-        }
-      }
-    }
-    let html = '';
-    for (const r of [1, 2, 3]) {
-      if (zenichi[r] && zenichi[r].length) {
-        const names = zenichi[r].join(i18n('common.list_sep'));
-        const label = i18n('table.zenichi.' + r, { chars: names });
-        html += `<span class="zenichi-badge zenichi-${r}" title="${escapeHtml(i18n('table.zenichi.title.' + r, { chars: names }))}">${escapeHtml(label)}</span> `;
-      }
-    }
-    zenichiEl.innerHTML = html;
-  }
-
-  // 使用キャラ (直近 1 年, 主キャラ + サブキャラ).
-  // 使い手ランキングは echo fighter を統合表示するため (シモン+リヒター 等),
-  // 表示は分離した個別キャラ名のままで, 飛び先 URL のみ canonical id へ向ける.
-  // v4/char_index.py _MERGE_TO_CANONICAL と一致させる.
-  const CHAR_MERGE_CANONICAL = {
-    1411: 1411, 1412: 1411,   // シモン / リヒター → 1411
-    1320: 1320, 1278: 1320,   // ピット / ブラックピット → 1320
-    1328: 1328, 1408: 1328,   // サムス / ダークサムス → 1328
-    1317: 1317, 1277: 1317,   // ピーチ / デイジー → 1317
-  };
-  const chars = PLAYER.characters || [];
-  if (chars.length > 0) {
-    const charLine = document.getElementById('char-line');
-    const body = document.getElementById('char-line-body');
-    // メインキャラの 使い手ランキング 内順位 (= メインキャラの直後に表示)。
-    const SUB = PLAYER_SUBRANKS && PLAYER_SUBRANKS[String(UID)];
-    if (body) body.innerHTML = chars.map((c, i) => {
-      const isMain = i === 0;
-      const color = isMain ? '#dc2626' : '#6b7280';
-      const weight = isMain ? 600 : 400;
-      const canonicalId = CHAR_MERGE_CANONICAL[c.id] || c.id;
-      // 使用キャラ名の前にキャラ絵文字 (char_emoji.json, char_id キー) を表示。
-      const ce = CHAR_EMOJI && (CHAR_EMOJI[c.id] || CHAR_EMOJI[canonicalId]);
-      const emoji = (ce && ce.emoji) ? ce.emoji + ' ' : '';
-      // 大会での使用データが無く本人申告で入ったキャラは pct を持たない
-      // (docs/post_feature_design.md §12)。
-      const title = typeof c.pct === 'number' ? '' : ` title="${i18n('player.char_self_declared_title')}"`;
-      let html = `<a href="${SPSPLinks.charRankingHref(SPSP.langRoot, canonicalId)}"${title} style="color:${color};font-weight:${weight};text-decoration:none">${emoji}${escapeHtml(charName(c.id, c.name))}</a>`;
-      if (isMain && SUB && SUB.char) {
-        html += `<a href="${SPSPLinks.charRankingHref(SPSP.langRoot, canonicalId)}" ` +
-          `style="margin-left:5px;color:#9ca3af;font-size:11px;text-decoration:none">#${SUB.char.rank}</a>`;
-      }
-      return html;
-    }).join('<span style="color:#d1d5db;margin:0 6px">·</span>');
-    if (charLine) charLine.style.display = '';
-  }
-
-  // 居住地 (都道府県). player_prefectures.json (uid -> 都道府県漢字) から引く。
-  const pref = PLAYER_PREF && PLAYER_PREF[String(UID)];
-  if (pref) {
-    const SUBP = PLAYER_SUBRANKS && PLAYER_SUBRANKS[String(UID)];
-    const prefRankHtml = (SUBP && SUBP.pref)
-      ? `<span style="margin-left:8px;color:#9ca3af;font-size:11px">#${SUBP.pref.rank}</span>`
-      : '';
-    const prefBody = document.getElementById('pref-body');
-    if (prefBody) prefBody.innerHTML =
-      `📍 ${SPSPLinks.a(SPSPLinks.prefRankingHref(SPSP.langRoot, pref), escapeHtml(SPSPGeo.unitName(pref)), ' style="color:inherit;text-decoration:none"')}` + prefRankHtml;
-    const prefLine = document.getElementById('pref-line');
-    if (prefLine) prefLine.style.display = '';
-  } else if (PLAYER.country && PLAYER.country !== 'Japan'
-             && OVERSEAS_UIDS && OVERSEAS_UIDS.has(UID)) {
-    // 海外タグ勢は都道府県の代わりに国名 (players/<uid>.json の country_ja) を表示。リンクなし。
-    // 日本勢扱い (jp_uids / 住んでそう勢 = overseas.json 非該当) は国登録があっても出さない。
-    const prefBody = document.getElementById('pref-body');
-    if (prefBody) prefBody.innerHTML =
-      `📍 ${escapeHtml(SPSPI18n.lang === 'ja' ? (PLAYER.country_ja || PLAYER.country) : PLAYER.country)}`;   // 国名は表示言語 (country_ja は日本語)
-    const prefLine = document.getElementById('pref-line');
-    if (prefLine) prefLine.style.display = '';
-  }
+  // ── 選手カード (最上部。../js/player_card.js) ──
+  const card = document.getElementById('pcard');
+  // 設定 (テンプレート・色・実績の選択) は編集ページで「適用」したもの (いまはこのブラウザに保存。本人確認とサーバ保存は後で)
+  if (card) SPSPPlayerCard.render(card, buildCardModel(cardData(), loadApplied(UID)));
+  // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
+  const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
+  if (editBtn) editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
 
   // Achievements: priority 順、上位 N 件のみデフォルト表示、それ以降は折りたたみ
   const ach = PLAYER.achievements || [];
@@ -2015,13 +1865,65 @@ async function capturePng() {
   }
 }
 
+// ── プレイヤーカードの画像: 保存 / 共有 (../js/player_card.js capture) ──
+const cardFileName = () => `spsp_card_${SPSPShare.safeFileName(MAIN_REC && SPSPFormat.stripTeamTag(MAIN_REC.display), 'player')}`;
+/** @param {Blob} blob @param {string} name */
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+/** 押している間は無効化して「生成中…」。カードの PNG を作って fn に渡す
+ * @param {HTMLElement | null} btn @param {(blob: Blob) => (void | Promise<void>)} fn */
+function onCardImage(btn, fn) {
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const card = document.getElementById('pcard');
+    if (!card || !MAIN_REC) return;
+    const label = btn.querySelector('span');
+    const orig = label ? label.textContent : '';
+    btn.setAttribute('disabled', ''); if (label) label.textContent = i18n('share.s2');
+    try {
+      const blob = await SPSPPlayerCard.capture(card);
+      if (!blob) throw new Error('empty');
+      await fn(blob);
+    } catch (err) {
+      if (/** @type {any} */ (err).name !== 'AbortError') alert(i18n('player.card.capture_failed') + /** @type {Error} */ (err).message);
+    } finally {
+      btn.removeAttribute('disabled'); if (label) label.textContent = orig;
+    }
+  });
+}
+onCardImage(document.getElementById('pc-save-btn'), blob => downloadBlob(blob, cardFileName() + '.png'));
+// 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
+// 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
+const shareData = () => MAIN_REC ? {
+  // 共有の文面は 名前 (チームタグ無し)・総合順位・SPSP だけ
+  title: `${SPSPFormat.stripTeamTag(MAIN_REC.display)} | SPSP`,
+  text:  i18n('player.share.text', { name: SPSPFormat.stripTeamTag(MAIN_REC.display), rank: MAIN_REC.ranks.ensemble }),
+  url:   location.href,
+} : { url: location.href };
+/** @returns {boolean} */
+function canShareImage() {
+  const nav = /** @type {any} */ (navigator);
+  try { return !!(typeof File === 'function' && nav.canShare && nav.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] })); }
+  catch (e) { return false; }
+}
+const shareBtn = document.getElementById('pc-share-btn');
+if (shareBtn && !canShareImage()) {
+  SPSPShare.setup(shareBtn, shareData);
+} else {
+  onCardImage(shareBtn, async blob => {
+    const d = shareData();
+    const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
+    await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n${d.url}` });   // URL は次の行に
+  });
+}
+
 SPSPShare.setupSaveButton(document.getElementById('save-btn'), capturePng,
   () => `smash_banzuke_${SPSPShare.safeFileName(MAIN_REC && MAIN_REC.display, 'player')}`);
 
-SPSPShare.setup(document.getElementById('share-icon-btn'), () => MAIN_REC ? {
-  title: `${MAIN_REC.display} — SPSP`,
-  text:  i18n('player.share.text', { name: MAIN_REC.display, rank: MAIN_REC.ranks.ensemble, n: /** @type {PMeta} */ (META).n_players }),
-  url:   location.href,
-} : { url: location.href });
 
 loadData();

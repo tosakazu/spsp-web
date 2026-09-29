@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.p_edit.title">カードを編集 | SPSP</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="../css/player.css">
+<link rel="stylesheet" href="../css/player_card.css">
+<link rel="stylesheet" href="../css/card_edit.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap">
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<!-- プレイヤーカードの編集 (テンプレート・色・実績)。中身は src/pages/p_edit.js -->
+<main class="ce">
+  <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
+  <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
+
+  <div id="ce-root" style="display:none">
+    <a class="ce-back" id="ce-back" href="./">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      <span id="ce-name"></span>
+    </a>
+
+    <div class="ce-preview"><div class="pcard" id="ce-card"></div></div>
+
+    <!-- ログインして本人と確認できたら編集できる (いまは spsp.games でだけ確認する。確認用のプレビューでは素通し) -->
+    <div class="ce-gate" id="ce-gate" style="display:none">
+      <button type="button" class="ce-login" id="ce-login-btn" data-i18n="card_edit.login">start.gg でログイン</button>
+      <div class="ce-gate-msg" id="ce-gate-msg"></div>
+    </div>
+
+    <div id="ce-form" style="display:none">
+      <section class="ce-sec">
+        <h2 data-i18n="card_edit.template">テンプレート</h2>
+        <div class="ce-templates" id="ce-templates"></div>
+      </section>
+      <section class="ce-sec">
+        <h2 data-i18n="card_edit.color">カラー</h2>
+        <div class="ce-colors" id="ce-colors"></div>
+      </section>
+      <section class="ce-sec">
+        <h2>
+          <span data-i18n="card_edit.achievements">実績</span>
+          <button type="button" class="ce-reset" id="ce-reset" data-i18n-attr="title:card_edit.reset,aria-label:card_edit.reset" title="リセット" aria-label="リセット">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
+          </button>
+        </h2>
+        <div class="ce-achs" id="ce-achs"></div>
+      </section>
+      <div class="ce-bar">
+        <button type="button" class="ce-apply" id="ce-apply" data-i18n="card_edit.apply">適用</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../assets/p_edit.js"></script>
+</body>
+</html>
