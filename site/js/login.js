@@ -87,4 +87,10 @@ if (typeof location !== 'undefined' && typeof history !== 'undefined') {
   } catch (e) { /* 何もしない */ }
 }
 
-export default { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, api };
+const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, api };
+// ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むときは import がグローバル参照になるため)
+if (typeof window !== 'undefined') {
+  /** @type {any} */ (window).SpspLogin = API;
+  (/** @type {any} */ (window).SPSP = /** @type {any} */ (window).SPSP || {}).Login = API;
+}
+export default API;

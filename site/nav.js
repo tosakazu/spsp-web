@@ -371,12 +371,13 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
     const menu = document.getElementById('__nav_user_menu');
     const trigger = document.querySelector('.nav-user-trigger');
     if (!menu || !trigger) return;
-    const sess = SpspLogin.session();
+    // ログインの部品が読めない環境 (テストの vm など) ではログアウト中の表示にする
+    const sess = SpspLogin ? SpspLogin.session() : null;
     const cls = (/** @type {string} */ k) => (cur === k ? ' class="current"' : '');
     const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
     if (!sess) {
       trigger.innerHTML = USER_SVG;
-      menu.innerHTML = vote + (SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '');   // ログインはログアウトと同じく一番下
+      menu.innerHTML = vote + (SpspLogin && SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '');   // ログインはログアウトと同じく一番下
       return;
     }
     const name = sess.user.gamerTag || sess.user.slug || String(sess.user.id);
@@ -388,17 +389,19 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
   }
-  SpspLogin.onChange(renderAccount);
-  SpspLogin.verify().then(renderAccount).catch(() => {});
+  if (SpspLogin) {
+    SpspLogin.onChange(renderAccount);
+    SpspLogin.verify().then(renderAccount).catch(() => {});
+  }
   document.addEventListener('click', (e) => {
     const el = /** @type {Element} */ (e.target);
     const login = el.closest && el.closest('.nav-login');
-    if (login) {
+    if (login && SpspLogin) {
       /** @type {HTMLButtonElement} */ (login).disabled = true;
       SpspLogin.startLogin().then(ok => { if (!ok) /** @type {HTMLButtonElement} */ (login).disabled = false; });
       return;
     }
-    if (el.closest && el.closest('.nav-logout')) { SpspLogin.logout(); renderAccount(); }
+    if (el.closest && el.closest('.nav-logout') && SpspLogin) { SpspLogin.logout(); renderAccount(); }
   });
 
   // ブランド枠にロゴを組み立てる。logo.js は import で束ねてあるので通常は即 put()。無ければ (古い読み方) 動的に読む。
