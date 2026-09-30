@@ -15,6 +15,7 @@ import SPSPI18n from './i18n.js';
 import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
+import SpspLogin from './login.js';   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
   var i18n = function (k, p) { return SPSPI18n.t(k, p); };   // 文言 (i18n/ja.js、js/i18n.js を先に読む)
@@ -44,7 +45,11 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
     }).catch(function () { /* ロゴが出なくても処理は続ける */ });
   }
 
-  function show(kind, title, detail, backPath) {
+  /**
+   * @param {string} kind @param {string} title @param {string} [detail] @param {string} [backPath]
+   * @param {boolean} [retry] true なら「もう一度ログイン」ボタン (戻り先 = backPath) も出す
+   */
+  function show(kind, title, detail, backPath, retry) {
     var root = document.getElementById('cb-root');
     root.className = 'cb ' + kind;
 
@@ -65,9 +70,22 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
       var a = document.createElement('a');
       a.className = 'cb-back';
       a.href = backPath;
-      // 戻り先は投票 / 投稿の 2 種類。ラベルが実際の遷移先と食い違わないようにする。
-      a.textContent = (backPath.indexOf('vote') >= 0)
-        ? i18n('callback.s1') : i18n('callback.s2');
+      // ラベルは実際の戻り先に合わせる (投票 / 投稿 / サイトのトップ / それ以外 = 元のページ)
+      a.textContent = backPath.indexOf('vote') >= 0 ? i18n('callback.s1')
+        : backPath.indexOf('post') >= 0 ? i18n('callback.s2')
+        : backPath === CFG.CANONICAL_BASE ? i18n('callback.back_top')
+        : i18n('callback.back');
+      if (retry) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cb-retry';
+        b.textContent = i18n('callback.retry');
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          SpspLogin.startLogin(backPath).then(function (ok) { if (!ok) b.disabled = false; });
+        });
+        root.appendChild(b);
+      }
       root.appendChild(a);
     }
   }
@@ -130,7 +148,8 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
     var st0 = state ? S.decodeState(state) : null;
     if (!oauthError && code) showBusy(st0 && st0.f);
 
-    var backDefault = CFG.CANONICAL_BASE + ((window.SPSP && window.SPSP.pageHref) ? window.SPSP.pageHref('post.html') : 'post.html');
+    // 戻り先が分からないとき (state が読めない・start.gg から情報なしで開かれた) はサイトのトップ
+    var backDefault = CFG.CANONICAL_BASE;
 
     if (oauthError) {
       // start.gg が返す error は OAuth 2.0 の標準コード。
@@ -269,8 +288,11 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
         ? json.error.message
         : i18n('callback.s29');
       // server 側にも残るが、どの経路で来たかを見るために種別だけ添える
-      reportError('login_failed', (json && json.error && json.error.code) || 'unknown');
-      show('error', i18n('callback.s30'), msg, back);
+      var errCode = (json && json.error && json.error.code) || 'unknown';
+      reportError('login_failed', errCode);
+      // 期限切れ・使用済み (state_invalid) はよくある: 時間がかかった / 同じ画面をもう一度開いた。やり直せば通る
+      if (errCode === 'state_invalid') msg = i18n('callback.state_invalid');
+      show('error', i18n('callback.s30'), msg, back, true);
     }).catch(function () {
       reportError('network', 'login fetch failed');
       show('error', i18n('callback.s30'),

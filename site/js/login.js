@@ -50,13 +50,14 @@ export function isSelf(uid) {
 
 /** 投票ページと同じ流れ: state はサーバに署名してもらい (ブラウザが変わっても検証できる)、start.gg の許可画面へ。
  * 始められなかったら false (ボタンを戻すため) */
-export async function startLogin() {
+/** @param {string} [returnPath] 戻り先 (既定 = 今のページ)。callback の「もう一度ログイン」は元のページを渡す */
+export async function startLogin(returnPath) {
   if (!apiAvailable()) return false;
   let nonce;
   try { nonce = crypto.randomUUID(); } catch (e) { return false; }
   S.saveNonce(nonce);
   try { sessionStorage.setItem(S.INTENT_KEY, 'login'); } catch (e) { /* 署名 state 側で判断できる */ }
-  const json = await api({ action: 'begin_login', flow: 'login', nonce, returnPath: location.pathname + location.search });
+  const json = await api({ action: 'begin_login', flow: 'login', nonce, returnPath: returnPath || (location.pathname + location.search) });
   if (!json || !json.ok || !json.state) return false;
   location.assign(S.buildAuthorizeUrl(CFG, json.state));
   return true;
