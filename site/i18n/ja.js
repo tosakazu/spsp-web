@@ -284,7 +284,7 @@ window.SPSP_I18N.ja = {
   'player.sr.none': '集計対象の大会はありません',
   'player.sec.achievements': '🏆 実績',
   'player.sec.latest': '🎮 最新の大会結果',
-  'player.sec.upcoming': '📅 次に出場予定の集計対象大会',
+  'player.sec.upcoming': '📅 次の集計対象大会',
   'player.simulate': '🔮 スコア予想',
   'player.sec.rivals': '👥 ライバルプレイヤー',
   'player.sec.analysis': '📊 プレイヤー分析',
