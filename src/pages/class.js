@@ -76,7 +76,16 @@ async function load() {
     const a = await sgg(token, 'query($id: ID) { tournament(id: $id) { admins { id } } }', { id: ev.tournament.id });
     admins = (a.tournament && a.tournament.admins) || [];
   } catch (e) { /* admins は admin でないと読めない: 読めなければ owner だけで判断 */ }
-  const isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
+  let isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
+  // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る
+  for (let page = 1; !isTo && page <= 4; page++) {
+    const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
+      pageInfo { totalPages } nodes { id } } } }`, { page });
+    const ts = d.currentUser && d.currentUser.tournaments;
+    const nodes = (ts && ts.nodes) || [];
+    if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(ev.tournament.id))) isTo = true;
+    if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
+  }
   if (!isTo) return status(i18n('class.err.not_admin'), 'error');
 
   // 2. 本戦の順位 (開催途中でもよい。順位が付いている人だけが対象になる)
