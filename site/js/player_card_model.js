@@ -130,7 +130,7 @@ function zenichiOf(data) {
 // ── カードの model ──
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
-//   最新の大会 = DQ を除いた最新 1 件、合計 = 出場大会数と試合数 (勝ち + 負け)
+//   最新の大会 = 集計対象の大会のうち最新 1 件 (DQ は除く)、合計 = 出場大会数と試合数 (勝ち + 負け)
 /** @param {CardData} data @param {CardSettings | null} [settings]
  * @returns {import('./player_card.js').PCardModel} */
 export function buildCardModel(data, settings) {
@@ -168,8 +168,9 @@ export function buildCardModel(data, settings) {
   const tours = /** @type {any[]} */ (player.tournaments || []);
   /** @type {import('./player_card.js').PCardLatest | null} */
   let latest = null;
-  // カードの最新の大会は DQ の大会を飛ばす
-  const shown = tours.filter(x => !x.is_dq);
+  // カードの最新の大会は集計対象の大会だけ (順位評価か直対評価に使われたもの。下の「最新の大会結果」の「集計対象」と同じ判定)。DQ は飛ばす
+  const counted = (/** @type {any} */ x) => !!(x.bt_used || (x.tjpr_lv || 0) > 0 || (x.tjpr_raw || 0) > 0);
+  const shown = tours.filter(x => !x.is_dq && counted(x));
   if (shown.length) {
     const t = shown.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
     const perf = perfInfoOf(t);
