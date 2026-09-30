@@ -2,6 +2,8 @@
    Figma「submit」(514×333) の座標をそのまま使い、.pc-in を表示幅に合わせて transform: scale で縮める。
    文字の top はデザインの字面 (cap) 上端から font-size × 0.2 ほど上にずらしている (line-height: 1 の箱の上端) */
 .pcard {
+  /* カードはデザインどおりの色で固定 (ブラウザのダークモードで反転させない。ページ側の meta と二重) */
+  color-scheme: only light; forced-color-adjust: none;
   position: relative; margin: 0; aspect-ratio: 514 / 333; overflow: hidden;
   --pc-red: #df1b1b; --pc-gray: #626262; --pc-light: #eaeaea;
 }
