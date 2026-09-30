@@ -15,7 +15,7 @@ function d1Like(db) {
       stmt.bind = (...p) => { stmt.params = p; return stmt; };
       stmt.first = async () => db.prepare(sql).get(...stmt.params) ?? null;
       stmt.all = async () => ({ results: db.prepare(sql).all(...stmt.params) });
-      stmt.run = async () => { const r = db.prepare(sql).run(...stmt.params); return { meta: { changes: Number(r.changes) } }; };
+      stmt.run = async () => { const r = db.prepare(sql).run(...stmt.params); return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } }; };
       return stmt;
     },
     async batch(stmts) { const out = []; for (const s of stmts) out.push(await s.run()); return out; },
@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -94,4 +94,26 @@ test('card_settings: 連投条件つきの置き換え・削除と、古い書�
   assert.strictEqual(await store.putCardSettings('4242', '{"a":6}', 'U6', g(t0 + 3 * 24 * 3600e3)), true);   // 3 日後: 古い記録は消える
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM card_writes').get().n, 1);
   assert.strictEqual(typeof db.prepare('SELECT uid FROM card_settings').get().uid, 'number', 'uid は INTEGER で入る');
+});
+
+test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は rate_limited・取得待ちの一覧・done', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store } = fresh();
+  const t0 = Date.parse('2026-09-30T03:00:00Z');
+  const row = (cid, now, counted = 1) => ({ created_at: 'C' + cid, ts_ms: now, day: dayOf(now), parent_event_id: 1234567,
+    parent_tournament_id: 777, class_letter: 'B', name: 'n' + cid, challonge_id: cid, challonge_url: 'https://challonge.com/' + cid,
+    format: 'single', counted, place_min: 9, place_max: null, seeding: 'random', entrant_count: 32, registered_by: '111' });
+  const g = (now) => ({ userId: '111', nowMs: now, minIntervalMs: 10000, dayKey: dayOf(now), maxPerDay: 50 });
+  assert.deepStrictEqual(await store.insertClassBracket(row(1, t0), g(t0)), { status: 'ok', id: 1 });
+  assert.strictEqual(await store.classExists(1), true);
+  assert.deepStrictEqual(await store.insertClassBracket(row(1, t0 + 60000), g(t0 + 60000)), { status: 'duplicate' });
+  assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 5000), g(t0 + 5000)), { status: 'rate_limited' });
+  assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 20000, 0), g(t0 + 20000)), { status: 'ok', id: 2 });
+  assert.deepStrictEqual(await store.insertClassBracket(row(3, t0 + 40000), g(t0 + 40000)), { status: 'ok', id: 3 });
+  const w = await store.listClassWaitlist();
+  assert.deepStrictEqual(w.map((x) => x.id), [1, 3]);
+  assert.deepStrictEqual(w[0], { id: 1, parent_event_id: 1234567, parent_tournament_id: 777, class_letter: 'B', name: 'n1',
+    challonge_id: 1, challonge_url: 'https://challonge.com/1', created_at: 'C1' });
+  assert.strictEqual(await store.markClassDone(1), true);
+  assert.strictEqual(await store.markClassDone(99), false);
+  assert.deepStrictEqual((await store.listClassWaitlist()).map((x) => x.id), [3]);
 });

@@ -7,6 +7,8 @@
 #                          そのまま入れると既存ログインが引き継げる。無ければ `openssl rand -hex 32`)
 #   EXPORT_KEY             (任意) エクスポート API の追加鍵。未設定なら GAS と同じ
 #                          HMAC(client secret, EXPORT_KEY_LABEL) の導出鍵だけを受け付ける
+#   CLASS_DONE_KEY         下位クラスの取得側 (smash_database) が class_done で送る鍵。取得側の secret と同じ値。
+#                          未設定なら class_done は internal (取得済みにできないだけで、登録と一覧は動く)
 #
 # Routes (DNS を Cloudflare に移してから有効化する):
 #   本番 = 下の routes (custom_domain)。

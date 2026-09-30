@@ -59,6 +59,40 @@ export interface CardRow {
   updated_at: string;
 }
 
+/** class_brackets の 1 行 (id と status は D1 が付ける)。 */
+export interface ClassBracketRow {
+  created_at: string;
+  ts_ms: number;
+  day: string;
+  parent_event_id: number;
+  parent_tournament_id: number;
+  class_letter: string;
+  name: string;
+  challonge_id: number;
+  challonge_url: string;
+  format: string;
+  counted: number;          // 1 / 0
+  place_min: number;
+  place_max: number | null;
+  seeding: string;
+  entrant_count: number;
+  registered_by: string;
+}
+
+/** 取得待ちの一覧 (class_waitlist) に出す欄。公開してよいものだけ。 */
+export interface ClassWaitItem {
+  id: number;
+  parent_event_id: number;
+  parent_tournament_id: number;
+  class_letter: string;
+  name: string;
+  challonge_id: number;
+  challonge_url: string;
+  created_at: string;
+}
+
+export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplicate' } | { status: 'rate_limited' };
+
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
@@ -83,4 +117,12 @@ export interface Store {
    * (settings が null なら行を消す)。書いたら true、連投で弾いたら false。
    */
   putCardSettings(uid: string, settings: string | null, updatedAt: string, guard: RateGuard): Promise<boolean>;
+  /** 同じ challonge_id があるか。 */
+  classExists(challongeId: number): Promise<boolean>;
+  /** 連投条件 (registered_by ごと) を満たし、challonge_id が未登録なら 1 行追加する。 */
+  insertClassBracket(row: ClassBracketRow, guard: RateGuard): Promise<ClassInsertResult>;
+  /** counted = 1 かつ status = 'waiting' の行 (id 順)。 */
+  listClassWaitlist(): Promise<ClassWaitItem[]>;
+  /** status を done にする。行が無ければ false (もう done なら true)。 */
+  markClassDone(id: number): Promise<boolean>;
 }
