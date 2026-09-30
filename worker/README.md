@@ -55,7 +55,7 @@ cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
 | `vote` (vote.gs) | `POST /api` `{action:"vote"}` / `POST /api/vote` | `token`, `charId` | `{user, charId, charName}` / `auth_failed` `bad_request` `internal` `bad_char` `not_player` `char_exists` `not_candidate` `rate_limited` |
 | `post` (main.gs) | `POST /api` `{action:"post"}` / `POST /api/post` | `code`, `state`, `body` | `{user}` / `bad_request` `body_invalid` `state_invalid` `auth_failed` `rate_limited` |
 | `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
-| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach}|null, updated_at|null}` / `bad_request` |
+| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour}|null, updated_at|null}` / `bad_request` |
 | `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (10 秒に 1 回・1 日 100 回) |
 | `client_error` (errlog.gs) | `POST /api` `{action:"client_error"}` / `POST /api/client_error` | `kind` (白リスト), `flow`, `note`, `token?` | `{logged: true|false}` |
 | `export_votes` (export.gs) | `POST /api` `{action:"export_votes"}` **または** `GET /api/export/votes?key=&since=` | `key`, `since?` | `{votes:[{ts,userId,charId,charName,status}], total, since}` / `auth_failed` `internal` |

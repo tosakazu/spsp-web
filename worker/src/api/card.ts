@@ -26,18 +26,20 @@ export interface CardSettings {
   template: string;
   color: string;
   ach: string[] | null;
+  tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
 }
 
 /**
  * settings を確かめて正規化したものを返す。形が違えば null。
  *   template: CARD_TEMPLATES のどれか / color: CARD_COLORS のどれか
  *   ach: null (省略も null) か、文字列の配列 (0〜CARD_ACH_MAX 個、各 1〜CARD_ACH_KEY_MAX 文字、重複なし)
+ *   tour: null (省略も null) か、大会の event_id (正の整数 1〜12 桁。数字の文字列も受けて整数にする)
  * 知らない欄があれば弾く (黙って捨てると、フロントが増やした欄が保存されないことに気づけないため)。
  */
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -49,7 +51,14 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     if (new Set(o.ach).size !== o.ach.length) return null;
     ach = o.ach.slice();
   }
-  return { template: o.template, color: o.color, ach };
+  let tour: number | null = null;
+  if (o.tour !== undefined && o.tour !== null) {
+    const t = typeof o.tour === 'number' ? (Number.isInteger(o.tour) ? String(o.tour) : '')
+      : typeof o.tour === 'string' ? o.tour : '';
+    if (!/^[1-9]\d{0,11}$/.test(t)) return null;
+    tour = Number(t);
+  }
+  return { template: o.template, color: o.color, ach, tour };
 }
 
 /** uid の形 (start.gg のユーザー ID = 数字)。 */
