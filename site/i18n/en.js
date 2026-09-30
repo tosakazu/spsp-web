@@ -313,6 +313,7 @@ window.SPSP_I18N.en = {
   'player.card.eval_date': 'Updated',
   'player.card.achievements': 'Highlights',
   'player.card.latest': 'Latest result',
+  'player.card.best': 'Best result',
   'player.card.save': 'Save',
   'player.card.share': 'Share',
   'player.card.edit': 'Edit',

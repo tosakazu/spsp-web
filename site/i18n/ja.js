@@ -315,6 +315,7 @@ window.SPSP_I18N.ja = {
   'player.card.eval_date': '評価日',
   'player.card.achievements': '主な実績',
   'player.card.latest': '最新の大会結果',
+  'player.card.best': '最高の大会結果',
   'player.card.save': '保存',
   'player.card.share': '共有',
   'player.card.edit': '編集',

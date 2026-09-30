@@ -130,7 +130,7 @@ function zenichiOf(data) {
 // ── カードの model ──
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
-//   最新の大会 = 集計対象の大会のうち最新 1 件 (DQ は除く)、合計 = 出場大会数と試合数 (勝ち + 負け)
+//   左下の大会 = 順位評価のポイントが一番高い大会 (無ければ最新の集計対象大会)、合計 = 出場大会数と試合数 (勝ち + 負け)
 /** @param {CardData} data @param {CardSettings | null} [settings]
  * @returns {import('./player_card.js').PCardModel} */
 export function buildCardModel(data, settings) {
@@ -168,11 +168,14 @@ export function buildCardModel(data, settings) {
   const tours = /** @type {any[]} */ (player.tournaments || []);
   /** @type {import('./player_card.js').PCardLatest | null} */
   let latest = null;
-  // カードの最新の大会は集計対象の大会だけ (順位評価か直対評価に使われたもの。下の「最新の大会結果」の「集計対象」と同じ判定)。DQ は飛ばす
+  // カードの左下は「最高の大会結果」= 順位評価のポイント (今の重み tjpr_w) が一番高い大会 (プレイヤーページの順位評価の詳細の 1 番目)。
+  // 順位評価のポイントのある大会が無ければ、最新の集計対象大会 (順位評価か直対評価に使われたもの) を「最新の大会結果」として。DQ は飛ばす
   const counted = (/** @type {any} */ x) => !!(x.bt_used || (x.tjpr_lv || 0) > 0 || (x.tjpr_raw || 0) > 0);
-  const shown = tours.filter(x => !x.is_dq && counted(x));
+  const byPts = tours.filter(x => !x.is_dq && (x.tjpr_w || 0) > 0).sort((a, b) => (b.tjpr_w || 0) - (a.tjpr_w || 0));
+  const bestMode = byPts.length > 0;
+  const shown = bestMode ? byPts : tours.filter(x => !x.is_dq && counted(x)).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   if (shown.length) {
-    const t = shown.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+    const t = shown[0];
     const perf = perfInfoOf(t);
     const pre = t.pretour_ranks && t.pretour_ranks.ensemble != null ? t.pretour_ranks.ensemble : null;
     const d = t.rank_delta_ensemble;
@@ -197,7 +200,7 @@ export function buildCardModel(data, settings) {
     totalTournaments: tours.length,
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
-      evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: i18n('player.card.latest'),
+      evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
       overall: i18n('ranking.tab.ensemble'), national: i18n('common.national'), equivalent: i18n('player.equivalent'), noAch: i18n('player.card.no_ach'),
     },
   };
