@@ -75,21 +75,48 @@ export async function handleChallongeToken(cfg: Config, store: Store, fetchFn: F
   }
   const exp = Number(json.expires_in);
   // 画面の「<名前> でログイン中」用。取れなくてもログインは成功のまま (username: null)。保存・記録しない
-  const username = await challongeUsername(fetchFn, json.access_token);
-  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null, username });
+  const me = await challongeMe(fetchFn, json.access_token);
+  // 取れなかった理由は wrangler tail で見えるように符号だけ出す (トークン・名前は出さない)
+  if ('note' in me) console.log('challonge_token: username unavailable: ' + me.note);
+  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null, username: 'username' in me ? me.username : null });
 }
 
-/** GET /v2.1/me.json の data.attributes.username (無ければ name、email)。失敗は null。 */
-export async function challongeUsername(fetchFn: FetchFn, token: string): Promise<string | null> {
+/**
+ * GET /v2.1/me.json のアカウント名 (username → name → email)。取れなければ理由の符号 (http_403 / no_username:keys=… 等)。
+ * 応答は JSON:API の {data:{attributes:{…}}} のはずだが、data が配列・attributes 無しの形も一応見る。
+ * no_username の note には attributes の **キー名だけ** を入れる (値は入れない)。
+ */
+export async function challongeMe(fetchFn: FetchFn, token: string): Promise<{ username: string } | { note: string; code: 'challonge_auth' | 'challonge_error' }> {
   const r = await challongeApi(fetchFn, token, '/me.json', null, 'GET');
-  if (!r.ok) return null;
-  const data = r.json.data as { attributes?: Record<string, unknown> } | undefined;
-  const a = (data && data.attributes) || {};
+  if (!r.ok) return { note: r.note, code: r.code };
+  let d: unknown = r.json.data;
+  if (Array.isArray(d)) d = d[0];
+  const obj = (d && typeof d === 'object' ? d : r.json) as Record<string, unknown>;
+  const a = (obj.attributes && typeof obj.attributes === 'object' ? obj.attributes : obj) as Record<string, unknown>;
   for (const k of ['username', 'name', 'email']) {
     const v = a[k];
-    if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 100);
+    if (typeof v === 'string' && v.trim()) return { username: v.trim().slice(0, 100) };
   }
-  return null;
+  const keys = Object.keys(a).filter((k) => /^[a-z_]{1,30}$/i.test(k)).slice(0, 12).join(',');
+  return { note: 'no_username:keys=' + keys, code: 'challonge_error' };
+}
+
+/** 後方互換: 名前だけ (取れなければ null)。 */
+export async function challongeUsername(fetchFn: FetchFn, token: string): Promise<string | null> {
+  const m = await challongeMe(fetchFn, token);
+  return 'username' in m ? m.username : null;
+}
+
+/** action: "challonge_me" — { challonge_token } → { username }。ブラウザからは me.json の応答を読めない (CORS) ため Worker 経由。 */
+export async function handleChallongeMe(fetchFn: FetchFn, req: Record<string, unknown>): Promise<HandlerResult> {
+  const t = req.challonge_token;
+  if (typeof t !== 'string' || !t || t.length > 4096 || /\s/.test(t)) return err('bad_request', 'Challonge のトークンがありません。', 'bad:challonge_token');
+  const m = await challongeMe(fetchFn, t);
+  if ('username' in m) return ok({ username: m.username });
+  if (m.code === 'challonge_auth') {
+    return err('challonge_auth', 'Challonge のログインが無効か期限切れです。もう一度 Challonge でログインしてください。', 'me:' + m.note);
+  }
+  return err('challonge_error', 'Challonge のアカウント名を取得できませんでした。', 'me:' + m.note);
 }
 
 export function netNote(ex: unknown): string {

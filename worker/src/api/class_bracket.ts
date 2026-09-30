@@ -128,7 +128,15 @@ async function startggGql(fetchFn: FetchFn, token: string, query: string, variab
     const timeout = ex instanceof Error && (ex.name === 'TimeoutError' || ex.name === 'AbortError');
     return { ok: false, note: timeout ? 'timeout' : 'network' };
   }
-  if (res.status !== 200) return { ok: false, note: 'http_' + res.status };
+  if (res.status !== 200) {
+    let why = '';
+    try {
+      const b = await res.json() as { message?: unknown; errors?: { message?: unknown }[] };
+      const m = typeof b.message === 'string' ? b.message : Array.isArray(b.errors) && b.errors[0] && typeof b.errors[0].message === 'string' ? b.errors[0].message : '';
+      why = m.split(token).join('').replace(/[^\x20-\x7e]/g, '').slice(0, 80);
+    } catch (_) { /* 本文なし */ }
+    return { ok: false, note: 'http_' + res.status + (why ? ':' + why : '') };
+  }
   try {
     return { ok: true, json: await res.json() };
   } catch (_) {
@@ -186,10 +194,10 @@ export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId
 const MSG_BAD = '入力の形式が不正です。';
 
 function startggMessage(note: string): string {
-  if (note === 'http_401' || note === 'http_403' || note === 'no_user') {
+  if (/^(tours:)?http_40[13]\b/.test(note) || note === 'no_user') {
     return 'start.gg の API キーが無効です。キーを確かめてやり直してください。';
   }
-  if (note === 'http_429') return 'start.gg が混み合っています。少し待ってからやり直してください。';
+  if (/^(tours:)?http_429\b/.test(note)) return 'start.gg が混み合っています。少し待ってからやり直してください。';
   return 'start.gg に確認できませんでした。時間をおいてやり直してください。';
 }
 
