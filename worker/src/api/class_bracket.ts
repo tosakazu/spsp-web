@@ -101,34 +101,52 @@ const ADMIN_QUERY = `query SpspClassAdmin($eventId: ID!) {
   event(id: $eventId) { id tournament { id owner { id } admins { id } } }
 }`;
 
+const ADMIN_TOURS_PER_PAGE = 50;
+const ADMIN_TOURS_MAX_PAGES = 4;
+const ADMIN_TOURNAMENTS_QUERY = `query SpspClassAdminTours($page: Int!, $perPage: Int!) {
+  currentUser { tournaments(query: { page: $page, perPage: $perPage, filter: { tournamentView: "admin" } }) { nodes { id } } }
+}`;
+
 export type AdminCheck =
   | { ok: true; userId: string; tournamentId: number }
   | { ok: false; code: 'not_admin' | 'startgg_error' | 'bad_request'; note: string };
 
-/**
- * start.gg に「このキーの持ち主は、このイベントの大会の owner か admins か」を問い合わせる。
- * キーは Authorization ヘッダにだけ入れる。本文・エラーの記録には入れない。
- */
-export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId: number): Promise<AdminCheck> {
+type GqlResult = { ok: true; json: { data?: Record<string, unknown> | null; errors?: unknown[] } } | { ok: false; note: string };
+
+/** start.gg GraphQL を 1 回呼ぶ。キーは Authorization ヘッダにだけ入れる。 */
+async function startggGql(fetchFn: FetchFn, token: string, query: string, variables: Record<string, unknown>): Promise<GqlResult> {
   let res: Response;
   try {
     res = await fetchFn(GQL_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ query: ADMIN_QUERY, variables: { eventId: String(eventId) } }),
+      body: JSON.stringify({ query, variables }),
       signal: AbortSignal.timeout(STARTGG_TIMEOUT_MS),
     });
   } catch (ex) {
     const timeout = ex instanceof Error && (ex.name === 'TimeoutError' || ex.name === 'AbortError');
-    return { ok: false, code: 'startgg_error', note: timeout ? 'timeout' : 'network' };
+    return { ok: false, note: timeout ? 'timeout' : 'network' };
   }
-  if (res.status !== 200) return { ok: false, code: 'startgg_error', note: 'http_' + res.status };
-  let json: { data?: Record<string, unknown> | null; errors?: unknown[] };
+  if (res.status !== 200) return { ok: false, note: 'http_' + res.status };
   try {
-    json = await res.json();
+    return { ok: true, json: await res.json() };
   } catch (_) {
-    return { ok: false, code: 'startgg_error', note: 'bad_json' };
+    return { ok: false, note: 'bad_json' };
   }
+}
+
+/**
+ * start.gg に「このキーの持ち主は、このイベントの大会の管理者か」を問い合わせる。次のどれかなら管理者:
+ *   1. 大会の owner  2. 大会の admins に入っている
+ *   3. 本人の「管理している大会」(currentUser.tournaments、tournamentView: admin) にその大会がある
+ * スタッフの役割によっては admins が null で返る (2026-10-01、ブラケット・シード編集の権限がある人で確認) ため 3 も見る。
+ * 3 は 50 件ずつ最大 4 ページ (pageInfo の総数は当てにならないので、空か 50 件未満のページで止める)。
+ * キーは Authorization ヘッダにだけ入れる。本文・エラーの記録には入れない。
+ */
+export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId: number): Promise<AdminCheck> {
+  const first = await startggGql(fetchFn, token, ADMIN_QUERY, { eventId: String(eventId) });
+  if (!first.ok) return { ok: false, code: 'startgg_error', note: first.note };
+  const json = first.json;
   const data = (json && json.data) || null;
   const cu = data && (data.currentUser as { id?: unknown } | null);
   if (!cu || cu.id === undefined || cu.id === null) {
@@ -140,14 +158,28 @@ export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId
   const t = ev.tournament;
   const tournamentId = t ? Number(t.id) : NaN;
   if (!t || !Number.isFinite(tournamentId)) return { ok: false, code: 'bad_request', note: 'event_not_found' };
-  // admins は権限の無い人には null やエラーで返ることがある → owner と admins のどちらにもいなければ not_admin
   const ids: string[] = [];
   if (t.owner && t.owner.id !== undefined && t.owner.id !== null) ids.push(String(t.owner.id));
   if (Array.isArray(t.admins)) {
     for (const a of t.admins) if (a && (a as { id?: unknown }).id !== undefined) ids.push(String((a as { id: unknown }).id));
   }
-  if (!ids.includes(userId)) return { ok: false, code: 'not_admin', note: 'not_admin' };
-  return { ok: true, userId, tournamentId };
+  if (ids.includes(userId)) return { ok: true, userId, tournamentId };
+
+  // 3. 本人の管理している大会の一覧
+  for (let page = 1; page <= ADMIN_TOURS_MAX_PAGES; page++) {
+    const r = await startggGql(fetchFn, token, ADMIN_TOURNAMENTS_QUERY, { page, perPage: ADMIN_TOURS_PER_PAGE });
+    if (!r.ok) return { ok: false, code: 'startgg_error', note: 'tours:' + r.note };
+    const d = (r.json && r.json.data) || null;
+    const cu2 = d && (d.currentUser as { tournaments?: { nodes?: unknown } | null } | null);
+    const nodes = cu2 && cu2.tournaments && Array.isArray(cu2.tournaments.nodes) ? cu2.tournaments.nodes : null;
+    if (!nodes) {
+      if (Array.isArray(r.json.errors) && r.json.errors.length) return { ok: false, code: 'startgg_error', note: 'tours:gql_error' };
+      break;
+    }
+    if (nodes.some((n) => n && Number((n as { id?: unknown }).id) === tournamentId)) return { ok: true, userId, tournamentId };
+    if (nodes.length < ADMIN_TOURS_PER_PAGE) break;
+  }
+  return { ok: false, code: 'not_admin', note: 'not_admin' };
 }
 
 const MSG_BAD = '入力の形式が不正です。';
