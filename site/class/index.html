@@ -119,6 +119,13 @@
     <!-- 読み込んだら: 対象の選手とシード順 (チェックを外した人は入れない)。確かめてから作成 -->
     <div class="cb-sec" id="cb-preview" hidden>
       <h2 id="cb-preview-title"></h2>
+      <!-- 名前で検索・出る人 / 出ない人で絞る (表示だけ。シードは変わらない) -->
+      <div class="cb-filter">
+        <input type="search" id="cb-search" data-i18n-attr="placeholder:class.search" placeholder="プレイヤー名で検索…" autocomplete="off">
+        <div class="cb-seg" id="cb-seg">
+          <button type="button" data-f="all" class="on"></button><button type="button" data-f="on"></button><button type="button" data-f="off"></button>
+        </div>
+      </div>
       <div class="cb-table-wrap">
         <table class="cb-table">
           <thead><tr>

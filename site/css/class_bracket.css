@@ -114,3 +114,12 @@
 .cb-avoid-opts { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 12px; color: #374151; }
 .cb-avoid-opts label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cb-av-groups { display: contents; }
+
+/* 一覧の検索・絞り込み (シード機能の手法タブと同じ見た目) */
+.cb-filter { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.cb-card .cb-filter input[type="search"] { flex: 1; min-width: 160px; width: auto; padding: 7px 10px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit; }
+.cb-seg { display: flex; gap: 2px; background: #fff; padding: 3px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.cb-seg button { border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; font-size: 12px; color: #6b7280; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.cb-seg button:hover { color: #374151; background: #f3f4f6; }
+.cb-seg button.on { background: #dc2626; color: #fff; }
+.cb-empty td { text-align: center; color: #9ca3af; padding: 14px 6px; cursor: default; }

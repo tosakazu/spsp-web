@@ -60,7 +60,7 @@ async function sgg(token, query, variables = {}) {
  * mainSize = 本戦の人数、mainPairs = 本戦で当たった組 (必要になったら取る)
  * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number>,
  *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> }, order: ClassEntrant[],
- *   mainSize: number, mainPairs: Set<string> | null }} */
+ *   mainSize: number, mainPairs: Set<string> | null, display: ClassEntrant[] }} */
 let loaded = null;
 
 /** 外した人を除いて、被り回避 (あれば) をかけた並びを作る */
@@ -79,6 +79,16 @@ function computeOrder() {
       loaded.order = r.seedOrder.map((/** @type {number} */ u) => /** @type {ClassEntrant} */ (byUid.get(u)));
     }
   } catch (e) { /* 失敗したら元の並び (被り回避なし) */ }
+  mergeDisplay();
+}
+
+/** 表の並び: 外した人はその場に残し (下に回さない)、出る人の枠に新しいシード順を上から入れる */
+function mergeDisplay() {
+  if (!loaded) return;
+  const L = loaded;
+  if (!L.display.length) { L.display = L.order.concat(L.seeded.filter(p => L.off.has(p.userId))); return; }
+  const queue = L.order.slice();
+  L.display = L.display.map(p => (L.off.has(p.userId) ? p : /** @type {ClassEntrant} */ (queue.shift())));
 }
 
 /** 本戦の試合から、当たった組 (pairKey) を集める
@@ -257,7 +267,9 @@ async function load() {
   const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
   const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
   const seeded = seedOrder(targets, method, rankOf);
-  loaded = { token, event: ev, seeded, off: new Set(), avoid: null, order: [], mainSize: standings.length, mainPairs: null };
+  loaded = { token, event: ev, seeded, off: new Set(), avoid: null, order: [], mainSize: standings.length, mainPairs: null, display: [] };
+  $('cb-search').value = '';
+  listFilter = 'all';
   try { await refreshAvoid(); } catch (e) { loaded.avoid = null; }
   computeOrder();
   renderList();
@@ -265,23 +277,38 @@ async function load() {
   status(i18n('class.step.ready'), 'ok');
 }
 
-/** 対象の一覧 (上から最終のシード順、外した人は下に)。チェックを外した人は作成に入れない */
+/** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
+let listFilter = 'all';
+
+/** 対象の一覧 (上から最終のシード順。外した人はその場に残る)。チェックを外した人は作成に入れない */
 function renderList() {
   if (!loaded) return;
   const L = loaded;
-  const row = (/** @type {ClassEntrant} */ p, /** @type {number | null} */ seed) => {
+  /** @type {Map<number, number>} */
+  const seedOf = new Map(L.order.map((p, i) => [p.userId, i + 1]));
+  const q = String($('cb-search').value || '').trim().toLowerCase();
+  const rows = L.display.filter(p => {
+    const on = !L.off.has(p.userId);
+    if ((listFilter === 'on' && !on) || (listFilter === 'off' && on)) return false;
+    return !q || p.gamerTag.toLowerCase().includes(q) || String(p.discriminator || '').toLowerCase().includes(q);
+  });
+  $('cb-list').innerHTML = rows.map(p => {
+    const seed = seedOf.get(p.userId);
     const on = seed != null;
-    // 本戦の 1 回戦で当たる組を避けたか分かるよう、同じ組の相手と本戦で当たっていたら印
     return `<tr class="${on ? '' : 'off'}" data-uid="${p.userId}">
       <td class="col-on"><input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}></td>
       <td class="col-no">${on ? seed : ''}</td>
       <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? '<span class="cb-badge">DQ</span>' : ''}</td>
       <td class="col-place">${p.placement != null ? p.placement : ''}</td>
     </tr>`;
-  };
-  const offRows = L.seeded.filter(p => L.off.has(p.userId));
-  $('cb-list').innerHTML = L.order.map((p, i) => row(p, i + 1)).join('') + offRows.map(p => row(p, null)).join('');
-  const n = L.order.length;
+  }).join('') || `<tr class="cb-empty"><td colspan="4">${escapeHtml(i18n('class.filter.empty'))}</td></tr>`;
+  const n = L.order.length, total = L.display.length;
+  const labels = { all: i18n('class.filter.all', { n: total }), on: i18n('class.filter.on', { n }), off: i18n('class.filter.off', { n: total - n }) };
+  for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#cb-seg button'))) {
+    const f = /** @type {'all' | 'on' | 'off'} */ (b.dataset.f);
+    b.textContent = labels[f];
+    b.classList.toggle('on', f === listFilter);
+  }
   $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
   $('cb-create').disabled = n < 2;
 }
@@ -396,6 +423,13 @@ $('cb-create').addEventListener('click', () => {
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 for (const id of AV_IDS) $(id).addEventListener('change', () => { onAvoidChange(); });
 $('cb-av-groups').addEventListener('change', () => { onAvoidChange(); });
+$('cb-search').addEventListener('input', () => { renderList(); });
+$('cb-seg').addEventListener('click', (/** @type {MouseEvent} */ e) => {
+  const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-f]'));
+  if (!b) return;
+  listFilter = String(b.dataset.f);
+  renderList();
+});
 renderGroupToggles();
 // 行のどこを押してもオン・オフ (チェックボックスそのものも)。外す・戻すたびに被り回避をかけ直す
 $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
