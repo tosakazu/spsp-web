@@ -3,7 +3,8 @@
 //   parseStartggUrl(url)                  start.gg の URL → { tournamentSlug, eventSlug } (大会のページでもよい。eventSlug は無ければ null。読めなければ null)
 //   pickEvents(events)                    大会のイベントから候補 (スマブラSP の 1on1。無ければ全部)
 //   selectTargets(standings, min, max, excludeDq)  本戦の順位から対象の選手 (min 位〜max 位、max が null なら最後まで。順位の無い人は除く。excludeDq なら DQ も除く)
-//   seedOrder(targets, method, rankOf, rand)  シード順に並べる (random / main_result = 本戦の順位、同率はランダム / spsp = SPSP の順位、無い人は後ろにランダム)
+//   seedOrder(targets, method, rankOf, rand)  シード順に並べる (random / main_result = 本戦の順位、同率はランダム /
+//                                         main_spsp = 本戦の順位、同率は SPSP の順位 (無い人はその中で後ろにランダム) / spsp = SPSP の順位、無い人は後ろにランダム)
 //   participantName(p)                    Challonge の参加者名 = 「start.gg の名前 (discriminator)」
 //   CHALLONGE_TOKEN_KEY / challongeToken()  Challonge でログインしたトークン (callback.js が sessionStorage に置く。期限切れは null)
 
@@ -45,17 +46,19 @@ function shuffled(arr, rand) {
   return a;
 }
 
-/** @param {ClassEntrant[]} targets @param {'random' | 'main_result' | 'spsp'} method
+/** @param {ClassEntrant[]} targets @param {'random' | 'main_result' | 'main_spsp' | 'spsp'} method
  * @param {(userId: number) => number | null} rankOf SPSP の総合順位 (無ければ null) @param {() => number} [rand] */
 export function seedOrder(targets, method, rankOf, rand = Math.random) {
   // まずランダムに並べ、同じ値の中の順番をランダムにしたうえで、安定ソートで並べ直す
   const base = shuffled(targets, rand);
   if (method === 'random') return base;
-  const key = method === 'spsp'
-    ? (/** @type {ClassEntrant} */ p) => { const r = rankOf(p.userId); return r == null ? Infinity : r; }
-    : (/** @type {ClassEntrant} */ p) => (p.placement == null ? Infinity : p.placement);
-  return base.map((p, i) => ({ p, i, k: key(p) }))
-    .sort((a, b) => (a.k - b.k) || (a.i - b.i))
+  const spsp = (/** @type {ClassEntrant} */ p) => { const r = rankOf(p.userId); return r == null ? Infinity : r; };
+  const place = (/** @type {ClassEntrant} */ p) => (p.placement == null ? Infinity : p.placement);
+  // 比べる値の組 (前から順に。同じなら次、全部同じならシャッフル順)
+  const keys = method === 'spsp' ? [spsp] : method === 'main_spsp' ? [place, spsp] : [place];
+  const cmp = (/** @type {number} */ a, /** @type {number} */ b) => (a === b ? 0 : a < b ? -1 : 1);
+  return base.map((p, i) => ({ p, i, k: keys.map(f => f(p)) }))
+    .sort((a, b) => { for (let j = 0; j < a.k.length; j++) { const c = cmp(a.k[j], b.k[j]); if (c) return c; } return a.i - b.i; })
     .map(x => x.p);
 }
 

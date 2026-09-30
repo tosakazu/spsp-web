@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="page.class.title">下位クラス作成 | SPSP</title>
 <meta name="description" content="start.gg の本戦の結果から、下位クラス (Bクラス・Cクラスなど) のトーナメントを Challonge に作ります。" data-i18n-attr="content:page.class.description">
-<link rel="stylesheet" href="../css/player.css">
+<meta name="robots" content="noindex">
 <link rel="stylesheet" href="../css/class_bracket.css">
 <link rel="stylesheet" href="../region/site.css">
 </head>
@@ -16,101 +16,124 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- 下位クラス作成 (docs/class_bracket_design.md)。キーはこのページの中だけで使い、SPSP には保存しない -->
+<!-- 下位クラス作成 (docs/class_bracket_design.md)。見た目は優先枠作成・シード機能に合わせる。
+     start.gg のキーは「保存」を押したときだけブラウザに保存 (シード機能と共通)。SPSP のサーバには保存しない -->
 <main class="cb-main">
-  <h1 class="cb-h1" data-i18n="class.title">下位クラス作成</h1>
+  <h1 data-i18n="class.title">下位クラス作成</h1>
+  <p class="subtitle" data-i18n="page.class.description">start.gg の本戦の結果から、下位クラス (Bクラス・Cクラスなど) のトーナメントを Challonge に作ります。</p>
 
-  <section class="cb-sec">
-    <!-- Challonge は SPSP のアプリとしてログインして作る (取得側がアプリ経由のトーナメントを読むため)。ページを離れるので最初に -->
-    <div class="cb-field">
-      <span data-i18n="class.challonge">Challonge</span>
+  <div class="cb-card">
+    <!-- 1. アカウント -->
+    <div class="cb-sec">
+      <h2 data-i18n="class.h.accounts">アカウント</h2>
+      <label class="cb-label" for="cb-sgg-key">
+        <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
+        <a class="cb-help-link" href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" data-i18n="seed.skeleton.t8">API キー取得→</a>
+      </label>
+      <div class="cb-token">
+        <input type="password" id="cb-sgg-key" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+        <button type="button" class="cb-icon-btn" id="cb-sgg-reveal" data-i18n-attr="title:seed.skeleton.t116" title="表示/隠す">👁</button>
+        <button type="button" class="cb-save-btn" id="cb-sgg-save" data-i18n-attr="title:seed.skeleton.t117" title="ブラウザに保存" data-i18n="seed.skeleton.t9">💾 保存</button>
+      </div>
+      <div class="cb-hint" id="cb-sgg-hint"></div>
+
+      <div class="cb-label"><span data-i18n="class.challonge">Challonge</span></div>
       <div class="cb-connect">
         <span class="cb-connect-state" id="cb-ch-state"></span>
-        <button type="button" class="cb-btn" id="cb-ch-login" data-i18n="class.challonge_login">Challonge でログイン</button>
+        <button type="button" class="cb-sub-btn" id="cb-ch-login" data-i18n="class.challonge_login">Challonge でログイン</button>
       </div>
     </div>
-    <label class="cb-field">
-      <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
-      <span class="cb-key">
-        <input type="password" id="cb-sgg-key" autocomplete="off">
-        <button type="button" class="cb-btn cb-btn-sm" id="cb-sgg-save" data-i18n="class.key_save">ブラウザに保存</button>
-      </span>
-    </label>
-    <!-- キーで管理できる大会のうち、開催中・近いものから選べる (選ぶと URL に入る) -->
-    <label class="cb-field" id="cb-tour-pick-row" hidden>
-      <span data-i18n="class.tour_pick">管理している大会から選ぶ</span>
-      <select id="cb-tour-pick"></select>
-    </label>
-    <label class="cb-field">
-      <span data-i18n="class.event_url">本戦の start.gg の URL (大会のページでも可)</span>
-      <input type="url" id="cb-event" placeholder="https://www.start.gg/tournament/…" autocomplete="off">
-    </label>
-    <!-- 大会にイベントが複数あるときだけ出す -->
-    <label class="cb-field" id="cb-event-pick-row" hidden>
-      <span data-i18n="class.event_pick">イベント</span>
-      <select id="cb-event-pick"></select>
-    </label>
-  </section>
 
-  <section class="cb-sec cb-grid">
-    <label class="cb-field">
-      <span data-i18n="class.letter">クラス</span>
-      <select id="cb-letter">
-        <option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
-      </select>
-    </label>
-    <label class="cb-field">
-      <span data-i18n="class.format">形式</span>
-      <select id="cb-format">
-        <option value="single" data-i18n="class.format.single">シングルエリミネーション</option>
-        <option value="double" data-i18n="class.format.double">ダブルエリミネーション</option>
-      </select>
-    </label>
-    <label class="cb-field">
-      <span data-i18n="class.range">対象の順位</span>
-      <span class="cb-range">
-        <input type="number" id="cb-place-min" min="1" inputmode="numeric" placeholder="9">
-        <span data-i18n="class.range_to">位 〜</span>
-        <input type="number" id="cb-place-max" min="1" inputmode="numeric" data-i18n-attr="placeholder:class.range_none" placeholder="下限なし">
-        <span data-i18n="class.range_unit">位</span>
-      </span>
-    </label>
-    <label class="cb-field">
-      <span data-i18n="class.seeding">シード</span>
-      <select id="cb-seeding">
-        <option value="main_result" data-i18n="class.seeding.main_result">本戦の結果 (同率はランダム)</option>
-        <option value="spsp" data-i18n="class.seeding.spsp">SPSP の順位</option>
-        <option value="random" data-i18n="class.seeding.random">ランダム</option>
-      </select>
-    </label>
-    <label class="cb-check">
-      <input type="checkbox" id="cb-exclude-dq" checked>
-      <span data-i18n="class.exclude_dq">DQ の人を除く</span>
-    </label>
-    <label class="cb-check">
-      <input type="checkbox" id="cb-counted" checked>
-      <span data-i18n="class.counted">SPSP の集計対象にする</span>
-    </label>
-  </section>
-
-  <div class="cb-actions">
-    <button type="button" class="cb-btn" id="cb-load" data-i18n="class.load">読み込む</button>
-  </div>
-  <div class="cb-status" id="cb-status" role="status"></div>
-
-  <!-- 読み込んだら: 対象の選手とシード順。確かめてから作成 -->
-  <section class="cb-sec" id="cb-preview" hidden>
-    <h2 class="cb-h2"><span id="cb-preview-title"></span></h2>
-    <ul class="cb-list" id="cb-list"></ul>
-    <div class="cb-actions">
-      <button type="button" class="cb-btn cb-btn-main" id="cb-create" data-i18n="class.create">Challonge に作成</button>
+    <!-- 2. 本戦 -->
+    <div class="cb-sec">
+      <h2 data-i18n="class.h.main">本戦</h2>
+      <!-- キーで管理できる大会 (開催中を先頭)。選ぶと URL に入る -->
+      <div id="cb-tour-pick-row" hidden>
+        <label class="cb-label" for="cb-tour-pick" data-i18n="class.tour_pick">管理している大会から選ぶ</label>
+        <select id="cb-tour-pick"></select>
+      </div>
+      <label class="cb-label" for="cb-event" data-i18n="class.event_url">本戦の start.gg の URL (大会のページでも可)</label>
+      <input type="text" id="cb-event" placeholder="https://www.start.gg/tournament/…" autocomplete="off">
+      <!-- 大会にイベントが複数あるときだけ出す -->
+      <div id="cb-event-pick-row" hidden>
+        <label class="cb-label" for="cb-event-pick" data-i18n="class.event_pick">イベント</label>
+        <select id="cb-event-pick"></select>
+      </div>
     </div>
-  </section>
 
-  <section class="cb-sec cb-done" id="cb-done" hidden>
-    <div class="cb-done-title" data-i18n="class.done">作成しました</div>
-    <a id="cb-done-link" target="_blank" rel="noopener"></a>
-  </section>
+    <!-- 3. 設定 -->
+    <div class="cb-sec">
+      <h2 data-i18n="class.h.settings">設定</h2>
+      <div class="cb-grid">
+        <div>
+          <label class="cb-label" for="cb-letter" data-i18n="class.letter">クラス</label>
+          <select id="cb-letter">
+            <option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
+          </select>
+        </div>
+        <div>
+          <label class="cb-label" for="cb-format" data-i18n="class.format">形式</label>
+          <select id="cb-format">
+            <option value="single" data-i18n="class.format.single">シングルエリミネーション</option>
+            <option value="double" data-i18n="class.format.double">ダブルエリミネーション</option>
+          </select>
+        </div>
+        <div>
+          <label class="cb-label" for="cb-place-min" data-i18n="class.range">対象の順位</label>
+          <div class="cb-range">
+            <input type="text" id="cb-place-min" inputmode="numeric" placeholder="9" autocomplete="off">
+            <span data-i18n="class.range_to">位 〜</span>
+            <input type="text" id="cb-place-max" inputmode="numeric" data-i18n-attr="placeholder:class.range_none" placeholder="下限なし" autocomplete="off">
+            <span data-i18n="class.range_unit">位</span>
+          </div>
+        </div>
+        <div>
+          <label class="cb-label" for="cb-seeding" data-i18n="class.seeding">シード</label>
+          <select id="cb-seeding">
+            <option value="main_spsp" data-i18n="class.seeding.main_spsp">本戦の結果 (同率は SPSP の順位)</option>
+            <option value="main_result" data-i18n="class.seeding.main_result">本戦の結果 (同率はランダム)</option>
+            <option value="spsp" data-i18n="class.seeding.spsp">SPSP の順位</option>
+            <option value="random" data-i18n="class.seeding.random">ランダム</option>
+          </select>
+        </div>
+      </div>
+      <label class="cb-opt"><input type="checkbox" id="cb-avoid" checked> <span data-i18n="class.avoid">地域被り・再対戦を避ける (本戦で当たった人は特に)</span></label>
+      <label class="cb-opt"><input type="checkbox" id="cb-exclude-dq" checked> <span data-i18n="class.exclude_dq">DQ の人を除く</span></label>
+      <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
+    </div>
+
+    <button type="button" class="cb-main-btn" id="cb-load" data-i18n="class.load">読み込む</button>
+    <div class="cb-status" id="cb-status" role="status"></div>
+
+    <!-- 読み込んだら: 対象の選手とシード順 (チェックを外した人は入れない)。確かめてから作成 -->
+    <div class="cb-sec" id="cb-preview" hidden>
+      <h2 id="cb-preview-title"></h2>
+      <div class="cb-table-wrap">
+        <table class="cb-table">
+          <thead><tr>
+            <th class="col-on"></th>
+            <th class="col-no" data-i18n="class.col.seed">シード</th>
+            <th data-i18n="class.col.player">プレイヤー</th>
+            <th class="col-place" data-i18n="class.col.main">本戦</th>
+          </tr></thead>
+          <tbody id="cb-list"></tbody>
+        </table>
+      </div>
+      <button type="button" class="cb-main-btn" id="cb-create" data-i18n="class.create">Challonge に作成</button>
+    </div>
+
+    <div class="cb-done" id="cb-done" hidden>
+      <div class="cb-done-title" data-i18n="class.done">作成しました</div>
+      <a id="cb-done-link" target="_blank" rel="noopener"></a>
+    </div>
+  </div>
+
+  <!-- 作成した下位クラス (間違えたら削除できる。取り込み済みは削除できない) -->
+  <div class="cb-card cb-mine" id="cb-mine" hidden>
+    <h2 data-i18n="class.h.mine">作成した下位クラス</h2>
+    <ul class="cb-mine-list" id="cb-mine-list"></ul>
+    <div class="cb-status" id="cb-mine-status" role="status"></div>
+  </div>
 </main>
 
 <script src="../assets/class.js"></script>

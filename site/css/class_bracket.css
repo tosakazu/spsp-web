@@ -1,39 +1,107 @@
-/* class_bracket.css — 下位クラス作成 (class/index.html) */
+/* class_bracket.css — 下位クラス作成 (class/index.html)。優先枠作成 (priority/) とシード機能 (seeding/) の見た目に合わせる */
 .cb-main { max-width: 560px; margin: 0 auto; padding: 16px 16px 48px; }
-.cb-h1 { font-size: 18px; margin: 4px 0 14px; }
-.cb-h2 { font-size: 14px; margin: 0 0 8px; color: #374151; }
-.cb-sec { margin-bottom: 14px; }
-.cb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-@media (max-width: 480px) { .cb-grid { grid-template-columns: 1fr; } }
-.cb-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6b7280; margin-bottom: 10px; }
-.cb-grid .cb-field { margin-bottom: 0; }
-.cb-field input, .cb-field select { height: 36px; padding: 0 10px; border: 1px solid #e5e7eb; border-radius: 8px; font: inherit; font-size: 14px; color: #111827; background: #fff; min-width: 0; }
-.cb-range { display: flex; align-items: center; gap: 6px; color: #374151; }
-.cb-range input { width: 5.5em; }
-.cb-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; align-self: end; height: 36px; }
-.cb-actions { display: flex; gap: 8px; margin: 6px 0 10px; }
-.cb-btn { height: 40px; padding: 0 18px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; color: #111827; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.cb-btn-main { background: #111827; color: #fff; border-color: #111827; }
-.cb-btn:disabled { opacity: .6; cursor: default; }
-.cb-status { font-size: 13px; color: #6b7280; min-height: 1.4em; margin-bottom: 10px; }
-.cb-status.error { color: #b91c1c; font-weight: 600; }
-.cb-status.ok { color: #047857; font-weight: 600; }
-.cb-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 8px; font-size: 13px; }
-.cb-list li { padding: 5px 10px; border-bottom: 1px solid #f3f4f6; }
-.cb-list li:last-child { border-bottom: 0; }
-.cb-name { font-weight: 600; }
-.cb-place { color: #9ca3af; font-size: 11px; margin-left: 8px; }
-.cb-done { padding: 12px; border: 1px solid #a7f3d0; background: #ecfdf5; border-radius: 10px; font-size: 13px; word-break: break-all; }
-.cb-done-title { font-weight: 700; color: #047857; margin-bottom: 4px; }
+.cb-main h1 { font-size: 18px; font-weight: 700; margin: 2px 0 4px; }
+.cb-main .subtitle { color: #6b7280; font-size: 12px; margin: 0 0 12px; }
+
+.cb-card {
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 30%, #ffffff 100%);
+  border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 14px;
+}
+.cb-card + .cb-card { margin-top: 14px; }
+.cb-sec { margin-top: 18px; }
+.cb-sec:first-child { margin-top: 0; }
+.cb-card h2 {
+  font-size: 12px; color: #374151; text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 0 0 8px; font-weight: 600;
+}
+
+.cb-label { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: #6b7280; margin: 10px 0 3px; }
+.cb-sec h2 + .cb-label, .cb-sec h2 + div > .cb-label:first-child { margin-top: 0; }
+.cb-help-link { color: #dc2626; font-size: 10px; text-decoration: underline; }
+.cb-hint { font-size: 10px; color: #9ca3af; margin-top: 3px; min-height: 14px; }
+
+.cb-card input[type="text"], .cb-card input[type="password"], .cb-card select {
+  width: 100%; min-width: 0; padding: 8px 10px; font-size: 14px; font-family: inherit; color: #111827;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+}
+.cb-card select { height: 38px; }
+.cb-card input[type="checkbox"] { accent-color: #dc2626; }
+
+/* start.gg のキー: シード機能と同じ並び (入力・👁・💾 保存) */
+.cb-token { display: flex; gap: 4px; align-items: stretch; }
+.cb-token input { flex: 1; }
+.cb-icon-btn {
+  background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 0 10px; font-size: 14px; cursor: pointer; font-family: inherit;
+}
+.cb-save-btn {
+  background: #dc2626; color: #fff; border: none; border-radius: 6px;
+  padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.cb-save-btn:disabled { opacity: .7; cursor: default; }
+
 .cb-connect { display: flex; align-items: center; gap: 10px; }
 .cb-connect-state { font-size: 13px; color: #6b7280; }
 .cb-connect-state.on { color: #047857; font-weight: 700; }
-.cb-connect .cb-btn { height: 34px; padding: 0 14px; font-size: 13px; }
-.cb-key { display: flex; gap: 6px; }
-.cb-key input { flex: 1; }
-.cb-btn-sm { height: 36px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
-.cb-list li.off { color: #9ca3af; }
-.cb-list li.off .cb-name { text-decoration: line-through; font-weight: 400; }
-.cb-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.cb-seed { min-width: 2.2em; color: #6b7280; font-size: 11px; text-align: right; }
-.cb-dq { color: #b91c1c; font-size: 11px; margin-left: 6px; }
+.cb-sub-btn {
+  padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit; color: #111827;
+  border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+}
+.cb-sub-btn:hover { background: #f3f4f6; }
+.cb-sub-btn:disabled { color: #9ca3af; cursor: default; }
+
+.cb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.cb-grid .cb-label { margin-top: 0; }
+.cb-grid > div { margin-bottom: 10px; }
+@media (max-width: 480px) { .cb-grid { grid-template-columns: 1fr; } }
+.cb-range { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; white-space: nowrap; }
+.cb-card .cb-range input { width: 5em; text-align: right; }
+.cb-opt { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 13px; }
+
+.cb-main-btn {
+  display: block; width: 100%; margin-top: 14px; padding: 10px;
+  background: #dc2626; color: #fff; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.cb-main-btn:hover { background: #b91c1c; }
+.cb-main-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
+
+.cb-status { font-size: 12px; color: #6b7280; min-height: 1.4em; margin-top: 8px; }
+.cb-status:empty { display: none; }
+.cb-status.error { color: #b91c1c; font-weight: 600; }
+.cb-status.ok { color: #047857; font-weight: 600; }
+
+/* 対象の一覧 (優先枠作成のプレビュー表と同じ見た目) */
+.cb-table-wrap { max-height: 420px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 8px; }
+.cb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cb-table th {
+  position: sticky; top: 0; background: #fff;
+  text-align: left; font-size: 11px; color: #6b7280; font-weight: 600;
+  border-bottom: 1px solid #e5e7eb; padding: 4px 6px;
+}
+.cb-table td { padding: 4px 6px; border-bottom: 1px solid #f3f4f6; }
+.cb-table tr { cursor: pointer; }
+.cb-table .col-on { width: 28px; text-align: center; }
+.cb-table .col-no { width: 44px; text-align: right; color: #9ca3af; font-variant-numeric: tabular-nums; }
+.cb-table .col-place { width: 64px; text-align: right; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-table .disc { color: #9ca3af; font-size: 11px; margin-left: 4px; }
+.cb-table tr.off td { color: #9ca3af; }
+.cb-table tr.off .name { text-decoration: line-through; }
+.cb-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+  font-size: 10px; font-weight: 600; background: #fee2e2; color: #b91c1c; vertical-align: 1px;
+}
+
+.cb-done { margin-top: 12px; padding: 10px 12px; border: 1px solid #a7f3d0; background: #ecfdf5; border-radius: 8px; font-size: 13px; word-break: break-all; }
+.cb-done-title { font-weight: 700; color: #047857; margin-bottom: 2px; }
+
+/* 作成した下位クラス */
+.cb-mine-list { list-style: none; margin: 0; padding: 0; }
+.cb-mine-list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+.cb-mine-list li:last-child { border-bottom: 0; }
+.cb-mine-main { flex: 1; min-width: 0; }
+.cb-mine-main a { color: #111827; font-weight: 600; text-decoration: none; word-break: break-all; }
+.cb-mine-main a:hover { text-decoration: underline; }
+.cb-mine-meta { color: #9ca3af; font-size: 11px; margin-top: 1px; }
+.cb-del-btn { color: #b91c1c; border-color: #fecaca; }
+.cb-del-btn:hover { background: #fef2f2; }

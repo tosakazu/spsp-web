@@ -1,7 +1,9 @@
 // @ts-check
 // src/pages/class.js — site/class/index.html (下位クラス作成、docs/class_bracket_design.md)。
 //   1. 読み込む: start.gg のキーで TO か確かめ (大会の owner / admins)、本戦の順位を取る (開催途中でもよい)
-//   2. 対象の選手とシード順を見せる
+//   2. 対象の選手とシード順を見せる。被り回避 (既定 ON) はシード機能の最適化 (seeding/seed_optimizer.js) をそのまま使う:
+//      地域 (都道府県) と直近の対戦 (seed_data.js) に加えて、本戦で当たった組を強い再対戦として避ける。
+//      1 ブラケットなので poolCount=1・ダブルエリミの勝者側として解く (シングルでも序盤の当たり方は同じ)
 //   3. Challonge に作成: Worker (class_create) が start.gg でもう一度 TO か確かめ、TO の Challonge ログイン (SPSP のアプリ) で
 //      トーナメントと参加者を作って登録する。アプリ経由で作るのは、取得側 (smash_database) がアプリの権限で読むため
 //   Challonge のログインは最初にする (ページを離れる)。入力中の設定 (キー以外) はこのタブに残して戻ったら戻す
@@ -11,6 +13,8 @@ import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
+import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
+import SPSPSeedData from '../../site/seeding/seed_data.js';
 import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
@@ -21,7 +25,9 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-exclude-dq', 'cb-counted'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-avoid', 'cb-exclude-dq', 'cb-counted'];
+/** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
+const MAIN_REMATCH_MULT = 3;
 
 /** @typedef {import('../../site/js/class_bracket.js').ClassEntrant} ClassEntrant */
 
@@ -48,11 +54,60 @@ async function sgg(token, query, variables = {}) {
   return j.data;
 }
 
-/** 読み込んだ内容 (作成で使う)。seeded = 全員のシード順、off = 外した人 (start.gg のユーザー ID)
- * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number> }} */
+/** 読み込んだ内容 (作成で使う)。seeded = 全員の元のシード順、off = 外した人 (start.gg のユーザー ID)、
+ * avoid = 被り回避の材料 (null = 使わない)、order = 表示・作成に使う最終の並び (外した人を除き、被り回避の後)
+ * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number>,
+ *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, mainPairs: Set<string> }, order: ClassEntrant[] }} */
 let loaded = null;
-/** 作成に使う人 (外した人を除いたシード順) */
-const activeSeeded = () => (loaded ? loaded.seeded.filter(p => !loaded?.off.has(p.userId)) : []);
+
+/** 外した人を除いて、被り回避 (あれば) をかけた並びを作る */
+function computeOrder() {
+  if (!loaded) return;
+  const base = loaded.seeded.filter(p => !loaded?.off.has(p.userId));
+  loaded.order = base;
+  if (!loaded.avoid || base.length < 4) return;
+  try {
+    const r = SPSPSeedOptimizer.optimize({
+      poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
+      prefByUid: loaded.avoid.prefByUid, recentPair: loaded.avoid.recentPair, params: {},
+    });
+    if (r && Array.isArray(r.seedOrder)) {
+      const byUid = new Map(base.map(p => [p.userId, p]));
+      loaded.order = r.seedOrder.map((/** @type {number} */ u) => /** @type {ClassEntrant} */ (byUid.get(u)));
+    }
+  } catch (e) { /* 失敗したら元の並び (被り回避なし) */ }
+}
+
+/** 本戦の試合から、当たった組 (pairKey) を集める
+ * @param {string} token @param {number} eventId @returns {Promise<Set<string>>} */
+async function mainEventPairs(token, eventId) {
+  const pairs = new Set();
+  for (let page = 1; page <= 60; page++) {
+    const d = await sgg(token, `query($id: ID!, $page: Int!) { event(id: $id) { sets(page: $page, perPage: 40) {
+      pageInfo { totalPages } nodes { slots { entrant { participants { user { id } } } } } } } }`, { id: eventId, page });
+    const sets = d.event && d.event.sets;
+    for (const s of (sets && sets.nodes) || []) {
+      const uids = (s.slots || []).map((/** @type {any} */ sl) => sl && sl.entrant && sl.entrant.participants && sl.entrant.participants[0] && sl.entrant.participants[0].user && sl.entrant.participants[0].user.id).filter((/** @type {any} */ u) => u != null);
+      if (uids.length === 2 && uids[0] !== uids[1]) pairs.add(SPSPSeedOptimizer.pairKey(uids[0], uids[1]));
+    }
+    if (!sets || !sets.pageInfo || page >= sets.pageInfo.totalPages) break;
+  }
+  return pairs;
+}
+
+/** 被り回避の材料: シード機能と同じ地域・直近対戦 + 本戦で当たった組
+ * @param {string} token @param {number} eventId @param {ClassEntrant[]} targets @param {number} mainSize */
+async function buildAvoid(token, eventId, targets, mainSize) {
+  const uids = targets.map(p => p.userId);
+  const [data, mainPairs] = await Promise.all([
+    SPSPSeedData.buildSeedData(uids, { prefsOptional: true }),
+    mainEventPairs(token, eventId),
+  ]);
+  const recentPair = Object.assign({}, data.recentPair);
+  const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, mainSize));
+  for (const k of mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
+  return { prefByUid: data.prefByUid, recentPair, mainPairs };
+}
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
  * @param {string} token @returns {Promise<string | null>} */
@@ -134,32 +189,40 @@ async function load() {
   // 3. 対象とシード順
   const targets = selectTargets(standings, min, max, !!$('cb-exclude-dq').checked);
   if (targets.length < 2) return status(i18n('class.err.too_few'), 'error');
-  const method = /** @type {'random' | 'main_result' | 'spsp'} */ ($('cb-seeding').value);
-  const rankOf = method === 'spsp' ? await spspRanks() : () => null;
+  const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
+  const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
   const seeded = seedOrder(targets, method, rankOf);
-  loaded = { token, event: ev, seeded, off: new Set() };
+  /** @type {any} */
+  let avoid = null;
+  if ($('cb-avoid').checked) {
+    status(i18n('class.step.avoid'));
+    try { avoid = await buildAvoid(token, ev.id, targets, standings.length); } catch (e) { avoid = null; }
+  }
+  loaded = { token, event: ev, seeded, off: new Set(), avoid, order: [] };
+  computeOrder();
   renderList();
   $('cb-preview').hidden = false;
   status(i18n('class.step.ready'), 'ok');
 }
 
-/** 対象の一覧。チェックを外した人は作成に入れない (シード番号は入れる人だけで詰める) */
+/** 対象の一覧 (上から最終のシード順、外した人は下に)。チェックを外した人は作成に入れない */
 function renderList() {
   if (!loaded) return;
-  const ev = loaded.event;
-  const off = loaded.off;
-  let n = 0;
-  $('cb-list').innerHTML = loaded.seeded.map(p => {
-    const on = !off.has(p.userId);
-    if (on) n++;
-    return `<li class="${on ? '' : 'off'}"><label class="cb-row">
-      <input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}>
-      <span class="cb-seed">${on ? n : ''}</span>
-      <span class="cb-name">${escapeHtml(participantName(p))}</span>${p.dq ? `<span class="cb-dq">DQ</span>` : ''}
-      <span class="cb-place">${p.placement != null ? escapeHtml(i18n('class.main_place', { n: p.placement })) : ''}</span>
-    </label></li>`;
-  }).join('');
-  $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(ev) });
+  const L = loaded;
+  const row = (/** @type {ClassEntrant} */ p, /** @type {number | null} */ seed) => {
+    const on = seed != null;
+    // 本戦の 1 回戦で当たる組を避けたか分かるよう、同じ組の相手と本戦で当たっていたら印
+    return `<tr class="${on ? '' : 'off'}" data-uid="${p.userId}">
+      <td class="col-on"><input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}></td>
+      <td class="col-no">${on ? seed : ''}</td>
+      <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? '<span class="cb-badge">DQ</span>' : ''}</td>
+      <td class="col-place">${p.placement != null ? p.placement : ''}</td>
+    </tr>`;
+  };
+  const offRows = L.seeded.filter(p => L.off.has(p.userId));
+  $('cb-list').innerHTML = L.order.map((p, i) => row(p, i + 1)).join('') + offRows.map(p => row(p, null)).join('');
+  const n = L.order.length;
+  $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
   $('cb-create').disabled = n < 2;
 }
 
@@ -193,7 +256,7 @@ async function create() {
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
       seeding: $('cb-seeding').value,
       // 名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID (取得側が選手に結びつける)
-      participants: activeSeeded().map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
+      participants: loaded.order.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
     });
     const url = r && r.challonge && r.challonge.url;
     if (url) {
@@ -202,7 +265,7 @@ async function create() {
       link.textContent = url;
       $('cb-done').hidden = false;
     }
-    if (r && r.ok) return status(i18n('class.step.done'), 'ok');
+    if (r && r.ok) { loadMine(); return status(i18n('class.step.done'), 'ok'); }
     const code = (r && r.error && r.error.code) || 'unknown';
     const message = (r && r.error && r.error.message) || code;
     if (code === 'challonge_auth') {
@@ -270,11 +333,13 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
-$('cb-list').addEventListener('change', (/** @type {Event} */ e) => {
-  const el = /** @type {HTMLInputElement} */ (e.target);
-  if (!loaded || !el.dataset.uid) return;
-  const uid = Number(el.dataset.uid);
-  if (el.checked) loaded.off.delete(uid); else loaded.off.add(uid);
+// 行のどこを押してもオン・オフ (チェックボックスそのものも)。外す・戻すたびに被り回避をかけ直す
+$('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
+  const tr = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('tr[data-uid]'));
+  if (!loaded || !tr) return;
+  const uid = Number(tr.dataset.uid);
+  if (loaded.off.has(uid)) loaded.off.delete(uid); else loaded.off.add(uid);
+  computeOrder();
   renderList();
 });
 // URL を変えたらイベントの選択欄は隠す (別の大会の選択が残らないように)
@@ -327,21 +392,82 @@ $('cb-tour-pick').addEventListener('change', () => {
   $('cb-event').value = 'https://www.start.gg/' + v;
   $('cb-event-pick-row').hidden = true;
 });
-$('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); });
+$('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine(); });
 
-// start.gg のキー: 「ブラウザに保存」を押したときだけ保存 (シード機能と同じ場所。どちらで保存しても両方で使える)
+// start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
 const SGG_TOKEN_KEY = 'spsp_startgg_token';
+function updateKeyHint() {
+  const v = String($('cb-sgg-key').value || '').trim();
+  $('cb-sgg-hint').textContent = v ? `${i18n('seed.boot.t1')} ${v.slice(-4)} (${v.length} ${i18n('seed.boot.t2')}` : '';
+}
 try { const t0 = localStorage.getItem(SGG_TOKEN_KEY); if (t0) $('cb-sgg-key').value = t0; } catch (e) { /* 入れてもらう */ }
-loadMyTournaments();
+updateKeyHint();
+$('cb-sgg-key').addEventListener('input', updateKeyHint);
+$('cb-sgg-reveal').addEventListener('click', () => {
+  const el = $('cb-sgg-key');
+  const pwd = el.type === 'password';
+  el.type = pwd ? 'text' : 'password';
+  $('cb-sgg-reveal').textContent = pwd ? '🙈' : '👁';
+});
 $('cb-sgg-save').addEventListener('click', () => {
   const b = $('cb-sgg-save');
   const v = String($('cb-sgg-key').value || '').trim();
-  if (!v) return status(i18n('class.err.startgg_key'), 'error');
-  try { localStorage.setItem(SGG_TOKEN_KEY, v); } catch (e) { return; }
-  b.textContent = i18n('class.key_saved');
+  if (!v) { $('cb-sgg-hint').textContent = i18n('seed.boot.s1'); return; }
+  try { localStorage.setItem(SGG_TOKEN_KEY, v); } catch (e) { $('cb-sgg-hint').textContent = i18n('seed.boot.s3') + /** @type {any} */ (e).message; return; }
+  const orig = b.textContent;
+  b.textContent = i18n('seed.boot.s2');
   b.disabled = true;
-  setTimeout(() => { b.textContent = i18n('class.key_save'); b.disabled = false; }, 1500);
+  setTimeout(() => { b.textContent = orig; b.disabled = false; }, 1500);
 });
+loadMyTournaments();
+
+/** 作成した下位クラス (class_mine)。間違えて作ったものは削除できる (取り込み済みは不可)。まだ API が無い環境では出さない */
+async function loadMine() {
+  const token = String($('cb-sgg-key').value || '').trim();
+  const box = $('cb-mine');
+  if (!token || !SpspLogin.apiAvailable()) { box.hidden = true; return; }
+  const r = await SpspLogin.api({ action: 'class_mine', startgg_token: token });
+  const items = (r && r.ok && Array.isArray(r.items)) ? r.items : [];
+  if (!items.length) { box.hidden = true; return; }
+  const fmt = (/** @type {string} */ s) => { const d = new Date(s); return isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  const stateText = (/** @type {any} */ it) => it.status === 'done' ? i18n('class.mine.done') : (it.counted ? i18n('class.mine.waiting') : i18n('class.mine.uncounted'));
+  $('cb-mine-list').innerHTML = items.map((/** @type {any} */ it) => `<li>
+    <div class="cb-mine-main">
+      <a href="${escapeHtml(String(it.challonge_url || ''))}" target="_blank" rel="noopener">${escapeHtml(String(it.name || ''))}</a>
+      <div class="cb-mine-meta">${escapeHtml(fmt(it.created_at))} · ${escapeHtml(i18n('class.mine.entrants', { n: it.entrant_count }))} · ${escapeHtml(stateText(it))}</div>
+    </div>
+    <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
+  </li>`).join('');
+  box.hidden = false;
+}
+
+/** @param {string} msg @param {'' | 'error' | 'ok'} [kind] */
+function mineStatus(msg, kind = '') {
+  const el = $('cb-mine-status');
+  el.textContent = msg;
+  el.className = 'cb-status' + (kind ? ' ' + kind : '');
+}
+
+$('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) => {
+  const b = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-id]'));
+  if (!b || b.disabled) return;
+  const chToken = challongeToken();
+  if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
+  if (!confirm(i18n('class.del_confirm', { name: b.dataset.name || '' }))) return;
+  b.disabled = true;
+  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: String($('cb-sgg-key').value || '').trim(), challonge_token: chToken, id: Number(b.dataset.id) });
+  if (r && r.ok) { mineStatus(i18n('class.del_done'), 'ok'); loadMine(); return; }
+  b.disabled = false;
+  const code = (r && r.error && r.error.code) || 'unknown';
+  if (code === 'challonge_auth') {
+    try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e2) { /* 表示だけ変える */ }
+    renderChallongeState();
+    return mineStatus(i18n('class.err.challonge_auth'), 'error');
+  }
+  if (code === 'already_imported') return mineStatus(i18n('class.err.already_imported'), 'error');
+  mineStatus(i18n('class.err.del', { message: (r && r.error && r.error.message) || code }), 'error');
+});
+loadMine();
 
 // Challonge のログインから戻った (?challonge=1): 入力を戻し、印はアドレスバーから消す
 restoreForm();

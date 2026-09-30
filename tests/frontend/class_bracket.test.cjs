@@ -61,6 +61,14 @@ test('seedOrder: spsp は SPSP 順位順、順位の無い人は後ろ', () => {
   assert.deepStrictEqual(got, [3, 1, 2]);
 });
 
+test('seedOrder: main_spsp は本戦の順位、同率は SPSP 順位 (無い人はその中で後ろ)', () => {
+  const C = load();
+  const t = [P(1, 13), P(2, 9), P(3, 13), P(4, 13), P(5, 9)];
+  const ranks = { 1: 400, 2: 900, 3: null, 4: 20, 5: 100 };
+  const got = C.seedOrder(t, 'main_spsp', uid => ranks[uid], zero).map(p => p.userId);
+  assert.deepStrictEqual(got, [5, 2, 4, 1, 3]);
+});
+
 test('seedOrder: random は全員を 1 回ずつ含む', () => {
   const C = load();
   const t = [P(1, 9), P(2, 13), P(3, 17)];
