@@ -15,7 +15,8 @@ import SPSPI18n from './i18n.js';
 import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
-import SpspLogin from './login.js';   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
+import SpspLogin from './login.js';
+import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
   var i18n = function (k, p) { return SPSPI18n.t(k, p); };   // 文言 (i18n/ja.js、js/i18n.js を先に読む)
@@ -224,6 +225,10 @@ import SpspLogin from './login.js';   // 失敗したときの「もう一度ロ
       runLogin(code, state, back);
       return;
     }
+    if (intent === 'challonge') {
+      runChallonge(code, state, back);
+      return;
+    }
 
     // ── 4. 下書き (post フロー) ──
     var body = null;
@@ -297,6 +302,36 @@ import SpspLogin from './login.js';   // 失敗したときの「もう一度ロ
       reportError('network', 'login fetch failed');
       show('error', i18n('callback.s30'),
         i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * challonge フロー (下位クラス作成): code を Challonge のアクセストークンに替えて (Worker が交換し、保存しない)
+   * sessionStorage に置き、元のページに ?challonge=1 で戻る。トークンはこのタブの中だけで使う。
+   */
+  function runChallonge(code, state, back) {
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'challonge_token', code: code, state: state }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.access_token) {
+        var exp = Date.now() + (Number(json.expires_in) > 0 ? Number(json.expires_in) * 1000 : 3600 * 1000);
+        try { sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ token: json.access_token, exp: exp })); } catch (_) { /* 下で失敗として出す */ }
+        location.replace(S.withFlag(back, 'challonge'));
+        return;
+      }
+      var errCode = (json && json.error && json.error.code) || 'unknown';
+      reportError('challonge_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.challonge_failed'));
+      show('error', i18n('callback.challonge_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'challonge fetch failed');
+      show('error', i18n('callback.challonge_title'), i18n('callback.s28'), back);
     });
   }
 

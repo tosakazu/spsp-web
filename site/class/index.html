@@ -21,6 +21,14 @@
   <h1 class="cb-h1" data-i18n="class.title">下位クラス作成</h1>
 
   <section class="cb-sec">
+    <!-- Challonge は SPSP のアプリとしてログインして作る (取得側がアプリ経由のトーナメントを読むため)。ページを離れるので最初に -->
+    <div class="cb-field">
+      <span data-i18n="class.challonge">Challonge</span>
+      <div class="cb-connect">
+        <span class="cb-connect-state" id="cb-ch-state"></span>
+        <button type="button" class="cb-btn" id="cb-ch-login" data-i18n="class.challonge_login">Challonge でログイン</button>
+      </div>
+    </div>
     <label class="cb-field">
       <span data-i18n="class.event_url">本戦の start.gg イベントの URL</span>
       <input type="url" id="cb-event" placeholder="https://www.start.gg/tournament/…/event/…" autocomplete="off">
@@ -28,10 +36,6 @@
     <label class="cb-field">
       <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
       <input type="password" id="cb-sgg-key" autocomplete="off">
-    </label>
-    <label class="cb-field">
-      <span data-i18n="class.challonge_key">Challonge の API キー</span>
-      <input type="password" id="cb-ch-key" autocomplete="off">
     </label>
   </section>
 

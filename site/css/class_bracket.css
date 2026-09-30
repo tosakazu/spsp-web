@@ -25,3 +25,7 @@
 .cb-place { color: #9ca3af; font-size: 11px; margin-left: 8px; }
 .cb-done { padding: 12px; border: 1px solid #a7f3d0; background: #ecfdf5; border-radius: 10px; font-size: 13px; word-break: break-all; }
 .cb-done-title { font-weight: 700; color: #047857; margin-bottom: 4px; }
+.cb-connect { display: flex; align-items: center; gap: 10px; }
+.cb-connect-state { font-size: 13px; color: #6b7280; }
+.cb-connect-state.on { color: #047857; font-weight: 700; }
+.cb-connect .cb-btn { height: 34px; padding: 0 14px; font-size: 13px; }

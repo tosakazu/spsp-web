@@ -2,13 +2,16 @@
 // src/pages/class.js — site/class/index.html (下位クラス作成、docs/class_bracket_design.md)。
 //   1. 読み込む: start.gg のキーで TO か確かめ (大会の owner / admins)、本戦の順位を取る (開催途中でもよい)
 //   2. 対象の選手とシード順を見せる
-//   3. Challonge に作成: Challonge のキーでトーナメントと参加者を作り、SPSP に登録 (Worker が start.gg でもう一度 TO か確かめる)
-//   キーはこのページの中だけで使う (SPSP に保存しない。start.gg のキーは登録の確認にだけ Worker へ渡し、Worker も保存しない)
+//   3. Challonge に作成: Worker (class_create) が start.gg でもう一度 TO か確かめ、TO の Challonge ログイン (SPSP のアプリ) で
+//      トーナメントと参加者を作って登録する。アプリ経由で作るのは、取得側 (smash_database) がアプリの権限で読むため
+//   Challonge のログインは最初にする (ページを離れる)。入力中の設定 (キー以外) はこのタブに残して戻ったら戻す
+//   キーとトークンは SPSP に保存しない (Worker に渡すのは作成の 1 回だけ。Worker も保存しない)
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
-import { eventSlugOf, selectTargets, seedOrder, participantName } from '../../site/js/class_bracket.js';
+import SpspOAuthState from '../../site/js/oauth_state.js';
+import { eventSlugOf, selectTargets, seedOrder, participantName, challongeToken, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -16,7 +19,9 @@ SPSPI18n.apply(document);
 
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
-const CHALLONGE_API = 'https://api.challonge.com/v1';
+const FORM_KEY = 'spsp_class_form';
+/** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-counted'];
 
 /** @typedef {import('../../site/js/class_bracket.js').ClassEntrant} ClassEntrant */
 
@@ -120,54 +125,86 @@ function className(ev) {
   return `${ev.tournament.name} ${i18n('ach.class.' + $('cb-letter').value)}`;
 }
 
-/** Challonge v1 (JSON)。エラーは Error で投げる
- * @param {string} path @param {Record<string, unknown>} body */
-async function challonge(path, body) {
-  const res = await fetch(CHALLONGE_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const j = await res.json().catch(() => null);
-  if (!res.ok || !j) throw new Error((j && j.errors && j.errors.join(' / ')) || String(res.status));
-  return j;
-}
-
 async function create() {
   if (!loaded) return;
-  const chKey = String($('cb-ch-key').value || '').trim();
-  if (!chKey) return status(i18n('class.err.challonge_key'), 'error');
+  const chToken = challongeToken();
+  if (!chToken) { renderChallongeState(); return status(i18n('class.err.challonge_login'), 'error'); }
   const btn = $('cb-create');
   btn.disabled = true;
   try {
-    const letter = $('cb-letter').value;
-    const format = $('cb-format').value;
-    const name = className(loaded.event);
-    // 1. トーナメント (URL は重ならないよう大会 ID・クラス・乱数で作る)
     status(i18n('class.step.create'));
-    const urlKey = `spsp_${loaded.event.id}_${letter.toLowerCase()}_${Math.random().toString(36).slice(2, 7)}`;
-    const t = (await challonge('/tournaments.json', { api_key: chKey, tournament: {
-      name, url: urlKey, tournament_type: format === 'double' ? 'double elimination' : 'single elimination',
-      game_name: 'Super Smash Bros. Ultimate', open_signup: false,
-    } })).tournament;
-    // 2. 参加者 (名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID。取得側が選手に結びつける)
-    await challonge(`/tournaments/${t.id}/participants/bulk_add.json`, { api_key: chKey,
-      participants: loaded.seeded.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })) });
-    // 3. SPSP に登録 (Worker が start.gg のキーでもう一度 TO か確かめる。キーは保存しない)
-    status(i18n('class.step.register'));
-    const reg = await SpspLogin.api({
-      action: 'class_register', startgg_token: loaded.token, parent_event_id: loaded.event.id, class_letter: letter, name,
-      challonge: { id: t.id, url: t.full_challonge_url }, format, counted: !!$('cb-counted').checked,
+    const r = await SpspLogin.api({
+      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
+      parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
+      format: $('cb-format').value, counted: !!$('cb-counted').checked,
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
-      seeding: $('cb-seeding').value, entrant_count: loaded.seeded.length,
+      seeding: $('cb-seeding').value,
+      // 名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID (取得側が選手に結びつける)
+      participants: loaded.seeded.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
     });
-    const link = $('cb-done-link');
-    link.href = t.full_challonge_url;
-    link.textContent = t.full_challonge_url;
-    $('cb-done').hidden = false;
-    // Challonge には作れている。SPSP への登録だけ失敗したときは、その旨を出す (集計対象にならない)
-    if (reg && reg.ok) status(i18n('class.step.done'), 'ok');
-    else status(i18n('class.err.register', { code: (reg && reg.error && (reg.error.message || reg.error.code)) || 'unknown' }), 'error');
-  } catch (e) {
-    status(i18n('class.err.challonge', { message: /** @type {Error} */ (e).message }), 'error');
+    const url = r && r.challonge && r.challonge.url;
+    if (url) {
+      const link = $('cb-done-link');
+      link.href = url;
+      link.textContent = url;
+      $('cb-done').hidden = false;
+    }
+    if (r && r.ok) return status(i18n('class.step.done'), 'ok');
+    const code = (r && r.error && r.error.code) || 'unknown';
+    const message = (r && r.error && r.error.message) || code;
+    if (code === 'challonge_auth') {
+      try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e) { /* 表示だけ変える */ }
+      renderChallongeState();
+      return status(i18n('class.err.challonge_auth'), 'error');
+    }
+    // トーナメントまでは作れて途中で失敗したとき (参加者の追加・登録) は、作ったものの URL も出す
+    status(url ? i18n('class.err.partial', { message }) : i18n('class.err.create', { message }), 'error');
   } finally {
     btn.disabled = false;
+  }
+}
+
+function renderChallongeState() {
+  const on = !!challongeToken();
+  const st = $('cb-ch-state');
+  st.textContent = on ? i18n('class.challonge_on') : i18n('class.challonge_off');
+  st.className = 'cb-connect-state' + (on ? ' on' : '');
+  $('cb-ch-login').textContent = on ? i18n('class.challonge_relogin') : i18n('class.challonge_login');
+}
+
+function saveForm() {
+  /** @type {Record<string, string | boolean>} */
+  const v = {};
+  for (const id of FORM_IDS) { const el = $(id); v[id] = el.type === 'checkbox' ? el.checked : el.value; }
+  try { sessionStorage.setItem(FORM_KEY, JSON.stringify(v)); } catch (e) { /* 戻ったら入れ直してもらう */ }
+}
+
+function restoreForm() {
+  let v = null;
+  try { v = JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); sessionStorage.removeItem(FORM_KEY); } catch (e) { /* 何もしない */ }
+  if (!v) return;
+  for (const id of FORM_IDS) {
+    if (!(id in v)) continue;
+    const el = $(id);
+    if (el.type === 'checkbox') el.checked = !!v[id]; else el.value = String(v[id]);
+  }
+}
+
+/** SPSP のアプリとして Challonge にログイン (戻り先 = このページ。callback.js がトークンをこのタブに置く) */
+async function challongeLogin() {
+  const b = $('cb-ch-login');
+  b.disabled = true;
+  try {
+    let nonce;
+    try { nonce = crypto.randomUUID(); } catch (e) { return status(i18n('class.err.challonge_start'), 'error'); }
+    SpspOAuthState.saveNonce(nonce);
+    try { sessionStorage.setItem(SpspOAuthState.INTENT_KEY, 'challonge'); } catch (e) { /* 署名 state 側で判断できる */ }
+    const r = await SpspLogin.api({ action: 'challonge_begin', nonce, returnPath: location.pathname });
+    if (!r || !r.ok || !r.url) return status(i18n('class.err.challonge_start'), 'error');
+    saveForm();
+    location.assign(r.url);
+  } finally {
+    b.disabled = false;
   }
 }
 
@@ -176,4 +213,18 @@ $('cb-load').addEventListener('click', () => {
   b.disabled = true;
   load().catch(e => status(i18n('class.err.startgg', { message: e.message }), 'error')).finally(() => { b.disabled = false; });
 });
-$('cb-create').addEventListener('click', () => { create(); });
+$('cb-create').addEventListener('click', () => {
+  create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
+});
+$('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
+
+// Challonge のログインから戻った (?challonge=1): 入力を戻し、印はアドレスバーから消す
+restoreForm();
+try {
+  const u = new URL(location.href);
+  if (u.searchParams.has('challonge')) {
+    u.searchParams.delete('challonge');
+    history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+  }
+} catch (e) { /* 何もしない */ }
+renderChallongeState();

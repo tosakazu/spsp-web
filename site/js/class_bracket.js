@@ -4,6 +4,7 @@
 //   selectTargets(standings, min, max)    本戦の順位から対象の選手 (min 位〜max 位、max が null なら最後まで。DQ と順位の無い人は除く)
 //   seedOrder(targets, method, rankOf, rand)  シード順に並べる (random / main_result = 本戦の順位、同率はランダム / spsp = SPSP の順位、無い人は後ろにランダム)
 //   participantName(p)                    Challonge の参加者名 = 「start.gg の名前 (discriminator)」
+//   CHALLONGE_TOKEN_KEY / challongeToken()  Challonge でログインしたトークン (callback.js が sessionStorage に置く。期限切れは null)
 
 /** 本戦の 1 人 (start.gg の standings の 1 件を平たくしたもの)
  * @typedef {{ userId: number, discriminator: string, gamerTag: string, placement: number | null, dq: boolean }} ClassEntrant */
@@ -49,7 +50,18 @@ export function participantName(p) {
   return p.discriminator ? `${p.gamerTag} (${p.discriminator})` : p.gamerTag;
 }
 
-const API = { eventSlugOf, selectTargets, seedOrder, participantName };
+export const CHALLONGE_TOKEN_KEY = 'spsp_challonge_token';
+
+/** @param {number} [now] @returns {string | null} */
+export function challongeToken(now = Date.now()) {
+  try {
+    const j = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
+    // 期限の 1 分前からは使わない (作成の途中で切れないように)
+    return j && typeof j.token === 'string' && j.exp > now + 60 * 1000 ? j.token : null;
+  } catch (e) { return null; }
+}
+
+const API = { eventSlugOf, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspClassBracket = API;
 export default API;

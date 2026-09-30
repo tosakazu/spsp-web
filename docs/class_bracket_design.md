@@ -6,6 +6,14 @@ Challonge に作れるようにする。集計対象にしたものは smash_dat
 担当: フロント = spsp frontend セッション (このリポジトリの site/ と src/) / バックエンド = spsp backend セッション (worker/) /
 取得 = spsp database セッション (tosakazu/smash_database)。
 
+> **2026-10-01 変更 (ユーザー判断 (b))**: Challonge は TO の API キーではなく「Challonge でログイン」(SPSP の OAuth アプリ) で作る。
+> 取得側はアプリの権限 (client credentials) で読むので、TO が自分のキーで作ったトーナメントは読めない (database セッションが実 API で確認)。
+> 作成は Worker の `class_create` がまとめて行う (TO の確認 → Challonge v2.1 で作成・参加者追加 → D1 登録)。`class_register` は廃止。
+> 流れ: `challonge_begin` (署名 state f=challonge、authorize URL を返す) → Challonge の許可 → `/callback.html` → `challonge_token`
+> (Worker が code をトークンに交換。保存しない) → トークンはそのタブの sessionStorage だけ → ページに戻る。Redirect URI は
+> `https://spsp.games/callback.html` と preview の `/callback.html`。スコープ = me tournaments:read/write participants:read/write matches:read/write application:organizer。
+> 以下の 3・5・6 の「Challonge の API キー」「ブラウザから Challonge を呼ぶ」「class_register」は、この変更で置き換わった。
+
 ## 流れ
 
 1. **TO がページを開く** (シーディングのメニュー →「下位クラス作成」、`/jp/class/`)

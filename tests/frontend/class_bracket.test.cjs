@@ -60,3 +60,21 @@ test('participantName: 「名前 (discriminator)」', () => {
   assert.strictEqual(C.participantName(P(7, 9)), 'p7 (d7)');
   assert.strictEqual(C.participantName(P(7, 9, { discriminator: '' })), 'p7');
 });
+
+test('challongeToken: sessionStorage のトークン。期限の 1 分前からと壊れた値は null', () => {
+  const ctx = { console };
+  ctx.window = ctx; ctx.globalThis = ctx;
+  const store = new Map();
+  ctx.sessionStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+  vm.createContext(ctx);
+  vm.runInContext(built('js/class_bracket.js'), ctx);
+  const C = ctx.SpspClassBracket;
+  const now = 1e12;
+  assert.strictEqual(C.challongeToken(now), null);
+  store.set(C.CHALLONGE_TOKEN_KEY, JSON.stringify({ token: 'tk', exp: now + 10 * 60 * 1000 }));
+  assert.strictEqual(C.challongeToken(now), 'tk');
+  store.set(C.CHALLONGE_TOKEN_KEY, JSON.stringify({ token: 'tk', exp: now + 30 * 1000 }));
+  assert.strictEqual(C.challongeToken(now), null);
+  store.set(C.CHALLONGE_TOKEN_KEY, '{broken');
+  assert.strictEqual(C.challongeToken(now), null);
+});
