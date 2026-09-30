@@ -369,7 +369,7 @@ function renderList() {
     return `<tr class="${on ? '' : 'off'}" data-uid="${p.userId}">
       <td class="col-on"><input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}></td>
       <td class="col-no">${on ? seed : ''}</td>
-      <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? '<span class="cb-badge">DQ</span>' : ''}</td>
+      <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? `<span class="cb-badge">${escapeHtml(i18n('class.main_dq'))}</span>` : ''}</td>
       <td class="col-place">${p.placement != null ? p.placement : ''}</td>
     </tr>`;
   }).join('') || `<tr class="cb-empty"><td colspan="4">${escapeHtml(i18n('class.filter.empty'))}</td></tr>`;
