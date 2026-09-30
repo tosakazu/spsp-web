@@ -56,7 +56,7 @@
   border: 2px solid var(--pc-red); border-radius: 30px; background: rgba(255, 255, 255, .7);
   color: var(--pc-red); font-weight: 700; font-size: 10px; white-space: nowrap; max-width: 206px;
 }
-.pc-ach-emoji { font-size: 1.3em; color: #000; }
+.pc-ach-emoji { font-size: 1.3em; color: #000; position: relative; top: 2.5px; }   /* 絵文字は字面が上に寄るので少し下げて文字の上下の真ん中に */
 .pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
 .pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
 
@@ -130,5 +130,6 @@
 .pc-ov-btn svg { width: 17px; height: 17px; }
 .pc-ov-btn:disabled { opacity: .6; cursor: default; }
 /* 見出しの横のアイコン (start.gg・共有) */
-.hero { margin-bottom: 10px; }
+/* 名前とカードの間: 余白と、カードを囲む枠 (#share-card) と同じ色・太さの線 */
+.hero { padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid #e5e7eb; }
 .hero .share-icon-btn svg { width: 16px; height: 16px; }
