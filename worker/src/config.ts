@@ -42,8 +42,8 @@ export const RATE_MIN_INTERVAL_MS = 60 * 1000; // 同一ユーザーの連投間
 export const RATE_MAX_PER_DAY = 10;            // 同一ユーザーの当日投稿数
 
 /** プレイヤーカードの設定 (action card_put)。編集画面の「適用」を何度か押す程度は通す。 */
-export const CARD_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同一ユーザーの書き込み間隔 (1 分に 6 回まで)
-export const CARD_RATE_MAX_PER_DAY = 100;           // 同一ユーザーの当日書き込み数
+export const CARD_RATE_MIN_INTERVAL_MS = 2 * 1000;  // 同一ユーザーの書き込み間隔 (適用 → 戻る → すぐ直して適用、を通す)
+export const CARD_RATE_MAX_PER_DAY = 300;           // 同一ユーザーの当日書き込み数
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
