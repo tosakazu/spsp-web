@@ -276,6 +276,10 @@ window.SPSP_I18N.en = {
   // ── Player page (p/index.html) ──
   'player.not_found': 'Player not found. Check the URL.',
   'player.score': 'Score',
+  'player.sr.tjpr_list': 'Counted tournaments (by points)',
+  'player.sr.internal': 'Internal rating',
+  'player.sr.peak': 'Peak internal rating (last {days} days; this is the score)',
+  'player.sr.none': 'No counted tournaments',
   'player.sec.achievements': '🏆 Achievements',
   'player.sec.latest': '🎮 Latest result',
   'player.sec.upcoming': '📅 Next counted tournament',

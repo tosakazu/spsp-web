@@ -545,6 +545,61 @@ function tournamentItem(t, valueHtml) {
 
 // escapeHtml は ../js/html.js (サイト共通)
 
+// 順位評価・直対評価の箱: 押すと下に詳細が開く (もう一度押すと閉じる。もう一方を押すとそちらに切り替わる)。
+//   順位評価: スコアと、集計対象の大会のポイント (今の重み = 素点 × 経過による減衰) の順のリスト
+//   直対評価: スコア・内部レートと、スコアのもとになっている最高内部レート (直近 BT_PEAK_DAYS 日の最大) を出した大会と日付
+function setupSubrankDetail() {
+  const panel = document.getElementById('subrank-detail');
+  const cards = /** @type {HTMLElement[]} */ (Array.from(document.querySelectorAll('.subrank-card[data-sr]')));
+  if (!panel || !cards.length || !PLAYER || !MAIN_REC || !META) return;
+  const rec = /** @type {MainRec} */ (MAIN_REC), meta = /** @type {PMeta} */ (META);
+  const P = meta.params || {};
+  const ELO = P.ELO_PER_UNIT || 29.48, SCALE = P.TJPR_ELO_SCALE || 17.5, BT_OFF = P.BT_ELO_OFFSET || 0;
+  const fmt = (/** @type {number | null | undefined} */ v) => (v != null && isFinite(v) ? v.toFixed(2) : '—');
+  const tours = /** @type {PTour[]} */ (PLAYER.tournaments || []);
+  const tourLink = (/** @type {PTour} */ t) => t.event_id
+    ? SPSPLinks.tournamentLink(SPSP.langRoot, t.event_id, escapeHtml(t.name || '')) : escapeHtml(t.name || '');
+  const row = (/** @type {string} */ k, /** @type {string} */ v, red = false) =>
+    `<div class="sd-row"><span class="sd-k">${escapeHtml(k)}</span><span class="sd-v${red ? ' red' : ''}">${escapeHtml(v)}</span></div>`;
+
+  function tjprHtml() {
+    const list = tours.filter(t => (t.tjpr_w || 0) > 0).sort((a, b) => (b.tjpr_w || 0) - (a.tjpr_w || 0));
+    const items = list.map(t => `<li><span class="sd-date">${escapeHtml(t.date || '')}</span><span class="sd-name">${tourLink(t)}</span>` +
+      `<span class="sd-pts">+${((t.tjpr_w || 0) * SCALE).toFixed(1)}</span></li>`).join('');
+    return row(i18n('player.score'), fmt(rec.scores.tjpr_elo), true) +
+      `<div class="sd-h">${escapeHtml(i18n('player.sr.tjpr_list'))}</div>` +
+      (items ? `<ul class="sd-list">${items}</ul>` : `<div class="sd-sub">${escapeHtml(i18n('player.sr.none'))}</div>`);
+  }
+  function btHtml() {
+    const days = P.BT_PEAK_DAYS || 180;
+    const cutoff = new Date(Date.parse(meta.eval_date) - days * 86400e3).toISOString().slice(0, 10);
+    /** @type {PTour | null} */
+    let best = null;
+    for (const t of tours) {
+      if (t.bt_internal_after == null || (t.date || '') < cutoff) continue;
+      if (!best || t.bt_internal_after > /** @type {number} */ (best.bt_internal_after)) best = t;
+    }
+    let html = row(i18n('player.score'), fmt(rec.scores.bt_gated_elo), true) +
+      row(i18n('player.sr.internal'), fmt(rec.scores.bt_internal_elo));
+    if (best) {
+      html += `<div class="sd-h">${escapeHtml(i18n('player.sr.peak', { days }))}</div>` +
+        `<ul class="sd-list"><li><span class="sd-date">${escapeHtml(best.date || '')}</span><span class="sd-name">${tourLink(best)}</span>` +
+        `<span class="sd-pts">${fmt(best.bt_internal_after * ELO + BT_OFF)}</span></li></ul>`;
+    }
+    return html;
+  }
+
+  /** @type {string | null} */
+  let open = null;
+  const toggle = (/** @type {string} */ which) => {
+    open = open === which ? null : which;
+    cards.forEach(c => c.setAttribute('aria-expanded', String(c.dataset.sr === open)));
+    panel.hidden = !open;
+    panel.innerHTML = open === 'tjpr' ? tjprHtml() : open === 'bt' ? btHtml() : '';
+  };
+  cards.forEach(c => c.addEventListener('click', () => toggle(/** @type {string} */ (c.dataset.sr))));
+}
+
 // 最上部の選手カード (../js/player_card.js) に渡すデータ (中身の組み立ては ../js/player_card_model.js。編集ページと共有)
 /** @returns {import('../../site/js/player_card_model.js').CardData} */
 function cardData() {
@@ -592,15 +647,7 @@ function render() {
   if (rankTjpr) rankTjpr.textContent = fmtRank(MAIN_REC.ranks.tjpr);
   const rankBt = document.getElementById('rank-bt');
   if (rankBt) rankBt.textContent = fmtRank(MAIN_REC.ranks.bt_gated);
-  const scoreTjpr = document.getElementById('score-tjpr');
-  if (scoreTjpr) scoreTjpr.textContent =
-    MAIN_REC.scores.tjpr_elo != null ? MAIN_REC.scores.tjpr_elo.toFixed(2) : '—';
-  const scoreBt = document.getElementById('score-bt');
-  if (scoreBt) scoreBt.textContent =
-    MAIN_REC.scores.bt_gated_elo != null ? MAIN_REC.scores.bt_gated_elo.toFixed(2) : '—';
-  const scoreBtInternal = document.getElementById('score-bt-internal');
-  if (scoreBtInternal) scoreBtInternal.textContent =
-    MAIN_REC.scores.bt_internal_elo != null ? MAIN_REC.scores.bt_internal_elo.toFixed(2) : '—';
+  setupSubrankDetail();
 
   // ── 選手カード (最上部。../js/player_card.js) ──
   const card = document.getElementById('pcard');

@@ -55,19 +55,32 @@
 
   /* Sub ranks (順位評価/直対評価) */
   .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
-  /* 縦幅を詰める: 左に見出しを 2 行 (順位 / 評価)、右に順位 (大) とスコア (小) の 2 段 */
+  /* 箱: 左に見出し 2 行 (順位 / 評価)、右に順位、右端に ▼。押すと下に詳細 */
   .subrank-card {
-    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
-    padding: 6px 10px;
-    display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center;
-    align-content: center;   /* 隣の箱に合わせて高くなっても、中身は上下の真ん中に詰めたまま */
+    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 6px 10px;
+    display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit;
   }
-  .subrank-card .label-row { grid-row: 1 / span 2; }
+  .subrank-card:hover { background: #f3f4f6; }
+  .subrank-card[aria-expanded="true"] { border-color: #d1d5db; background: #fff; }
   .subrank-card .label { display: block; max-width: 2.3em; font-size: 11px; line-height: 1.3; color: #6b7280; letter-spacing: 0.06em; }
   html[lang="en"] .subrank-card .label { max-width: 6.5em; letter-spacing: 0; }   /* 英語は単語で折り返す (Head-to-head は - で) */
-  .subrank-card .value { font-size: 18px; line-height: 1.15; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .subrank-card .subscore { font-size: 11px; line-height: 1.3; color: #dc2626; font-variant-numeric: tabular-nums;
-                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* 折り返さない (2 段のまま) */
+  .subrank-card .value { flex: 1; font-size: 18px; line-height: 1.15; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .subrank-card .sr-caret { width: 16px; height: 16px; color: #9ca3af; flex: none; transition: transform .15s; }
+  .subrank-card[aria-expanded="true"] .sr-caret { transform: rotate(180deg); }
+  /* 詳細 (2 つの箱の下、全幅) */
+  .subrank-detail { margin-top: 8px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; font-size: 12px; color: #374151; }
+  .subrank-detail .sd-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+  .subrank-detail .sd-k { color: #6b7280; }
+  .subrank-detail .sd-v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .subrank-detail .sd-v.red { color: #dc2626; }
+  .subrank-detail .sd-sub { color: #9ca3af; font-size: 11px; margin: 2px 0 6px; }
+  .subrank-detail .sd-h { color: #6b7280; font-size: 11px; font-weight: 600; margin: 8px 0 4px; }
+  .subrank-detail .sd-list { list-style: none; margin: 0; padding: 0; }
+  .subrank-detail .sd-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 3px 0; border-top: 1px solid #f3f4f6; align-items: baseline; }
+  .subrank-detail .sd-date { color: #9ca3af; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .subrank-detail .sd-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subrank-detail .sd-name a { color: inherit; }
+  .subrank-detail .sd-pts { color: #dc2626; font-weight: 600; font-variant-numeric: tabular-nums; }
 
   /* Lv badge (順位評価) */
   .lv-pill {
@@ -452,24 +465,20 @@
       </div>
     </div>
 
+    <!-- 順位評価・直対評価: 見出しと順位だけ。タップで下に詳細 (スコアと、その中身) が開く -->
     <div class="subranks">
-      <div class="subrank-card">
-        <div class="label-row">
-          <span class="label" data-i18n="ranking.tab.tjpr">順位評価</span>
-        </div>
-        <div class="value">#<span id="rank-tjpr">—</span></div>
-        <div class="subscore" data-i18n="player.score">スコア <span id="score-tjpr">—</span></div>
-      </div>
-      <div class="subrank-card">
-        <div class="label-row">
-          <span class="label" data-i18n="ranking.tab.bt">直対評価</span>
-        </div>
-        <div class="value">#<span id="rank-bt">—</span></div>
-        <div class="subscore" data-i18n="player.score">スコア <span id="score-bt">—</span>
-          <span style="color:#9ca3af;font-size:10px">(<span id="score-bt-internal">—</span>)</span>
-        </div>
-      </div>
+      <button type="button" class="subrank-card" data-sr="tjpr" aria-expanded="false" aria-controls="subrank-detail">
+        <span class="label-row"><span class="label" data-i18n="ranking.tab.tjpr">順位評価</span></span>
+        <span class="value">#<span id="rank-tjpr">—</span></span>
+        <svg class="sr-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="subrank-card" data-sr="bt" aria-expanded="false" aria-controls="subrank-detail">
+        <span class="label-row"><span class="label" data-i18n="ranking.tab.bt">直対評価</span></span>
+        <span class="value">#<span id="rank-bt">—</span></span>
+        <svg class="sr-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </div>
+    <div class="subrank-detail" id="subrank-detail" hidden></div>
 
     <!-- 最新の大会結果 + パフォーマンス (SPSP シード基準の相当順位/相当Lv)
          (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
