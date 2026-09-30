@@ -334,7 +334,7 @@ export function render(el, model) {
   // 組み立てと詰めは毎回まっさらな HTML から (詰めは実績の並べ替えや改行を入れるので、2 回目は作り直してからやる)
   const build = () => {
     // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)
-    const keep = el.querySelector('img.pc-img');
+    const keep = el.querySelector('.pc-img');
     el.innerHTML = cardHtml(model);
     if (keep) el.appendChild(keep);
     fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
@@ -368,15 +368,27 @@ function scheduleImage(el) {
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
   imageTimers.set(el, setTimeout(() => {
-    capture(el).then(blob => {
-      if (!blob) return;
-      const prev = /** @type {HTMLImageElement | null} */ (el.querySelector('img.pc-img'));
-      const img = document.createElement('img');
-      img.className = 'pc-img';
-      img.alt = '';
-      img.src = URL.createObjectURL(blob);
-      img.onload = () => { if (prev) { URL.revokeObjectURL(prev.src); prev.remove(); } };
-      el.appendChild(img);
+    // Samsung Internet のダークモードは <img> を暗くする。canvas (既定) か背景画像で重ねる (?pcimg=bg / img で切り替えて比べられる)
+    const mode = (/[?&]pcimg=(bg|img)/.exec(location.search) || [])[1] || 'canvas';
+    captureCanvas(el).then(canvas => {
+      if (!canvas) return;
+      const prev = el.querySelector('.pc-img');
+      /** @type {HTMLElement} */
+      let node;
+      if (mode === 'canvas') {
+        node = canvas;
+      } else if (mode === 'bg') {
+        node = document.createElement('div');
+        node.style.backgroundImage = `url(${canvas.toDataURL('image/png')})`;
+        node.style.backgroundSize = '100% 100%';
+      } else {
+        node = document.createElement('img');
+        /** @type {HTMLImageElement} */ (node).alt = '';
+        /** @type {HTMLImageElement} */ (node).src = canvas.toDataURL('image/png');
+      }
+      node.classList.add('pc-img');
+      el.appendChild(node);
+      if (prev) prev.remove();
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
   }, 300));
 }
@@ -385,6 +397,13 @@ function scheduleImage(el) {
  * 画面外に 514×333 の原寸で複製して撮る (3 倍 = 1542×999)
  * @param {HTMLElement} el  render() したカードの箱 (.pcard) @returns {Promise<Blob | null>} */
 export async function capture(el) {
+  const canvas = await captureCanvas(el);
+  if (!canvas) return null;
+  return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+/** capture の元 (原寸 3 倍の canvas) @param {HTMLElement} el @returns {Promise<HTMLCanvasElement | null>} */
+async function captureCanvas(el) {
   const src = el.querySelector('.pc-in');
   if (!src) return null;
   const w = /** @type {any} */ (window);
@@ -403,8 +422,7 @@ export async function capture(el) {
   box.appendChild(clone);
   document.body.appendChild(box);
   try {
-    const canvas = await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333 });
-    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333 });
   } finally {
     box.remove();
   }
