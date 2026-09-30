@@ -14,6 +14,7 @@ import './html.js';   // SPSP.pageHref (ページ間リンクの形)。読めな
 import SPSPI18n from './i18n.js';
 import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
+import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 (function () {
   'use strict';
   var i18n = function (k, p) { return SPSPI18n.t(k, p); };   // 文言 (i18n/ja.js、js/i18n.js を先に読む)
@@ -21,6 +22,27 @@ import SPSP_POST_CONFIG from './post_config.js';
   var CFG = SPSP_POST_CONFIG;
   var S = SpspOAuthState;
   var AUTH = SpspAuth;
+
+  /**
+   * 処理中の表示: 流れに合わせた文言 (ログイン中… / 投稿処理中…) と SPSP のロゴ (再生)。
+   * ロゴの見た目は logo.css。このページの CSP は外部の CSS を読まないので、同じサイトから fetch して <style> で入れる
+   * (connect-src 'self' と style-src 'unsafe-inline' の範囲。INV-8 の「外部リソースなし」はそのまま)。
+   */
+  function showBusy(flow) {
+    var msg = document.getElementById('cb-busy-msg');
+    var key = flow === 'post' ? 'callback.busy_post' : 'callback.busy_login';
+    if (msg) msg.textContent = i18n(key);
+    document.title = i18n(key) + ' | SPSP';
+    var logo = document.getElementById('cb-logo');
+    if (!logo || !SPSPLogo || typeof fetch !== 'function') return;
+    fetch(new URL('logo.css', location.href).toString()).then(function (r) { return r.ok ? r.text() : ''; }).then(function (css) {
+      if (!css || !document.getElementById('cb-logo')) return;   // もう結果の表示に変わっていたら出さない
+      var st = document.createElement('style');
+      st.textContent = css;
+      document.head.appendChild(st);
+      SPSPLogo.inline(logo, { sub: true });
+    }).catch(function () { /* ロゴが出なくても処理は続ける */ });
+  }
 
   function show(kind, title, detail, backPath) {
     var root = document.getElementById('cb-root');
@@ -103,6 +125,10 @@ import SPSP_POST_CONFIG from './post_config.js';
 
     // ── 2. INV-6: 何をするより先に URL から code を消す ──
     history.replaceState(null, '', location.pathname);
+
+    // 処理中の表示 (state の flow で文言を分ける。検証は下でする。ここは表示だけ)
+    var st0 = state ? S.decodeState(state) : null;
+    if (!oauthError && code) showBusy(st0 && st0.f);
 
     var backDefault = CFG.CANONICAL_BASE + ((window.SPSP && window.SPSP.pageHref) ? window.SPSP.pageHref('post.html') : 'post.html');
 

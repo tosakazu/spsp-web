@@ -747,6 +747,8 @@ window.SPSP_I18N.ja = {
   'post.s8': '投稿を受け付けました。サイトへの反映は次回の更新時になります。',
 
   // ── callback (site/js/callback.js) — tools/frontend/i18n_extract_literals.py で機械的に抽出 ──
+  'callback.busy_login': 'ログイン中…',
+  'callback.busy_post': '投稿処理中…',
   'callback.s1': 'キャラ投票ページに戻る',
   'callback.s2': '投稿ページに戻る',
   'callback.s3': 'SPSP 側のアプリ設定に問題がある可能性があります。運営にご連絡ください。',
@@ -845,7 +847,7 @@ window.SPSP_I18N.ja = {
   'page.vote.title': 'キャラ投票 — SPSP',
   'page.vote.description': 'SPSP の選手が自分のメインキャラを申告するページ。大会での使用データが無い選手と、メインキャラ判定が僅差の選手が対象。',
   'page.post.title': '投稿 — SPSP',
-  'page.callback.title': '投稿処理中 — SPSP',
+  'page.callback.title': '処理中 — SPSP',
   'page.overview.title': '基本編 — SPSP',
   'page.overview.description': 'SPSP の基本概念解説: 順位評価 + 直対評価の共通 5 層レベルでスマブラSPプレイヤーをランクづけする仕組みを数式なしで説明。',
   'page.overview.og_title': 'SPSP 基本編 | スマブラSP プレイヤーランキングの仕組み',

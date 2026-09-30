@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-i18n="page.callback.title">投稿処理中 — SPSP</title>
+<title data-i18n="page.callback.title">処理中 — SPSP</title>
 <meta name="robots" content="noindex">
 
 <!--
@@ -26,11 +26,16 @@
   .cb-detail { color: #6b7280; font-size: 13px; margin: 0 0 14px; line-height: 1.7; }
   .cb-back { color: #2563eb; font-size: 13px; }
   .cb.error .cb-title { color: #991b1b; }
+  /* 処理中: SPSP のロゴ (再生) と「ログイン中…」を真ん中に。ロゴの CSS は同じサイトの logo.css を <style> にして入れる (INV-8) */
+  .cb-busy { text-align: center; }
+  .cb-logo { max-width: 280px; margin: 0 auto 14px; }
+  .cb-busy .cb-title { color: #6b7280; font-weight: 600; }
 </style>
 </head>
 <body>
-<div id="cb-root" class="cb">
-  <p class="cb-title">投稿処理中…</p>
+<div id="cb-root" class="cb cb-busy">
+  <div class="cb-logo" id="cb-logo"></div>
+  <p class="cb-title" id="cb-busy-msg">処理中…</p>
 </div>
 
 <script src="region/config.js"></script>

@@ -745,6 +745,8 @@ window.SPSP_I18N.en = {
   'post.s8': 'Post received. It appears on the site after the next update.',
 
   // ── callback (site/js/callback.js) ──
+  'callback.busy_login': 'Logging in…',
+  'callback.busy_post': 'Posting…',
   'callback.s1': 'Back to the character vote',
   'callback.s2': 'Back to the post page',
   'callback.s3': 'The SPSP app configuration may be wrong. Please contact the admins.',
