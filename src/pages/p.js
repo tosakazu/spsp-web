@@ -2036,20 +2036,23 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   }
 }
 
-// 最新の大会結果の共有ボタン: 文章 (latestShareText) と URL。共有シートがあればそれ、無ければ両方をクリップボードへ
+// 最新の大会結果の共有ボタン: カードの画像 + 文章 (latestShareText) + URL。
+// 画像つきの共有シートが使えなければ (PC など)、文章と URL をクリップボードへ
 {
   const btn = document.getElementById('lr-share-btn');
-  if (btn) btn.addEventListener('click', async () => {
-    if (!MAIN_REC) return;
-    const text = `${latestShareText()}\n\n${location.href}`;
-    const nav = /** @type {any} */ (navigator);
-    if (nav.share) {
-      try { await nav.share({ text }); return; }
-      catch (e) { if (/** @type {any} */ (e).name === 'AbortError') return; }
-    }
-    const ok = await SPSPShare.copyToClipboard(text);
-    alert(ok ? i18n('player.share.copied') : i18n('share.copy_failed') + text);
-  });
+  if (btn && canShareImage()) {
+    onCardImage(btn, async blob => {
+      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
+      await /** @type {any} */ (navigator).share({ files: [file], title: shareData().title, text: `${latestShareText()}\n\n${location.href}` });
+    });
+  } else if (btn) {
+    btn.addEventListener('click', async () => {
+      if (!MAIN_REC) return;
+      const text = `${latestShareText()}\n\n${location.href}`;
+      const ok = await SPSPShare.copyToClipboard(text);
+      alert(ok ? i18n('player.share.copied') : i18n('share.copy_failed') + text);
+    });
+  }
 }
 
 // カードをタップすると、カードの上に編集 (本人のページだけ)・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
