@@ -56,9 +56,9 @@ VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト�
 SITE_PREFIX = "/jp"
 # タイムスタンプの固定オフセット (GAS は Asia/Tokyo で書いていた)。
 TS_OFFSET = "+09:00"
-# セッションの有効期間 (180 日) と state の有効期間 (5 分)。ミリ秒。
+# セッションの有効期間 (180 日) と state の有効期間 (30 分)。ミリ秒。
 SESSION_TTL_MS = "15552000000"
-STATE_TTL_MS = "300000"
+STATE_TTL_MS = "1800000"
 
 # ── preview (workers.dev で確認する。本番と別の D1) ──
 [env.preview]
@@ -88,7 +88,7 @@ VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト�
 SITE_PREFIX = "/jp"
 TS_OFFSET = "+09:00"
 SESSION_TTL_MS = "15552000000"
-STATE_TTL_MS = "300000"
+STATE_TTL_MS = "1800000"
 
 # ── na (北米版。start.gg アプリ・データ・D1 を分ける) ──
 [env.na]
@@ -119,4 +119,4 @@ VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト�
 SITE_PREFIX = "/na"
 TS_OFFSET = "-05:00"
 SESSION_TTL_MS = "15552000000"
-STATE_TTL_MS = "300000"
+STATE_TTL_MS = "1800000"
