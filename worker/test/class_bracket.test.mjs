@@ -157,7 +157,7 @@ test('class_create: 管理者でなければ not_admin で、Challonge には何
   const e = env({ ...okHandlers(), gql: () => gqlOk(111, 999, [{ id: 222 }]) });
   const r = await post(e, body());
   assert.strictEqual(r.error.code, 'not_admin');
-  assert.deepStrictEqual(e.calls.map((c) => c.kind), ['gql']);
+  assert.deepStrictEqual(e.calls.map((c) => c.kind), ['gql', 'gql'], '大会の確認 + 管理している大会の一覧 1 ページ');
   assert.strictEqual(e.store.classes.length, 0);
   assert.strictEqual(e.store.errors.at(-1).note, 'not_admin');
   assert.strictEqual(leaked(e), false);
@@ -287,4 +287,67 @@ test('class_done: 鍵違いは auth_failed、id 不正は bad_request、無い i
 
 test('class_register は廃止 (class_create に置き換え)', async () => {
   assert.strictEqual((await post(env({}), { action: 'class_register' })).error.code, 'bad_request');
+});
+
+/** gql の問い合わせを種類で分ける: 大会の確認 (SpspClassAdmin) / 管理している大会の一覧 (SpspClassAdminTours、page ごと) */
+function gqlRouter(eventRes, toursPage) {
+  return (init) => {
+    const b = JSON.parse(init.body);
+    if (b.query.includes('SpspClassAdminTours')) return toursPage(b.variables.page, b.variables.perPage);
+    return eventRes();
+  };
+}
+const toursResp = (ids) => resp(200, { data: { currentUser: { tournaments: { nodes: ids.map((id) => ({ id })) } } } });
+const others = (n, base) => Array.from({ length: n }, (_, i) => base + i);
+
+test('class_create: admins が null でも、本人の管理している大会の一覧にあれば TO として通す', async () => {
+  const e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), (page) => toursResp(page === 1 ? [5, 777, 9] : [])) });
+  const r = await post(e, body());
+  assert.strictEqual(r.ok, true);
+  const g = e.calls.filter((c) => c.kind === 'gql');
+  assert.strictEqual(g.length, 2);
+  const q = JSON.parse(g[1].init.body);
+  assert.deepStrictEqual(q.variables, { page: 1, perPage: 50 });
+  assert.match(q.query, /tournamentView: "admin"/);
+  assert.strictEqual(g[1].init.headers.Authorization, 'Bearer ' + SG_KEY);
+  assert.strictEqual(e.store.classes[0].parent_tournament_id, 777);
+});
+
+test('class_create: 管理している大会の一覧は 50 件ずつ、見つかるまで・50 件未満のページまで・最大 4 ページ', async () => {
+  // 2 ページ目で見つかる
+  let e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), (page) => toursResp(page === 1 ? others(50, 1) : [777])) });
+  assert.strictEqual((await post(e, body())).ok, true);
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 3);
+  // 50 件未満のページで止める
+  e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), (page) => toursResp(page === 1 ? others(50, 1) : others(10, 100))) });
+  assert.strictEqual((await post(e, body())).error.code, 'not_admin');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 3);
+  // 毎ページ 50 件でも 4 ページで止める (5 ページ目に有っても見ない)
+  e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), (page) => toursResp(page <= 4 ? others(50, page * 1000) : [777])) });
+  assert.strictEqual((await post(e, body())).error.code, 'not_admin');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 5);
+  assert.deepStrictEqual(e.calls.filter((c) => c.kind !== 'gql'), [], 'Challonge には作らない');
+  // 一覧が取れない (nodes 無し・エラー無し) → not_admin
+  e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), () => resp(200, { data: { currentUser: { tournaments: null } } })) });
+  assert.strictEqual((await post(e, body())).error.code, 'not_admin');
+});
+
+test('class_create: 管理している大会の一覧の取得に失敗したら startgg_error (not_admin にはしない)', async () => {
+  for (const [page, note] of [
+    [() => resp(500, {}), 'tours:http_500'],
+    [() => resp(200, { data: null, errors: [{ message: 'x' }] }), 'tours:gql_error'],
+    [() => { const x = new Error('t'); x.name = 'TimeoutError'; throw x; }, 'tours:timeout'],
+  ]) {
+    const e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 999, null), page) });
+    const r = await post(e, body());
+    assert.strictEqual(r.error.code, 'startgg_error', note);
+    assert.strictEqual(e.store.errors.at(-1).note, note);
+    assert.strictEqual(JSON.stringify(e.store).includes(SG_KEY), false);
+  }
+});
+
+test('class_create: owner / admins で通るときは一覧を問い合わせない', async () => {
+  const e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 111, null), () => { throw new Error('should not be called'); }) });
+  assert.strictEqual((await post(e, body())).ok, true);
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 1);
 });
