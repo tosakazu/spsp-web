@@ -282,6 +282,8 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
                                    font:inherit; font-size:13px; padding:7px 14px; color:#6b7280; cursor:pointer; }
       .nav-user .nav-menu button:hover { color:#111827; }
+      /* ログアウトは誤タップしないよう、上に線を引いて少し離す */
+      .nav-user .nav-menu .nav-logout { margin-top:6px; border-top:1px solid #f3f4f6; padding-top:9px; }
       .nav-user .nav-menu button:hover { background:#f3f4f6; }
       .nav-news-panel { display:none; position:absolute; top:100%; right:0;
                         background:#fff; border:1px solid #e5e7eb;
