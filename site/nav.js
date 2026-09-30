@@ -282,8 +282,8 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
                                    font:inherit; font-size:13px; padding:7px 14px; color:#6b7280; cursor:pointer; }
       .nav-user .nav-menu button:hover { color:#111827; }
-      /* ログアウトは誤タップしないよう、上に線を引いて少し離す */
-      .nav-user .nav-menu .nav-logout { margin-top:6px; border-top:1px solid #f3f4f6; padding-top:9px; }
+      /* ログイン・ログアウトは誤タップしないよう、一番下で上に線を引いて少し離す */
+      .nav-user .nav-menu .nav-logout, .nav-user .nav-menu .nav-login { margin-top:6px; border-top:1px solid #f3f4f6; padding-top:9px; }
       .nav-user .nav-menu button:hover { background:#f3f4f6; }
       .nav-news-panel { display:none; position:absolute; top:100%; right:0;
                         background:#fff; border:1px solid #e5e7eb;
@@ -362,7 +362,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
   }
 
   // ── アカウントメニュー (人型アイコン) ──
-  //   ログアウト中: start.gg でログイン / キャラ投票
+  //   ログアウト中: キャラ投票 / (線) start.gg でログイン
   //   ログイン中:   人型が塗りつぶしになり、名前 (見出し)・マイページ・カードを編集・キャラ投票・ログアウト
   //   ログインできない場所 (API の無い ConoHa のプレビュー) では「ログイン」を出さない
   const USER_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
@@ -376,7 +376,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
     const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
     if (!sess) {
       trigger.innerHTML = USER_SVG;
-      menu.innerHTML = (SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '') + vote;
+      menu.innerHTML = vote + (SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '');   // ログインはログアウトと同じく一番下
       return;
     }
     const name = sess.user.gamerTag || sess.user.slug || String(sess.user.id);
