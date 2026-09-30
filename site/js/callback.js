@@ -30,9 +30,9 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
    */
   function showBusy(flow) {
     var msg = document.getElementById('cb-busy-msg');
-    var key = flow === 'post' ? 'callback.busy_post' : 'callback.busy_login';
-    if (msg) msg.textContent = i18n(key);
-    document.title = i18n(key) + ' | SPSP';
+    var text = flow === 'post' ? i18n('callback.busy_post') : i18n('callback.busy_login');
+    if (msg) msg.textContent = text;
+    document.title = text + ' | SPSP';
     var logo = document.getElementById('cb-logo');
     if (!logo || !SPSPLogo || typeof fetch !== 'function') return;
     fetch(new URL('logo.css', location.href).toString()).then(function (r) { return r.ok ? r.text() : ''; }).then(function (css) {
