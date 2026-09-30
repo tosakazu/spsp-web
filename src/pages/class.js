@@ -25,7 +25,8 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-avoid', 'cb-exclude-dq', 'cb-counted'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-exclude-dq', 'cb-counted'];
+const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
 
@@ -55,9 +56,11 @@ async function sgg(token, query, variables = {}) {
 }
 
 /** 読み込んだ内容 (作成で使う)。seeded = 全員の元のシード順、off = 外した人 (start.gg のユーザー ID)、
- * avoid = 被り回避の材料 (null = 使わない)、order = 表示・作成に使う最終の並び (外した人を除き、被り回避の後)
+ * avoid = 被り回避の材料 (null = 使わない)、order = 表示・作成に使う最終の並び (外した人を除き、被り回避の後)、
+ * mainSize = 本戦の人数、mainPairs = 本戦で当たった組 (必要になったら取る)
  * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number>,
- *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, mainPairs: Set<string> }, order: ClassEntrant[] }} */
+ *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> }, order: ClassEntrant[],
+ *   mainSize: number, mainPairs: Set<string> | null }} */
 let loaded = null;
 
 /** 外した人を除いて、被り回避 (あれば) をかけた並びを作る */
@@ -69,7 +72,7 @@ function computeOrder() {
   try {
     const r = SPSPSeedOptimizer.optimize({
       poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
-      prefByUid: loaded.avoid.prefByUid, recentPair: loaded.avoid.recentPair, params: {},
+      prefByUid: loaded.avoid.prefByUid, recentPair: loaded.avoid.recentPair, params: loaded.avoid.params,
     });
     if (r && Array.isArray(r.seedOrder)) {
       const byUid = new Map(base.map(p => [p.userId, p]));
@@ -90,23 +93,84 @@ async function mainEventPairs(token, eventId) {
       const uids = (s.slots || []).map((/** @type {any} */ sl) => sl && sl.entrant && sl.entrant.participants && sl.entrant.participants[0] && sl.entrant.participants[0].user && sl.entrant.participants[0].user.id).filter((/** @type {any} */ u) => u != null);
       if (uids.length === 2 && uids[0] !== uids[1]) pairs.add(SPSPSeedOptimizer.pairKey(uids[0], uids[1]));
     }
+    if (sets && sets.pageInfo) status(i18n('class.progress.sets', { done: page, total: sets.pageInfo.totalPages || page }));
     if (!sets || !sets.pageInfo || page >= sets.pageInfo.totalPages) break;
   }
   return pairs;
 }
 
-/** 被り回避の材料: シード機能と同じ地域・直近対戦 + 本戦で当たった組
- * @param {string} token @param {number} eventId @param {ClassEntrant[]} targets @param {number} mainSize */
-async function buildAvoid(token, eventId, targets, mainSize) {
-  const uids = targets.map(p => p.userId);
-  const [data, mainPairs] = await Promise.all([
-    SPSPSeedData.buildSeedData(uids, { prefsOptional: true }),
-    mainEventPairs(token, eventId),
-  ]);
-  const recentPair = Object.assign({}, data.recentPair);
-  const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, mainSize));
-  for (const k of mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
-  return { prefByUid: data.prefByUid, recentPair, mainPairs };
+/** 選手のファイル (対戦歴) はこのページの中で使い回す (設定を切り替えるたびに取り直さない) */
+const PLAYER_CACHE = new Map();
+function cachedFetchers() {
+  const base = SPSPSeedData.defaultFetchers(SPSP.data);
+  return Object.assign({}, base, {
+    fetchPlayer: async (/** @type {number} */ uid) => {
+      if (!PLAYER_CACHE.has(uid)) PLAYER_CACHE.set(uid, await base.fetchPlayer(uid));
+      return PLAYER_CACHE.get(uid);
+    },
+  });
+}
+
+/** 地域まとめ (南関東など) のトグル。定義は geo.json の seed_groups (シード機能と同じ文言・既定) */
+async function renderGroupToggles() {
+  try {
+    const geo = /** @type {any} */ (await SPSPSeedData.ensureGeoCatalog(cachedFetchers()));
+    const units = (geo && geo.units) || [];
+    const shortName = (/** @type {string} */ id) => {
+      const u = units.find((/** @type {any} */ x) => x.id === id);
+      return String((u && SPSPI18n.pick(u.name)) || id).replace(/[都府県]$/, '');
+    };
+    $('cb-av-groups').innerHTML = ((geo && geo.seed_groups) || []).map((/** @type {any} */ g) => {
+      const names = (g.units || []).map(shortName).join(i18n('seed.skeleton.unit_sep'));
+      const name = SPSPI18n.pick(g.name) || g.id;
+      return `<label title="${escapeHtml(i18n('seed.skeleton.group_help', { name, units: names }))}"><input type="checkbox" data-group="${escapeHtml(String(g.id))}"${g.default ? ' checked' : ''}> ${escapeHtml(i18n('seed.skeleton.group_toggle', { units: names }))}</label>`;
+    }).join('');
+  } catch (e) { /* まとめ無し (都道府県単位) */ }
+}
+
+/** 被り回避の設定 (画面のトグル) から材料を作る。全部 OFF なら null
+ * シード機能と同じ地域・直接対戦 (seed_data.js) に、本戦で当たった組を強い再対戦として足す */
+async function refreshAvoid() {
+  if (!loaded) return;
+  const L = loaded;
+  const region = !!$('cb-av-region').checked, recent = !!$('cb-av-recent').checked, main = !!$('cb-av-main').checked;
+  if (!region && !recent && !main) { L.avoid = null; return; }
+  /** @type {Record<string, boolean>} */
+  const groups = {};
+  for (const el of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('#cb-av-groups input[data-group]'))) groups[String(el.dataset.group)] = el.checked;
+  const fetchers = cachedFetchers();
+  /** @type {any} */
+  let data = null;
+  if (region || recent) {
+    await SPSPSeedData.ensureGeoCatalog(fetchers);
+    data = await SPSPSeedData.buildSeedData(L.seeded.map(p => p.userId), Object.assign({}, fetchers, {
+      prefix: SPSP.data, regionGroups: SPSPSeedData.buildRegionGroups(groups), prefsOptional: !region,
+      params: { excludeWeekday: !$('cb-av-weekday').checked },
+      onProgress: (/** @type {any} */ pr) => { if (pr && pr.phase === 'fetch') status(i18n('class.progress.players', { done: pr.done, total: pr.total })); },
+    }));
+  }
+  if (main && !L.mainPairs) L.mainPairs = await mainEventPairs(L.token, L.event.id);
+  /** @type {Record<string, number>} */
+  const recentPair = Object.assign({}, recent && data ? data.recentPair : {});
+  status(i18n('class.progress.optimize'));
+  if (main && L.mainPairs) {
+    const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, L.mainSize));
+    for (const k of L.mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
+  }
+  L.avoid = {
+    prefByUid: region && data ? data.prefByUid : {},
+    recentPair,
+    params: { avoidRegion: region, avoidRecent: recent || main },
+  };
+}
+
+/** 被り回避の設定を変えたら、読み込み済みなら並べ直す */
+async function onAvoidChange() {
+  if (!loaded) return;
+  try { await refreshAvoid(); } catch (e) { if (loaded) loaded.avoid = null; }
+  computeOrder();
+  renderList();
+  status(i18n('class.step.ready'), 'ok');
 }
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
@@ -175,7 +239,7 @@ async function load() {
   const standings = [];
   for (let page = 1; page <= 100; page++) {
     const d = await sgg(token, `query($id: ID!, $page: Int!) { event(id: $id) { standings(query: { page: $page, perPage: 64 }) {
-      pageInfo { totalPages } nodes { placement entrant { isDisqualified participants { user { id discriminator player { gamerTag } } } } } } } }`,
+      pageInfo { totalPages total } nodes { placement entrant { isDisqualified participants { user { id discriminator player { gamerTag } } } } } } } }`,
     { id: ev.id, page });
     const st = d.event && d.event.standings;
     for (const n of (st && st.nodes) || []) {
@@ -183,6 +247,7 @@ async function load() {
       if (!u) continue;
       standings.push({ userId: u.id, discriminator: u.discriminator || '', gamerTag: (u.player && u.player.gamerTag) || '', placement: n.placement, dq: !!n.entrant.isDisqualified });
     }
+    if (st && st.pageInfo) status(i18n('class.progress.standings', { done: standings.length, total: st.pageInfo.total || standings.length }));
     if (!st || !st.pageInfo || page >= st.pageInfo.totalPages) break;
   }
 
@@ -192,13 +257,8 @@ async function load() {
   const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
   const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
   const seeded = seedOrder(targets, method, rankOf);
-  /** @type {any} */
-  let avoid = null;
-  if ($('cb-avoid').checked) {
-    status(i18n('class.step.avoid'));
-    try { avoid = await buildAvoid(token, ev.id, targets, standings.length); } catch (e) { avoid = null; }
-  }
-  loaded = { token, event: ev, seeded, off: new Set(), avoid, order: [] };
+  loaded = { token, event: ev, seeded, off: new Set(), avoid: null, order: [], mainSize: standings.length, mainPairs: null };
+  try { await refreshAvoid(); } catch (e) { loaded.avoid = null; }
   computeOrder();
   renderList();
   $('cb-preview').hidden = false;
@@ -334,6 +394,9 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
+for (const id of AV_IDS) $(id).addEventListener('change', () => { onAvoidChange(); });
+$('cb-av-groups').addEventListener('change', () => { onAvoidChange(); });
+renderGroupToggles();
 // 行のどこを押してもオン・オフ (チェックボックスそのものも)。外す・戻すたびに被り回避をかけ直す
 $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   const tr = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('tr[data-uid]'));

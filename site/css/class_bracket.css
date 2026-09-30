@@ -105,3 +105,12 @@
 .cb-mine-meta { color: #9ca3af; font-size: 11px; margin-top: 1px; }
 .cb-del-btn { color: #b91c1c; border-color: #fecaca; }
 .cb-del-btn:hover { background: #fef2f2; }
+
+/* 被り回避 (シード機能の「🔀 被り回避最適化」の枠と同じ見た目) */
+.cb-avoid { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; background: #fafafa; margin: 4px 0 10px; }
+.cb-avoid summary { cursor: pointer; list-style: revert; }
+.cb-avoid summary strong { font-size: 13px; color: #111827; }
+.cb-avoid-desc { display: block; font-size: 11px; color: #6b7280; margin-top: 2px; }
+.cb-avoid-opts { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 12px; color: #374151; }
+.cb-avoid-opts label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cb-av-groups { display: contents; }

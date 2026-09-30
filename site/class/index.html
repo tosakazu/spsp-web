@@ -27,7 +27,7 @@
     <div class="cb-sec">
       <h2 data-i18n="class.h.accounts">アカウント</h2>
       <label class="cb-label" for="cb-sgg-key">
-        <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
+        <span data-i18n="class.startgg_key">start.gg の API キー (その大会の管理者)</span>
         <a class="cb-help-link" href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" data-i18n="seed.skeleton.t8">API キー取得→</a>
       </label>
       <div class="cb-token">
@@ -97,7 +97,18 @@
           </select>
         </div>
       </div>
-      <label class="cb-opt"><input type="checkbox" id="cb-avoid" checked> <span data-i18n="class.avoid">地域被り・再対戦を避ける (本戦で当たった人は特に)</span></label>
+      <!-- 被り回避: シード機能の「🔀 被り回避最適化」と同じ項目 + 本戦で当たった人を避ける (既定 ON) -->
+      <details class="cb-avoid" open>
+        <summary><strong data-i18n="seed.skeleton.t29">🔀 被り回避最適化</strong>
+          <span class="cb-avoid-desc" data-i18n="class.avoid_desc">地域被り・直接対戦・本戦で当たった組が序盤で当たらないよう、シード順を並べ替えます。</span></summary>
+        <div class="cb-avoid-opts">
+          <label data-i18n-attr="title:seed.skeleton.t122" title="同じ地域の選手が同じプール・早期回戦に固まらないよう分散する"><input type="checkbox" id="cb-av-region" checked> <span data-i18n="seed.skeleton.t36">地域被りを考慮</span></label>
+          <label data-i18n-attr="title:seed.skeleton.t123" title="直近に対戦した相手と再び早期に当たるのを避ける"><input type="checkbox" id="cb-av-recent" checked> <span data-i18n="seed.skeleton.t37">直接対戦を考慮</span></label>
+          <label data-i18n-attr="title:class.avoid_main_help" title="本戦で対戦した相手と、早い回戦で再び当たるのを避ける (直接対戦より強く)"><input type="checkbox" id="cb-av-main" checked> <span data-i18n="class.avoid_main">本戦で当たった人を避ける</span></label>
+          <label data-i18n-attr="title:seed.skeleton.t126" title="平日扱いの大会での対戦も「直接対戦」に含める"><input type="checkbox" id="cb-av-weekday"> <span data-i18n="seed.skeleton.t40">平日大会を含む</span></label>
+          <span id="cb-av-groups" class="cb-av-groups"></span>
+        </div>
+      </details>
       <label class="cb-opt"><input type="checkbox" id="cb-exclude-dq" checked> <span data-i18n="class.exclude_dq">DQ の人を除く</span></label>
       <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
     </div>
