@@ -108,6 +108,7 @@ window.SPSP_I18N.ja = {
   'class.err.event': 'イベントが見つかりません',
   'class.err.not_admin': 'この start.gg のキーの持ち主は、この大会の管理者ではありません',
   'class.err.too_few': '対象の選手が 2 人未満です',
+  'class.err.too_many': '人数が多すぎます: {n} 人 (1 つの下位クラスは {max} 人まで)。対象の順位を狭めるか、チェックを外して減らしてください',
   'class.err.challonge_login': '先に Challonge でログインしてください',
   'class.err.challonge_auth': 'Challonge のログインが切れました。もう一度ログインしてください',
   'class.err.challonge_start': 'Challonge のログインを始められませんでした。時間をおいてもう一度お試しください',

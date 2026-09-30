@@ -81,9 +81,9 @@
         <div>
           <label class="cb-label" for="cb-place-min" data-i18n="class.range">対象の順位</label>
           <div class="cb-range">
-            <input type="text" id="cb-place-min" inputmode="numeric" placeholder="9" autocomplete="off">
+            <input type="text" id="cb-place-min" inputmode="numeric" placeholder="9" autocomplete="off" list="cb-place-min-list">
             <span data-i18n="class.range_to">位 〜</span>
-            <input type="text" id="cb-place-max" inputmode="numeric" data-i18n-attr="placeholder:class.range_none" placeholder="下限なし" autocomplete="off">
+            <input type="text" id="cb-place-max" inputmode="numeric" data-i18n-attr="placeholder:class.range_none" placeholder="下限なし" autocomplete="off" list="cb-place-max-list">
             <span data-i18n="class.range_unit">位</span>
           </div>
         </div>
@@ -109,6 +109,9 @@
           <span id="cb-av-groups" class="cb-av-groups"></span>
         </div>
       </details>
+      <!-- 対象の順位の候補 (ダブルエリミの順位の区切り)。手入力もできる。中身は class.js が入れる -->
+      <datalist id="cb-place-min-list"></datalist>
+      <datalist id="cb-place-max-list"></datalist>
       <label class="cb-opt"><input type="checkbox" id="cb-exclude-dq" checked> <span data-i18n="class.exclude_dq">DQ の人を除く</span></label>
       <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
     </div>

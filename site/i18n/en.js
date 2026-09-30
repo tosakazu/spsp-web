@@ -107,6 +107,7 @@ window.SPSP_I18N.en = {
   'class.err.event': 'Event not found',
   'class.err.not_admin': 'The owner of this start.gg key is not an admin of this tournament',
   'class.err.too_few': 'Fewer than 2 players',
+  'class.err.too_many': 'Too many players: {n} (a lower-class bracket allows up to {max}). Narrow the placements or uncheck some players',
   'class.err.challonge_login': 'Log in with Challonge first',
   'class.err.challonge_auth': 'Your Challonge login expired. Please log in again',
   'class.err.challonge_start': 'Could not start the Challonge login. Please try again later',

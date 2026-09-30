@@ -29,6 +29,8 @@ const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-plac
 const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
+/** 1 つの下位クラスの最大人数 (Worker の class_create と同じ上限) */
+const MAX_PARTICIPANTS = 512;
 
 /** @typedef {import('../../site/js/class_bracket.js').ClassEntrant} ClassEntrant */
 
@@ -180,7 +182,7 @@ async function onAvoidChange() {
   try { await refreshAvoid(); } catch (e) { if (loaded) loaded.avoid = null; }
   computeOrder();
   renderList();
-  status(i18n('class.step.ready'), 'ok');
+  if (loaded && loaded.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
 }
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
@@ -274,7 +276,7 @@ async function load() {
   computeOrder();
   renderList();
   $('cb-preview').hidden = false;
-  status(i18n('class.step.ready'), 'ok');
+  if (loaded && loaded.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
 }
 
 /** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
@@ -310,7 +312,8 @@ function renderList() {
     b.classList.toggle('on', f === listFilter);
   }
   $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
-  $('cb-create').disabled = n < 2;
+  $('cb-create').disabled = n < 2 || n > MAX_PARTICIPANTS;
+  if (n > MAX_PARTICIPANTS) status(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
 }
 
 /** SPSP の総合順位 (players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
@@ -367,8 +370,35 @@ async function create() {
   }
 }
 
+/** 名前の無いログイン (名前を返す前の Worker でログインした等) は、このページから Challonge に聞いて足す (Challonge の API はブラウザから呼べる) */
+/** 聞きに行ったトークン (1 つのトークンにつき 1 回だけ。失敗しても繰り返さない) */
+let userTriedFor = '';
+async function fillChallongeUser() {
+  const tok = challongeToken();
+  if (!tok || challongeUser() || userTriedFor === tok) return;
+  userTriedFor = tok;
+  try {
+    const res = await fetch('https://api.challonge.com/v2.1/me.json', {
+      headers: { Authorization: 'Bearer ' + tok, 'Authorization-Type': 'v2', Accept: 'application/json', 'Content-Type': 'application/vnd.api+json' },
+    });
+    if (res.status === 401) {
+      try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e) { /* 表示だけ変える */ }
+    } else if (res.ok) {
+      const j = await res.json();
+      const a = (j && j.data && j.data.attributes) || {};
+      const name = [a.username, a.name, a.email].find(v => typeof v === 'string' && v.trim());
+      if (name) {
+        const cur = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
+        if (cur && cur.token === tok) sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify(Object.assign(cur, { user: String(name).trim().slice(0, 100) })));
+      }
+    }
+  } catch (e) { /* 名前は出せないまま (ログイン済みの表示) */ }
+  renderChallongeState();
+}
+
 function renderChallongeState() {
   const on = !!challongeToken();
+  if (on && !challongeUser()) fillChallongeUser();
   const st = $('cb-ch-state');
   const user = challongeUser();
   st.textContent = !on ? i18n('class.challonge_off') : user ? i18n('class.challonge_as', { name: user }) : i18n('class.challonge_on');
@@ -424,6 +454,15 @@ $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 for (const id of AV_IDS) $(id).addEventListener('change', () => { onAvoidChange(); });
 $('cb-av-groups').addEventListener('change', () => { onAvoidChange(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
+
+// 対象の順位の候補: ダブルエリミの順位の区切り (1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, …)。「〜位まで」は次の区切りの 1 つ前
+(function fillPlaceLists() {
+  /** @type {number[]} */
+  const starts = [1, 2, 3, 4];
+  for (let b = 4; b < 1024; b *= 2) starts.push(b + 1, b + b / 2 + 1);
+  $('cb-place-min-list').innerHTML = starts.map(v => `<option value="${v}"></option>`).join('');
+  $('cb-place-max-list').innerHTML = starts.slice(1).map(v => `<option value="${v - 1}"></option>`).join('');
+})();
 $('cb-seg').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-f]'));
   if (!b) return;
