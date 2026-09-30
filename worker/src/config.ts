@@ -13,6 +13,8 @@ export interface Env {
   // [vars]
   STARTGG_CLIENT_ID?: string;
   REDIRECT_URI?: string;
+  /** Challonge OAuth の戻り先 (Challonge のアプリに登録したもの)。本番 / preview で違う */
+  CHALLONGE_REDIRECT_URI?: string;
   DATA_ORIGIN?: string;
   SITE_PREFIX?: string;
   TS_OFFSET?: string;
@@ -26,6 +28,9 @@ export interface Env {
   EXPORT_KEY?: string;
   /** 下位クラスの取得側 (smash_database) が class_done で送る鍵。取得側の secret と同じ値を入れる */
   CLASS_DONE_KEY?: string;
+  /** Challonge OAuth アプリ (下位クラスを TO の Challonge アカウントで作る) */
+  CHALLONGE_CLIENT_ID?: string;
+  CHALLONGE_CLIENT_SECRET?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
@@ -50,6 +55,16 @@ export const CARD_RATE_MAX_PER_DAY = 300;           // 同一ユーザーの当�
 export const CLASS_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同じ TO の登録間隔
 export const CLASS_RATE_MAX_PER_DAY = 50;            // 同じ TO の当日登録数
 export const STARTGG_TIMEOUT_MS = 10 * 1000;         // start.gg GraphQL の応答待ち
+export const CHALLONGE_TIMEOUT_MS = 15 * 1000;       // Challonge API の応答待ち (1 回ごと)
+export const CLASS_PARTICIPANTS_MIN = 2;
+export const CLASS_PARTICIPANTS_MAX = 512;
+
+/** Challonge (OAuth と API v2.1)。scope は取得側 (smash_database、client credentials の application:manage) と
+ *  確認済み: TO が SPSP のアプリ経由で作ったトーナメントは /v2.1/application/tournaments に出る (2026-10-01)。 */
+export const CHALLONGE_AUTHORIZE_URL = 'https://api.challonge.com/oauth/authorize';
+export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
+export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
+export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
@@ -102,6 +117,9 @@ export interface Config {
   sessionSecret?: string;
   exportKey?: string;
   classDoneKey?: string;
+  challongeClientId?: string;
+  challongeClientSecret?: string;
+  challongeRedirectUri?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -131,6 +149,9 @@ export function configFromEnv(env: Env): Config {
     sessionSecret: env.SESSION_SECRET || undefined,
     exportKey: env.EXPORT_KEY || undefined,
     classDoneKey: env.CLASS_DONE_KEY || undefined,
+    challongeClientId: env.CHALLONGE_CLIENT_ID || undefined,
+    challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
+    challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),
     tsOffsetMin: parseOffset(env.TS_OFFSET),

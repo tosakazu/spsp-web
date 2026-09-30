@@ -16,7 +16,8 @@ worker/
   src/api/oauth.ts         start.gg の code 交換と currentUser (gas/oauth.gs)
   src/api/vote.ts          キャラ投票の規則・資格判定 (gas/vote.gs)
   src/api/card.ts          ログインの確認 (me) とプレイヤーカードの設定 (card_get / card_put)。GAS には無い
-  src/api/class_bracket.ts 下位クラス (Challonge) の登録・取得待ちの一覧・取得済み (docs/class_bracket_design.md)
+  src/api/class_bracket.ts 下位クラス (Challonge) の作成・取得待ちの一覧・取得済み (docs/class_bracket_design.md)
+  src/api/challonge.ts     Challonge OAuth (challonge_begin / challonge_token) と API v2.1 の呼び出し
   src/api/post.ts          投稿 (gas/main.gs handlePost_。未公開だが移植)
   src/api/errlog.ts        失敗の記録 (gas/errlog.gs)
   src/api/export.ts        ビルド向けエクスポート (gas/export.gs)
@@ -59,7 +60,9 @@ cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
 | `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
 | `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour}|null, updated_at|null}` / `bad_request` |
 | `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (2 秒に 1 回・1 日 300 回) |
-| `class_register` | `POST /api` `{action:"class_register"}` | `startgg_token` (確認にだけ使い保存・記録しない), `parent_event_id`, `class_letter` (B〜E), `name`, `challonge:{id,url}`, `format`, `counted`, `place_min`, `place_max`, `seeding`, `entrant_count` | `{id}` / `bad_request` `duplicate` `not_admin` `startgg_error` `rate_limited` (同じ TO は 10 秒に 1 回・1 日 50 回)。start.gg GraphQL で owner / admins を確かめ直す (10 秒でタイムアウト) |
+| `challonge_begin` | `POST /api` `{action:"challonge_begin"}` | `nonce` (≤128), `returnPath` (≤512) | `{url, ttlMs}` = Challonge の認可画面 (client_id・scope・戻り先 `CHALLONGE_REDIRECT_URI`・state f=challonge は Worker が決める) |
+| `challonge_token` | `POST /api` `{action:"challonge_token"}` | `code`, `state` (f=challonge、単回使用) | `{access_token, expires_in}` (保存・記録しない) / `bad_request` `state_invalid` `challonge_auth` `challonge_error` |
+| `class_create` | `POST /api` `{action:"class_create"}` | `startgg_token`, `challonge_token` (どちらも問い合わせにだけ使い保存・記録しない), `parent_event_id`, `class_letter` (B〜E), `name`, `format`, `counted`, `place_min`, `place_max`, `seeding`, `participants:[{name, seed, misc:"startgg:<id>"}]` (2〜512) | `{id, challonge:{id,url}}` / `bad_request` `not_admin` `startgg_error` `challonge_auth` `challonge_error` (文言は Challonge のもの) `rate_limited` `duplicate`。順に start.gg で owner/admins を確認 → Challonge v2.1 にトーナメント作成 → 参加者を bulk_add → D1 に登録。作成後に失敗したら応答に `challonge:{id,url}` を添える。同じ TO は 10 秒に 1 回・1 日 50 回 (Challonge に作る前に判定) |
 | `class_waitlist` | `GET /api/class_waitlist` (または POST) | なし | `{items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at}]}` (counted かつ waiting) |
 | `class_done` | `POST /api` `{action:"class_done"}` | `key` (= secret `CLASS_DONE_KEY`), `id` | `{id, status:"done"}` / `auth_failed` `bad_request` `not_found` `internal` (鍵未設定) |
 | `client_error` (errlog.gs) | `POST /api` `{action:"client_error"}` / `POST /api/client_error` | `kind` (白リスト), `flow`, `note`, `token?` | `{logged: true|false}` |
@@ -112,6 +115,8 @@ npx wrangler d1 migrations apply spsp-preview --remote --env preview
 npx wrangler secret put STARTGG_CLIENT_SECRET     # ~/spsp-secrets/startgg_oauth_client_secret の値
 npx wrangler secret put SESSION_SECRET            # GAS のスクリプトプロパティ SESSION_SECRET を写すと既存ログインが引き継げる。無ければ openssl rand -hex 32
 npx wrangler secret put EXPORT_KEY                # 任意
+npx wrangler secret put CHALLONGE_CLIENT_ID       # Challonge OAuth アプリ (下位クラス)。値は ~/spsp-secrets/challonge_oauth.env
+npx wrangler secret put CHALLONGE_CLIENT_SECRET
 npx wrangler secret put CLASS_DONE_KEY            # 下位クラスの取得側 (smash_database) と同じ値。openssl rand -hex 32 で作って両方に入れる
 #    preview / na は --env preview / --env na を付けて同じことをする
 ```

@@ -52,7 +52,9 @@ export async function handlePost(cfg: Config, store: Store, fetchFn: FetchFn, re
     return err('body_invalid', '本文が長すぎます (' + BODY_MAX + '文字まで)。');
   }
 
-  const st = await checkStateToken(cfg, store, req.state, true, now);
+  const st0 = await checkStateToken(cfg, store, req.state, true, now);
+  // Challonge 用の state (f='challonge') は start.gg のログインには使わせない
+  const st = 'payload' in st0 && st0.payload.f === 'challonge' ? { reason: 'wrong_flow' as const } : st0;
   if ('reason' in st) {
     return err('state_invalid',
       '認証の照合に失敗しました。時間が経ちすぎたか、同じリンクを二度開いた可能性があります。'

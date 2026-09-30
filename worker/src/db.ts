@@ -143,6 +143,14 @@ export class D1Store implements Store {
     return !!r;
   }
 
+  async classRateOk(g: RateGuard): Promise<boolean> {
+    const r = await this.db.prepare(
+      `SELECT (NOT EXISTS (SELECT 1 FROM class_brackets WHERE registered_by = ?1 AND ts_ms > ?2 - ?3)
+         AND (SELECT COUNT(*) FROM class_brackets WHERE registered_by = ?1 AND day = ?4) < ?5) AS ok`)
+      .bind(g.userId, g.nowMs, g.minIntervalMs, g.dayKey, g.maxPerDay).first<{ ok: number }>();
+    return !!(r && Number(r.ok));
+  }
+
   async insertClassBracket(row: ClassBracketRow, g: RateGuard): Promise<ClassInsertResult> {
     // ?1..?5 = 連投条件 (votes / posts と同じ形、registered_by ごと)。challonge_id の重複は UNIQUE 制約で弾く
     let res: D1Result;

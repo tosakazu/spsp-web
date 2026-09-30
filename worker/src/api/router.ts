@@ -17,7 +17,8 @@
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
-import { handleClassDone, handleClassRegister, handleClassWaitlist } from './class_bracket.ts';
+import { handleChallongeBegin, handleChallongeToken } from './challonge.ts';
+import { handleClassCreate, handleClassDone, handleClassWaitlist } from './class_bracket.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin } from './login.ts';
@@ -74,8 +75,12 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'card_put':
         res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
-      case 'class_register':
-        res = await handleClassRegister(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'class_create':
+        res = await handleClassCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'challonge_begin':
+        return (await handleChallongeBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
+      case 'challonge_token':
+        res = await handleChallongeToken(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_waitlist':
         return (await handleClassWaitlist(ctx.store)).body;   // 読むだけ (だれでも)。記録しない
       case 'class_done':
@@ -112,8 +117,9 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     const sess = await verifySessionToken(ctx.cfg, req.token, now);
     if (sess) uid = sess.id;
   }
-  // note は理由の符号だけ (class_register の start.gg のキーは note にも入らない)
-  const note = (action === 'login' || action === 'post' || action === 'class_register') ? String(res.note || '') : '';
+  // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
+  const NOTE_ACTIONS = ['login', 'post', 'class_create', 'challonge_token'];
+  const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
 

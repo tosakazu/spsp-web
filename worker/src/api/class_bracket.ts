@@ -1,15 +1,21 @@
 /**
  * 下位クラス (Bクラス等) を Challonge で開いたものの登録と、取得側への受け渡し (docs/class_bracket_design.md)。
  *
- *   action: "class_register"  TO がページから登録する。start.gg の API キーで、本戦の大会の owner / admins か確かめ直す
+ *   action: "class_create"    TO がページから作る。start.gg の API キーで本戦の大会の owner / admins か確かめ直し、
+ *                             TO の Challonge トークン (OAuth、challonge.ts) でトーナメントを作って参加者を入れ、D1 に登録する
  *   action: "class_waitlist"  取得待ち (counted かつ waiting) の一覧。公開してよい欄だけ (GET /api/class_waitlist)
  *   action: "class_done"      取得側 (smash_database) が取り終えたら呼ぶ。鍵 = Worker の secret CLASS_DONE_KEY
  *
- * start.gg の API キー (startgg_token) は確かめる問い合わせにだけ使い、保存しない・ログに出さない・応答に返さない。
+ * start.gg の API キー (startgg_token) と Challonge のトークン (challonge_token) は問い合わせにだけ使い、
+ * 保存しない・ログに出さない・応答に返さない。
  * 失敗の記録 (errors の note) にも理由の符号 (http_401 など) だけを入れる。
  */
 import type { Config } from '../config.ts';
-import { CLASS_RATE_MAX_PER_DAY, CLASS_RATE_MIN_INTERVAL_MS, GQL_URL, STARTGG_TIMEOUT_MS, requireSecret } from '../config.ts';
+import {
+  CLASS_PARTICIPANTS_MAX, CLASS_PARTICIPANTS_MIN, CLASS_RATE_MAX_PER_DAY, CLASS_RATE_MIN_INTERVAL_MS, GQL_URL, STARTGG_TIMEOUT_MS,
+  requireSecret,
+} from '../config.ts';
+import { challongeApi } from './challonge.ts';
 import type { Store } from '../store.ts';
 import { keyMatches } from './export.ts';
 import type { FetchFn } from './oauth.ts';
@@ -21,7 +27,6 @@ const CLASS_LETTERS = ['B', 'C', 'D', 'E'];
 const FORMATS = ['single', 'double'];
 const SEEDINGS = ['random', 'main_result', 'spsp'];
 const NAME_MAX = 200;
-const URL_MAX = 300;
 const TOKEN_MAX = 200;
 
 /** 正の整数 (数字の文字列も可、maxDigits 桁まで)。違えば null。 */
@@ -30,37 +35,36 @@ function posInt(v: unknown, maxDigits: number): number | null {
   return new RegExp('^[1-9]\\d{0,' + (maxDigits - 1) + '}$').test(s) ? Number(s) : null;
 }
 
-export interface ClassRegisterInput {
-  token: string;
+export interface ClassParticipant { name: string; seed: number; misc: string }
+
+export interface ClassCreateInput {
+  startggToken: string;
+  challongeToken: string;
   parentEventId: number;
   classLetter: string;
   name: string;
-  challongeId: number;
-  challongeUrl: string;
   format: string;
   counted: boolean;
   placeMin: number;
   placeMax: number | null;
   seeding: string;
-  entrantCount: number;
+  participants: ClassParticipant[];
 }
 
+const PARTICIPANT_NAME_MAX = 120;
+const CHALLONGE_TOKEN_MAX = 4096;
+
 /** 入力を確かめる。違えば理由 (note 用の短い符号)。 */
-export function parseClassRegister(r: Record<string, unknown>): { input: ClassRegisterInput } | { bad: string } {
-  const token = r.startgg_token;
-  if (typeof token !== 'string' || !token || token.length > TOKEN_MAX || /\s/.test(token)) return { bad: 'token' };
+export function parseClassCreate(r: Record<string, unknown>): { input: ClassCreateInput } | { bad: string } {
+  const st = r.startgg_token;
+  if (typeof st !== 'string' || !st || st.length > TOKEN_MAX || /\s/.test(st)) return { bad: 'startgg_token' };
+  const ct = r.challonge_token;
+  if (typeof ct !== 'string' || !ct || ct.length > CHALLONGE_TOKEN_MAX || /\s/.test(ct)) return { bad: 'challonge_token' };
   const parentEventId = posInt(r.parent_event_id, 12);
   if (parentEventId === null) return { bad: 'parent_event_id' };
   if (typeof r.class_letter !== 'string' || !CLASS_LETTERS.includes(r.class_letter)) return { bad: 'class_letter' };
   const name = typeof r.name === 'string' ? r.name.trim() : '';
   if (!name || name.length > NAME_MAX) return { bad: 'name' };
-  const ch = r.challonge as Record<string, unknown> | null | undefined;
-  if (!ch || typeof ch !== 'object' || Array.isArray(ch)) return { bad: 'challonge' };
-  const challongeId = posInt(ch.id, 15);
-  if (challongeId === null) return { bad: 'challonge_id' };
-  const url = ch.url;
-  if (typeof url !== 'string' || !url.startsWith('https://challonge.com/') || url.length > URL_MAX || /\s/.test(url)
-      || url === 'https://challonge.com/') return { bad: 'challonge_url' };
   if (typeof r.format !== 'string' || !FORMATS.includes(r.format)) return { bad: 'format' };
   if (typeof r.counted !== 'boolean') return { bad: 'counted' };
   const placeMin = posInt(r.place_min, 6);
@@ -71,10 +75,25 @@ export function parseClassRegister(r: Record<string, unknown>): { input: ClassRe
     if (placeMax === null || placeMax < placeMin) return { bad: 'place_max' };
   }
   if (typeof r.seeding !== 'string' || !SEEDINGS.includes(r.seeding)) return { bad: 'seeding' };
-  const entrantCount = posInt(r.entrant_count, 5);
-  if (entrantCount === null) return { bad: 'entrant_count' };
-  return { input: { token, parentEventId, classLetter: r.class_letter, name, challongeId, challongeUrl: url,
-    format: r.format, counted: r.counted, placeMin, placeMax, seeding: r.seeding, entrantCount } };
+  const ps = r.participants;
+  if (!Array.isArray(ps) || ps.length < CLASS_PARTICIPANTS_MIN || ps.length > CLASS_PARTICIPANTS_MAX) return { bad: 'participants' };
+  const participants: ClassParticipant[] = [];
+  const seeds = new Set<number>();
+  const miscs = new Set<string>();
+  for (const p of ps) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return { bad: 'participant' };
+    const o = p as Record<string, unknown>;
+    const pn = typeof o.name === 'string' ? o.name.trim() : '';
+    if (!pn || pn.length > PARTICIPANT_NAME_MAX) return { bad: 'participant_name' };
+    const seed = posInt(o.seed, 3);
+    if (seed === null || seed > CLASS_PARTICIPANTS_MAX || seeds.has(seed)) return { bad: 'participant_seed' };
+    if (typeof o.misc !== 'string' || !/^startgg:[1-9]\d{0,11}$/.test(o.misc) || miscs.has(o.misc)) return { bad: 'participant_misc' };
+    seeds.add(seed);
+    miscs.add(o.misc);
+    participants.push({ name: pn, seed, misc: o.misc });
+  }
+  return { input: { startggToken: st, challongeToken: ct, parentEventId, classLetter: r.class_letter, name,
+    format: r.format, counted: r.counted, placeMin, placeMax, seeding: r.seeding, participants } };
 }
 
 const ADMIN_QUERY = `query SpspClassAdmin($eventId: ID!) {
@@ -141,18 +160,28 @@ function startggMessage(note: string): string {
   return 'start.gg に確認できませんでした。時間をおいてやり直してください。';
 }
 
-/** action: "class_register" */
-export async function handleClassRegister(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
-  const parsed = parseClassRegister(req);
+/** Challonge のトーナメント URL (識別子)。英小文字・数字・_ だけ: spsp_<本戦イベント ID>_<クラス>_<ランダム 6 文字> */
+export function challongeSlug(eventId: number, letter: string): string {
+  const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const b = crypto.getRandomValues(new Uint8Array(6));
+  let r = '';
+  for (const x of b) r += abc[x % abc.length];
+  return 'spsp_' + eventId + '_' + letter.toLowerCase() + '_' + r;
+}
+
+/** 失敗応答にトーナメントの URL を添える (作れたが参加者の追加や登録で失敗したとき、TO が手で直せるように)。 */
+function withTournament(res: HandlerResult, t: { id: number; url: string }): HandlerResult {
+  return { ...res, body: { ...res.body, challonge: t } };
+}
+
+/** action: "class_create" */
+export async function handleClassCreate(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const parsed = parseClassCreate(req);
   if ('bad' in parsed) return err('bad_request', MSG_BAD, 'bad:' + parsed.bad);
   const inp = parsed.input;
 
-  // 二重登録は start.gg に問い合わせる前に弾く (登録そのものは下の INSERT でも UNIQUE で守る)
-  if (await store.classExists(inp.challongeId)) {
-    return err('duplicate', 'この Challonge のトーナメントはすでに登録されています。', 'duplicate');
-  }
-
-  const adm = await checkStartggAdmin(fetchFn, inp.token, inp.parentEventId);
+  // 1. start.gg で TO か確かめ直す
+  const adm = await checkStartggAdmin(fetchFn, inp.startggToken, inp.parentEventId);
   if (!adm.ok) {
     if (adm.code === 'not_admin') {
       return err('not_admin', 'この start.gg の API キーの持ち主は、本戦の大会の管理者ではありません。', adm.note);
@@ -161,17 +190,53 @@ export async function handleClassRegister(cfg: Config, store: Store, fetchFn: Fe
     return err('startgg_error', startggMessage(adm.note), adm.note);
   }
 
+  // 2. 連投は Challonge に作る前に弾く (作ってから弾くとトーナメントだけ残る)
   const day = dayKey(now, cfg.tsOffsetMin);
+  const guard = { userId: adm.userId, nowMs: now, minIntervalMs: CLASS_RATE_MIN_INTERVAL_MS, dayKey: day, maxPerDay: CLASS_RATE_MAX_PER_DAY };
+  if (!(await store.classRateOk(guard))) {
+    return err('rate_limited', '作成の間隔が短すぎます。少し待ってからやり直してください。', 'rate');
+  }
+
+  // 3. Challonge にトーナメントを作る (TO のトークンで)
+  const created = await challongeApi(fetchFn, inp.challongeToken, '/tournaments.json', {
+    data: { type: 'tournaments', attributes: {
+      name: inp.name, url: challongeSlug(inp.parentEventId, inp.classLetter),
+      tournament_type: inp.format === 'double' ? 'double elimination' : 'single elimination',
+      game_name: 'Super Smash Bros. Ultimate', private: false,
+    } },
+  });
+  if (!created.ok) return err(created.code, created.message, 'create:' + created.note);
+  const data = created.json.data as { id?: unknown; attributes?: { full_challonge_url?: unknown; url?: unknown } } | undefined;
+  const tid = data ? posInt(data.id, 15) : null;
+  const attrs = (data && data.attributes) || {};
+  const turl = typeof attrs.full_challonge_url === 'string' ? attrs.full_challonge_url
+    : typeof attrs.url === 'string' ? 'https://challonge.com/' + attrs.url : '';
+  if (tid === null || !/^https:\/\/([a-z0-9-]+\.)?challonge\.com\//.test(turl)) {
+    return err('challonge_error', 'Challonge の応答を読み取れませんでした。Challonge 上にトーナメントができていないか確認してください。', 'create:bad_response');
+  }
+  const t = { id: tid, url: turl };
+
+  // 4. 参加者をまとめて入れる
+  const added = await challongeApi(fetchFn, inp.challongeToken, '/tournaments/' + tid + '/participants/bulk_add.json', {
+    data: { type: 'Participants', attributes: { participants: inp.participants.map((p) => ({ name: p.name, seed: p.seed, misc: p.misc })) } },
+  });
+  if (!added.ok) {
+    return withTournament(err(added.code, 'トーナメントは作れましたが、参加者を入れられませんでした: ' + added.message, 'bulk_add:' + added.note), t);
+  }
+
+  // 5. D1 に登録 (取得待ちの一覧に載る)
   const ins = await store.insertClassBracket({
     created_at: formatIso(now, cfg.tsOffsetMin), ts_ms: now, day,
     parent_event_id: inp.parentEventId, parent_tournament_id: adm.tournamentId,
-    class_letter: inp.classLetter, name: inp.name, challonge_id: inp.challongeId, challonge_url: inp.challongeUrl,
+    class_letter: inp.classLetter, name: inp.name, challonge_id: tid, challonge_url: turl,
     format: inp.format, counted: inp.counted ? 1 : 0, place_min: inp.placeMin, place_max: inp.placeMax,
-    seeding: inp.seeding, entrant_count: inp.entrantCount, registered_by: adm.userId,
-  }, { userId: adm.userId, nowMs: now, minIntervalMs: CLASS_RATE_MIN_INTERVAL_MS, dayKey: day, maxPerDay: CLASS_RATE_MAX_PER_DAY });
-  if (ins.status === 'duplicate') return err('duplicate', 'この Challonge のトーナメントはすでに登録されています。', 'duplicate');
-  if (ins.status === 'rate_limited') return err('rate_limited', '登録の間隔が短すぎます。少し待ってからやり直してください。', 'rate');
-  return ok({ id: ins.id });
+    seeding: inp.seeding, entrant_count: inp.participants.length, registered_by: adm.userId,
+  }, guard);
+  if (ins.status !== 'ok') {
+    const code = ins.status === 'duplicate' ? 'duplicate' : 'rate_limited';
+    return withTournament(err(code, 'トーナメントは作れましたが、SPSP への登録に失敗しました。', 'insert:' + ins.status), t);
+  }
+  return ok({ id: ins.id, challonge: t });
 }
 
 /** action: "class_waitlist" — だれでも読める (中身は公開してよい欄だけ)。 */

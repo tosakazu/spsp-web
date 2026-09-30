@@ -106,6 +106,8 @@ test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は ra
   assert.deepStrictEqual(await store.insertClassBracket(row(1, t0), g(t0)), { status: 'ok', id: 1 });
   assert.strictEqual(await store.classExists(1), true);
   assert.deepStrictEqual(await store.insertClassBracket(row(1, t0 + 60000), g(t0 + 60000)), { status: 'duplicate' });
+  assert.strictEqual(await store.classRateOk(g(t0 + 5000)), false);
+  assert.strictEqual(await store.classRateOk(g(t0 + 20000)), true);
   assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 5000), g(t0 + 5000)), { status: 'rate_limited' });
   assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 20000, 0), g(t0 + 20000)), { status: 'ok', id: 2 });
   assert.deepStrictEqual(await store.insertClassBracket(row(3, t0 + 40000), g(t0 + 40000)), { status: 'ok', id: 3 });

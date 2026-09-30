@@ -9,10 +9,11 @@ export type ErrorCode =
   | 'bad_request' | 'auth_failed' | 'rate_limited' | 'body_invalid' | 'internal'
   | 'state_invalid' | 'bad_char' | 'not_player' | 'char_exists' | 'not_candidate'
   | 'invalid_session' | 'bad_settings'
-  | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found';
+  | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found' | 'challonge_auth' | 'challonge_error';
 
 export interface OkBody { ok: true; [k: string]: unknown }
-export interface ErrBody { ok: false; error: { code: ErrorCode; message: string } }
+/** 失敗でも添える情報があることがある (class_create: 作れたトーナメントの challonge:{id,url})。 */
+export interface ErrBody { ok: false; error: { code: ErrorCode; message: string }; [k: string]: unknown }
 export type ApiBody = OkBody | ErrBody;
 
 /** ハンドラの返り値。note は失敗ログに添える内部の手掛かり (利用者には見せない)。 */
