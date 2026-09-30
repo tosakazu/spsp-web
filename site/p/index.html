@@ -55,6 +55,15 @@
 
   /* Sub ranks (順位評価/直対評価) */
   .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
+  /* 次に出場予定の大会: 左に大会名と日付・人数の 2 行、右にスコア予想のボタン */
+  .yosou-row { display: flex; align-items: center; gap: 10px; }
+  .yosou-tour { flex: 1; min-width: 0; }
+  .yosou-tour .yt-name { font-size: 13px; color: #111827; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .yosou-tour .yt-name a { color: inherit; }
+  .yosou-tour .yt-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .yosou-btn { flex: none; margin-left: auto; padding: 7px 12px; border: 1px solid #dc2626; border-radius: 8px; color: #dc2626;
+               font-weight: 600; font-size: 13px; text-decoration: none; white-space: nowrap; }
+  .yosou-btn:hover { background: #fef2f2; }
   /* 箱: 左に見出し 2 行 (順位 / 評価)、右に順位、右端に ▼。押すと下に詳細 */
   .subrank-card {
     background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 6px 10px;
@@ -491,8 +500,11 @@
          (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
     <div class="section" id="yosou-section" style="display:none">
       <h2 id="yosou-head" style="display:none" data-i18n="player.sec.upcoming">📅 次に出場予定の集計対象大会</h2>
-      <div id="yosou-tour" style="display:none;font-size:13px;color:#374151;margin-bottom:8px"></div>
-      <a id="yosou-link" href="#" style="display:block;text-align:center;padding:8px;border:1px solid #dc2626;border-radius:8px;color:#dc2626;font-weight:600;text-decoration:none;font-size:13px" data-i18n="player.simulate">🔮 スコアをシミュレーションする</a>
+      <!-- 左に大会名 (1 行目) と日付・人数 (2 行目)、右にスコア予想のボタン -->
+      <div class="yosou-row">
+        <div class="yosou-tour" id="yosou-tour" style="display:none"></div>
+        <a class="yosou-btn" id="yosou-link" href="#" data-i18n="player.simulate">🔮 スコア予想</a>
+      </div>
     </div>
 
     <div class="section">

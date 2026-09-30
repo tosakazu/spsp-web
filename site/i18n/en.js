@@ -283,7 +283,7 @@ window.SPSP_I18N.en = {
   'player.sec.achievements': '🏆 Achievements',
   'player.sec.latest': '🎮 Latest result',
   'player.sec.upcoming': '📅 Next counted tournament',
-  'player.simulate': '🔮 Simulate the score',
+  'player.simulate': '🔮 Score forecast',
   'player.sec.rivals': '👥 Rivals',
   'player.sec.analysis': '📊 Player analysis',
   'player.sec.analysis_note': '(last 5 tournaments)',

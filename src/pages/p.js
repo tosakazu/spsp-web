@@ -364,16 +364,20 @@ async function buildYosouSection() {
     const t = document.getElementById('yosou-tour');
     if (!t) return;
     t.style.display = '';
-    const rest = ` ・ ${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` +
+    // 1 行目 = 大会名、2 行目 = 日付・人数
+    const meta2 = `${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` +
       i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' });
-    t.textContent = ev.tournament_name + rest;
+    const draw = (/** @type {string} */ nameHtml) => {
+      t.innerHTML = `<div class="yt-name">${nameHtml}</div><div class="yt-meta">${escapeHtml(meta2)}</div>`;
+    };
+    draw(escapeHtml(ev.tournament_name));
     // 大会名は start.gg の大会のホームへのリンク (開催予定の一覧 upcoming.json の大会の slug から)
     const upList = await fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
     const tour = upList && Array.isArray(upList.tournaments)
       ? upList.tournaments.find((/** @type {any} */ x) => x.tournament_id === ev.tournament_id) : null;
     const slug = (tour && tour.tournament_slug) || '';
     if (slug) {
-      t.innerHTML = `<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>${escapeHtml(rest)}`;
+      draw(`<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>`);
     }
   } catch (e) { /* ドラフトデータ未配置時は ボタンのみ表示 */ }
 }
