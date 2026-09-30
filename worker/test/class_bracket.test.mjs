@@ -528,3 +528,39 @@ test('challonge_token: アカウント名は username → name → email の順�
     assert.strictEqual(r.access_token, CH_TOKEN);
   }
 });
+
+test('challonge_me: Worker 経由でアカウント名を返す。401 は challonge_auth、他は challonge_error で理由は note だけ', async () => {
+  let e = env({ me: () => resp(200, { data: { id: '1', type: 'user', attributes: { username: 'to_name' } } }) });
+  assert.deepStrictEqual(await post(e, { action: 'challonge_me', challonge_token: CH_TOKEN }), { ok: true, username: 'to_name' });
+  const c = e.calls[0];
+  assert.strictEqual(c.url, 'https://api.challonge.com/v2.1/me.json');
+  assert.strictEqual(c.init.headers.Authorization, 'Bearer ' + CH_TOKEN);
+  // data が配列・attributes の無い形でも読む
+  e = env({ me: () => resp(200, { data: [{ attributes: { username: 'arr_name' } }] }) });
+  assert.strictEqual((await post(e, { action: 'challonge_me', challonge_token: CH_TOKEN })).username, 'arr_name');
+  e = env({ me: () => resp(200, { username: 'flat_name' }) });
+  assert.strictEqual((await post(e, { action: 'challonge_me', challonge_token: CH_TOKEN })).username, 'flat_name');
+  for (const [h, code, note] of [
+    [() => resp(401, {}), 'challonge_auth', 'me:http_401'],
+    [() => resp(403, { errors: [{ detail: 'scope' }] }), 'challonge_error', 'me:http_403'],
+    [() => resp(200, { data: { attributes: { image_url: 'x', created_at: 'y' } } }), 'challonge_error', 'me:no_username:keys=image_url,created_at'],
+  ]) {
+    e = env({ me: h });
+    const r = await post(e, { action: 'challonge_me', challonge_token: CH_TOKEN });
+    assert.strictEqual(r.error.code, code, note);
+    assert.strictEqual(e.store.errors.at(-1).note, note);
+    assert.ok(!JSON.stringify(e.store).includes(CH_TOKEN));
+  }
+  assert.strictEqual((await post(env({}), { action: 'challonge_me' })).error.code, 'bad_request');
+});
+
+test('start.gg の HTTP エラーは本文の message を note に添える (キーは消す)', async () => {
+  const e = env({ ...okHandlers(), gql: () => resp(400, { success: false, message: 'Invalid token ' + SG_KEY + ' given' }) });
+  const r = await post(e, body());
+  assert.strictEqual(r.error.code, 'startgg_error');
+  const note = e.store.errors.at(-1).note;
+  assert.strictEqual(note, 'http_400:Invalid token  given');
+  assert.ok(!JSON.stringify(e.store).includes(SG_KEY));
+  const e2 = env({ ...okHandlers(), gql: () => resp(401, { message: 'Unauthorized' }) });
+  assert.match((await post(e2, body())).error.message, /API キーが無効/);
+});
