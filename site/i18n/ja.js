@@ -58,6 +58,7 @@ window.SPSP_I18N.ja = {
   'class.challonge_login': 'Challonge でログイン',
   'class.challonge_relogin': 'ログインし直す',
   'class.challonge_on': 'ログイン済み',
+  'class.challonge_as': '{name} でログイン中',
   'class.challonge_off': '未ログイン',
   'class.event_url': '本戦の start.gg の URL (大会のページでも可)',
   'class.event_pick': 'イベント',

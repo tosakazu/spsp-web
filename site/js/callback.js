@@ -320,7 +320,7 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).then(function (json) {
       if (json && json.ok && json.access_token) {
         var exp = Date.now() + (Number(json.expires_in) > 0 ? Number(json.expires_in) * 1000 : 3600 * 1000);
-        try { sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ token: json.access_token, exp: exp })); } catch (_) { /* 下で失敗として出す */ }
+        try { sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ token: json.access_token, exp: exp, user: json.username || null })); } catch (_) { /* 下で失敗として出す */ }
         location.replace(S.withFlag(back, 'challonge'));
         return;
       }

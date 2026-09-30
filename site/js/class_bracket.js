@@ -7,6 +7,7 @@
 //                                         main_spsp = 本戦の順位、同率は SPSP の順位 (無い人はその中で後ろにランダム) / spsp = SPSP の順位、無い人は後ろにランダム)
 //   participantName(p)                    Challonge の参加者名 = 「start.gg の名前 (discriminator)」
 //   CHALLONGE_TOKEN_KEY / challongeToken()  Challonge でログインしたトークン (callback.js が sessionStorage に置く。期限切れは null)
+//   challongeUser()                        そのログインの Challonge のアカウント名 (表示用。分からなければ null)
 
 /** 本戦の 1 人 (start.gg の standings の 1 件を平たくしたもの)
  * @typedef {{ userId: number, discriminator: string, gamerTag: string, placement: number | null, dq: boolean }} ClassEntrant */
@@ -78,7 +79,16 @@ export function challongeToken(now = Date.now()) {
   } catch (e) { return null; }
 }
 
-const API = { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
+/** @param {number} [now] @returns {string | null} */
+export function challongeUser(now = Date.now()) {
+  if (!challongeToken(now)) return null;
+  try {
+    const j = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
+    return j && typeof j.user === 'string' && j.user ? j.user : null;
+  } catch (e) { return null; }
+}
+
+const API = { parseStartggUrl, challongeUser, pickEvents, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspClassBracket = API;
 export default API;

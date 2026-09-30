@@ -57,6 +57,7 @@ window.SPSP_I18N.en = {
   'class.challonge_login': 'Log in with Challonge',
   'class.challonge_relogin': 'Log in again',
   'class.challonge_on': 'Logged in',
+  'class.challonge_as': 'Logged in as {name}',
   'class.challonge_off': 'Not logged in',
   'class.event_url': 'start.gg URL of the main event (tournament page is fine)',
   'class.event_pick': 'Event',

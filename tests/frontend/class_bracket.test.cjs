@@ -96,6 +96,9 @@ test('challongeToken: sessionStorage のトークン。期限の 1 分前から�
   assert.strictEqual(C.challongeToken(now), 'tk');
   store.set(C.CHALLONGE_TOKEN_KEY, JSON.stringify({ token: 'tk', exp: now + 30 * 1000 }));
   assert.strictEqual(C.challongeToken(now), null);
+  store.set(C.CHALLONGE_TOKEN_KEY, JSON.stringify({ token: 'tk', exp: now + 10 * 60 * 1000, user: 'tosa' }));
+  assert.strictEqual(C.challongeUser(now), 'tosa');
   store.set(C.CHALLONGE_TOKEN_KEY, '{broken');
+  assert.strictEqual(C.challongeUser(now), null);
   assert.strictEqual(C.challongeToken(now), null);
 });

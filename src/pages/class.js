@@ -15,7 +15,7 @@ import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
-import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
+import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -283,7 +283,8 @@ async function create() {
 function renderChallongeState() {
   const on = !!challongeToken();
   const st = $('cb-ch-state');
-  st.textContent = on ? i18n('class.challonge_on') : i18n('class.challonge_off');
+  const user = challongeUser();
+  st.textContent = !on ? i18n('class.challonge_off') : user ? i18n('class.challonge_as', { name: user }) : i18n('class.challonge_on');
   st.className = 'cb-connect-state' + (on ? ' on' : '');
   $('cb-ch-login').textContent = on ? i18n('class.challonge_relogin') : i18n('class.challonge_login');
 }
