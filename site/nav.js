@@ -86,6 +86,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
     if (/\/eval(\.html)?$/.test(p))     return 'eval';
     if (/\/math(\.html)?$/.test(p))     return 'math';
     if (/\/seed-upload\//.test(p))   return 'seed-upload';
+    if (/\/class\//.test(p))         return 'class';
     if (/\/seed\//.test(p))          return 'seed';
     if (/\/priority\//.test(p))      return 'priority';
     if (/\/local\/ranking(\.html)?$/.test(p)) return 'local-ranking';
@@ -105,7 +106,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
   }
   const cur = currentPage();
   const isRanking = cur === 'ranking' || cur === 'local-series' || cur === 'local-ranking' || cur === 'char-list' || cur === 'char-ranking' || cur === 'pref-list' || cur === 'pref-ranking' || cur === 'events' || cur === 'sim';
-  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority';
+  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class';
   const isMethod  = ['overview', 'details', 'eval', 'math', 'blog'].includes(cur);
 
   // 言語の切替 (日本語 ⇄ English)。同じ URL に ?lang=<言語> を付けたもの (js/lang_boot.js が読んで覚える。既定言語へ戻すときも明示する)。
@@ -158,6 +159,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
           <a href="${prefix}seed/"${cur === 'seed' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.seed')}</a>
           <a href="${prefix}seed-upload/"${cur === 'seed-upload' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.upload')}</a>
           <a href="${prefix}priority/"${cur === 'priority' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.priority')}</a>
+          <a href="${prefix}class/"${cur === 'class' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.class')}</a>
         </div>
       </div>
       <div class="nav-dropdown${isMethod ? ' has-current' : ''}">
