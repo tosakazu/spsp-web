@@ -24,7 +24,8 @@ function env(h, o) {
   e.calls = [];
   e.ctx.fetch = async (url, init) => {
     const kind = url.includes('api.start.gg/gql') ? 'gql' : url.includes('challonge.com/oauth/token') ? 'token'
-      : url.endsWith('/v2.1/tournaments.json') ? 'create' : url.includes('/participants/bulk_add.json') ? 'bulk' : 'other';
+      : url.endsWith('/v2.1/tournaments.json') ? 'create' : url.includes('/participants/bulk_add.json') ? 'bulk'
+      : url.endsWith('/v2.1/me.json') ? 'me' : init && init.method === 'DELETE' ? 'delete' : 'other';
     e.calls.push({ kind, url, init });
     const f = h[kind];
     if (!f) throw new Error('unexpected fetch ' + url);
@@ -61,11 +62,18 @@ test('challonge_begin: Challonge の認可 URL (client_id・scope・戻り先・
 });
 
 test('challonge_token: code を換えて access_token を返す (form・Accept つき)。保存も記録もしない', async () => {
-  const e = env({ token: () => resp(200, { access_token: CH_TOKEN, token_type: 'Bearer', expires_in: 604800, scope: CHALLONGE_SCOPE }) });
+  const e = env({ token: () => resp(200, { access_token: CH_TOKEN, token_type: 'Bearer', expires_in: 604800, scope: CHALLONGE_SCOPE }),
+    me: () => resp(200, { data: { id: '1', type: 'user', attributes: { username: 'tosakazu_to', email: 'x@example.com' } } }) });
   const begin = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/' });
   const state = new URL(begin.url).searchParams.get('state');
   const r = await post(e, { action: 'challonge_token', code: 'CODE-1', state });
-  assert.deepStrictEqual(r, { ok: true, access_token: CH_TOKEN, expires_in: 604800 });
+  assert.deepStrictEqual(r, { ok: true, access_token: CH_TOKEN, expires_in: 604800, username: 'tosakazu_to' });
+  const me = e.calls.find((x) => x.kind === 'me');
+  assert.strictEqual(me.init.method, 'GET');
+  assert.strictEqual(me.init.headers.Authorization, 'Bearer ' + CH_TOKEN);
+  assert.strictEqual(me.init.headers['Authorization-Type'], 'v2');
+  assert.strictEqual(me.init.body, undefined);
+  assert.ok(!JSON.stringify(e.store).includes('tosakazu_to'), 'username も保存しない');
   const c = e.calls[0];
   assert.strictEqual(c.url, 'https://api.challonge.com/oauth/token');
   assert.strictEqual(c.init.headers['Content-Type'], 'application/x-www-form-urlencoded');
@@ -221,6 +229,7 @@ test('class_create: 同じ TO の連続作成は Challonge に作る前に rate_
 
 test('parseClassCreate: 許す形と弾く形', () => {
   assert.ok('input' in parseClassCreate(body()));
+  for (const sd of ['random', 'main_result', 'main_spsp', 'spsp']) assert.ok('input' in parseClassCreate(body({ seeding: sd })), sd);
   assert.ok('input' in parseClassCreate(body({ place_max: 16, parent_event_id: '1234567', participants: participants(512) })));
   const dupSeed = participants(3); dupSeed[2].seed = 1;
   const dupMisc = participants(3); dupMisc[2].misc = dupMisc[0].misc;
@@ -350,4 +359,172 @@ test('class_create: owner / admins で通るときは一覧を問い合わせな
   const e = env({ ...okHandlers(), gql: gqlRouter(() => gqlOk(111, 111, null), () => { throw new Error('should not be called'); }) });
   assert.strictEqual((await post(e, body())).ok, true);
   assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 1);
+});
+
+// ── class_mine / class_delete ──
+/** gql を種類で分ける: 本人 (SpspCurrentUser) / 大会の確認 (SpspClassAdmin) / 管理している大会の一覧 (SpspClassAdminTours) */
+function gqlBy(me, event, tours) {
+  return (init) => {
+    const q = JSON.parse(init.body).query;
+    if (q.includes('SpspCurrentUser')) return me();
+    if (q.includes('SpspClassAdminTours')) return tours ? tours() : toursResp([]);
+    return event();
+  };
+}
+const meResp = (id) => resp(200, { data: { currentUser: { id } } });
+
+test('class_mine: 本人が作った直近 60 日・削除していないものを新しい順で', async () => {
+  let id = 700;
+  const e = env({ ...okHandlers(), create: () => createdOk(String(++id), 'https://challonge.com/m' + id),
+    gql: gqlBy(() => meResp(111), () => gqlOk(111, 111, null)) });
+  let t = Date.parse('2026-07-01T03:00:00Z');   // 1 件目は 92 日前 → 出ない
+  for (const counted of [true, true, false]) {
+    e.nowMs = t; t = Date.parse('2026-09-20T03:00:00Z') + (id - 700) * 60000;
+    assert.strictEqual((await post(e, body({ counted }))).ok, true);
+  }
+  e.store.classes.push({ ...e.store.classes[1], id: 99, registered_by: '222', challonge_id: 9999 });   // 他人のもの
+  e.nowMs = Date.parse('2026-10-01T03:00:00Z');
+  const r = await post(e, { action: 'class_mine', startgg_token: SG_KEY });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.items.map((x) => x.id), [3, 2]);
+  assert.deepStrictEqual(Object.keys(r.items[0]).sort(), ['challonge_id', 'challonge_url', 'class_letter', 'counted', 'created_at',
+    'entrant_count', 'id', 'name', 'parent_event_id', 'parent_tournament_id', 'status'].sort());
+  assert.strictEqual(r.items[0].counted, false);
+  assert.strictEqual(r.items[1].counted, true);
+  assert.strictEqual(r.items[0].status, 'waiting');
+  assert.strictEqual(r.items[0].entrant_count, 4);
+  // 連打は rate_limited、start.gg の失敗は startgg_error、キー無しは bad_request
+  e.nowMs += 500;
+  assert.strictEqual((await post(e, { action: 'class_mine', startgg_token: SG_KEY })).error.code, 'rate_limited');
+  assert.strictEqual((await post(e, { action: 'class_mine' })).error.code, 'bad_request');
+  const bad = env({ gql: () => resp(401, {}) });
+  assert.strictEqual((await post(bad, { action: 'class_mine', startgg_token: SG_KEY })).error.code, 'startgg_error');
+  assert.strictEqual(JSON.stringify(e.store).includes(SG_KEY), false);
+});
+
+/** 111 が作った 1 件 (id 1、challonge 98765) がある状態を作る。削除時の start.gg / Challonge の応答は h で決める */
+async function created(h) {
+  const e = env({ ...okHandlers(), gql: gqlBy(() => meResp(111), () => gqlOk(111, 111, null)) });
+  e.nowMs = Date.parse('2026-10-01T03:00:00Z');
+  assert.strictEqual((await post(e, body())).ok, true);
+  e.calls.length = 0;
+  e.nowMs += 60 * 1000;
+  e.ctx.fetch = (() => {
+    const base = e.ctx.fetch;
+    return async (url, init) => base(url, init);
+  })();
+  Object.assign(e, { h });
+  return e;
+}
+function setHandlers(e, h) {
+  e.ctx.fetch = async (url, init) => {
+    const kind = url.includes('api.start.gg/gql') ? 'gql' : init && init.method === 'DELETE' ? 'delete' : 'other';
+    e.calls.push({ kind, url, init });
+    const fn = h[kind];
+    if (!fn) throw new Error('unexpected fetch ' + url);
+    return fn(init);
+  };
+}
+const delBody = (o) => Object.assign({ action: 'class_delete', startgg_token: SG_KEY, challonge_token: CH_TOKEN, id: 1 }, o || {});
+
+test('class_delete: 作った本人なら Challonge を消して deleted に。取得待ちの一覧からも class_mine からも消える', async () => {
+  const e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(111), () => { throw new Error('not needed'); }), delete: () => new Response(null, { status: 204 }) });
+  assert.deepStrictEqual(await post(e, delBody()), { ok: true, id: 1 });
+  const d = e.calls.find((c) => c.kind === 'delete');
+  assert.strictEqual(d.url, 'https://api.challonge.com/v2.1/tournaments/98765.json');
+  assert.strictEqual(d.init.headers.Authorization, 'Bearer ' + CH_TOKEN);
+  assert.strictEqual(d.init.headers['Authorization-Type'], 'v2');
+  assert.strictEqual(d.init.body, undefined);
+  assert.deepStrictEqual(e.calls.map((c) => c.kind), ['gql', 'delete'], '本人なら大会の確認はしない');
+  assert.strictEqual(e.store.classes[0].status, 'deleted');
+  assert.match(e.store.classes[0].deleted_at, /\+09:00$/);
+  assert.deepStrictEqual((await post(e, { action: 'class_waitlist' })).items, []);
+  e.nowMs += 10000;
+  assert.deepStrictEqual((await post(e, { action: 'class_mine', startgg_token: SG_KEY })).items, []);
+  // もう一度消そうとすると not_found、取得側が done を送っても done にはならない (status:'deleted' を返す)
+  e.nowMs += 10000;
+  assert.strictEqual((await post(e, delBody())).error.code, 'not_found');
+  assert.deepStrictEqual(await post(e, { action: 'class_done', key: DONE_KEY, id: 1 }), { ok: true, id: 1, status: 'deleted' });
+  assert.strictEqual(e.store.classes[0].status, 'deleted');
+  const s = JSON.stringify(e.store);
+  assert.ok(!s.includes(SG_KEY) && !s.includes(CH_TOKEN));
+});
+
+test('class_delete: Challonge で 404 (もう無い) なら続けて deleted に', async () => {
+  const e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => resp(404, { errors: [{ detail: 'not found' }] }) });
+  assert.deepStrictEqual(await post(e, delBody()), { ok: true, id: 1 });
+  assert.strictEqual(e.store.classes[0].status, 'deleted');
+});
+
+test('class_delete: Challonge 401 は challonge_auth、403 などは challonge_error で D1 はそのまま', async () => {
+  for (const [st, code] of [[401, 'challonge_auth'], [403, 'challonge_error'], [500, 'challonge_error']]) {
+    const e = await created();
+    setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => resp(st, { errors: [{ detail: 'Forbidden' }] }) });
+    const r = await post(e, delBody());
+    assert.strictEqual(r.error.code, code, String(st));
+    assert.strictEqual(e.store.classes[0].status, 'waiting');
+    assert.strictEqual(e.store.errors.at(-1).note, 'delete:http_' + st);
+    if (st === 403) assert.match(r.error.message, /Forbidden/);
+  }
+});
+
+test('class_delete: 作った人でなくても本戦の大会の TO なら消せる / どちらでもなければ not_admin', async () => {
+  let e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(333), () => gqlOk(333, 999, [{ id: 333 }])), delete: () => new Response(null, { status: 204 }) });
+  assert.deepStrictEqual(await post(e, delBody()), { ok: true, id: 1 });
+  e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(333), () => gqlOk(333, 999, null), () => toursResp([1, 2])), delete: () => { throw new Error('must not delete'); } });
+  const r = await post(e, delBody());
+  assert.strictEqual(r.error.code, 'not_admin');
+  assert.strictEqual(e.store.classes[0].status, 'waiting');
+});
+
+test('class_delete: 取得済み (done) は already_imported で何も消さない', async () => {
+  const e = await created();
+  await post(e, { action: 'class_done', key: DONE_KEY, id: 1 });
+  setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => { throw new Error('must not delete'); } });
+  const r = await post(e, delBody());
+  assert.strictEqual(r.error.code, 'already_imported');
+  assert.strictEqual(e.store.classes[0].status, 'done');
+});
+
+test('class_delete: 入力不正は bad_request、無い id は not_found、start.gg の失敗は startgg_error、連打は rate_limited', async () => {
+  const e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => new Response(null, { status: 204 }) });
+  for (const b of [delBody({ id: 'x' }), delBody({ id: 0 }), delBody({ startgg_token: '' }), delBody({ challonge_token: 'a b' })]) {
+    assert.strictEqual((await post(e, b)).error.code, 'bad_request');
+  }
+  assert.strictEqual((await post(e, delBody({ id: 42 }))).error.code, 'not_found');
+  e.nowMs += 1000;
+  assert.strictEqual((await post(e, delBody())).error.code, 'rate_limited');
+  const e2 = await created();
+  setHandlers(e2, { gql: () => resp(500, {}) });
+  assert.strictEqual((await post(e2, delBody())).error.code, 'startgg_error');
+  assert.strictEqual(e2.store.classes[0].status, 'waiting');
+});
+
+test('class_create: seeding は main_spsp も受け付けて保存する', async () => {
+  const e = env(okHandlers());
+  assert.strictEqual((await post(e, body({ seeding: 'main_spsp' }))).ok, true);
+  assert.strictEqual(e.store.classes[0].seeding, 'main_spsp');
+});
+
+test('challonge_token: アカウント名は username → name → email の順。me が失敗しても ok で username は null', async () => {
+  for (const [meH, want] of [
+    [() => resp(200, { data: { attributes: { username: '', name: 'Name Only' } } }), 'Name Only'],
+    [() => resp(200, { data: { attributes: { email: 'e@example.com' } } }), 'e@example.com'],
+    [() => resp(200, { data: { attributes: {} } }), null],
+    [() => resp(401, {}), null],
+    [() => resp(500, 'x'), null],
+    [() => { throw new Error('network'); }, null],
+  ]) {
+    const e = env({ token: () => resp(200, { access_token: CH_TOKEN, expires_in: 10 }), me: meH });
+    const state = await signState(e.cfg, 'N', '/jp/class/', 'challonge', Date.now());
+    const r = await post(e, { action: 'challonge_token', code: 'C', state });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.username, want);
+    assert.strictEqual(r.access_token, CH_TOKEN);
+  }
 });

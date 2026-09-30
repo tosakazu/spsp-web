@@ -74,7 +74,22 @@ export async function handleChallongeToken(cfg: Config, store: Store, fetchFn: F
     return err('challonge_error', 'Challonge の認証に失敗しました。時間をおいてやり直してください。', 'no_token');
   }
   const exp = Number(json.expires_in);
-  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null });
+  // 画面の「<名前> でログイン中」用。取れなくてもログインは成功のまま (username: null)。保存・記録しない
+  const username = await challongeUsername(fetchFn, json.access_token);
+  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null, username });
+}
+
+/** GET /v2.1/me.json の data.attributes.username (無ければ name、email)。失敗は null。 */
+export async function challongeUsername(fetchFn: FetchFn, token: string): Promise<string | null> {
+  const r = await challongeApi(fetchFn, token, '/me.json', null, 'GET');
+  if (!r.ok) return null;
+  const data = r.json.data as { attributes?: Record<string, unknown> } | undefined;
+  const a = (data && data.attributes) || {};
+  for (const k of ['username', 'name', 'email']) {
+    const v = a[k];
+    if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 100);
+  }
+  return null;
 }
 
 export function netNote(ex: unknown): string {
@@ -84,7 +99,7 @@ export function netNote(ex: unknown): string {
 /** Challonge API v2.1 の 1 回の呼び出しの結果。失敗は code (challonge_auth / challonge_error) と、利用者に見せる Challonge の文言。 */
 export type ChallongeCall =
   | { ok: true; json: Record<string, unknown> }
-  | { ok: false; code: 'challonge_auth' | 'challonge_error'; message: string; note: string };
+  | { ok: false; code: 'challonge_auth' | 'challonge_error'; message: string; note: string; status?: number };
 
 /** JSON:API の errors から Challonge の文言を取り出す (長すぎれば切る)。 */
 export function challongeErrorText(json: unknown): string {
@@ -105,22 +120,24 @@ export function challongeErrorText(json: unknown): string {
   return parts.join(' / ').slice(0, 300);
 }
 
-/** Challonge API v2.1 を TO のトークンで呼ぶ。トークンは Authorization ヘッダにだけ入れる。 */
-export async function challongeApi(fetchFn: FetchFn, token: string, path: string, payload: unknown): Promise<ChallongeCall> {
+/** Challonge API v2.1 を TO のトークンで呼ぶ。トークンは Authorization ヘッダにだけ入れる。DELETE は payload 無し。 */
+export async function challongeApi(fetchFn: FetchFn, token: string, path: string, payload: unknown, method: 'POST' | 'DELETE' | 'GET' = 'POST'): Promise<ChallongeCall> {
   let res: Response;
   try {
     res = await fetchFn(CHALLONGE_API + path, {
-      method: 'POST',
+      method,
       headers: {
         Authorization: 'Bearer ' + token, 'Authorization-Type': 'v2',
         'Content-Type': 'application/vnd.api+json', Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: method === 'POST' ? JSON.stringify(payload) : undefined,
       signal: AbortSignal.timeout(CHALLONGE_TIMEOUT_MS),
     });
   } catch (ex) {
     return { ok: false, code: 'challonge_error', message: 'Challonge に接続できませんでした。時間をおいてやり直してください。', note: netNote(ex) };
   }
+  // DELETE は本文が空 (204) のことがある
+  if (method === 'DELETE' && res.status >= 200 && res.status < 300) return { ok: true, json: {} };
   let json: Record<string, unknown> | null = null;
   try {
     json = await res.json();
@@ -128,11 +145,11 @@ export async function challongeApi(fetchFn: FetchFn, token: string, path: string
     json = null;
   }
   if (res.status === 401) {
-    return { ok: false, code: 'challonge_auth', message: 'Challonge のログインが無効か期限切れです。もう一度 Challonge でログインしてください。', note: 'http_401' };
+    return { ok: false, code: 'challonge_auth', message: 'Challonge のログインが無効か期限切れです。もう一度 Challonge でログインしてください。', note: 'http_401', status: 401 };
   }
   if (res.status < 200 || res.status >= 300 || !json) {
     const text = json ? challongeErrorText(json) : '';
-    return { ok: false, code: 'challonge_error', message: text || ('Challonge がエラーを返しました (HTTP ' + res.status + ')。'), note: 'http_' + res.status };
+    return { ok: false, code: 'challonge_error', message: text || ('Challonge がエラーを返しました (HTTP ' + res.status + ')。'), note: 'http_' + res.status, status: res.status };
   }
   return { ok: true, json };
 }

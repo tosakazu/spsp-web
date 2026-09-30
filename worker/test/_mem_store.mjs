@@ -8,6 +8,7 @@ export class MemStore {
     this.cards = new Map();  // uid → { settings, updated_at }
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
+    this.classActions = [];  // { user_id, action, ts_ms, day }
   }
 
   async recentActivity(table, userId, dayKey) {
@@ -102,8 +103,38 @@ export class MemStore {
 
   async markClassDone(id) {
     const r = this.classes.find((x) => x.id === id);
-    if (!r) return false;
+    if (!r) return 'missing';
+    if (r.status === 'deleted') return 'deleted';
     r.status = 'done';
+    return 'done';
+  }
+
+  async getClassBracket(id) {
+    const r = this.classes.find((x) => x.id === id);
+    return r ? { id: r.id, parent_event_id: r.parent_event_id, challonge_id: r.challonge_id, registered_by: r.registered_by, status: r.status } : null;
+  }
+
+  async listClassMine(userId, sinceMs) {
+    return this.classes.filter((r) => r.registered_by === userId && r.ts_ms >= sinceMs && r.status !== 'deleted')
+      .sort((a, b) => b.id - a.id).map((r) => ({
+        id: r.id, parent_event_id: r.parent_event_id, parent_tournament_id: r.parent_tournament_id, class_letter: r.class_letter,
+        name: r.name, challonge_id: r.challonge_id, challonge_url: r.challonge_url, counted: r.counted === 1, status: r.status,
+        created_at: r.created_at, entrant_count: r.entrant_count,
+      }));
+  }
+
+  async markClassDeleted(id, deletedAt) {
+    const r = this.classes.find((x) => x.id === id);
+    if (r && r.status === 'waiting') { r.status = 'deleted'; r.deleted_at = deletedAt; return 'deleted'; }
+    return r && r.status === 'done' ? 'done' : 'missing';
+  }
+
+  async recordClassAction(action, g) {
+    const mine = this.classActions.filter((r) => r.user_id === g.userId && r.action === action);
+    if (mine.some((r) => r.ts_ms > g.nowMs - g.minIntervalMs)) return false;
+    if (mine.filter((r) => r.day === g.dayKey).length >= g.maxPerDay) return false;
+    this.classActions.push({ user_id: g.userId, action, ts_ms: g.nowMs, day: g.dayKey });
+    this.classActions = this.classActions.filter((r) => r.ts_ms >= g.nowMs - 2 * 24 * 3600 * 1000);
     return true;
   }
 }

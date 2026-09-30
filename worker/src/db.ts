@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type {
-  CardRow, ClassBracketRow, ClassInsertResult, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+  CardRow, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -182,10 +182,52 @@ export class D1Store implements Store {
       parent_tournament_id: Number(x.parent_tournament_id), challonge_id: Number(x.challonge_id) }));
   }
 
-  async markClassDone(id: number): Promise<boolean> {
-    const hit = await this.db.prepare('SELECT 1 AS x FROM class_brackets WHERE id = ?').bind(id).first();
-    if (!hit) return false;
-    await this.db.prepare("UPDATE class_brackets SET status = 'done' WHERE id = ?").bind(id).run();
+  async markClassDone(id: number): Promise<'done' | 'deleted' | 'missing'> {
+    const hit = await this.db.prepare('SELECT status FROM class_brackets WHERE id = ?').bind(id).first<{ status: string }>();
+    if (!hit) return 'missing';
+    if (hit.status === 'deleted') return 'deleted';
+    await this.db.prepare("UPDATE class_brackets SET status = 'done' WHERE id = ? AND status <> 'deleted'").bind(id).run();
+    return 'done';
+  }
+
+  async getClassBracket(id: number): Promise<ClassRecord | null> {
+    const r = await this.db.prepare(
+      'SELECT id, parent_event_id, challonge_id, registered_by, status FROM class_brackets WHERE id = ?').bind(id).first<ClassRecord>();
+    return r ? { id: Number(r.id), parent_event_id: Number(r.parent_event_id), challonge_id: Number(r.challonge_id),
+      registered_by: String(r.registered_by), status: String(r.status) } : null;
+  }
+
+  async listClassMine(userId: string, sinceMs: number): Promise<ClassMineItem[]> {
+    const r = await this.db.prepare(
+      `SELECT id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, counted, status,
+              created_at, entrant_count
+       FROM class_brackets WHERE registered_by = ? AND ts_ms >= ? AND status <> 'deleted' ORDER BY id DESC`)
+      .bind(userId, sinceMs).all<Record<string, unknown>>();
+    return (r.results || []).map((x) => ({
+      id: Number(x.id), parent_event_id: Number(x.parent_event_id), parent_tournament_id: Number(x.parent_tournament_id),
+      class_letter: String(x.class_letter), name: String(x.name), challonge_id: Number(x.challonge_id),
+      challonge_url: String(x.challonge_url), counted: Number(x.counted) === 1, status: String(x.status),
+      created_at: String(x.created_at), entrant_count: Number(x.entrant_count),
+    }));
+  }
+
+  async markClassDeleted(id: number, deletedAt: string): Promise<'deleted' | 'done' | 'missing'> {
+    const res = await this.db.prepare(
+      "UPDATE class_brackets SET status = 'deleted', deleted_at = ? WHERE id = ? AND status = 'waiting'").bind(deletedAt, id).run();
+    if ((res.meta?.changes ?? 0) > 0) return 'deleted';
+    const r = await this.db.prepare('SELECT status FROM class_brackets WHERE id = ?').bind(id).first<{ status: string }>();
+    return r && r.status === 'done' ? 'done' : 'missing';
+  }
+
+  async recordClassAction(action: string, g: RateGuard): Promise<boolean> {
+    const res = await this.db.prepare(
+      `INSERT INTO class_actions (user_id, action, ts_ms, day)
+       SELECT ?1, ?6, ?2, ?4
+       WHERE NOT EXISTS (SELECT 1 FROM class_actions WHERE user_id = ?1 AND action = ?6 AND ts_ms > ?2 - ?3)
+         AND (SELECT COUNT(*) FROM class_actions WHERE user_id = ?1 AND action = ?6 AND day = ?4) < ?5`)
+      .bind(g.userId, g.nowMs, g.minIntervalMs, g.dayKey, g.maxPerDay, action).run();
+    if ((res.meta?.changes ?? 0) === 0) return false;
+    await this.db.prepare('DELETE FROM class_actions WHERE ts_ms < ?').bind(g.nowMs - 2 * 24 * 3600 * 1000).run();
     return true;
   }
 }

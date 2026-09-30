@@ -9,7 +9,7 @@ export type ErrorCode =
   | 'bad_request' | 'auth_failed' | 'rate_limited' | 'body_invalid' | 'internal'
   | 'state_invalid' | 'bad_char' | 'not_player' | 'char_exists' | 'not_candidate'
   | 'invalid_session' | 'bad_settings'
-  | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found' | 'challonge_auth' | 'challonge_error';
+  | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found' | 'challonge_auth' | 'challonge_error' | 'already_imported';
 
 export interface OkBody { ok: true; [k: string]: unknown }
 /** 失敗でも添える情報があることがある (class_create: 作れたトーナメントの challonge:{id,url})。 */

@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -115,7 +115,26 @@ test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は ra
   assert.deepStrictEqual(w.map((x) => x.id), [1, 3]);
   assert.deepStrictEqual(w[0], { id: 1, parent_event_id: 1234567, parent_tournament_id: 777, class_letter: 'B', name: 'n1',
     challonge_id: 1, challonge_url: 'https://challonge.com/1', created_at: 'C1' });
-  assert.strictEqual(await store.markClassDone(1), true);
-  assert.strictEqual(await store.markClassDone(99), false);
+  assert.strictEqual(await store.markClassDone(1), 'done');
+  assert.strictEqual(await store.markClassDone(99), 'missing');
   assert.deepStrictEqual((await store.listClassWaitlist()).map((x) => x.id), [3]);
+  // 削除 (0004): done は消さない、waiting は deleted に、deleted に done は付かない
+  assert.deepStrictEqual(await store.getClassBracket(3), { id: 3, parent_event_id: 1234567, challonge_id: 3, registered_by: '111', status: 'waiting' });
+  assert.strictEqual(await store.getClassBracket(42), null);
+  assert.strictEqual(await store.markClassDeleted(1, 'D'), 'done');
+  assert.strictEqual(await store.markClassDeleted(3, 'D3'), 'deleted');
+  assert.strictEqual(await store.markClassDeleted(3, 'D3'), 'missing');
+  assert.strictEqual(await store.markClassDeleted(42, 'D'), 'missing');
+  assert.strictEqual(await store.markClassDone(3), 'deleted');
+  assert.deepStrictEqual((await store.listClassWaitlist()).map((x) => x.id), []);
+  const mine = await store.listClassMine('111', t0 - 1);
+  assert.deepStrictEqual(mine.map((x) => [x.id, x.counted, x.status]), [[2, false, 'waiting'], [1, true, 'done']]);
+  assert.deepStrictEqual(await store.listClassMine('111', t0 + 30000), [], '期間外');
+  // class_actions の連投判定
+  const ga = (now) => ({ userId: '111', nowMs: now, minIntervalMs: 2000, dayKey: dayOf(now), maxPerDay: 2 });
+  assert.strictEqual(await store.recordClassAction('mine', ga(t0)), true);
+  assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 1000)), false);
+  assert.strictEqual(await store.recordClassAction('delete', ga(t0 + 1000)), true, 'action ごとに別');
+  assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 3000)), true);
+  assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 6000)), false, '当日上限');
 });
