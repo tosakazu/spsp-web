@@ -148,7 +148,7 @@ export function challongeErrorText(json: unknown): string {
 }
 
 /** Challonge API v2.1 を TO のトークンで呼ぶ。トークンは Authorization ヘッダにだけ入れる。DELETE は payload 無し。 */
-export async function challongeApi(fetchFn: FetchFn, token: string, path: string, payload: unknown, method: 'POST' | 'DELETE' | 'GET' = 'POST'): Promise<ChallongeCall> {
+export async function challongeApi(fetchFn: FetchFn, token: string, path: string, payload: unknown, method: 'POST' | 'PUT' | 'DELETE' | 'GET' = 'POST'): Promise<ChallongeCall> {
   let res: Response;
   try {
     res = await fetchFn(CHALLONGE_API + path, {
@@ -157,7 +157,7 @@ export async function challongeApi(fetchFn: FetchFn, token: string, path: string
         Authorization: 'Bearer ' + token, 'Authorization-Type': 'v2',
         'Content-Type': 'application/vnd.api+json', Accept: 'application/json',
       },
-      body: method === 'POST' ? JSON.stringify(payload) : undefined,
+      body: method === 'POST' || method === 'PUT' ? JSON.stringify(payload) : undefined,
       signal: AbortSignal.timeout(CHALLONGE_TIMEOUT_MS),
     });
   } catch (ex) {

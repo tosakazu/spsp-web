@@ -418,7 +418,7 @@ async function created(h) {
 }
 function setHandlers(e, h) {
   e.ctx.fetch = async (url, init) => {
-    const kind = url.includes('api.start.gg/gql') ? 'gql' : init && init.method === 'DELETE' ? 'delete' : 'other';
+    const kind = url.includes('api.start.gg/gql') ? 'gql' : init && init.method === 'DELETE' ? 'delete' : url.endsWith('/change_state.json') ? 'reset' : 'other';
     e.calls.push({ kind, url, init });
     const fn = h[kind];
     if (!fn) throw new Error('unexpected fetch ' + url);
@@ -563,4 +563,38 @@ test('start.gg の HTTP エラーは本文の message を note に添える (キ
   assert.ok(!JSON.stringify(e.store).includes(SG_KEY));
   const e2 = env({ ...okHandlers(), gql: () => resp(401, { message: 'Unauthorized' }) });
   assert.match((await post(e2, body())).error.message, /API キーが無効/);
+});
+
+test('class_delete: 終了済み・進行中で 422 なら状態をリセットしてから消し直す', async () => {
+  const e = await created();
+  let n = 0;
+  setHandlers(e, {
+    gql: gqlBy(() => meResp(111)),
+    delete: () => (++n === 1 ? resp(422, { errors: [{ detail: 'Tournament x is currently complete. Please revert the tournament to \`pending\` before deleting' }] }) : new Response(null, { status: 204 })),
+    reset: () => resp(200, { data: { attributes: { state: 'pending' } } }),
+  });
+  assert.deepStrictEqual(await post(e, delBody()), { ok: true, id: 1 });
+  assert.deepStrictEqual(e.calls.map((c) => c.kind), ['gql', 'delete', 'reset', 'delete']);
+  const r = e.calls.find((c) => c.kind === 'reset');
+  assert.strictEqual(r.url, 'https://api.challonge.com/v2.1/tournaments/98765/change_state.json');
+  assert.strictEqual(r.init.method, 'PUT');
+  assert.deepStrictEqual(JSON.parse(r.init.body), { data: { type: 'TournamentState', attributes: { state: 'reset' } } });
+  assert.strictEqual(r.init.headers.Authorization, 'Bearer ' + CH_TOKEN);
+  assert.strictEqual(e.store.classes[0].status, 'deleted');
+});
+
+test('class_delete: リセットに失敗・リセット後も消せないなら challonge_error で D1 はそのまま', async () => {
+  let e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => resp(422, { errors: [{ detail: 'complete' }] }), reset: () => resp(403, { errors: [{ detail: 'Forbidden' }] }) });
+  let r = await post(e, delBody());
+  assert.strictEqual(r.error.code, 'challonge_error');
+  assert.strictEqual(e.store.errors.at(-1).note, 'reset:http_403');
+  assert.strictEqual(e.store.classes[0].status, 'waiting');
+  e = await created();
+  setHandlers(e, { gql: gqlBy(() => meResp(111)), delete: () => resp(422, { errors: [{ detail: 'still complete' }] }), reset: () => resp(200, {}) });
+  r = await post(e, delBody());
+  assert.strictEqual(r.error.code, 'challonge_error');
+  assert.match(r.error.message, /still complete/);
+  assert.strictEqual(e.store.errors.at(-1).note, 'delete:http_422');
+  assert.strictEqual(e.store.classes[0].status, 'waiting');
 });
