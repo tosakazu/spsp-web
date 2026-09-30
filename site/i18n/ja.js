@@ -401,7 +401,7 @@ window.SPSP_I18N.ja = {
   'player.chart.score_delta': 'スコア Δ',
   'player.chart.method_change': '集計方法変更',
   'player.share.text': '{name}\nSPSP 【全国{rank}位】',
-  'player.share.latest': '最新の大会結果\n{tour}\n{place}位/{n}',
+  'player.share.latest': '最新の大会結果:\n{tour}\n{place}位/{n}',
   'player.share.spr': 'SPR {v}',
   'player.share.perf': 'パフォーマンス 全国{rank}位相当 ({lv})',
   'player.share.rank_move': '全国 #{from}→#{to}',
