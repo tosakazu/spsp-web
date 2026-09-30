@@ -563,7 +563,8 @@ function setupSubrankDetail() {
     `<div class="sd-row"><span class="sd-k">${escapeHtml(k)}</span><span class="sd-v${red ? ' red' : ''}">${escapeHtml(v)}</span></div>`;
 
   function tjprHtml() {
-    const list = tours.filter(t => (t.tjpr_w || 0) > 0).sort((a, b) => (b.tjpr_w || 0) - (a.tjpr_w || 0));
+    // 表示で +0.0 になるもの (減衰でほぼ効いていない大会) は出さない
+    const list = tours.filter(t => (t.tjpr_w || 0) * SCALE >= 0.05).sort((a, b) => (b.tjpr_w || 0) - (a.tjpr_w || 0));
     const items = list.map(t => `<li><span class="sd-date">${escapeHtml(t.date || '')}</span><span class="sd-name">${tourLink(t)}</span>` +
       `<span class="sd-pts">+${((t.tjpr_w || 0) * SCALE).toFixed(1)}</span></li>`).join('');
     return row(i18n('player.score'), fmt(rec.scores.tjpr_elo), true) +
