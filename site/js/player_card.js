@@ -353,11 +353,12 @@ export function render(el, model) {
 
 /** ブラウザの強制ダークモード (Samsung Internet など。color-scheme: only light を無視して色を書き換える) では、
  * カードを画像 (保存と同じ capture) にして上に重ねる。画像の色はブラウザが書き換えないので、デザインどおりに見える。
- * 重いので、ダークモードの設定か Samsung Internet のときだけ。描き直すたびに少し待ってから撮り直す */
+ * 重いので、Samsung Internet がダークモードのときだけ (ほかのブラウザは OS がダークでもページを勝手に暗くしないので不要)。
+ * 描き直すたびに少し待ってから撮り直す (編集中の連続した変更では最後の 1 回だけ撮る) */
 function needsImage() {
   try {
-    if (/SamsungBrowser/i.test(navigator.userAgent)) return true;
-    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    return /SamsungBrowser/i.test(navigator.userAgent) &&
+      !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   } catch (e) { return false; }
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
@@ -368,24 +369,10 @@ function scheduleImage(el) {
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
   imageTimers.set(el, setTimeout(() => {
-    // Samsung Internet のダークモードは <img> を暗くする。canvas (既定) か背景画像で重ねる (?pcimg=bg / img で切り替えて比べられる)
-    const mode = (/[?&]pcimg=(bg|img)/.exec(location.search) || [])[1] || 'canvas';
-    captureCanvas(el).then(canvas => {
-      if (!canvas) return;
+    // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
+    captureCanvas(el).then(node => {
+      if (!node) return;
       const prev = el.querySelector('.pc-img');
-      /** @type {HTMLElement} */
-      let node;
-      if (mode === 'canvas') {
-        node = canvas;
-      } else if (mode === 'bg') {
-        node = document.createElement('div');
-        node.style.backgroundImage = `url(${canvas.toDataURL('image/png')})`;
-        node.style.backgroundSize = '100% 100%';
-      } else {
-        node = document.createElement('img');
-        /** @type {HTMLImageElement} */ (node).alt = '';
-        /** @type {HTMLImageElement} */ (node).src = canvas.toDataURL('image/png');
-      }
       node.classList.add('pc-img');
       // html2canvas は canvas に原寸の幅・高さ (514px など) を直接書くので、カードの箱いっぱいに合わせ直す
       node.style.width = '100%';
@@ -393,7 +380,7 @@ function scheduleImage(el) {
       el.appendChild(node);
       if (prev) prev.remove();
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
-  }, 300));
+  }, 600));
 }
 
 /** カードだけを PNG にする (画像で保存 / X で共有)。表示中のカードは縮小されているので、
