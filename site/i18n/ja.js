@@ -280,7 +280,7 @@ window.SPSP_I18N.ja = {
   'player.score': 'スコア',
   'player.sr.tjpr_list': '集計対象の大会 (ポイント順)',
   'player.sr.internal': '内部レート',
-  'player.sr.peak': '最高内部レート (直近 {days} 日。これがスコア)',
+  'player.sr.peak': '最高レート (直近 {days} 日)',
   'player.sr.none': '集計対象の大会はありません',
   'player.sec.achievements': '🏆 実績',
   'player.sec.latest': '🎮 最新の大会結果',

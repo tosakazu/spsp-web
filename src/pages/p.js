@@ -547,7 +547,7 @@ function tournamentItem(t, valueHtml) {
 
 // 順位評価・直対評価の箱: 押すと下に詳細が開く (もう一度押すと閉じる。もう一方を押すとそちらに切り替わる)。
 //   順位評価: スコアと、集計対象の大会のポイント (今の重み = 素点 × 経過による減衰) の順のリスト
-//   直対評価: スコア・内部レートと、スコアのもとになっている最高内部レート (直近 BT_PEAK_DAYS 日の最大) を出した大会と日付
+//   直対評価: スコア・内部レートと、スコアのもとになっている最高レート (直近 BT_PEAK_DAYS 日、直対評価に使われた大会の最大) を出した大会と日付
 function setupSubrankDetail() {
   const panel = document.getElementById('subrank-detail');
   const cards = /** @type {HTMLElement[]} */ (Array.from(document.querySelectorAll('.subrank-card[data-sr]')));
@@ -575,9 +575,12 @@ function setupSubrankDetail() {
     const cutoff = new Date(Date.parse(meta.eval_date) - days * 86400e3).toISOString().slice(0, 10);
     /** @type {PTour | null} */
     let best = null;
+    // 直対評価に使われた大会だけ (平日大会などは内部レートが動かず前の値を持っているだけなので、そこで「達成」したことにしない)。
+    // 同じ値が並ぶときは最初に出した大会
     for (const t of tours) {
-      if (t.bt_internal_after == null || (t.date || '') < cutoff) continue;
-      if (!best || t.bt_internal_after > /** @type {number} */ (best.bt_internal_after)) best = t;
+      if (!t.bt_used || t.bt_internal_after == null || (t.date || '') < cutoff) continue;
+      const bv = best ? /** @type {number} */ (best.bt_internal_after) : -Infinity;
+      if (t.bt_internal_after > bv || (t.bt_internal_after === bv && (t.date || '') < ((best && best.date) || ''))) best = t;
     }
     let html = row(i18n('player.score'), fmt(rec.scores.bt_gated_elo), true) +
       row(i18n('player.sr.internal'), fmt(rec.scores.bt_internal_elo));

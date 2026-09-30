@@ -278,7 +278,7 @@ window.SPSP_I18N.en = {
   'player.score': 'Score',
   'player.sr.tjpr_list': 'Counted tournaments (by points)',
   'player.sr.internal': 'Internal rating',
-  'player.sr.peak': 'Peak internal rating (last {days} days; this is the score)',
+  'player.sr.peak': 'Peak (last {days} days)',
   'player.sr.none': 'No counted tournaments',
   'player.sec.achievements': '🏆 Achievements',
   'player.sec.latest': '🎮 Latest result',
