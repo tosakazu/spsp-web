@@ -1988,10 +1988,15 @@ function onCardImage(btn, fn) {
 for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
-// 共有の文面: 名前 (チームタグ無し)・総合順位・SPSP と、最新の大会結果 (順位/人数・SPR・パフォーマンス・全国順位の変動。ページの「最新の大会結果」と同じ大会、DQ は除く)
+// 共有の文面: 名前 (チームタグ無し)・総合順位・SPSP。見出しの横の共有ボタン (カードの画像つき) はこれだけ
 function shareText() {
   const rec = /** @type {MainRec} */ (MAIN_REC);
-  let text = i18n('player.share.text', { name: SPSPFormat.stripTeamTag(rec.display), rank: rec.ranks.ensemble });
+  return i18n('player.share.text', { name: SPSPFormat.stripTeamTag(rec.display), rank: rec.ranks.ensemble });
+}
+// 最新の大会結果の共有ボタンの文面: 上のあとに空行をはさんで最新の大会結果 (順位/人数・SPR・パフォーマンス・全国順位の変動。
+// ページの「最新の大会結果」と同じ大会、DQ は除く)
+function latestShareText() {
+  let text = shareText();
   const t = ((PLAYER && PLAYER.tournaments) || []).filter(x => !x.is_dq && x.place != null)
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   if (t) {
@@ -2029,6 +2034,22 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
     });
   }
+}
+
+// 最新の大会結果の共有ボタン: 文章 (latestShareText) と URL。共有シートがあればそれ、無ければ両方をクリップボードへ
+{
+  const btn = document.getElementById('lr-share-btn');
+  if (btn) btn.addEventListener('click', async () => {
+    if (!MAIN_REC) return;
+    const text = `${latestShareText()}\n\n${location.href}`;
+    const nav = /** @type {any} */ (navigator);
+    if (nav.share) {
+      try { await nav.share({ text }); return; }
+      catch (e) { if (/** @type {any} */ (e).name === 'AbortError') return; }
+    }
+    const ok = await SPSPShare.copyToClipboard(text);
+    alert(ok ? i18n('player.share.copied') : i18n('share.copy_failed') + text);
+  });
 }
 
 // カードをタップすると、カードの上に編集 (本人のページだけ)・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ

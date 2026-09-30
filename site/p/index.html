@@ -55,6 +55,9 @@
 
   /* Sub ranks (順位評価/直対評価) */
   .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
+  /* 最新の大会結果の見出しの右端の共有ボタン */
+  .lr-share { position: absolute; top: -4px; right: 0; padding: 5px 7px; }
+  .lr-share svg { width: 15px; height: 15px; }
   /* 次に出場予定の大会: 左に大会名と日付・人数の 2 行、右にスコア予想のボタン */
   .yosou-row { display: flex; align-items: center; gap: 10px; }
   .yosou-tour { flex: 1; min-width: 0; }
@@ -491,8 +494,10 @@
 
     <!-- 最新の大会結果 + パフォーマンス (SPSP シード基準の相当順位/相当Lv)
          (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
-    <div class="section" id="latestres-section" style="display:none">
+    <div class="section" id="latestres-section" style="display:none;position:relative">
       <h2 data-i18n="player.sec.latest">🎮 最新の大会結果 <span id="latestres-date" class="lr-date"></span></h2>
+      <!-- 最新の大会結果を文章で共有 (名前・全国順位 + この大会の順位・SPR・パフォーマンス・全国順位の変動) -->
+      <button type="button" class="share-icon-btn lr-share" id="lr-share-btn" title="共有" aria-label="共有" data-i18n-attr="title:player.card.share,aria-label:player.card.share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></button>
       <div id="latestres-body"></div>
     </div>
 

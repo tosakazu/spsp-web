@@ -405,6 +405,7 @@ window.SPSP_I18N.ja = {
   'player.share.spr': 'SPR {v}',
   'player.share.perf': 'パフォーマンス 全国{rank}位相当 ({lv})',
   'player.share.rank_move': '全国 #{from}→#{to}',
+  'player.share.copied': '共有する文章をクリップボードにコピーしました',
 
   // ── 大会ページ (t/index.html) ──
   'tournament.not_found': '大会が見つかりません。URL を確認してください。',

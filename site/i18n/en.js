@@ -403,6 +403,7 @@ window.SPSP_I18N.en = {
   'player.share.spr': 'SPR {v}',
   'player.share.perf': 'Performance: national #{rank} equiv. ({lv})',
   'player.share.rank_move': 'National #{from}→#{to}',
+  'player.share.copied': 'Copied the text to the clipboard',
 
   // ── Tournament page (t/index.html) ──
   'tournament.not_found': 'Tournament not found. Check the URL.',
