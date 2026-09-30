@@ -163,7 +163,7 @@ async function create() {
     $('cb-done').hidden = false;
     // Challonge には作れている。SPSP への登録だけ失敗したときは、その旨を出す (集計対象にならない)
     if (reg && reg.ok) status(i18n('class.step.done'), 'ok');
-    else status(i18n('class.err.register', { code: (reg && reg.error && reg.error.code) || 'unknown' }), 'error');
+    else status(i18n('class.err.register', { code: (reg && reg.error && (reg.error.message || reg.error.code)) || 'unknown' }), 'error');
   } catch (e) {
     status(i18n('class.err.challonge', { message: /** @type {Error} */ (e).message }), 'error');
   } finally {
