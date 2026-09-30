@@ -91,6 +91,30 @@ export interface ClassWaitItem {
   created_at: string;
 }
 
+/** class_mine に返す欄 (自分が作ったもの)。 */
+export interface ClassMineItem {
+  id: number;
+  parent_event_id: number;
+  parent_tournament_id: number;
+  class_letter: string;
+  name: string;
+  challonge_id: number;
+  challonge_url: string;
+  counted: boolean;
+  status: string;
+  created_at: string;
+  entrant_count: number;
+}
+
+/** class_delete が見る欄。 */
+export interface ClassRecord {
+  id: number;
+  parent_event_id: number;
+  challonge_id: number;
+  registered_by: string;
+  status: string;
+}
+
 export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplicate' } | { status: 'rate_limited' };
 
 export interface Store {
@@ -125,6 +149,14 @@ export interface Store {
   insertClassBracket(row: ClassBracketRow, guard: RateGuard): Promise<ClassInsertResult>;
   /** counted = 1 かつ status = 'waiting' の行 (id 順)。 */
   listClassWaitlist(): Promise<ClassWaitItem[]>;
-  /** status を done にする。行が無ければ false (もう done なら true)。 */
-  markClassDone(id: number): Promise<boolean>;
+  /** status を done にする。行が無ければ 'missing'、削除済みなら 'deleted' (変えない)、それ以外は 'done'。 */
+  markClassDone(id: number): Promise<'done' | 'deleted' | 'missing'>;
+  /** 1 行 (無ければ null)。 */
+  getClassBracket(id: number): Promise<ClassRecord | null>;
+  /** registered_by = userId かつ ts_ms >= sinceMs かつ削除していない行 (新しい順)。 */
+  listClassMine(userId: string, sinceMs: number): Promise<ClassMineItem[]>;
+  /** waiting の行だけ deleted にする。結果: 'deleted' / 'done' (取得済みなので消さなかった) / 'missing' (無い・もう削除済み)。 */
+  markClassDeleted(id: number, deletedAt: string): Promise<'deleted' | 'done' | 'missing'>;
+  /** 連投条件 (user_id と action ごと) を満たすときだけ記録する。記録したら true。 */
+  recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
 }

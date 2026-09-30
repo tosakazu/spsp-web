@@ -56,6 +56,11 @@ export const CLASS_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同じ TO の登録間�
 export const CLASS_RATE_MAX_PER_DAY = 50;            // 同じ TO の当日登録数
 export const STARTGG_TIMEOUT_MS = 10 * 1000;         // start.gg GraphQL の応答待ち
 export const CHALLONGE_TIMEOUT_MS = 15 * 1000;       // Challonge API の応答待ち (1 回ごと)
+export const CLASS_MINE_DAYS = 60;                   // class_mine に出す期間
+export const CLASS_MINE_MIN_INTERVAL_MS = 2 * 1000;  // class_mine の間隔 (同じ人)
+export const CLASS_MINE_MAX_PER_DAY = 500;
+export const CLASS_DELETE_MIN_INTERVAL_MS = 5 * 1000;
+export const CLASS_DELETE_MAX_PER_DAY = 50;
 export const CLASS_PARTICIPANTS_MIN = 2;
 export const CLASS_PARTICIPANTS_MAX = 512;
 

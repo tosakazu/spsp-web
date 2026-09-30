@@ -12,6 +12,7 @@
  */
 import type { Config } from '../config.ts';
 import {
+  CLASS_DELETE_MAX_PER_DAY, CLASS_DELETE_MIN_INTERVAL_MS, CLASS_MINE_DAYS, CLASS_MINE_MAX_PER_DAY, CLASS_MINE_MIN_INTERVAL_MS,
   CLASS_PARTICIPANTS_MAX, CLASS_PARTICIPANTS_MIN, CLASS_RATE_MAX_PER_DAY, CLASS_RATE_MIN_INTERVAL_MS, GQL_URL, STARTGG_TIMEOUT_MS,
   requireSecret,
 } from '../config.ts';
@@ -25,7 +26,7 @@ import { dayKey, formatIso } from './time.ts';
 
 const CLASS_LETTERS = ['B', 'C', 'D', 'E'];
 const FORMATS = ['single', 'double'];
-const SEEDINGS = ['random', 'main_result', 'spsp'];
+const SEEDINGS = ['random', 'main_result', 'main_spsp', 'spsp'];   // main_spsp = 本戦の順位、同順位は SPSP の順位 (既定)
 const NAME_MAX = 200;
 const TOKEN_MAX = 200;
 
@@ -282,6 +283,82 @@ export async function handleClassDone(cfg: Config, store: Store, req: Record<str
   if (!keyMatches(req.key, expected)) return err('auth_failed', '鍵が一致しません。');
   const id = posInt(req.id, 12);
   if (id === null) return err('bad_request', 'id の指定が不正です。');
-  if (!(await store.markClassDone(id))) return err('not_found', 'その id の登録はありません。');
-  return ok({ id, status: 'done' });
+  const r = await store.markClassDone(id);
+  if (r === 'missing') return err('not_found', 'その id の登録はありません。');
+  // TO が削除したもの: done にはしない。取得側は取り込んだ結果を捨てる (status:'deleted' で知らせる)
+  return ok({ id, status: r });
+}
+
+const CURRENT_USER_QUERY = 'query SpspCurrentUser { currentUser { id } }';
+
+/** start.gg のキーの持ち主のユーザー ID。 */
+async function startggCurrentUser(fetchFn: FetchFn, token: string): Promise<{ ok: true; userId: string } | { ok: false; note: string }> {
+  const r = await startggGql(fetchFn, token, CURRENT_USER_QUERY, {});
+  if (!r.ok) return { ok: false, note: r.note };
+  const cu = r.json && r.json.data ? (r.json.data.currentUser as { id?: unknown } | null) : null;
+  if (!cu || cu.id === undefined || cu.id === null) {
+    return { ok: false, note: Array.isArray(r.json.errors) && r.json.errors.length ? 'gql_error' : 'no_user' };
+  }
+  return { ok: true, userId: String(cu.id) };
+}
+
+function tokenOk(v: unknown, max: number): v is string {
+  return typeof v === 'string' && !!v && v.length <= max && !/\s/.test(v);
+}
+
+/** action: "class_mine" — { startgg_token }。自分 (start.gg の本人) が作った直近 60 日の下位クラス (削除したものは除く、新しい順)。 */
+export async function handleClassMine(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  if (!tokenOk(req.startgg_token, TOKEN_MAX)) return err('bad_request', MSG_BAD, 'bad:startgg_token');
+  const me = await startggCurrentUser(fetchFn, req.startgg_token);
+  if (!me.ok) return err('startgg_error', startggMessage(me.note), me.note);
+  const day = dayKey(now, cfg.tsOffsetMin);
+  if (!(await store.recordClassAction('mine', { userId: me.userId, nowMs: now, minIntervalMs: CLASS_MINE_MIN_INTERVAL_MS, dayKey: day, maxPerDay: CLASS_MINE_MAX_PER_DAY }))) {
+    return err('rate_limited', '間隔が短すぎます。少し待ってからやり直してください。', 'rate');
+  }
+  return ok({ items: await store.listClassMine(me.userId, now - CLASS_MINE_DAYS * 24 * 3600 * 1000) });
+}
+
+/**
+ * action: "class_delete" — { startgg_token, challonge_token, id }。
+ * 作った本人 (registered_by) か、本戦の大会の TO (class_create と同じ判定) だけ。取得済み (done) は消さない (already_imported)。
+ * Challonge のトーナメントを TO のトークンで消してから (404 = もう無いは続ける)、D1 を deleted にする。
+ */
+export async function handleClassDelete(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  if (!tokenOk(req.startgg_token, TOKEN_MAX)) return err('bad_request', MSG_BAD, 'bad:startgg_token');
+  if (!tokenOk(req.challonge_token, 4096)) return err('bad_request', MSG_BAD, 'bad:challonge_token');
+  const id = posInt(req.id, 12);
+  if (id === null) return err('bad_request', MSG_BAD, 'bad:id');
+
+  const me = await startggCurrentUser(fetchFn, req.startgg_token);
+  if (!me.ok) return err('startgg_error', startggMessage(me.note), me.note);
+  const day = dayKey(now, cfg.tsOffsetMin);
+  if (!(await store.recordClassAction('delete', { userId: me.userId, nowMs: now, minIntervalMs: CLASS_DELETE_MIN_INTERVAL_MS, dayKey: day, maxPerDay: CLASS_DELETE_MAX_PER_DAY }))) {
+    return err('rate_limited', '間隔が短すぎます。少し待ってからやり直してください。', 'rate');
+  }
+
+  const row = await store.getClassBracket(id);
+  if (!row || row.status === 'deleted') return err('not_found', 'その下位クラスはありません (削除済みかもしれません)。', 'not_found');
+  if (row.registered_by !== me.userId) {
+    const adm = await checkStartggAdmin(fetchFn, req.startgg_token, row.parent_event_id);
+    if (!adm.ok) {
+      if (adm.code === 'not_admin') return err('not_admin', 'この下位クラスを作った人か、本戦の大会の管理者だけが削除できます。', adm.note);
+      if (adm.code === 'bad_request') return err('not_admin', 'この下位クラスを作った人か、本戦の大会の管理者だけが削除できます。', adm.note);
+      return err('startgg_error', startggMessage(adm.note), adm.note);
+    }
+  }
+  if (row.status === 'done') {
+    return err('already_imported', 'この下位クラスはもう SPSP に取り込まれているため削除できません。', 'already_imported');
+  }
+
+  const del = await challongeApi(fetchFn, req.challonge_token, '/tournaments/' + row.challonge_id + '.json', null, 'DELETE');
+  if (!del.ok && del.status !== 404) {
+    return err(del.code, del.code === 'challonge_auth' ? del.message : 'Challonge のトーナメントを削除できませんでした: ' + del.message, 'delete:' + del.note);
+  }
+  const m = await store.markClassDeleted(id, formatIso(now, cfg.tsOffsetMin));
+  if (m === 'done') {
+    // Challonge を消している間に取得側が取り込み終えた (まれ)
+    return err('already_imported', 'Challonge のトーナメントは削除しましたが、直前に SPSP に取り込まれていました。', 'already_imported_race');
+  }
+  if (m === 'missing') return err('not_found', 'その下位クラスはありません (削除済みかもしれません)。', 'not_found_race');
+  return ok({ id });
 }
