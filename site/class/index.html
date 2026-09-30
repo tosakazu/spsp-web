@@ -145,11 +145,15 @@
         </table>
       </div>
       <button type="button" class="cb-main-btn" id="cb-create" data-i18n="class.create">Challonge に作成</button>
+      <div class="cb-status" id="cb-create-status" role="status"></div>
     </div>
 
     <div class="cb-done" id="cb-done" hidden>
       <div class="cb-done-title" data-i18n="class.done">作成しました</div>
-      <a id="cb-done-link" target="_blank" rel="noopener"></a>
+      <div class="cb-url-row">
+        <a id="cb-done-link" target="_blank" rel="noopener"></a>
+        <button type="button" class="cb-sub-btn cb-copy-btn" id="cb-done-copy" data-i18n="class.copy">コピー</button>
+      </div>
     </div>
   </div>
 

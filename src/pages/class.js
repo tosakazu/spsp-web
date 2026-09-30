@@ -34,9 +34,15 @@ const MAX_PARTICIPANTS = 512;
 
 /** @typedef {import('../../site/js/class_bracket.js').ClassEntrant} ClassEntrant */
 
-/** @param {string} msg @param {'' | 'error' | 'ok'} [kind] */
+/** 読み込みの状況 (「読み込む」の下) @param {string} msg @param {'' | 'error' | 'ok'} [kind] */
 function status(msg, kind = '') {
   const el = $('cb-status');
+  el.textContent = msg;
+  el.className = 'cb-status' + (kind ? ' ' + kind : '');
+}
+/** 作成の状況 (「Challonge に作成」の下。被り回避・作成・人数の過不足) @param {string} msg @param {'' | 'error' | 'ok'} [kind] */
+function createStatus(msg, kind = '') {
+  const el = $('cb-create-status');
   el.textContent = msg;
   el.className = 'cb-status' + (kind ? ' ' + kind : '');
 }
@@ -99,7 +105,7 @@ async function optimizeForCreate() {
   const av = L.avoid;
   const base = L.order.slice();
   if (!av || base.length < 4) return;
-  status(i18n('class.progress.optimize'));
+  createStatus(i18n('class.progress.optimize'));
   const input = {
     poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
     prefByUid: av.prefByUid, recentPair: av.recentPair,
@@ -147,7 +153,7 @@ async function mainEventPairs(token, eventId) {
       const uids = (s.slots || []).map((/** @type {any} */ sl) => sl && sl.entrant && sl.entrant.participants && sl.entrant.participants[0] && sl.entrant.participants[0].user && sl.entrant.participants[0].user.id).filter((/** @type {any} */ u) => u != null);
       if (uids.length === 2 && uids[0] !== uids[1]) pairs.add(SPSPSeedOptimizer.pairKey(uids[0], uids[1]));
     }
-    if (sets && sets.pageInfo) status(i18n('class.progress.sets', { done: page, total: sets.pageInfo.totalPages || page }));
+    if (sets && sets.pageInfo) createStatus(i18n('class.progress.sets', { done: page, total: sets.pageInfo.totalPages || page }));
     if (!sets || !sets.pageInfo || page >= sets.pageInfo.totalPages) break;
   }
   return pairs;
@@ -200,7 +206,7 @@ async function refreshAvoid() {
     data = await SPSPSeedData.buildSeedData(L.targets.map(p => p.userId), Object.assign({}, fetchers, {
       prefix: SPSP.data, regionGroups: SPSPSeedData.buildRegionGroups(groups), prefsOptional: !region,
       params: { excludeWeekday: !$('cb-av-weekday').checked },
-      onProgress: (/** @type {any} */ pr) => { if (pr && pr.phase === 'fetch') status(i18n('class.progress.players', { done: pr.done, total: pr.total })); },
+      onProgress: (/** @type {any} */ pr) => { if (pr && pr.phase === 'fetch') createStatus(i18n('class.progress.players', { done: pr.done, total: pr.total })); },
     }));
   }
   if (main && !L.mainPairs) L.mainPairs = await mainEventPairs(L.token, L.event.id);
@@ -233,8 +239,8 @@ async function recompute() {
   L.seeded = seedOrder(L.targets, method, rankOf, seededRand(L.rngSeed));
   buildOrder();
   renderList();
-  if (L.targets.length < 2) status(i18n('class.err.too_few'), 'error');
-  else if (L.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
+  if (L.targets.length < 2) createStatus(i18n('class.err.too_few'), 'error');
+  else if (L.order.length <= MAX_PARTICIPANTS) createStatus('');
 }
 
 /** 対象の順位の選択肢: 本戦に実際にある順位 (下位から)。各選択肢には「それを選ぶと何人になるか」(本戦DQ は数えない) を出す。
@@ -353,6 +359,7 @@ async function load() {
   $('cb-settings').hidden = false;
   $('cb-preview').hidden = false;
   await recompute();
+  status(i18n('class.step.ready'), 'ok');
 }
 
 /** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
@@ -392,7 +399,7 @@ function renderList() {
   }
   $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
   $('cb-create').disabled = n < 2 || n > MAX_PARTICIPANTS;
-  if (n > MAX_PARTICIPANTS) status(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
+  if (n > MAX_PARTICIPANTS) createStatus(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
 }
 
 /** SPSP の総合順位 (players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
@@ -419,13 +426,13 @@ function className(ev) {
 async function create() {
   if (!loaded) return;
   const chToken = challongeToken();
-  if (!chToken) { renderChallongeState(); return status(i18n('class.err.challonge_login'), 'error'); }
+  if (!chToken) { renderChallongeState(); return createStatus(i18n('class.err.challonge_login'), 'error'); }
   const btn = $('cb-create');
   btn.disabled = true;
   try {
     // 被り回避 (設定が ON なら) はここで 1 回だけ。並べ替えた順で作る
     await optimizeForCreate();
-    status(i18n('class.step.create'));
+    createStatus(i18n('class.step.create'));
     const r = await SpspLogin.api({
       action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
       parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
@@ -442,16 +449,16 @@ async function create() {
       link.textContent = url;
       $('cb-done').hidden = false;
     }
-    if (r && r.ok) { loadMine(); return status(i18n('class.step.done'), 'ok'); }
+    if (r && r.ok) { loadMine(); return createStatus(i18n('class.step.done'), 'ok'); }
     const code = (r && r.error && r.error.code) || 'unknown';
     const message = (r && r.error && r.error.message) || code;
     if (code === 'challonge_auth') {
       try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e) { /* 表示だけ変える */ }
       renderChallongeState();
-      return status(i18n('class.err.challonge_auth'), 'error');
+      return createStatus(i18n('class.err.challonge_auth'), 'error');
     }
     // トーナメントまでは作れて途中で失敗したとき (参加者の追加・登録) は、作ったものの URL も出す
-    status(url ? i18n('class.err.partial', { message }) : i18n('class.err.create', { message }), 'error');
+    createStatus(url ? i18n('class.err.partial', { message }) : i18n('class.err.create', { message }), 'error');
   } finally {
     btn.disabled = false;
   }
@@ -532,7 +539,7 @@ function startLoad() {
 }
 $('cb-load').addEventListener('click', startLoad);
 $('cb-create').addEventListener('click', () => {
-  create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
+  create().catch(e => { createStatus(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
@@ -657,10 +664,35 @@ async function loadMine() {
       <a href="${escapeHtml(String(it.challonge_url || ''))}" target="_blank" rel="noopener">${escapeHtml(String(it.name || ''))}</a>
       <div class="cb-mine-meta">${escapeHtml(fmt(it.created_at))} · ${escapeHtml(i18n('class.mine.entrants', { n: it.entrant_count }))} · ${escapeHtml(stateText(it))}</div>
     </div>
+    <button type="button" class="cb-sub-btn cb-copy-btn" data-copy="${escapeHtml(String(it.challonge_url || ''))}">${escapeHtml(i18n('class.copy'))}</button>
     <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
   </li>`).join('');
   box.hidden = false;
 }
+
+/** URL をクリップボードへ。押したボタンを少しのあいだ「コピーしました」に
+ * @param {string} text @param {HTMLButtonElement} btn */
+async function copyText(text, btn) {
+  if (!text) return;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    // clipboard が使えない環境: 一時的な textarea で
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (e2) { ok = false; }
+  }
+  if (!ok) return;
+  btn.textContent = i18n('class.copied');
+  setTimeout(() => { btn.textContent = i18n('class.copy'); }, 1500);
+}
+$('cb-done-copy').addEventListener('click', () => { copyText(String($('cb-done-link').href || ''), $('cb-done-copy')); });
 
 /** @param {string} msg @param {'' | 'error' | 'ok'} [kind] */
 function mineStatus(msg, kind = '') {
@@ -670,6 +702,8 @@ function mineStatus(msg, kind = '') {
 }
 
 $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) => {
+  const cp = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-copy]'));
+  if (cp) { copyText(String(cp.dataset.copy || ''), cp); return; }
   const b = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-id]'));
   if (!b || b.disabled) return;
   const chToken = challongeToken();

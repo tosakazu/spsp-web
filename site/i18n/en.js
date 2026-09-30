@@ -94,6 +94,8 @@ window.SPSP_I18N.en = {
   'class.load': 'Load',
   'class.create': 'Create on Challonge',
   'class.done': 'Created',
+  'class.copy': 'Copy',
+  'class.copied': 'Copied',
   'class.preview': '{name}: {n} players (seed order)',
   'class.step.check': 'Checking you are an admin of the tournament on start.gg…',
   'class.step.standings': 'Loading the main event standings…',

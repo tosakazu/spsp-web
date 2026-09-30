@@ -95,6 +95,8 @@ window.SPSP_I18N.ja = {
   'class.load': '読み込む',
   'class.create': 'Challonge に作成',
   'class.done': '作成しました',
+  'class.copy': 'コピー',
+  'class.copied': 'コピーしました',
   'class.preview': '{name} — {n} 人 (シード順)',
   'class.step.check': 'start.gg で大会の管理者か確かめています…',
   'class.step.standings': '本戦の順位を読み込んでいます…',
