@@ -251,8 +251,9 @@ function placeAuto(list) {
   }
 }
 
-/** 実績の箱の仕上げ: 行に 2 つ以上詰めたら左ぞろえ (1 行 1 つなら右ぞろえのまま)。「主な実績」と並びを箱の上下の真ん中に置く
- * (箱の中の高さ 105 = 110 から下の線 5 を引いたもの)
+/** 実績の箱の仕上げ: 行に 2 つ以上詰めたら左ぞろえ (1 行 1 つなら右ぞろえのまま)。
+ * 「主な実績」の見出しは箱の上の定位置 (実績の数で動かさない)。実績の並びは、見出しの下の残りの高さの上下の真ん中に置く
+ * (箱の中の高さ 105 = 110 から下の線 5 を引いたもの。3 行なら残りいっぱいで、今までと同じ位置)
  * @param {HTMLElement} list */
 function finishAch(list) {
   const rows = Array.from(list.querySelectorAll('.pc-ach-row'));
@@ -261,9 +262,12 @@ function finishAch(list) {
   const label = /** @type {HTMLElement | null} */ (box && box.querySelector('.pc-label'));
   if (!label) return;
   const GAP = 3, INNER_H = 105;
-  const top = Math.max(4, Math.round((INNER_H - (label.offsetHeight + GAP + list.offsetHeight)) / 2));
+  const full = label.offsetHeight + GAP + 3 * 23 + 2 * GAP;   // 3 行のときの高さ
+  const top = Math.max(4, Math.round((INNER_H - full) / 2));   // 見出しの位置 (固定)
+  const areaTop = top + label.offsetHeight + GAP;
+  const areaH = INNER_H - top - areaTop;                        // 見出しの下の残り (上の余白と同じだけ下も空ける)
   label.style.top = top + 'px';
-  list.style.top = (top + label.offsetHeight + GAP) + 'px';
+  list.style.top = (areaTop + Math.max(0, Math.round((areaH - list.offsetHeight) / 2))) + 'px';
 }
 
 const ACH_ROW_W = 206, ACH_GAP = 3, ACH_ROWS = 3;

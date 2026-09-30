@@ -320,6 +320,7 @@ window.SPSP_I18N.ja = {
   'player.card.latest': '最新の大会結果',
   'player.card.best': '主な大会結果',
   'player.card.picked': '主な大会結果',
+  'player.card.lower_class': '下位クラス',
   'player.card.save': '保存',
   'player.card.share': '共有',
   'player.card.edit': '編集',

@@ -128,6 +128,13 @@ function zenichiOf(data) {
   return [1, 2, 3].filter(r => zen[r] && zen[r].length).map(r => ({ rank: r, chars: zen[r].join(i18n('common.list_sep')) }));
 }
 
+/** 下位クラスの大会の印 (「 (Cクラス)」)。本戦なら '' @param {any} t */
+function classSuffix(t) {
+  if (t.parent_event_id == null && !t.class_letter) return '';
+  const label = t.class_letter ? i18n('ach.class.' + t.class_letter) : i18n('player.card.lower_class');
+  return ` (${label})`;
+}
+
 // ── カードの model ──
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
@@ -183,8 +190,8 @@ export function buildCardModel(data, settings) {
     const pre = t.pretour_ranks && t.pretour_ranks.ensemble != null ? t.pretour_ranks.ensemble : null;
     const d = t.rank_delta_ensemble;
     latest = {
-      // カードの中の大会名はリンクにしない (href 無し)
-      name: t.name || '', href: '', date: t.date || '',
+      // カードの中の大会名はリンクにしない (href 無し)。下位クラス (本戦から切り出したクラス戦) は「(Cクラス)」などを付ける
+      name: (t.name || '') + classSuffix(t), href: '', date: t.date || '',
       place: t.place, placeUnit: i18n('player.place_unit', { n: t.place || 0 }), nent: t.nent, dq: !!t.is_dq,
       perfRank: perf ? perf.eq : null, perfLv: perf ? `Lv${perf.eqLv}${perf.lvSfx}` : '',
       rankBefore: pre, rankAfter: pre != null && d != null ? pre - d : null,

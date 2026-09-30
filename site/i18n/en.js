@@ -318,6 +318,7 @@ window.SPSP_I18N.en = {
   'player.card.latest': 'Latest result',
   'player.card.best': 'Top result',
   'player.card.picked': 'Top result',
+  'player.card.lower_class': 'lower class',
   'player.card.save': 'Save',
   'player.card.share': 'Share',
   'player.card.edit': 'Edit',
