@@ -32,6 +32,9 @@ window.SPSP_I18N.en = {
   'nav.user.mypage': 'My page',
   'nav.user.card_edit': 'Edit card',
   'nav.user.logout': 'Log out',
+  // 自分のプレイヤーページへの共通リンク (me.html)
+  'me.login_needed': 'Log in with start.gg to open your player page.',
+  'me.unavailable': 'Login is not available here.',
   'nav.region_aria': 'Switch region',
   'nav.lang_aria': 'Switch language',
   'lang.ja': '日本語',
@@ -851,6 +854,7 @@ window.SPSP_I18N.en = {
   'page.news.description': 'SPSP highlights (automatic notices) and announcements from the admins.',
   'page.p.title': 'Player — SPSP',
   'page.p_edit.title': 'Edit card | SPSP',
+  'page.me.title': 'My page | SPSP',
   'page.p.description': 'SPSP player page: tournament history, placement and head-to-head ratings, SPR/UF, peak rank, radar chart and more. Data from Smash Ultimate tournaments in Japan.',
   'page.t.title': 'Tournament — SPSP',
   'page.t.description': 'SPSP tournament page: full standings, upsets, placement-rating gains, seed outperformances, head-to-head gains and rank climbs. Data from Smash Ultimate tournaments in Japan.',

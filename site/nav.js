@@ -383,7 +383,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
     const uid = encodeURIComponent(String(sess.user.id));
     trigger.innerHTML = USER_SVG_IN;
     menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
-      `<a href="${prefix}${pageHref('p/index.html')}?uid=${uid}" role="menuitem">${t('nav.user.mypage')}</a>` +
+      `<a href="${prefix}${pageHref('me.html')}" role="menuitem">${t('nav.user.mypage')}</a>` +   // 自分のプレイヤーページへの共通リンク
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;

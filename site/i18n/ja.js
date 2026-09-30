@@ -33,6 +33,9 @@ window.SPSP_I18N.ja = {
   'nav.user.mypage': 'マイページ',
   'nav.user.card_edit': 'カードを編集',
   'nav.user.logout': 'ログアウト',
+  // 自分のプレイヤーページへの共通リンク (me.html)
+  'me.login_needed': '自分のプレイヤーページを開くには、start.gg でログインしてください。',
+  'me.unavailable': 'ここではログインできません。',
   'nav.region_aria': '地域版を切り替える',
   'nav.lang_aria': '言語を切り替える',
   'lang.ja': '日本語',
@@ -853,6 +856,7 @@ window.SPSP_I18N.ja = {
   'page.news.description': 'SPSP の速報 (エンタメ自動通知) と運営からの通知一覧。',
   'page.p.title': 'プレイヤー詳細 — SPSP',
   'page.p_edit.title': 'カードを編集 | SPSP',
+  'page.me.title': 'マイページ | SPSP',
   'page.p.description': 'SPSP プレイヤー詳細ページ。出場履歴、順位評価/直対評価、SPR/UF、過去最高ランク、レーダーチャートなど。日本のスマブラSP選手データ。',
   'page.t.title': '大会詳細 — SPSP',
   'page.t.description': 'SPSP 大会詳細ページ。全順位表、アップセット/順位評価上昇/シード超え/直対上昇/順位上昇ランキング。日本のスマブラSP大会データ。',
