@@ -675,7 +675,8 @@ function render() {
   if (editBtn) {
     editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
-    const showEdit = () => { editBtn.style.display = (SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
+    // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
+    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
     showEdit();
     SpspLogin.onChange(showEdit);
     SpspLogin.verify().then(showEdit).catch(() => {});

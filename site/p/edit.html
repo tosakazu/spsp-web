@@ -35,8 +35,10 @@
 
     <!-- ログインして本人と確認できたら編集できる (いまは spsp.games でだけ確認する。確認用のプレビューでは素通し) -->
     <div class="ce-gate" id="ce-gate" style="display:none">
-      <button type="button" class="ce-login" id="ce-login-btn" data-i18n="card_edit.login">start.gg でログイン</button>
+      <!-- ログアウト中: ログインのボタン。別の人でログイン中: 注意と「自分のカードを編集」 -->
       <div class="ce-gate-msg" id="ce-gate-msg"></div>
+      <button type="button" class="ce-login" id="ce-login-btn" data-i18n="card_edit.login">start.gg でログイン</button>
+      <a class="ce-login" id="ce-mine-btn" href="edit.html" style="display:none" data-i18n="card_edit.edit_mine">自分のカードを編集</a>
     </div>
 
     <div id="ce-form" style="display:none">

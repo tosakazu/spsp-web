@@ -71,8 +71,17 @@ async function main() {
   if (owner !== 'ok') {
     $('ce-gate').style.display = '';
     const btn = /** @type {HTMLButtonElement} */ ($('ce-login-btn'));
-    btn.addEventListener('click', () => { btn.disabled = true; SpspLogin.startLogin().then(ok => { if (!ok) btn.disabled = false; }); });
-    if (owner === 'other') { $('ce-gate-msg').textContent = i18n('card_edit.not_owner'); }
+    if (owner === 'other') {
+      // 別の人でログイン中: 自分のカードしか編集できないことと、自分のカードの編集ページへのボタン
+      const sess = /** @type {NonNullable<ReturnType<typeof SpspLogin.session>>} */ (SpspLogin.session());
+      $('ce-gate-msg').textContent = i18n('card_edit.not_owner');
+      btn.style.display = 'none';
+      const mine = /** @type {HTMLAnchorElement} */ ($('ce-mine-btn'));
+      mine.href = SPSP.pageHref('edit.html') + '?uid=' + encodeURIComponent(String(sess.user.id));
+      mine.style.display = '';
+    } else {
+      btn.addEventListener('click', () => { btn.disabled = true; SpspLogin.startLogin().then(ok => { if (!ok) btn.disabled = false; }); });
+    }
     return;
   }
   $('ce-form').style.display = '';
