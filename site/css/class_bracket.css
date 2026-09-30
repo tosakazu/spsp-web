@@ -8,8 +8,9 @@
   border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 14px;
 }
 .cb-card + .cb-card { margin-top: 14px; }
-.cb-sec { margin-top: 18px; }
-.cb-sec:first-child { margin-top: 0; }
+/* 区切り (アカウント / 本戦 / 設定 / 一覧) の間に線 */
+.cb-sec { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+.cb-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .cb-card h2 {
   font-size: 12px; color: #374151; text-transform: uppercase; letter-spacing: 0.08em;
   margin: 0 0 8px; font-weight: 600;
