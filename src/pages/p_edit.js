@@ -118,7 +118,48 @@ async function main() {
     apply.disabled = done;
     apply.textContent = done ? i18n('card_edit.applied') : i18n('card_edit.apply');
     ($('ce-reset')).style.visibility = picked.length ? '' : 'hidden';
+    paintTours();
   }
+
+  // 大会: カード左下に出す大会を選ぶ。並べ替え (日付 = 新しい順 / ポイント = 今の重み / ポイント (減衰なし) = 素点) と大会名の検索。
+  // 先頭の「自動」は既定 (順位評価のポイントが一番高い大会)。DQ の大会は出さない
+  const tourEl = $('ce-tours');
+  const tourQ = /** @type {HTMLInputElement} */ ($('ce-tour-q'));
+  const SCALE = (data.meta.params && data.meta.params.TJPR_ELO_SCALE) || 17.5;
+  const tours = (/** @type {any[]} */ (data.player.tournaments || [])).filter(t => !t.is_dq && t.event_id != null);
+  let tourSort = 'date';
+  /** @param {any} t */
+  const ptsOf = t => (tourSort === 'raw' ? (t.tjpr_raw || 0) : (t.tjpr_w || 0)) * SCALE;
+  function paintTours() {
+    const hex = (COLORS.find(c => c.id === st.color) || COLORS[0]).hex;
+    const q = tourQ.value.trim().toLowerCase();
+    const list = tours.filter(t => !q || String(t.name || '').toLowerCase().includes(q))
+      .sort((a, b) => tourSort === 'date' ? (b.ts || 0) - (a.ts || 0) : (ptsOf(b) - ptsOf(a)) || ((b.ts || 0) - (a.ts || 0)));
+    const row = (/** @type {any} */ t) => {
+      const on = st.tour === t.event_id;
+      const pts = ptsOf(t);
+      const place = t.place != null ? `${t.place}${i18n('player.place_unit', { n: t.place })}${t.nent != null ? '/' + t.nent : ''}` : '';
+      return `<button type="button" class="ce-tour${on ? ' on' : ''}" data-tour="${t.event_id}" style="--c:${hex}" aria-pressed="${on}">` +
+        `<span class="ce-tour-date">${escapeHtml(t.date || '')}</span><span class="ce-tour-name">${escapeHtml(t.name || '')}</span>` +
+        `<span class="ce-tour-place">${escapeHtml(place)}</span><span class="ce-tour-pts">${pts >= 0.05 ? '+' + pts.toFixed(1) : ''}</span></button>`;
+    };
+    tourEl.innerHTML = `<button type="button" class="ce-tour auto${st.tour == null ? ' on' : ''}" data-tour="" style="--c:${hex}" aria-pressed="${st.tour == null}">${escapeHtml(i18n('card_edit.tour_auto'))}</button>` +
+      (list.length ? list.map(row).join('') : `<div class="ce-tour auto" style="cursor:default;color:#9ca3af">${escapeHtml(i18n('card_edit.tour_none'))}</div>`);
+  }
+  tourEl.addEventListener('click', e => {
+    const b = /** @type {HTMLElement} */ (e.target).closest('[data-tour]');
+    if (!b) return;
+    const v = b.getAttribute('data-tour');
+    update({ tour: v ? Number(v) : null });
+  });
+  $('ce-tour-sort').addEventListener('click', e => {
+    const b = /** @type {HTMLElement} */ (e.target).closest('[data-sort]');
+    if (!b) return;
+    tourSort = /** @type {string} */ (b.getAttribute('data-sort'));
+    $('ce-tour-sort').querySelectorAll('[data-sort]').forEach(x => x.classList.toggle('on', x === b));
+    paintTours();
+  });
+  tourQ.addEventListener('input', () => paintTours());
 
   tplEl.addEventListener('click', e => {
     const b = /** @type {HTMLElement} */ (e.target).closest('[data-tpl]');

@@ -25,10 +25,11 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
  * @typedef {{ uid: number, player: any, rec: any, meta: any, subranks: any, prefs: any, overseas: Set<number> | null,
  *             charIdx: any, charEmoji: any }} CardData */
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
- * @typedef {{ template: string, color: string, ach: string[] | null }} CardSettings */
+ * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null };
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)
@@ -170,10 +171,12 @@ export function buildCardModel(data, settings) {
   let latest = null;
   // カードの左下は「最高の大会結果」= 順位評価のポイント (今の重み tjpr_w) が一番高い大会 (プレイヤーページの順位評価の詳細の 1 番目)。
   // 順位評価のポイントのある大会が無ければ、最新の集計対象大会 (順位評価か直対評価に使われたもの) を「最新の大会結果」として。DQ は飛ばす
+  // 編集ページで大会を選んでいれば (st.tour) その大会を「大会結果」として (出場記録から消えていたら自動に戻る)
   const counted = (/** @type {any} */ x) => !!(x.bt_used || (x.tjpr_lv || 0) > 0 || (x.tjpr_raw || 0) > 0);
+  const pickedTour = st.tour != null ? tours.find(x => x.event_id === st.tour && !x.is_dq) : null;
   const byPts = tours.filter(x => !x.is_dq && (x.tjpr_w || 0) > 0).sort((a, b) => (b.tjpr_w || 0) - (a.tjpr_w || 0));
-  const bestMode = byPts.length > 0;
-  const shown = bestMode ? byPts : tours.filter(x => !x.is_dq && counted(x)).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const bestMode = !pickedTour && byPts.length > 0;
+  const shown = pickedTour ? [pickedTour] : bestMode ? byPts : tours.filter(x => !x.is_dq && counted(x)).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   if (shown.length) {
     const t = shown[0];
     const perf = perfInfoOf(t);
@@ -200,7 +203,7 @@ export function buildCardModel(data, settings) {
     totalTournaments: tours.length,
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
-      evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
+      evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: pickedTour ? i18n('player.card.picked') : bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
       overall: i18n('ranking.tab.ensemble'), national: i18n('common.national'), equivalent: i18n('player.equivalent'), noAch: i18n('player.card.no_ach'),
     },
   };
@@ -247,7 +250,8 @@ function writeOne(key, uid, s) {
 function normalize(s) {
   if (!s || typeof s !== 'object') return null;
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
-           ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null };
+           ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
+           tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null };
 }
 const loadLocalApplied = (/** @type {number} */ uid) => normalize(readMap(APPLIED_KEY)[String(uid)]);
 

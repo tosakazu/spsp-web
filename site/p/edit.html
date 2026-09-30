@@ -57,6 +57,19 @@
         </h2>
         <div class="ce-achs" id="ce-achs"></div>
       </section>
+      <!-- カード左下に出す大会: 並べ替え (日付 / ポイント / ポイント (減衰なし)) と検索。先頭の「自動」= ポイントが一番高い大会 -->
+      <section class="ce-sec">
+        <h2><span data-i18n="card_edit.tour">大会</span></h2>
+        <div class="ce-tour-tools">
+          <div class="ce-seg" id="ce-tour-sort" role="tablist">
+            <button type="button" data-sort="date" class="on" data-i18n="card_edit.sort.date">日付</button>
+            <button type="button" data-sort="pts" data-i18n="card_edit.sort.pts">ポイント</button>
+            <button type="button" data-sort="raw" data-i18n="card_edit.sort.raw">ポイント (減衰なし)</button>
+          </div>
+          <input type="search" class="ce-tour-q" id="ce-tour-q" placeholder="大会名で検索" data-i18n-attr="placeholder:card_edit.tour_search" autocomplete="off">
+        </div>
+        <div class="ce-tours" id="ce-tours"></div>
+      </section>
       <div class="ce-bar">
         <button type="button" class="ce-apply" id="ce-apply" data-i18n="card_edit.apply">適用</button>
       </div>
