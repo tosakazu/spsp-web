@@ -55,14 +55,17 @@
 
   /* Sub ranks (順位評価/直対評価) */
   .subranks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 0; }
+  /* 縦幅を詰める: 左に見出しを 2 行 (順位 / 評価)、右に順位 (大) とスコア (小) の 2 段 */
   .subrank-card {
     background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px;
-    padding: 8px 10px;
+    padding: 6px 10px;
+    display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center;
   }
-  .subrank-card .label-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-  .subrank-card .label { font-size: 10px; color: #6b7280; letter-spacing: 0.06em; }
-  .subrank-card .value { font-size: 18px; color: #111827; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .subrank-card .subscore { font-size: 11px; color: #dc2626; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .subrank-card .label-row { grid-row: 1 / span 2; }
+  .subrank-card .label { display: block; max-width: 2.3em; font-size: 11px; line-height: 1.3; color: #6b7280; letter-spacing: 0.06em; }
+  html[lang="en"] .subrank-card .label { max-width: 6.5em; letter-spacing: 0; }   /* 英語は単語で折り返す (Head-to-head は - で) */
+  .subrank-card .value { font-size: 18px; line-height: 1.15; color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .subrank-card .subscore { font-size: 11px; line-height: 1.3; color: #dc2626; font-variant-numeric: tabular-nums; }
 
   /* Lv badge (順位評価) */
   .lv-pill {
