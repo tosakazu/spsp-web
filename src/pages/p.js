@@ -1995,7 +1995,7 @@ function shareText() {
   const t = ((PLAYER && PLAYER.tournaments) || []).filter(x => !x.is_dq && x.place != null)
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   if (t) {
-    text += '\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
+    text += '\n\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
     // 2 行目: SPR とパフォーマンス (あるものだけ)
     const parts = [];
     if (t.spr != null) parts.push(i18n('player.share.spr', { v: t.spr > 0 ? '+' + t.spr : t.spr < 0 ? String(t.spr) : '±0' }));
@@ -2026,7 +2026,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
     onCardImage(shareBtn, async blob => {
       const d = shareData();
       const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-      await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n${d.url}` });   // URL は次の行に
+      await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
     });
   }
 }
