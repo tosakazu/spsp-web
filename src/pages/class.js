@@ -25,7 +25,7 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-exclude-dq', 'cb-counted'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-exclude-dq', 'cb-counted'];
 const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
@@ -57,38 +57,117 @@ async function sgg(token, query, variables = {}) {
   return j.data;
 }
 
-/** 読み込んだ内容 (作成で使う)。seeded = 全員の元のシード順、off = 外した人 (start.gg のユーザー ID)、
- * avoid = 被り回避の材料 (null = 使わない)、order = 表示・作成に使う最終の並び (外した人を除き、被り回避の後)、
- * mainSize = 本戦の人数、mainPairs = 本戦で当たった組 (必要になったら取る)
- * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number>,
- *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> }, order: ClassEntrant[],
- *   mainSize: number, mainPairs: Set<string> | null, display: ClassEntrant[] }} */
+/** 読み込んだ内容。設定 (対象の順位・シード・被り回避・DQ) を変えても取り直さず、ここから計算し直す
+ *   standings = 本戦の順位 (全員)、off = 外した人、targets = 今の設定での対象、seeded = 元のシード順 (被り回避の前)、
+ *   order = 作成に使う並び (外した人を除き、被り回避の後)、display = 表の並び (外した人もその場に残す)、
+ *   avoid = 被り回避の材料 (null = 使わない)、mainPairs = 本戦で当たった組 (必要になったら取る)、rngSeed = 同率の並びを設定を変えても保つための乱数の種
+ * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, standings: ClassEntrant[], off: Set<number>,
+ *   targets: ClassEntrant[], seeded: ClassEntrant[], order: ClassEntrant[], display: ClassEntrant[],
+ *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> },
+ *   mainPairs: Set<string> | null, rngSeed: number }} */
 let loaded = null;
 
-/** 外した人を除いて、被り回避 (あれば) をかけた並びを作る */
-function computeOrder() {
-  if (!loaded) return;
-  const base = loaded.seeded.filter(p => !loaded?.off.has(p.userId));
-  loaded.order = base;
-  if (!loaded.avoid || base.length < 4) return;
-  try {
-    const r = SPSPSeedOptimizer.optimize({
-      poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
-      prefByUid: loaded.avoid.prefByUid, recentPair: loaded.avoid.recentPair, params: loaded.avoid.params,
-    });
-    if (r && Array.isArray(r.seedOrder)) {
-      const byUid = new Map(base.map(p => [p.userId, p]));
-      loaded.order = r.seedOrder.map((/** @type {number} */ u) => /** @type {ClassEntrant} */ (byUid.get(u)));
-    }
-  } catch (e) { /* 失敗したら元の並び (被り回避なし) */ }
-  mergeDisplay();
+/** 決まった種から 0〜1 を返す (mulberry32)。同じ設定なら同率の並びが毎回同じになる
+ * @param {number} seed */
+function seededRand(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-/** 表の並び: 外した人はその場に残し (下に回さない)、出る人の枠に新しいシード順を上から入れる */
-function mergeDisplay() {
+/** 被り回避は別スレッド (シード機能と同じ assets/seed_worker.js) で。オン・オフのたびに画面が固まらないように。
+ * 新しい計算を始めたら前のは止める (古い結果は使わない) */
+/** @type {Worker | null} */
+let optWorker = null;
+let optGen = 0;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let optTimer = null;
+
+/** 並べ替えの材料が変わった: まず今の並びから外した人を抜いた暫定の順ですぐ描き、少し待ってから被り回避をかける
+ * @param {boolean} fresh true = 対象・シードの方法が変わった (暫定は元のシード順) */
+function scheduleOrder(fresh) {
   if (!loaded) return;
   const L = loaded;
-  if (!L.display.length) { L.display = L.order.concat(L.seeded.filter(p => L.off.has(p.userId))); return; }
+  const active = (/** @type {ClassEntrant} */ p) => !L.off.has(p.userId) && L.targets.includes(p);
+  const prev = fresh ? L.seeded : L.order;
+  const inPrev = new Set(prev.map(p => p.userId));
+  // 暫定: 前の並びの順 (戻した人は元のシード順の位置に差し込む)
+  L.order = L.seeded.filter(active).sort((a, b) => {
+    const ia = inPrev.has(a.userId) ? prev.indexOf(a) : L.seeded.indexOf(a) - 0.5;
+    const ib = inPrev.has(b.userId) ? prev.indexOf(b) : L.seeded.indexOf(b) - 0.5;
+    return ia - ib;
+  });
+  mergeDisplay(fresh);
+  const gen = ++optGen;
+  if (optTimer) clearTimeout(optTimer);
+  if (optWorker) { optWorker.terminate(); optWorker = null; }
+  if (!L.avoid || L.order.length < 4) { setBusy(false); renderList(); return; }
+  setBusy(true);
+  renderList();
+  optTimer = setTimeout(() => runOptimize(gen), 250);
+}
+
+/** @param {number} gen */
+function runOptimize(gen) {
+  if (!loaded || !loaded.avoid || gen !== optGen) return;
+  const L = loaded;
+  const av = loaded.avoid;
+  const base = L.seeded.filter(p => !L.off.has(p.userId) && L.targets.includes(p));
+  const input = {
+    poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
+    prefByUid: av.prefByUid, recentPair: av.recentPair,
+    // 1 ブラケットで人数も少ないので、多点スタートは少なめ (シード機能の既定 15 回 → 4 回)
+    params: Object.assign({ mode: 'multistart-sa', restarts: 4 }, av.params),
+  };
+  const apply = (/** @type {number[] | null} */ seedOrder) => {
+    if (gen !== optGen || !loaded) return;
+    if (Array.isArray(seedOrder)) {
+      const byUid = new Map(base.map(p => [p.userId, p]));
+      const next = seedOrder.map(u => byUid.get(u)).filter(Boolean);
+      if (next.length === base.length) L.order = /** @type {ClassEntrant[]} */ (next);
+    }
+    mergeDisplay(false);
+    setBusy(false);
+    renderList();
+  };
+  if (typeof Worker === 'undefined') {
+    try { apply(SPSPSeedOptimizer.optimize(input).seedOrder); } catch (e) { apply(null); }
+    return;
+  }
+  try {
+    const w = new Worker(SPSP.root + 'assets/seed_worker.js');
+    optWorker = w;
+    w.onmessage = (/** @type {MessageEvent} */ e) => {
+      const m = e.data || {};
+      if (m.type === 'done') { apply(m.result && m.result.seedOrder); w.terminate(); if (optWorker === w) optWorker = null; }
+      else if (m.type === 'error') { apply(null); w.terminate(); if (optWorker === w) optWorker = null; }
+    };
+    w.onerror = () => { apply(null); w.terminate(); if (optWorker === w) optWorker = null; };
+    w.postMessage({ type: 'start', input });
+  } catch (e) { apply(null); }
+}
+
+/** 並べ替え中の印 (一覧を薄くし、作成は押せない) @param {boolean} on */
+let optBusy = false;
+function setBusy(on) {
+  optBusy = on;
+  $('cb-table').classList.toggle('busy', on);
+}
+
+/** 表の並び: 外した人はその場に残し (下に回さない)、出る人の枠に新しいシード順を上から入れる
+ * @param {boolean} fresh true = 対象が変わった (並びを作り直す。外した人は元のシード順の位置) */
+function mergeDisplay(fresh) {
+  if (!loaded) return;
+  const L = loaded;
+  if (fresh || !L.display.length) {
+    const queue = L.order.slice();
+    L.display = L.seeded.filter(p => L.targets.includes(p)).map(p => (L.off.has(p.userId) ? p : /** @type {ClassEntrant} */ (queue.shift())));
+    return;
+  }
   const queue = L.order.slice();
   L.display = L.display.map(p => (L.off.has(p.userId) ? p : /** @type {ClassEntrant} */ (queue.shift())));
 }
@@ -155,7 +234,7 @@ async function refreshAvoid() {
   let data = null;
   if (region || recent) {
     await SPSPSeedData.ensureGeoCatalog(fetchers);
-    data = await SPSPSeedData.buildSeedData(L.seeded.map(p => p.userId), Object.assign({}, fetchers, {
+    data = await SPSPSeedData.buildSeedData(L.targets.map(p => p.userId), Object.assign({}, fetchers, {
       prefix: SPSP.data, regionGroups: SPSPSeedData.buildRegionGroups(groups), prefsOptional: !region,
       params: { excludeWeekday: !$('cb-av-weekday').checked },
       onProgress: (/** @type {any} */ pr) => { if (pr && pr.phase === 'fetch') status(i18n('class.progress.players', { done: pr.done, total: pr.total })); },
@@ -164,9 +243,8 @@ async function refreshAvoid() {
   if (main && !L.mainPairs) L.mainPairs = await mainEventPairs(L.token, L.event.id);
   /** @type {Record<string, number>} */
   const recentPair = Object.assign({}, recent && data ? data.recentPair : {});
-  status(i18n('class.progress.optimize'));
   if (main && L.mainPairs) {
-    const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, L.mainSize));
+    const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, L.standings.length));
     for (const k of L.mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
   }
   L.avoid = {
@@ -176,13 +254,49 @@ async function refreshAvoid() {
   };
 }
 
-/** 被り回避の設定を変えたら、読み込み済みなら並べ直す */
-async function onAvoidChange() {
+/** 設定 (対象の順位・シード・DQ・被り回避) から対象と並びを作り直す。本戦のデータは取り直さない
+ * @param {{ avoid?: boolean }} [opt] avoid = 被り回避の材料も作り直す (対象や被り回避の設定が変わったとき) */
+async function recompute(opt = {}) {
   if (!loaded) return;
-  try { await refreshAvoid(); } catch (e) { if (loaded) loaded.avoid = null; }
-  computeOrder();
-  renderList();
-  if (loaded && loaded.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
+  const L = loaded;
+  const min = Number($('cb-place-min').value) || 1;
+  const maxV = $('cb-place-max').value;
+  const max = maxV ? Number(maxV) : null;
+  L.targets = selectTargets(L.standings, min, max, !!$('cb-exclude-dq').checked);
+  const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
+  const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
+  L.seeded = seedOrder(L.targets, method, rankOf, seededRand(L.rngSeed));
+  if (opt.avoid) {
+    try { await refreshAvoid(); } catch (e) { L.avoid = null; }
+  }
+  scheduleOrder(true);
+  if (L.targets.length < 2) status(i18n('class.err.too_few'), 'error');
+  else if (L.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
+}
+
+/** 対象の順位の選択肢: 本戦に実際にある順位 (下位から)。人数付き。前の選択はできるだけ残す */
+function fillPlaceOptions() {
+  if (!loaded) return;
+  /** @type {Map<number, number>} */
+  const cnt = new Map();
+  for (const s of loaded.standings) if (s.placement != null) cnt.set(s.placement, (cnt.get(s.placement) || 0) + 1);
+  const places = [...cnt.keys()].sort((a, b) => b - a);
+  const minEl = $('cb-place-min'), maxEl = $('cb-place-max');
+  const prevMin = Number(minEl.value) || null, prevMax = maxEl.value;
+  minEl.innerHTML = places.map(v => `<option value="${v}">${escapeHtml(i18n('class.place_opt', { p: v, n: cnt.get(v) || 0 }))}</option>`).join('');
+  // 既定の開始: 9 位以降で一番上の順位 (無ければ一番下)
+  const def = places.filter(v => v >= 9).pop() || places[0];
+  minEl.value = String(prevMin && cnt.has(prevMin) ? prevMin : def);
+  const fillMax = () => {
+    const lo = Number(minEl.value) || 1;
+    const cur = maxEl.value;
+    maxEl.innerHTML = `<option value="">${escapeHtml(i18n('class.range_none'))}</option>` +
+      places.filter(v => v >= lo).map(v => `<option value="${v}">${escapeHtml(i18n('class.place_max_opt', { p: v }))}</option>`).join('');
+    maxEl.value = cur && Number(cur) >= lo ? cur : '';
+  };
+  maxEl.value = prevMax;
+  fillMax();
+  minEl.onchange = () => { fillMax(); recompute({ avoid: true }); };
 }
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
@@ -210,15 +324,13 @@ async function resolveEventSlug(token) {
 
 async function load() {
   loaded = null;
+  if (optWorker) { optWorker.terminate(); optWorker = null; }
+  $('cb-settings').hidden = true;
   $('cb-preview').hidden = true;
   $('cb-done').hidden = true;
   const token = String($('cb-sgg-key').value || '').trim();
-  const min = parseInt($('cb-place-min').value, 10);
-  const maxRaw = String($('cb-place-max').value || '').trim();
-  const max = maxRaw ? parseInt(maxRaw, 10) : null;
   if (!parseStartggUrl($('cb-event').value)) return status(i18n('class.err.url'), 'error');
   if (!token) return status(i18n('class.err.startgg_key'), 'error');
-  if (!(min >= 1) || (max != null && !(max >= min))) return status(i18n('class.err.range'), 'error');
   const slug = await resolveEventSlug(token);
   if (!slug) return;
 
@@ -263,20 +375,18 @@ async function load() {
     if (!st || !st.pageInfo || page >= st.pageInfo.totalPages) break;
   }
 
-  // 3. 対象とシード順
-  const targets = selectTargets(standings, min, max, !!$('cb-exclude-dq').checked);
-  if (targets.length < 2) return status(i18n('class.err.too_few'), 'error');
-  const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
-  const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
-  const seeded = seedOrder(targets, method, rankOf);
-  loaded = { token, event: ev, seeded, off: new Set(), avoid: null, order: [], mainSize: standings.length, mainPairs: null, display: [] };
+  // 3. 設定の候補 (本戦の順位・DQ) を出し、対象と並びを作る
+  loaded = { token, event: ev, standings, off: new Set(), targets: [], seeded: [], order: [], display: [], avoid: null, mainPairs: null,
+    rngSeed: Math.floor(Math.random() * 0x7fffffff) };
   $('cb-search').value = '';
   listFilter = 'all';
-  try { await refreshAvoid(); } catch (e) { loaded.avoid = null; }
-  computeOrder();
-  renderList();
+  fillPlaceOptions();
+  const dq = standings.filter(s => s.dq && s.placement != null).length;
+  $('cb-dq-row').hidden = dq === 0;
+  $('cb-dq-label').textContent = i18n('class.exclude_dq', { n: dq });
+  $('cb-settings').hidden = false;
   $('cb-preview').hidden = false;
-  if (loaded && loaded.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
+  await recompute({ avoid: true });
 }
 
 /** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
@@ -311,13 +421,19 @@ function renderList() {
     b.textContent = labels[f];
     b.classList.toggle('on', f === listFilter);
   }
-  $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
-  $('cb-create').disabled = n < 2 || n > MAX_PARTICIPANTS;
+  $('cb-preview-title').innerHTML = escapeHtml(i18n('class.preview', { n, name: className(L.event) })) + (optBusy ? `<span class="cb-busy">${escapeHtml(i18n('class.progress.optimize'))}</span>` : '');
+  $('cb-create').disabled = optBusy || n < 2 || n > MAX_PARTICIPANTS;
   if (n > MAX_PARTICIPANTS) status(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
 }
 
 /** SPSP の総合順位 (players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
-async function spspRanks() {
+/** @type {Promise<(uid: number) => number | null> | null} */
+let spspRanksP = null;
+function spspRanks() {
+  if (!spspRanksP) spspRanksP = loadSpspRanks();
+  return spspRanksP;
+}
+async function loadSpspRanks() {
   try {
     const j = await fetch(SPSP.data + 'players_current.json').then(r => r.json());
     const col = (j.columns || []).indexOf('ranks.ensemble');
@@ -444,18 +560,14 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
-for (const id of AV_IDS) $(id).addEventListener('change', () => { onAvoidChange(); });
-$('cb-av-groups').addEventListener('change', () => { onAvoidChange(); });
+for (const id of AV_IDS) $(id).addEventListener('change', () => { recompute({ avoid: true }); });
+$('cb-av-groups').addEventListener('change', () => { recompute({ avoid: true }); });
+$('cb-place-max').addEventListener('change', () => { recompute({ avoid: true }); });
+$('cb-exclude-dq').addEventListener('change', () => { recompute({ avoid: true }); });
+$('cb-seeding').addEventListener('change', () => { recompute(); });
+$('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
 
-// 対象の順位の候補: ダブルエリミの順位の区切り (1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, …)。「〜位まで」は次の区切りの 1 つ前
-(function fillPlaceLists() {
-  /** @type {number[]} */
-  const starts = [1, 2, 3, 4];
-  for (let b = 4; b < 1024; b *= 2) starts.push(b + 1, b + b / 2 + 1);
-  $('cb-place-min-list').innerHTML = starts.map(v => `<option value="${v}"></option>`).join('');
-  $('cb-place-max-list').innerHTML = starts.slice(1).map(v => `<option value="${v - 1}"></option>`).join('');
-})();
 $('cb-seg').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-f]'));
   if (!b) return;
@@ -469,8 +581,7 @@ $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   if (!loaded || !tr) return;
   const uid = Number(tr.dataset.uid);
   if (loaded.off.has(uid)) loaded.off.delete(uid); else loaded.off.add(uid);
-  computeOrder();
-  renderList();
+  scheduleOrder(false);
 });
 // URL を変えたらイベントの選択欄は隠す (別の大会の選択が残らないように)
 $('cb-event').addEventListener('input', () => { $('cb-event-pick-row').hidden = true; });

@@ -61,8 +61,11 @@
       </div>
     </div>
 
-    <!-- 3. 設定 -->
-    <div class="cb-sec">
+    <button type="button" class="cb-main-btn" id="cb-load" data-i18n="class.load">読み込む</button>
+    <div class="cb-status" id="cb-status" role="status"></div>
+
+    <!-- 3. 設定 (読み込んだあとに出す。本戦の順位・DQ の有無から候補を作る。変えるとすぐ一覧に反映) -->
+    <div class="cb-sec" id="cb-settings" hidden>
       <h2 data-i18n="class.h.settings">設定</h2>
       <div class="cb-grid">
         <div>
@@ -81,10 +84,9 @@
         <div>
           <label class="cb-label" for="cb-place-min" data-i18n="class.range">対象の順位</label>
           <div class="cb-range">
-            <input type="text" id="cb-place-min" inputmode="numeric" placeholder="9" autocomplete="off" list="cb-place-min-list">
+            <select id="cb-place-min"></select>
             <span data-i18n="class.range_to">位 〜</span>
-            <input type="text" id="cb-place-max" inputmode="numeric" data-i18n-attr="placeholder:class.range_none" placeholder="下限なし" autocomplete="off" list="cb-place-max-list">
-            <span data-i18n="class.range_unit">位</span>
+            <select id="cb-place-max"></select>
           </div>
         </div>
         <div>
@@ -109,15 +111,11 @@
           <span id="cb-av-groups" class="cb-av-groups"></span>
         </div>
       </details>
-      <!-- 対象の順位の候補 (ダブルエリミの順位の区切り)。手入力もできる。中身は class.js が入れる -->
-      <datalist id="cb-place-min-list"></datalist>
-      <datalist id="cb-place-max-list"></datalist>
-      <label class="cb-opt"><input type="checkbox" id="cb-exclude-dq" checked> <span data-i18n="class.exclude_dq">DQ の人を除く</span></label>
+      <!-- DQ が居るときだけ出す (人数付き) -->
+      <label class="cb-opt" id="cb-dq-row" hidden><input type="checkbox" id="cb-exclude-dq" checked> <span id="cb-dq-label"></span></label>
       <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
     </div>
 
-    <button type="button" class="cb-main-btn" id="cb-load" data-i18n="class.load">読み込む</button>
-    <div class="cb-status" id="cb-status" role="status"></div>
 
     <!-- 読み込んだら: 対象の選手とシード順 (チェックを外した人は入れない)。確かめてから作成 -->
     <div class="cb-sec" id="cb-preview" hidden>
@@ -130,7 +128,7 @@
         </div>
       </div>
       <div class="cb-table-wrap">
-        <table class="cb-table">
+        <table class="cb-table" id="cb-table">
           <thead><tr>
             <th class="col-on"></th>
             <th class="col-no" data-i18n="class.col.seed">シード</th>
