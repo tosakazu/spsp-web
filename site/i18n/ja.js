@@ -402,6 +402,9 @@ window.SPSP_I18N.ja = {
   'player.chart.method_change': '集計方法変更',
   'player.share.text': '{name}\nSPSP 【全国{rank}位】',
   'player.share.latest': '最新の大会結果: {tour} {place}位/{n}',
+  'player.share.spr': 'SPR {v}',
+  'player.share.perf': 'パフォーマンス 全国{rank}位相当 ({lv})',
+  'player.share.rank_move': '全国 #{from}→#{to}',
 
   // ── 大会ページ (t/index.html) ──
   'tournament.not_found': '大会が見つかりません。URL を確認してください。',

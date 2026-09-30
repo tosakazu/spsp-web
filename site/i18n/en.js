@@ -400,6 +400,9 @@ window.SPSP_I18N.en = {
   'player.chart.method_change': 'Method change',
   'player.share.text': '{name}\nSPSP [National #{rank}]',
   'player.share.latest': 'Latest result: {tour} #{place}/{n}',
+  'player.share.spr': 'SPR {v}',
+  'player.share.perf': 'Performance: national #{rank} equiv. ({lv})',
+  'player.share.rank_move': 'National #{from}→#{to}',
 
   // ── Tournament page (t/index.html) ──
   'tournament.not_found': 'Tournament not found. Check the URL.',

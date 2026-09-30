@@ -1988,13 +1988,23 @@ function onCardImage(btn, fn) {
 for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
-// 共有の文面: 名前 (チームタグ無し)・総合順位・SPSP と、最新の大会結果 (ページの「最新の大会結果」と同じ大会、DQ は除く)
+// 共有の文面: 名前 (チームタグ無し)・総合順位・SPSP と、最新の大会結果 (順位/人数・SPR・パフォーマンス・全国順位の変動。ページの「最新の大会結果」と同じ大会、DQ は除く)
 function shareText() {
   const rec = /** @type {MainRec} */ (MAIN_REC);
   let text = i18n('player.share.text', { name: SPSPFormat.stripTeamTag(rec.display), rank: rec.ranks.ensemble });
   const t = ((PLAYER && PLAYER.tournaments) || []).filter(x => !x.is_dq && x.place != null)
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
-  if (t) text += '\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
+  if (t) {
+    text += '\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
+    // 2 行目: SPR とパフォーマンス (あるものだけ)
+    const parts = [];
+    if (t.spr != null) parts.push(i18n('player.share.spr', { v: t.spr > 0 ? '+' + t.spr : t.spr < 0 ? String(t.spr) : '±0' }));
+    const perf = perfInfoOf(t);
+    if (perf) parts.push(i18n('player.share.perf', { rank: perf.eq, lv: `Lv${perf.eqLv}${perf.lvSfx}` }));
+    const pre = t.pretour_ranks && t.pretour_ranks.ensemble != null ? t.pretour_ranks.ensemble : null;
+    if (pre != null && t.rank_delta_ensemble != null) parts.push(i18n('player.share.rank_move', { from: pre, to: pre - t.rank_delta_ensemble }));
+    if (parts.length) text += '\n' + parts.join(' / ');
+  }
   return text;
 }
 const shareData = () => MAIN_REC ? {
