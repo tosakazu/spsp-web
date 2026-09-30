@@ -1996,14 +1996,14 @@ function shareText() {
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   if (t) {
     text += '\n\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
-    // 2 行目: SPR とパフォーマンス (あるものだけ)
+    // その下に SPR・パフォーマンス・全国順位の変動を 1 行ずつ (あるものだけ)
     const parts = [];
     if (t.spr != null) parts.push(i18n('player.share.spr', { v: t.spr > 0 ? '+' + t.spr : t.spr < 0 ? String(t.spr) : '±0' }));
     const perf = perfInfoOf(t);
     if (perf) parts.push(i18n('player.share.perf', { rank: perf.eq, lv: `Lv${perf.eqLv}${perf.lvSfx}` }));
     const pre = t.pretour_ranks && t.pretour_ranks.ensemble != null ? t.pretour_ranks.ensemble : null;
     if (pre != null && t.rank_delta_ensemble != null) parts.push(i18n('player.share.rank_move', { from: pre, to: pre - t.rank_delta_ensemble }));
-    if (parts.length) text += '\n' + parts.join(' / ');
+    if (parts.length) text += '\n' + parts.join('\n');   // 1 項目 1 行
   }
   return text;
 }
