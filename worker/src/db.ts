@@ -5,7 +5,9 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { CardRow, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow } from './store.ts';
+import type {
+  CardRow, ClassBracketRow, ClassInsertResult, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+} from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
 const POST_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, body, status';
@@ -133,6 +135,49 @@ export class D1Store implements Store {
       put,
       this.db.prepare('DELETE FROM card_writes WHERE ts_ms < ?').bind(g.nowMs - 2 * 24 * 3600 * 1000),
     ]);
+    return true;
+  }
+
+  async classExists(challongeId: number): Promise<boolean> {
+    const r = await this.db.prepare('SELECT 1 AS x FROM class_brackets WHERE challonge_id = ?').bind(challongeId).first();
+    return !!r;
+  }
+
+  async insertClassBracket(row: ClassBracketRow, g: RateGuard): Promise<ClassInsertResult> {
+    // ?1..?5 = 連投条件 (votes / posts と同じ形、registered_by ごと)。challonge_id の重複は UNIQUE 制約で弾く
+    let res: D1Result;
+    try {
+      res = await this.db.prepare(
+        `INSERT INTO class_brackets (created_at, ts_ms, day, parent_event_id, parent_tournament_id, class_letter, name,
+           challonge_id, challonge_url, format, counted, place_min, place_max, seeding, entrant_count, registered_by)
+         SELECT ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+         WHERE NOT EXISTS (SELECT 1 FROM class_brackets WHERE registered_by = ?1 AND ts_ms > ?2 - ?3)
+           AND (SELECT COUNT(*) FROM class_brackets WHERE registered_by = ?1 AND day = ?4) < ?5`)
+        .bind(g.userId, g.nowMs, g.minIntervalMs, g.dayKey, g.maxPerDay,
+          row.created_at, row.ts_ms, row.day, row.parent_event_id, row.parent_tournament_id, row.class_letter, row.name,
+          row.challonge_id, row.challonge_url, row.format, row.counted, row.place_min, row.place_max, row.seeding,
+          row.entrant_count, row.registered_by)
+        .run();
+    } catch (ex) {
+      if (/UNIQUE/i.test(ex instanceof Error ? ex.message : String(ex))) return { status: 'duplicate' };
+      throw ex;
+    }
+    if ((res.meta?.changes ?? 0) === 0) return { status: 'rate_limited' };
+    return { status: 'ok', id: Number(res.meta?.last_row_id) };
+  }
+
+  async listClassWaitlist(): Promise<ClassWaitItem[]> {
+    const r = await this.db.prepare(
+      `SELECT id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at
+       FROM class_brackets WHERE counted = 1 AND status = 'waiting' ORDER BY id ASC`).all<ClassWaitItem>();
+    return (r.results || []).map((x) => ({ ...x, id: Number(x.id), parent_event_id: Number(x.parent_event_id),
+      parent_tournament_id: Number(x.parent_tournament_id), challonge_id: Number(x.challonge_id) }));
+  }
+
+  async markClassDone(id: number): Promise<boolean> {
+    const hit = await this.db.prepare('SELECT 1 AS x FROM class_brackets WHERE id = ?').bind(id).first();
+    if (!hit) return false;
+    await this.db.prepare("UPDATE class_brackets SET status = 'done' WHERE id = ?").bind(id).run();
     return true;
   }
 }

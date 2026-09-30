@@ -10,12 +10,14 @@
  *   GET  /api/export/votes?key=&since=   = action export_votes
  *   GET  /api/export/errors?key=&limit=  = action export_errors
  *   GET  /api/card?uid=                  = action card_get (だれでも読める。60 秒キャッシュ可)
+ *   GET  /api/class_waitlist             = action class_waitlist (下位クラスの取得待ち。だれでも読める)
  *   GET  それ以外        doGet と同じ bad_request
  * 応答は常に HTTP 200 の JSON (ビルド側の urllib が非 2xx を例外にするため)。
  */
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
+import { handleClassDone, handleClassRegister, handleClassWaitlist } from './class_bracket.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin } from './login.ts';
@@ -72,6 +74,12 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'card_put':
         res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
+      case 'class_register':
+        res = await handleClassRegister(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'class_waitlist':
+        return (await handleClassWaitlist(ctx.store)).body;   // 読むだけ (だれでも)。記録しない
+      case 'class_done':
+        res = await handleClassDone(ctx.cfg, ctx.store, r); break;
       case 'export_votes':
         // ビルドサーバーの定期取得。失敗しても人手の出番は無いので記録しない。
         return (await handleExportVotes(ctx.cfg, ctx.store, r)).body;
@@ -104,7 +112,8 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     const sess = await verifySessionToken(ctx.cfg, req.token, now);
     if (sess) uid = sess.id;
   }
-  const note = (action === 'login' || action === 'post') ? String(res.note || '') : '';
+  // note は理由の符号だけ (class_register の start.gg のキーは note にも入らない)
+  const note = (action === 'login' || action === 'post' || action === 'class_register') ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
 
@@ -157,6 +166,9 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
         action: 'export_errors', key: url.searchParams.get('key') || '',
         limit: url.searchParams.get('limit') || '',
       }));
+    }
+    if (sub === 'class_waitlist') {
+      return jsonResponse(await dispatch(ctx, { action: 'class_waitlist' }));
     }
     if (sub === 'card') {
       const body = await dispatch(ctx, { action: 'card_get', uid: url.searchParams.get('uid') || '' });

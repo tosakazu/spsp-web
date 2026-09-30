@@ -24,6 +24,8 @@ export interface Env {
   STARTGG_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
   EXPORT_KEY?: string;
+  /** 下位クラスの取得側 (smash_database) が class_done で送る鍵。取得側の secret と同じ値を入れる */
+  CLASS_DONE_KEY?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
@@ -44,6 +46,10 @@ export const RATE_MAX_PER_DAY = 10;            // 同一ユーザーの当日投
 /** プレイヤーカードの設定 (action card_put)。編集画面の「適用」を何度か押す程度は通す。 */
 export const CARD_RATE_MIN_INTERVAL_MS = 2 * 1000;  // 同一ユーザーの書き込み間隔 (適用 → 戻る → すぐ直して適用、を通す)
 export const CARD_RATE_MAX_PER_DAY = 300;           // 同一ユーザーの当日書き込み数
+/** 下位クラスの登録 (action class_register、docs/class_bracket_design.md)。 */
+export const CLASS_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同じ TO の登録間隔
+export const CLASS_RATE_MAX_PER_DAY = 50;            // 同じ TO の当日登録数
+export const STARTGG_TIMEOUT_MS = 10 * 1000;         // start.gg GraphQL の応答待ち
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
@@ -95,6 +101,7 @@ export interface Config {
   clientSecret?: string;
   sessionSecret?: string;
   exportKey?: string;
+  classDoneKey?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -123,6 +130,7 @@ export function configFromEnv(env: Env): Config {
     clientSecret: env.STARTGG_CLIENT_SECRET || undefined,
     sessionSecret: env.SESSION_SECRET || undefined,
     exportKey: env.EXPORT_KEY || undefined,
+    classDoneKey: env.CLASS_DONE_KEY || undefined,
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),
     tsOffsetMin: parseOffset(env.TS_OFFSET),

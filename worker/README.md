@@ -16,6 +16,7 @@ worker/
   src/api/oauth.ts         start.gg の code 交換と currentUser (gas/oauth.gs)
   src/api/vote.ts          キャラ投票の規則・資格判定 (gas/vote.gs)
   src/api/card.ts          ログインの確認 (me) とプレイヤーカードの設定 (card_get / card_put)。GAS には無い
+  src/api/class_bracket.ts 下位クラス (Challonge) の登録・取得待ちの一覧・取得済み (docs/class_bracket_design.md)
   src/api/post.ts          投稿 (gas/main.gs handlePost_。未公開だが移植)
   src/api/errlog.ts        失敗の記録 (gas/errlog.gs)
   src/api/export.ts        ビルド向けエクスポート (gas/export.gs)
@@ -23,6 +24,7 @@ worker/
   src/api/time.ts          固定オフセットの ISO 時刻
   migrations/0001_init.sql D1 のテーブル
   migrations/0002_card_settings.sql プレイヤーカードの設定 (card_settings / card_writes)
+  migrations/0003_class_brackets.sql 下位クラスの登録 (class_brackets)
   scripts/import_votes.mjs シートの内容 → D1 の INSERT
   scripts/assemble_dist.sh npm run build:cf の後に assets/_headers を dist-cf/ に写す
   assets/_headers          Worker を通らないアセット用のセキュリティヘッダ
@@ -57,6 +59,9 @@ cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
 | `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
 | `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour}|null, updated_at|null}` / `bad_request` |
 | `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (2 秒に 1 回・1 日 300 回) |
+| `class_register` | `POST /api` `{action:"class_register"}` | `startgg_token` (確認にだけ使い保存・記録しない), `parent_event_id`, `class_letter` (B〜E), `name`, `challonge:{id,url}`, `format`, `counted`, `place_min`, `place_max`, `seeding`, `entrant_count` | `{id}` / `bad_request` `duplicate` `not_admin` `startgg_error` `rate_limited` (同じ TO は 10 秒に 1 回・1 日 50 回)。start.gg GraphQL で owner / admins を確かめ直す (10 秒でタイムアウト) |
+| `class_waitlist` | `GET /api/class_waitlist` (または POST) | なし | `{items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at}]}` (counted かつ waiting) |
+| `class_done` | `POST /api` `{action:"class_done"}` | `key` (= secret `CLASS_DONE_KEY`), `id` | `{id, status:"done"}` / `auth_failed` `bad_request` `not_found` `internal` (鍵未設定) |
 | `client_error` (errlog.gs) | `POST /api` `{action:"client_error"}` / `POST /api/client_error` | `kind` (白リスト), `flow`, `note`, `token?` | `{logged: true|false}` |
 | `export_votes` (export.gs) | `POST /api` `{action:"export_votes"}` **または** `GET /api/export/votes?key=&since=` | `key`, `since?` | `{votes:[{ts,userId,charId,charName,status}], total, since}` / `auth_failed` `internal` |
 | `export_errors` (export.gs) | `POST /api` `{action:"export_errors"}` **または** `GET /api/export/errors?key=&limit=` | `key`, `limit?` (既定 100 / 上限 1000) | `{errors:[{ts,source,action,code,userId,note}], total}` |
@@ -83,6 +88,8 @@ GAS と同じく `base64url(HMAC-SHA256(key=STARTGG_CLIENT_SECRET, msg="spsp:exp
 | `card_settings` (0002) | `uid` (INTEGER PK), `settings` (検証済み JSON), `updated_at` | プレイヤーカードの設定。本人 (token の uid) だけが書く |
 | `card_writes` (0002) | `id`, `uid`, `ts_ms`, `day` | card_put の連投判定用。2 日より古い行は書き込みのたびに消す |
 
+| `class_brackets` (0003) | `id`, `created_at`, `ts_ms`, `day`, `parent_event_id`, `parent_tournament_id`, `class_letter`, `name`, `challonge_id` (UNIQUE), `challonge_url`, `format`, `counted`, `place_min`, `place_max`, `seeding`, `entrant_count`, `registered_by`, `status` | 下位クラスの登録。大会 ID と登録者は start.gg に問い合わせた値。start.gg のキーは持たない |
+
 **マイグレーションはデプロイ (Actions) では当たらない。** 0002 を足した版を本番に出すときは、先に
 `npx wrangler d1 migrations apply spsp --remote` を打つ (当てないと card_get / card_put が internal になる)。
 
@@ -105,6 +112,7 @@ npx wrangler d1 migrations apply spsp-preview --remote --env preview
 npx wrangler secret put STARTGG_CLIENT_SECRET     # ~/spsp-secrets/startgg_oauth_client_secret の値
 npx wrangler secret put SESSION_SECRET            # GAS のスクリプトプロパティ SESSION_SECRET を写すと既存ログインが引き継げる。無ければ openssl rand -hex 32
 npx wrangler secret put EXPORT_KEY                # 任意
+npx wrangler secret put CLASS_DONE_KEY            # 下位クラスの取得側 (smash_database) と同じ値。openssl rand -hex 32 で作って両方に入れる
 #    preview / na は --env preview / --env na を付けて同じことをする
 ```
 

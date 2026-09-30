@@ -8,7 +8,8 @@
 export type ErrorCode =
   | 'bad_request' | 'auth_failed' | 'rate_limited' | 'body_invalid' | 'internal'
   | 'state_invalid' | 'bad_char' | 'not_player' | 'char_exists' | 'not_candidate'
-  | 'invalid_session' | 'bad_settings';
+  | 'invalid_session' | 'bad_settings'
+  | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found';
 
 export interface OkBody { ok: true; [k: string]: unknown }
 export interface ErrBody { ok: false; error: { code: ErrorCode; message: string } }
