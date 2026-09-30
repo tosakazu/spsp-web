@@ -237,29 +237,34 @@ async function recompute() {
   else if (L.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
 }
 
-/** 対象の順位の選択肢: 本戦に実際にある順位 (下位から)。人数付き。前の選択はできるだけ残す */
+/** 対象の順位の選択肢: 本戦に実際にある順位 (下位から)。各選択肢には「それを選ぶと何人になるか」(本戦DQ は数えない) を出す。
+ * 既定の開始は準最速敗退の順位 (下から 2 番目の順位。最速・準最速敗退の人が対象になる)。前の選択はできるだけ残す */
 function fillPlaceOptions() {
   if (!loaded) return;
-  /** @type {Map<number, number>} */
-  const cnt = new Map();
-  for (const s of loaded.standings) if (s.placement != null) cnt.set(s.placement, (cnt.get(s.placement) || 0) + 1);
-  const places = [...cnt.keys()].sort((a, b) => b - a);
+  const L = loaded;
+  const places = [...new Set(L.standings.map(s => s.placement).filter(v => v != null))].map(Number).sort((a, b) => b - a);
   const minEl = $('cb-place-min'), maxEl = $('cb-place-max');
   const prevMin = Number(minEl.value) || null, prevMax = maxEl.value;
-  minEl.innerHTML = places.map(v => `<option value="${v}">${escapeHtml(i18n('class.place_opt', { p: v, n: cnt.get(v) || 0 }))}</option>`).join('');
-  // 既定の開始: 9 位以降で一番上の順位 (無ければ一番下)
-  const def = places.filter(v => v >= 9).pop() || places[0];
-  minEl.value = String(prevMin && cnt.has(prevMin) ? prevMin : def);
-  const fillMax = () => {
+  /** @param {number} lo @param {number | null} hi */
+  const count = (lo, hi) => L.standings.filter(s => !s.dq && s.placement != null && s.placement >= lo && (hi == null || s.placement <= hi)).length;
+  const def = places.length >= 2 ? places[1] : places[0];
+  minEl.innerHTML = places.map(v => `<option value="${v}"></option>`).join('');
+  minEl.value = String(prevMin && places.includes(prevMin) ? prevMin : def);
+  const fill = () => {
     const lo = Number(minEl.value) || 1;
     const cur = maxEl.value;
-    maxEl.innerHTML = `<option value="">${escapeHtml(i18n('class.range_none'))}</option>` +
-      places.filter(v => v >= lo).map(v => `<option value="${v}">${escapeHtml(i18n('class.place_max_opt', { p: v }))}</option>`).join('');
+    maxEl.innerHTML = `<option value=""></option>` + places.filter(v => v >= lo).map(v => `<option value="${v}"></option>`).join('');
     maxEl.value = cur && Number(cur) >= lo ? cur : '';
+    const hi = maxEl.value ? Number(maxEl.value) : null;
+    for (const o of /** @type {HTMLOptionElement[]} */ ([...minEl.options])) o.textContent = i18n('class.place_opt', { p: o.value, n: count(Number(o.value), hi) });
+    for (const o of /** @type {HTMLOptionElement[]} */ ([...maxEl.options])) {
+      o.textContent = o.value ? i18n('class.place_max_opt', { p: o.value, n: count(lo, Number(o.value)) }) : i18n('class.range_none_n', { n: count(lo, null) });
+    }
   };
   maxEl.value = prevMax;
-  fillMax();
-  minEl.onchange = () => { fillMax(); recompute(); };
+  fill();
+  minEl.onchange = () => { fill(); recompute(); };
+  maxEl.onchange = () => { fill(); recompute(); };
 }
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
@@ -530,7 +535,6 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
-$('cb-place-max').addEventListener('change', () => { recompute(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
