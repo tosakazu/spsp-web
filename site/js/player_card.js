@@ -387,6 +387,9 @@ function scheduleImage(el) {
         /** @type {HTMLImageElement} */ (node).src = canvas.toDataURL('image/png');
       }
       node.classList.add('pc-img');
+      // html2canvas は canvas に原寸の幅・高さ (514px など) を直接書くので、カードの箱いっぱいに合わせ直す
+      node.style.width = '100%';
+      node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
