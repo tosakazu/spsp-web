@@ -358,7 +358,18 @@ export async function handleClassDelete(cfg: Config, store: Store, fetchFn: Fetc
     return err('already_imported', 'この下位クラスはもう SPSP に取り込まれているため削除できません。', 'already_imported');
   }
 
-  const del = await challongeApi(fetchFn, req.challonge_token, '/tournaments/' + row.challonge_id + '.json', null, 'DELETE');
+  const path = '/tournaments/' + row.challonge_id;
+  let del = await challongeApi(fetchFn, req.challonge_token, path + '.json', null, 'DELETE');
+  if (!del.ok && del.status === 422) {
+    // 終了済み (complete) や進行中 (underway) は消せない (422「revert the tournament to pending before deleting」)。
+    // 状態をリセット (pending に戻す) してから消し直す (取得側が実物で確認、2026-10-01)
+    const reset = await challongeApi(fetchFn, req.challonge_token, path + '/change_state.json',
+      { data: { type: 'TournamentState', attributes: { state: 'reset' } } }, 'PUT');
+    if (!reset.ok) {
+      return err(reset.code, reset.code === 'challonge_auth' ? reset.message : 'Challonge のトーナメントを削除できませんでした: ' + reset.message, 'reset:' + reset.note);
+    }
+    del = await challongeApi(fetchFn, req.challonge_token, path + '.json', null, 'DELETE');
+  }
   if (!del.ok && del.status !== 404) {
     return err(del.code, del.code === 'challonge_auth' ? del.message : 'Challonge のトーナメントを削除できませんでした: ' + del.message, 'delete:' + del.note);
   }
