@@ -132,5 +132,3 @@ body {
 .cb-seg button:hover { color: #374151; background: #f3f4f6; }
 .cb-seg button.on { background: #dc2626; color: #fff; }
 .cb-empty td { text-align: center; color: #9ca3af; padding: 14px 6px; cursor: default; }
-.cb-busy { color: #6b7280; font-size: 11px; font-weight: 400; margin-left: 6px; }
-.cb-table.busy tbody { opacity: .55; }

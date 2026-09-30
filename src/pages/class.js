@@ -25,7 +25,7 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-exclude-dq', 'cb-counted'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-counted'];
 const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
@@ -59,12 +59,13 @@ async function sgg(token, query, variables = {}) {
 
 /** 読み込んだ内容。設定 (対象の順位・シード・被り回避・DQ) を変えても取り直さず、ここから計算し直す
  *   standings = 本戦の順位 (全員)、off = 外した人、targets = 今の設定での対象、seeded = 元のシード順 (被り回避の前)、
- *   order = 作成に使う並び (外した人を除き、被り回避の後)、display = 表の並び (外した人もその場に残す)、
+ *   order = 作成に使う並び (外した人を除く。被り回避は「作成」を押したときにだけかける)、display = 表の並び (外した人もその場に残す)、
+ *   touched = 手でオン・オフした人 (DQ の人は最初は外すが、手で入れたら設定を変えても外さない)、
  *   avoid = 被り回避の材料 (null = 使わない)、mainPairs = 本戦で当たった組 (必要になったら取る)、rngSeed = 同率の並びを設定を変えても保つための乱数の種
  * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, standings: ClassEntrant[], off: Set<number>,
  *   targets: ClassEntrant[], seeded: ClassEntrant[], order: ClassEntrant[], display: ClassEntrant[],
  *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> },
- *   mainPairs: Set<string> | null, rngSeed: number }} */
+ *   mainPairs: Set<string> | null, rngSeed: number, touched: Set<number> }} */
 let loaded = null;
 
 /** 決まった種から 0〜1 を返す (mulberry32)。同じ設定なら同率の並びが毎回同じになる
@@ -79,97 +80,59 @@ function seededRand(seed) {
   };
 }
 
-/** 被り回避は別スレッド (シード機能と同じ assets/seed_worker.js) で。オン・オフのたびに画面が固まらないように。
- * 新しい計算を始めたら前のは止める (古い結果は使わない) */
-/** @type {Worker | null} */
-let optWorker = null;
-let optGen = 0;
-/** @type {ReturnType<typeof setTimeout> | null} */
-let optTimer = null;
-
-/** 並べ替えの材料が変わった: まず今の並びから外した人を抜いた暫定の順ですぐ描き、少し待ってから被り回避をかける
- * @param {boolean} fresh true = 対象・シードの方法が変わった (暫定は元のシード順) */
-function scheduleOrder(fresh) {
+/** 一覧の並びを作る (被り回避はかけない。チェックの付け外し・設定の変更ではシード順は動かさない)。
+ * 表は元のシード順のまま、外した人はその場に残し、出る人に上から番号を振る */
+function buildOrder() {
   if (!loaded) return;
   const L = loaded;
-  const active = (/** @type {ClassEntrant} */ p) => !L.off.has(p.userId) && L.targets.includes(p);
-  const prev = fresh ? L.seeded : L.order;
-  const inPrev = new Set(prev.map(p => p.userId));
-  // 暫定: 前の並びの順 (戻した人は元のシード順の位置に差し込む)
-  L.order = L.seeded.filter(active).sort((a, b) => {
-    const ia = inPrev.has(a.userId) ? prev.indexOf(a) : L.seeded.indexOf(a) - 0.5;
-    const ib = inPrev.has(b.userId) ? prev.indexOf(b) : L.seeded.indexOf(b) - 0.5;
-    return ia - ib;
-  });
-  mergeDisplay(fresh);
-  const gen = ++optGen;
-  if (optTimer) clearTimeout(optTimer);
-  if (optWorker) { optWorker.terminate(); optWorker = null; }
-  if (!L.avoid || L.order.length < 4) { setBusy(false); renderList(); return; }
-  setBusy(true);
-  renderList();
-  optTimer = setTimeout(() => runOptimize(gen), 250);
+  L.display = L.seeded.slice();
+  L.order = L.seeded.filter(p => !L.off.has(p.userId));
 }
 
-/** @param {number} gen */
-function runOptimize(gen) {
-  if (!loaded || !loaded.avoid || gen !== optGen) return;
+/** 「作成」を押したとき: 被り回避の材料を作り、別スレッド (シード機能と同じ assets/seed_worker.js) で並べ替える。
+ * 結果は一覧にも出す (作ったトーナメントと同じ順)。失敗したら元の並びのまま
+ * @returns {Promise<void>} */
+async function optimizeForCreate() {
+  if (!loaded) return;
   const L = loaded;
-  const av = loaded.avoid;
-  const base = L.seeded.filter(p => !L.off.has(p.userId) && L.targets.includes(p));
+  try { await refreshAvoid(); } catch (e) { L.avoid = null; }
+  const av = L.avoid;
+  const base = L.order.slice();
+  if (!av || base.length < 4) return;
+  status(i18n('class.progress.optimize'));
   const input = {
     poolCount: 1, ranking: base.map(p => p.userId), format: 'DOUBLE_ELIMINATION',
     prefByUid: av.prefByUid, recentPair: av.recentPair,
     // 1 ブラケットで人数も少ないので、多点スタートは少なめ (シード機能の既定 15 回 → 4 回)
     params: Object.assign({ mode: 'multistart-sa', restarts: 4 }, av.params),
   };
-  const apply = (/** @type {number[] | null} */ seedOrder) => {
-    if (gen !== optGen || !loaded) return;
-    if (Array.isArray(seedOrder)) {
-      const byUid = new Map(base.map(p => [p.userId, p]));
-      const next = seedOrder.map(u => byUid.get(u)).filter(Boolean);
-      if (next.length === base.length) L.order = /** @type {ClassEntrant[]} */ (next);
+  /** @type {number[] | null} */
+  const seedOrderOut = await new Promise(resolve => {
+    if (typeof Worker === 'undefined') {
+      try { resolve(SPSPSeedOptimizer.optimize(input).seedOrder); } catch (e) { resolve(null); }
+      return;
     }
-    mergeDisplay(false);
-    setBusy(false);
-    renderList();
-  };
-  if (typeof Worker === 'undefined') {
-    try { apply(SPSPSeedOptimizer.optimize(input).seedOrder); } catch (e) { apply(null); }
-    return;
-  }
-  try {
-    const w = new Worker(SPSP.root + 'assets/seed_worker.js');
-    optWorker = w;
-    w.onmessage = (/** @type {MessageEvent} */ e) => {
-      const m = e.data || {};
-      if (m.type === 'done') { apply(m.result && m.result.seedOrder); w.terminate(); if (optWorker === w) optWorker = null; }
-      else if (m.type === 'error') { apply(null); w.terminate(); if (optWorker === w) optWorker = null; }
-    };
-    w.onerror = () => { apply(null); w.terminate(); if (optWorker === w) optWorker = null; };
-    w.postMessage({ type: 'start', input });
-  } catch (e) { apply(null); }
-}
-
-/** 並べ替え中の印 (一覧を薄くし、作成は押せない) @param {boolean} on */
-let optBusy = false;
-function setBusy(on) {
-  optBusy = on;
-  $('cb-table').classList.toggle('busy', on);
-}
-
-/** 表の並び: 外した人はその場に残し (下に回さない)、出る人の枠に新しいシード順を上から入れる
- * @param {boolean} fresh true = 対象が変わった (並びを作り直す。外した人は元のシード順の位置) */
-function mergeDisplay(fresh) {
-  if (!loaded) return;
-  const L = loaded;
-  if (fresh || !L.display.length) {
-    const queue = L.order.slice();
-    L.display = L.seeded.filter(p => L.targets.includes(p)).map(p => (L.off.has(p.userId) ? p : /** @type {ClassEntrant} */ (queue.shift())));
-    return;
-  }
+    try {
+      const w = new Worker(SPSP.root + 'assets/seed_worker.js');
+      const done = (/** @type {number[] | null} */ v) => { w.terminate(); resolve(v); };
+      w.onmessage = (/** @type {MessageEvent} */ e) => {
+        const m = e.data || {};
+        if (m.type === 'done') done((m.result && m.result.seedOrder) || null);
+        else if (m.type === 'error') done(null);
+      };
+      w.onerror = () => done(null);
+      w.postMessage({ type: 'start', input });
+    } catch (e) { resolve(null); }
+  });
+  if (!Array.isArray(seedOrderOut)) return;
+  const byUid = new Map(base.map(p => [p.userId, p]));
+  const next = seedOrderOut.map(u => byUid.get(u)).filter(Boolean);
+  if (next.length !== base.length) return;
+  L.order = /** @type {ClassEntrant[]} */ (next);
+  // 表も作成した順に (外した人は元の位置に残す)
   const queue = L.order.slice();
   L.display = L.display.map(p => (L.off.has(p.userId) ? p : /** @type {ClassEntrant} */ (queue.shift())));
+  renderList();
 }
 
 /** 本戦の試合から、当たった組 (pairKey) を集める
@@ -255,21 +218,21 @@ async function refreshAvoid() {
 }
 
 /** 設定 (対象の順位・シード・DQ・被り回避) から対象と並びを作り直す。本戦のデータは取り直さない
- * @param {{ avoid?: boolean }} [opt] avoid = 被り回避の材料も作り直す (対象や被り回避の設定が変わったとき) */
-async function recompute(opt = {}) {
+ */
+async function recompute() {
   if (!loaded) return;
   const L = loaded;
   const min = Number($('cb-place-min').value) || 1;
   const maxV = $('cb-place-max').value;
   const max = maxV ? Number(maxV) : null;
-  L.targets = selectTargets(L.standings, min, max, !!$('cb-exclude-dq').checked);
+  // DQ の人も一覧には出す (最初は外す。手で入れた人は設定を変えても外さない)
+  L.targets = selectTargets(L.standings, min, max, false);
+  for (const p of L.targets) if (p.dq && !L.touched.has(p.userId)) L.off.add(p.userId);
   const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
   const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
   L.seeded = seedOrder(L.targets, method, rankOf, seededRand(L.rngSeed));
-  if (opt.avoid) {
-    try { await refreshAvoid(); } catch (e) { L.avoid = null; }
-  }
-  scheduleOrder(true);
+  buildOrder();
+  renderList();
   if (L.targets.length < 2) status(i18n('class.err.too_few'), 'error');
   else if (L.order.length <= MAX_PARTICIPANTS) status(i18n('class.step.ready'), 'ok');
 }
@@ -296,7 +259,7 @@ function fillPlaceOptions() {
   };
   maxEl.value = prevMax;
   fillMax();
-  minEl.onchange = () => { fillMax(); recompute({ avoid: true }); };
+  minEl.onchange = () => { fillMax(); recompute(); };
 }
 
 /** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
@@ -324,7 +287,6 @@ async function resolveEventSlug(token) {
 
 async function load() {
   loaded = null;
-  if (optWorker) { optWorker.terminate(); optWorker = null; }
   $('cb-settings').hidden = true;
   $('cb-preview').hidden = true;
   $('cb-done').hidden = true;
@@ -377,16 +339,13 @@ async function load() {
 
   // 3. 設定の候補 (本戦の順位・DQ) を出し、対象と並びを作る
   loaded = { token, event: ev, standings, off: new Set(), targets: [], seeded: [], order: [], display: [], avoid: null, mainPairs: null,
-    rngSeed: Math.floor(Math.random() * 0x7fffffff) };
+    rngSeed: Math.floor(Math.random() * 0x7fffffff), touched: new Set() };
   $('cb-search').value = '';
   listFilter = 'all';
   fillPlaceOptions();
-  const dq = standings.filter(s => s.dq && s.placement != null).length;
-  $('cb-dq-row').hidden = dq === 0;
-  $('cb-dq-label').textContent = i18n('class.exclude_dq', { n: dq });
   $('cb-settings').hidden = false;
   $('cb-preview').hidden = false;
-  await recompute({ avoid: true });
+  await recompute();
 }
 
 /** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
@@ -401,7 +360,7 @@ function renderList() {
   const q = String($('cb-search').value || '').trim().toLowerCase();
   const rows = L.display.filter(p => {
     const on = !L.off.has(p.userId);
-    if ((listFilter === 'on' && !on) || (listFilter === 'off' && on)) return false;
+    if ((listFilter === 'on' && !on) || (listFilter === 'off' && on) || (listFilter === 'dq' && !p.dq)) return false;
     return !q || p.gamerTag.toLowerCase().includes(q) || String(p.discriminator || '').toLowerCase().includes(q);
   });
   $('cb-list').innerHTML = rows.map(p => {
@@ -415,14 +374,17 @@ function renderList() {
     </tr>`;
   }).join('') || `<tr class="cb-empty"><td colspan="4">${escapeHtml(i18n('class.filter.empty'))}</td></tr>`;
   const n = L.order.length, total = L.display.length;
-  const labels = { all: i18n('class.filter.all', { n: total }), on: i18n('class.filter.on', { n }), off: i18n('class.filter.off', { n: total - n }) };
+  const dqN = L.display.filter(p => p.dq).length;
+  const labels = { all: i18n('class.filter.all', { n: total }), on: i18n('class.filter.on', { n }), off: i18n('class.filter.off', { n: total - n }), dq: i18n('class.filter.dq', { n: dqN }) };
+  if (listFilter === 'dq' && !dqN) listFilter = 'all';
   for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#cb-seg button'))) {
-    const f = /** @type {'all' | 'on' | 'off'} */ (b.dataset.f);
+    const f = /** @type {'all' | 'on' | 'off' | 'dq'} */ (b.dataset.f);
     b.textContent = labels[f];
+    b.hidden = f === 'dq' && !dqN;   // DQ の人が居るときだけ
     b.classList.toggle('on', f === listFilter);
   }
-  $('cb-preview-title').innerHTML = escapeHtml(i18n('class.preview', { n, name: className(L.event) })) + (optBusy ? `<span class="cb-busy">${escapeHtml(i18n('class.progress.optimize'))}</span>` : '');
-  $('cb-create').disabled = optBusy || n < 2 || n > MAX_PARTICIPANTS;
+  $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(L.event) });
+  $('cb-create').disabled = n < 2 || n > MAX_PARTICIPANTS;
   if (n > MAX_PARTICIPANTS) status(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
 }
 
@@ -454,6 +416,8 @@ async function create() {
   const btn = $('cb-create');
   btn.disabled = true;
   try {
+    // 被り回避 (設定が ON なら) はここで 1 回だけ。並べ替えた順で作る
+    await optimizeForCreate();
     status(i18n('class.step.create'));
     const r = await SpspLogin.api({
       action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
@@ -560,10 +524,7 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
-for (const id of AV_IDS) $(id).addEventListener('change', () => { recompute({ avoid: true }); });
-$('cb-av-groups').addEventListener('change', () => { recompute({ avoid: true }); });
-$('cb-place-max').addEventListener('change', () => { recompute({ avoid: true }); });
-$('cb-exclude-dq').addEventListener('change', () => { recompute({ avoid: true }); });
+$('cb-place-max').addEventListener('change', () => { recompute(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
@@ -581,7 +542,9 @@ $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   if (!loaded || !tr) return;
   const uid = Number(tr.dataset.uid);
   if (loaded.off.has(uid)) loaded.off.delete(uid); else loaded.off.add(uid);
-  scheduleOrder(false);
+  loaded.touched.add(uid);
+  buildOrder();
+  renderList();
 });
 // URL を変えたらイベントの選択欄は隠す (別の大会の選択が残らないように)
 $('cb-event').addEventListener('input', () => { $('cb-event-pick-row').hidden = true; });

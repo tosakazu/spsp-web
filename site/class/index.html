@@ -102,7 +102,7 @@
       <!-- 被り回避: シード機能の「🔀 被り回避最適化」と同じ項目 + 本戦で当たった人を避ける (既定 ON) -->
       <details class="cb-avoid" open>
         <summary><strong data-i18n="seed.skeleton.t29">🔀 被り回避最適化</strong>
-          <span class="cb-avoid-desc" data-i18n="class.avoid_desc">地域被り・直接対戦・本戦で当たった組が序盤で当たらないよう、シード順を並べ替えます。</span></summary>
+          <span class="cb-avoid-desc" data-i18n="class.avoid_desc">地域被り・直接対戦・本戦で当たった組が序盤で当たらないよう、作成するときにシード順を並べ替えます。</span></summary>
         <div class="cb-avoid-opts">
           <label data-i18n-attr="title:seed.skeleton.t122" title="同じ地域の選手が同じプール・早期回戦に固まらないよう分散する"><input type="checkbox" id="cb-av-region" checked> <span data-i18n="seed.skeleton.t36">地域被りを考慮</span></label>
           <label data-i18n-attr="title:seed.skeleton.t123" title="直近に対戦した相手と再び早期に当たるのを避ける"><input type="checkbox" id="cb-av-recent" checked> <span data-i18n="seed.skeleton.t37">直接対戦を考慮</span></label>
@@ -111,8 +111,6 @@
           <span id="cb-av-groups" class="cb-av-groups"></span>
         </div>
       </details>
-      <!-- DQ が居るときだけ出す (人数付き) -->
-      <label class="cb-opt" id="cb-dq-row" hidden><input type="checkbox" id="cb-exclude-dq" checked> <span id="cb-dq-label"></span></label>
       <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
     </div>
 
@@ -120,11 +118,11 @@
     <!-- 読み込んだら: 対象の選手とシード順 (チェックを外した人は入れない)。確かめてから作成 -->
     <div class="cb-sec" id="cb-preview" hidden>
       <h2 id="cb-preview-title"></h2>
-      <!-- 名前で検索・出る人 / 出ない人で絞る (表示だけ。シードは変わらない) -->
+      <!-- 名前で検索・出る人 / 出ない人 / DQ で絞る (表示だけ。シードは変わらない)。DQ の人は最初は外してある -->
       <div class="cb-filter">
         <input type="search" id="cb-search" data-i18n-attr="placeholder:class.search" placeholder="プレイヤー名で検索…" autocomplete="off">
         <div class="cb-seg" id="cb-seg">
-          <button type="button" data-f="all" class="on"></button><button type="button" data-f="on"></button><button type="button" data-f="off"></button>
+          <button type="button" data-f="all" class="on"></button><button type="button" data-f="on"></button><button type="button" data-f="off"></button><button type="button" data-f="dq" hidden></button>
         </div>
       </div>
       <div class="cb-table-wrap">
