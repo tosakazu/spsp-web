@@ -275,17 +275,12 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
          はみ出して切れる。アイコンの右端に揃えて左へ開く。 */
       .nav-user .nav-menu { min-width:160px; left:auto; right:0;
                             max-width:calc(100vw - 24px); }
-      /* アカウントメニュー: ログイン中はアイコンの代わりに名前の頭文字の丸 */
-      /* 人型アイコン (18px) と同じ大きさにする (大きいとナビゲーションバーからはみ出す) */
-      .nav-avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; box-sizing:border-box;
-                    width:18px; height:18px; border-radius:50%; overflow:hidden;
-                    background:#111827; color:#fff; font-size:10px; font-weight:700; line-height:1; }
-      .nav-user-name { padding:8px 14px 6px; font-size:12px; color:#6b7280; border-bottom:1px solid #f3f4f6; margin-bottom:4px;
+      /* アカウントメニュー: ほかのメニューと同じ行の見た目。名前はお知らせの見出しと同じ小さな灰色 */
+      .nav-user-name { padding:6px 14px 2px; font-size:11px; font-weight:600; color:#6b7280;
                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-      .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; font:inherit; font-size:13px; padding:7px 14px; color:#374151; cursor:pointer; }
+      .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
+                                   font:inherit; font-size:13px; padding:7px 14px; color:inherit; cursor:pointer; }
       .nav-user .nav-menu button:hover { background:#f3f4f6; }
-      .nav-login { color:#111827 !important; font-weight:600; }
-      .nav-logout { color:#6b7280 !important; border-top:1px solid #f3f4f6 !important; margin-top:4px; }
       .nav-news-panel { display:none; position:absolute; top:100%; right:0;
                         background:#fff; border:1px solid #e5e7eb;
                         border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.08);
@@ -362,9 +357,10 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
 
   // ── アカウントメニュー (人型アイコン) ──
   //   ログアウト中: start.gg でログイン / キャラ投票
-  //   ログイン中:   アイコンが名前の頭文字の丸になり、名前・マイページ・カードを編集・キャラ投票・ログアウト
+  //   ログイン中:   人型が塗りつぶしになり、名前 (見出し)・マイページ・カードを編集・キャラ投票・ログアウト
   //   ログインできない場所 (API の無い ConoHa のプレビュー) では「ログイン」を出さない
   const USER_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  const USER_SVG_IN = USER_SVG.replace('fill="none"', 'fill="currentColor"');   // ログイン中: 同じ人型を塗りつぶし
   function renderAccount() {
     const menu = document.getElementById('__nav_user_menu');
     const trigger = document.querySelector('.nav-user-trigger');
@@ -379,7 +375,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
     }
     const name = sess.user.gamerTag || sess.user.slug || String(sess.user.id);
     const uid = encodeURIComponent(String(sess.user.id));
-    trigger.innerHTML = `<span class="nav-avatar" aria-hidden="true">${escHTML(Array.from(name)[0] || '?')}</span>`;
+    trigger.innerHTML = USER_SVG_IN;
     menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
       `<a href="${prefix}${pageHref('p/index.html')}?uid=${uid}" role="menuitem">${t('nav.user.mypage')}</a>` +
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
