@@ -333,18 +333,52 @@ const observed = new WeakSet();
 export function render(el, model) {
   // 組み立てと詰めは毎回まっさらな HTML から (詰めは実績の並べ替えや改行を入れるので、2 回目は作り直してからやる)
   const build = () => {
+    // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)
+    const keep = el.querySelector('img.pc-img');
     el.innerHTML = cardHtml(model);
+    if (keep) el.appendChild(keep);
     fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
   };
   build();
+  scheduleImage(el);
   // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す
   const fonts = /** @type {any} */ (document).fonts;
-  if (fonts && fonts.ready) fonts.ready.then(build).catch(() => {});
+  if (fonts && fonts.ready) fonts.ready.then(() => { build(); scheduleImage(el); }).catch(() => {});
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
     new ResizeObserver(() => applyScale(el)).observe(el);
   }
+}
+
+/** ブラウザの強制ダークモード (Samsung Internet など。color-scheme: only light を無視して色を書き換える) では、
+ * カードを画像 (保存と同じ capture) にして上に重ねる。画像の色はブラウザが書き換えないので、デザインどおりに見える。
+ * 重いので、ダークモードの設定か Samsung Internet のときだけ。描き直すたびに少し待ってから撮り直す */
+function needsImage() {
+  try {
+    if (/SamsungBrowser/i.test(navigator.userAgent)) return true;
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  } catch (e) { return false; }
+}
+/** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
+const imageTimers = new WeakMap();
+/** @param {HTMLElement} el */
+function scheduleImage(el) {
+  if (!needsImage()) return;
+  const old = imageTimers.get(el);
+  if (old) clearTimeout(old);
+  imageTimers.set(el, setTimeout(() => {
+    capture(el).then(blob => {
+      if (!blob) return;
+      const prev = /** @type {HTMLImageElement | null} */ (el.querySelector('img.pc-img'));
+      const img = document.createElement('img');
+      img.className = 'pc-img';
+      img.alt = '';
+      img.src = URL.createObjectURL(blob);
+      img.onload = () => { if (prev) { URL.revokeObjectURL(prev.src); prev.remove(); } };
+      el.appendChild(img);
+    }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
+  }, 300));
 }
 
 /** カードだけを PNG にする (画像で保存 / X で共有)。表示中のカードは縮小されているので、
