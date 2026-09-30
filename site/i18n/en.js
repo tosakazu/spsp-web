@@ -328,6 +328,7 @@ window.SPSP_I18N.en = {
   'card_edit.apply': 'Apply',
   'card_edit.applied': 'Applied',
   'card_edit.apply_failed': 'Could not save',
+  'card_edit.apply_too_soon': 'Please wait a moment and apply again',
   'card_edit.login': 'Log in with start.gg',
   'card_edit.not_owner': 'Log in as this player',
   'card_edit.template.standard': 'Standard',

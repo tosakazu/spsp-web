@@ -187,7 +187,8 @@ async function main() {
       location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href);
       return;
     }
-    alert(i18n('card_edit.apply_failed'));
+    // 間隔が短すぎて断られたときは待てばよいことを伝える (それ以外は保存できなかった旨だけ)
+    alert(r.code === 'rate_limited' ? i18n('card_edit.apply_too_soon') : i18n('card_edit.apply_failed'));
     paint();
   });
 

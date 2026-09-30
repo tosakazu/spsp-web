@@ -330,6 +330,7 @@ window.SPSP_I18N.ja = {
   'card_edit.apply': '適用',
   'card_edit.applied': '適用済み',
   'card_edit.apply_failed': '保存できませんでした',
+  'card_edit.apply_too_soon': '少し待ってからもう一度適用してください',
   'card_edit.login': 'start.gg でログイン',
   'card_edit.not_owner': '本人のアカウントでログインしてください',
   'card_edit.template.standard': 'スタンダード',
