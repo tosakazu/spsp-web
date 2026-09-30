@@ -90,6 +90,7 @@ window.SPSP_I18N.en = {
   'class.seeding.random': 'Random',
   'class.counted': 'Count for SPSP',
   'class.counted_note': 'When checked, the results go into the SPSP ranking after it finishes',
+  'class.counted_level': 'Only level 1 and 2 players are counted',
   'class.load': 'Load',
   'class.create': 'Create on Challonge',
   'class.done': 'Created',
