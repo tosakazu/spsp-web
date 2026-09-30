@@ -401,6 +401,7 @@ window.SPSP_I18N.ja = {
   'player.chart.score_delta': 'スコア Δ',
   'player.chart.method_change': '集計方法変更',
   'player.share.text': '{name}\nSPSP 【全国{rank}位】',
+  'player.share.latest': '最新の大会結果: {tour} {place}位/{n}',
 
   // ── 大会ページ (t/index.html) ──
   'tournament.not_found': '大会が見つかりません。URL を確認してください。',

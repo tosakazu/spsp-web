@@ -1988,10 +1988,18 @@ function onCardImage(btn, fn) {
 for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
 // 使えなければ今までの URL 共有 (共有シート → だめならクリップボードにコピー。../share.js)
+// 共有の文面: 名前 (チームタグ無し)・総合順位・SPSP と、最新の大会結果 (ページの「最新の大会結果」と同じ大会、DQ は除く)
+function shareText() {
+  const rec = /** @type {MainRec} */ (MAIN_REC);
+  let text = i18n('player.share.text', { name: SPSPFormat.stripTeamTag(rec.display), rank: rec.ranks.ensemble });
+  const t = ((PLAYER && PLAYER.tournaments) || []).filter(x => !x.is_dq && x.place != null)
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  if (t) text += '\n' + i18n('player.share.latest', { tour: t.name || '', place: t.place, n: t.nent != null ? t.nent : '?' });
+  return text;
+}
 const shareData = () => MAIN_REC ? {
-  // 共有の文面は 名前 (チームタグ無し)・総合順位・SPSP だけ
   title: `${SPSPFormat.stripTeamTag(MAIN_REC.display)} | SPSP`,
-  text:  i18n('player.share.text', { name: SPSPFormat.stripTeamTag(MAIN_REC.display), rank: MAIN_REC.ranks.ensemble }),
+  text:  shareText(),
   url:   location.href,
 } : { url: location.href };
 /** @returns {boolean} */

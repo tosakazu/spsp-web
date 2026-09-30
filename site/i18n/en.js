@@ -399,6 +399,7 @@ window.SPSP_I18N.en = {
   'player.chart.score_delta': 'Score Δ',
   'player.chart.method_change': 'Method change',
   'player.share.text': '{name}\nSPSP [National #{rank}]',
+  'player.share.latest': 'Latest result: {tour} #{place}/{n}',
 
   // ── Tournament page (t/index.html) ──
   'tournament.not_found': 'Tournament not found. Check the URL.',
