@@ -183,7 +183,8 @@ export function buildCardModel(data, settings) {
     const pre = t.pretour_ranks && t.pretour_ranks.ensemble != null ? t.pretour_ranks.ensemble : null;
     const d = t.rank_delta_ensemble;
     latest = {
-      name: t.name || '', href: '',   // カードの中の大会名はリンクにしない date: t.date || '',
+      // カードの中の大会名はリンクにしない (href 無し)
+      name: t.name || '', href: '', date: t.date || '',
       place: t.place, placeUnit: i18n('player.place_unit', { n: t.place || 0 }), nent: t.nent, dq: !!t.is_dq,
       perfRank: perf ? perf.eq : null, perfLv: perf ? `Lv${perf.eqLv}${perf.lvSfx}` : '',
       rankBefore: pre, rankAfter: pre != null && d != null ? pre - d : null,
