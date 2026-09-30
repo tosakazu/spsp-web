@@ -118,6 +118,10 @@ async function main() {
     apply.disabled = done;
     apply.textContent = done ? i18n('card_edit.applied') : i18n('card_edit.apply');
     ($('ce-reset')).style.visibility = picked.length ? '' : 'hidden';
+    // 畳んだ見出しの右: 今の選択 (実績 = 自動か選んだ数、大会 = 自動か選んだ大会名)
+    $('ce-ach-sum').textContent = picked.length ? i18n('card_edit.n_selected', { n: picked.length }) : i18n('card_edit.auto');
+    const tsel = st.tour != null ? tours.find(t => t.event_id === st.tour) : null;
+    $('ce-tour-sum').textContent = tsel ? String(tsel.name || '') : i18n('card_edit.auto');
     paintTours();
   }
 
@@ -176,7 +180,10 @@ async function main() {
     const cur = (st.ach || []).filter(k => labelOf.has(k));
     update({ ach: cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key] });
   });
-  $('ce-reset').addEventListener('click', () => update({ ach: null }));
+  // リセットは見出しの行 (summary) の中にあるので、押しても欄が開閉しないようにする
+  $('ce-reset').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); update({ ach: null }); });
+  // デフォルトに戻す: テンプレート・色・実績・大会を全部既定に (保存は「適用」で)
+  $('ce-default').addEventListener('click', () => update({ ...DEFAULT_SETTINGS }));
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;

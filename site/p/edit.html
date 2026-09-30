@@ -48,18 +48,21 @@
         <h2 data-i18n="card_edit.color">カラー</h2>
         <div class="ce-colors" id="ce-colors"></div>
       </section>
-      <section class="ce-sec">
-        <h2>
+      <!-- 実績と大会は最初は畳んでおく (見出しの右に今の選択) -->
+      <details class="ce-sec ce-fold">
+        <summary><h2>
           <span data-i18n="card_edit.achievements">実績</span>
+          <span class="ce-fold-sum" id="ce-ach-sum"></span>
           <button type="button" class="ce-reset" id="ce-reset" data-i18n-attr="title:card_edit.reset,aria-label:card_edit.reset" title="リセット" aria-label="リセット">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
           </button>
-        </h2>
+          <svg class="ce-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </h2></summary>
         <div class="ce-achs" id="ce-achs"></div>
-      </section>
+      </details>
       <!-- カード左下に出す大会: 並べ替え (日付 / ポイント / ポイント (減衰なし)) と検索。先頭の「自動」= ポイントが一番高い大会 -->
-      <section class="ce-sec">
-        <h2><span data-i18n="card_edit.tour">大会</span></h2>
+      <details class="ce-sec ce-fold">
+        <summary><h2><span data-i18n="card_edit.tour">大会</span><span class="ce-fold-sum" id="ce-tour-sum"></span><svg class="ce-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></h2></summary>
         <div class="ce-tour-tools">
           <div class="ce-seg" id="ce-tour-sort" role="tablist">
             <button type="button" data-sort="date" class="on" data-i18n="card_edit.sort.date">日付</button>
@@ -69,8 +72,9 @@
           <input type="search" class="ce-tour-q" id="ce-tour-q" placeholder="大会名で検索" data-i18n-attr="placeholder:card_edit.tour_search" autocomplete="off">
         </div>
         <div class="ce-tours" id="ce-tours"></div>
-      </section>
+      </details>
       <div class="ce-bar">
+        <button type="button" class="ce-default" id="ce-default" data-i18n="card_edit.default">デフォルトに戻す</button>
         <button type="button" class="ce-apply" id="ce-apply" data-i18n="card_edit.apply">適用</button>
       </div>
     </div>

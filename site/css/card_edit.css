@@ -45,6 +45,16 @@ main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
 .ce-reset svg { width: 16px; height: 16px; }
 .ce-reset:hover { color: #374151; background: #f3f4f6; }
 
+/* 畳める欄 (実績・大会): 見出しの行を押すと開く。右に今の選択と ▼ */
+.ce-fold > summary { list-style: none; cursor: pointer; }
+.ce-fold > summary::-webkit-details-marker { display: none; }
+.ce-fold > summary h2 { margin: 0; padding: 4px 0; }
+.ce-fold[open] > summary h2 { margin-bottom: 8px; }
+.ce-fold-sum { margin-left: auto; font-weight: 500; color: #9ca3af; font-size: 12px; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ce-caret { width: 16px; height: 16px; color: #9ca3af; flex: none; transition: transform .15s; }
+.ce-fold[open] .ce-caret { transform: rotate(180deg); }
+.ce-fold .ce-reset { margin-left: 4px; }
+
 /* 大会: 並べ替えのボタン列 + 検索、その下にスクロールする一覧。選んだ大会は色の枠 */
 .ce-tour-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .ce-seg { display: inline-flex; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
@@ -67,9 +77,12 @@ main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
 .ce-tour.auto { grid-template-columns: 1fr; font-weight: 600; }
 
 /* 適用: 下に固定 */
-.ce-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(255, 255, 255, .96); border-top: 1px solid #e5e7eb; padding: 10px 16px; display: flex; justify-content: center; }
+.ce-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(255, 255, 255, .96); border-top: 1px solid #e5e7eb; padding: 10px 16px; display: flex; justify-content: center; gap: 8px; }
+/* デフォルトに戻す: 白い控えめなボタン (適用の左) */
+.ce-default { flex: none; height: 44px; padding: 0 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; color: #374151; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ce-default:hover { background: #f9fafb; }
 .ce-apply {
-  width: 100%; max-width: 488px; height: 44px; border: 0; border-radius: 10px; background: #111827; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  flex: 1; max-width: 360px; height: 44px; border: 0; border-radius: 10px; background: #111827; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .ce-apply:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
 
