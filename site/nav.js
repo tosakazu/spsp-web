@@ -275,11 +275,13 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
          はみ出して切れる。アイコンの右端に揃えて左へ開く。 */
       .nav-user .nav-menu { min-width:160px; left:auto; right:0;
                             max-width:calc(100vw - 24px); }
-      /* アカウントメニュー: ほかのメニューと同じ行の見た目。名前はお知らせの見出しと同じ小さな灰色 */
-      .nav-user-name { padding:6px 14px 2px; font-size:11px; font-weight:600; color:#6b7280;
-                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      /* アカウントメニュー: 項目はほかのメニューのリンクと同じ見た目 (色も同じ灰色)。
+         名前は押せないので見出しとして: 濃い字・太字、下に細い線 */
+      .nav-user-name { padding:7px 14px 6px; margin-bottom:4px; font-size:13px; font-weight:600; color:#111827;
+                       border-bottom:1px solid #f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
-                                   font:inherit; font-size:13px; padding:7px 14px; color:inherit; cursor:pointer; }
+                                   font:inherit; font-size:13px; padding:7px 14px; color:#6b7280; cursor:pointer; }
+      .nav-user .nav-menu button:hover { color:#111827; }
       .nav-user .nav-menu button:hover { background:#f3f4f6; }
       .nav-news-panel { display:none; position:absolute; top:100%; right:0;
                         background:#fff; border:1px solid #e5e7eb;
@@ -307,7 +309,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
         .nav .brand { font-size:14px; margin-right:8px; }
         .nav .brand a { font-size:14px; }
         .nav a, .nav-trigger, .nav-user .nav-menu button { padding:3px 6px; font-size:12px; }   /* メニューのボタン (ログイン・ログアウト) もリンクと同じ */
-        .nav-user-name { padding:4px 6px 2px; }
+        .nav-user-name { padding:4px 6px; font-size:12px; }
         /* 2 行目 = バージョン行 (meta) と言語 / 地域ピル。1 行目はブランドとメニューだけ */
         .nav-tail { display:flex; flex-basis:100%; align-items:center; gap:6px; }
         .nav .meta { width:auto; flex:1 1 auto; margin-left:0; font-size:10px; }
@@ -331,7 +333,7 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       @media (max-width:380px) {
         .nav .brand, .nav .brand a { font-size:13px; }
         .nav a, .nav-trigger, .nav-user .nav-menu button { font-size:11px; }
-        .nav-user-name { font-size:10px; }
+        .nav-user-name { font-size:11px; }
       }
     `;
     document.head.appendChild(style);
