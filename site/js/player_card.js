@@ -329,22 +329,25 @@ function applyScale(el) {
 /** @type {WeakSet<HTMLElement>} */
 const observed = new WeakSet();
 
-/** @param {HTMLElement} el @param {PCardModel} model */
-export function render(el, model) {
+/** @param {HTMLElement} el @param {PCardModel} model
+ * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
+ *   古い画像を外して HTML のカードをすぐ見せ、手が止まってから (1.5 秒) 撮り直す */
+export function render(el, model, opts = {}) {
+  const live = !!opts.live;
   // 組み立てと詰めは毎回まっさらな HTML から (詰めは実績の並べ替えや改行を入れるので、2 回目は作り直してからやる)
   const build = () => {
-    // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)
-    const keep = el.querySelector('.pc-img');
+    // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)。編集中は古い画像を外す
+    const keep = live ? null : el.querySelector('.pc-img');
     el.innerHTML = cardHtml(model);
     if (keep) el.appendChild(keep);
     fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
   };
   build();
-  scheduleImage(el);
-  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す
+  scheduleImage(el, live ? 1500 : 300);
+  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す (読み込み済みなら不要)
   const fonts = /** @type {any} */ (document).fonts;
-  if (fonts && fonts.ready) fonts.ready.then(() => { build(); scheduleImage(el); }).catch(() => {});
+  if (fonts && fonts.ready && fonts.status !== 'loaded') fonts.ready.then(() => { build(); scheduleImage(el, live ? 1500 : 300); }).catch(() => {});
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
     new ResizeObserver(() => applyScale(el)).observe(el);
@@ -353,18 +356,19 @@ export function render(el, model) {
 
 /** ブラウザの強制ダークモード (Samsung Internet など。color-scheme: only light を無視して色を書き換える) では、
  * カードを画像 (保存と同じ capture) にして上に重ねる。画像の色はブラウザが書き換えないので、デザインどおりに見える。
- * 重いので、Samsung Internet がダークモードのときだけ (ほかのブラウザは OS がダークでもページを勝手に暗くしないので不要)。
- * 描き直すたびに少し待ってから撮り直す (編集中の連続した変更では最後の 1 回だけ撮る) */
+ * 重いので、Samsung Internet か、ダークモードの設定のときだけ (ページが実際に暗くされているかはページからは分からない。
+ * Samsung Internet のダークモードは prefers-color-scheme に出ないことがあるので、Samsung Internet は常に)。
+ * 描き直すたびに少し待ってから撮り直す (続けて変えたときは最後の 1 回だけ撮る) */
 function needsImage() {
   try {
-    return /SamsungBrowser/i.test(navigator.userAgent) &&
-      !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (/SamsungBrowser/i.test(navigator.userAgent)) return true;
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   } catch (e) { return false; }
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
 const imageTimers = new WeakMap();
-/** @param {HTMLElement} el */
-function scheduleImage(el) {
+/** @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) */
+function scheduleImage(el, delay) {
   if (!needsImage()) return;
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
@@ -380,7 +384,7 @@ function scheduleImage(el) {
       el.appendChild(node);
       if (prev) prev.remove();
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
-  }, 600));
+  }, delay));
 }
 
 /** カードだけを PNG にする (画像で保存 / X で共有)。表示中のカードは縮小されているので、

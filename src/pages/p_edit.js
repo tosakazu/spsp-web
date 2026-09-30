@@ -64,7 +64,7 @@ async function main() {
   let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
-  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st));
+  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st), { live: true });
   draw();
 
   const owner = ownerState(uid);
