@@ -7,6 +7,7 @@
 #                          そのまま入れると既存ログインが引き継げる。無ければ `openssl rand -hex 32`)
 #   EXPORT_KEY             (任意) エクスポート API の追加鍵。未設定なら GAS と同じ
 #                          HMAC(client secret, EXPORT_KEY_LABEL) の導出鍵だけを受け付ける
+#   CHALLONGE_CLIENT_ID / CHALLONGE_CLIENT_SECRET  Challonge OAuth アプリ (下位クラスを TO の Challonge アカウントで作る)
 #   CLASS_DONE_KEY         下位クラスの取得側 (smash_database) が class_done で送る鍵。取得側の secret と同じ値。
 #                          未設定なら class_done は internal (取得済みにできないだけで、登録と一覧は動く)
 #
@@ -48,6 +49,7 @@ STARTGG_CLIENT_ID = "619"
 # 認可時に使った redirect_uri と完全一致していないと token 交換が失敗する。
 # start.gg アプリ側の登録も同時に更新すること (README「フロントの切替」)。
 REDIRECT_URI = "https://spsp.games/callback.html"
+CHALLONGE_REDIRECT_URI = "https://spsp.games/callback.html"
 # 投票の資格判定・キャラ一覧の読み出し先 (= 公開データ)。GAS は gh-pages を読んでいた。
 #   "https://..."     → その URL 配下 (/players/<uid>.json, /data/char_emoji.json) を fetch する
 #   "assets:/jp"      → 同じ Worker の静的アセット (ASSETS binding) の /jp 配下を読む
@@ -85,6 +87,7 @@ migrations_dir = "migrations"
 [env.preview.vars]
 STARTGG_CLIENT_ID = "620"
 REDIRECT_URI = "https://spsp-web-preview.tosakazu.workers.dev/callback.html"
+CHALLONGE_REDIRECT_URI = "https://spsp-web-preview.tosakazu.workers.dev/callback.html"
 DATA_ORIGIN = "https://data.spsp.games/jp"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
 SITE_PREFIX = "/jp"
@@ -116,6 +119,7 @@ migrations_dir = "migrations"
 # 北米用の start.gg アプリを作ったら client_id を入れる (secret は wrangler secret put --env na)
 STARTGG_CLIENT_ID = "619"
 REDIRECT_URI = "https://spsp.games/callback.html"
+CHALLONGE_REDIRECT_URI = "https://spsp.games/callback.html"
 DATA_ORIGIN = "assets:/na"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
 SITE_PREFIX = "/na"

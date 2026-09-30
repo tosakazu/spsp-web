@@ -119,6 +119,8 @@ export interface Store {
   putCardSettings(uid: string, settings: string | null, updatedAt: string, guard: RateGuard): Promise<boolean>;
   /** 同じ challonge_id があるか。 */
   classExists(challongeId: number): Promise<boolean>;
+  /** 連投条件 (registered_by ごと) を今満たしているか (Challonge に作る前の確認)。 */
+  classRateOk(guard: RateGuard): Promise<boolean>;
   /** 連投条件 (registered_by ごと) を満たし、challonge_id が未登録なら 1 行追加する。 */
   insertClassBracket(row: ClassBracketRow, guard: RateGuard): Promise<ClassInsertResult>;
   /** counted = 1 かつ status = 'waiting' の行 (id 順)。 */

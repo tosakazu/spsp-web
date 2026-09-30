@@ -77,6 +77,12 @@ export class MemStore {
     return this.classes.some((r) => r.challonge_id === challongeId);
   }
 
+  async classRateOk(g) {
+    const mine = this.classes.filter((r) => r.registered_by === g.userId);
+    if (mine.some((r) => r.ts_ms > g.nowMs - g.minIntervalMs)) return false;
+    return mine.filter((r) => r.day === g.dayKey).length < g.maxPerDay;
+  }
+
   async insertClassBracket(row, g) {
     if (this.classes.some((r) => r.challonge_id === row.challonge_id)) return { status: 'duplicate' };
     const mine = this.classes.filter((r) => r.registered_by === g.userId);
