@@ -296,28 +296,30 @@ async function load() {
   const slug = await resolveEventSlug(token);
   if (!slug) return;
 
-  status(i18n('class.step.check'));
-  // 1. TO か (大会の owner か admins に自分がいるか)
-  const me = await sgg(token, 'query { currentUser { id } }');
-  const myId = me && me.currentUser && me.currentUser.id;
   const ev = (await sgg(token, 'query($slug: String) { event(slug: $slug) { id name tournament { id name owner { id } } } }', { slug })).event;
   if (!ev) return status(i18n('class.err.event'), 'error');
-  let admins = [];
-  try {
-    const a = await sgg(token, 'query($id: ID) { tournament(id: $id) { admins { id } } }', { id: ev.tournament.id });
-    admins = (a.tournament && a.tournament.admins) || [];
-  } catch (e) { /* admins は admin でないと読めない: 読めなければ owner だけで判断 */ }
-  let isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
-  // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る
-  for (let page = 1; !isTo && page <= 4; page++) {
-    const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-      pageInfo { totalPages } nodes { id } } } }`, { page });
-    const ts = d.currentUser && d.currentUser.tournaments;
-    const nodes = (ts && ts.nodes) || [];
-    if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(ev.tournament.id))) isTo = true;
-    if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
+  // 1. 管理者か。「管理している大会から選ぶ」の一覧にある大会なら確認済みとして飛ばす (作成時に Worker がもう一度確かめる)
+  if (!(MY_TOURNAMENTS.token === token && MY_TOURNAMENTS.ids.has(String(ev.tournament.id)))) {
+    status(i18n('class.step.check'));
+    const me = await sgg(token, 'query { currentUser { id } }');
+    const myId = me && me.currentUser && me.currentUser.id;
+    let admins = [];
+    try {
+      const a = await sgg(token, 'query($id: ID) { tournament(id: $id) { admins { id } } }', { id: ev.tournament.id });
+      admins = (a.tournament && a.tournament.admins) || [];
+    } catch (e) { /* admins は admin でないと読めない: 読めなければ owner だけで判断 */ }
+    let isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
+    // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る
+    for (let page = 1; !isTo && page <= 4; page++) {
+      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
+        pageInfo { totalPages } nodes { id } } } }`, { page });
+      const ts = d.currentUser && d.currentUser.tournaments;
+      const nodes = (ts && ts.nodes) || [];
+      if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(ev.tournament.id))) isTo = true;
+      if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
+    }
+    if (!isTo) return status(i18n('class.err.not_admin'), 'error');
   }
-  if (!isTo) return status(i18n('class.err.not_admin'), 'error');
 
   // 2. 本戦の順位 (開催途中でもよい。順位が付いている人だけが対象になる)
   status(i18n('class.step.standings'));
@@ -515,11 +517,15 @@ async function challongeLogin() {
   }
 }
 
-$('cb-load').addEventListener('click', () => {
+let loading = false;
+function startLoad() {
+  if (loading) return;
+  loading = true;
   const b = $('cb-load');
   b.disabled = true;
-  load().catch(e => status(i18n('class.err.startgg', { message: e.message }), 'error')).finally(() => { b.disabled = false; });
-});
+  load().catch(e => status(i18n('class.err.startgg', { message: e.message }), 'error')).finally(() => { b.disabled = false; loading = false; });
+}
+$('cb-load').addEventListener('click', startLoad);
 $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
@@ -549,6 +555,9 @@ $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
 // URL を変えたらイベントの選択欄は隠す (別の大会の選択が残らないように)
 $('cb-event').addEventListener('input', () => { $('cb-event-pick-row').hidden = true; });
 
+/** そのキーで管理できる大会の ID (読み込むときの管理者の確認を飛ばすのに使う) */
+let MY_TOURNAMENTS = { token: '', ids: /** @type {Set<string>} */ (new Set()) };
+
 /** キーで管理できる大会 (tournamentView admin) を、開催中 → これから → 最近終わった の順に選択欄へ。
  * 取れなければ欄は出さない (URL を入れればよい) */
 async function loadMyTournaments() {
@@ -566,6 +575,7 @@ async function loadMyTournaments() {
       if (nodes.length < 50) break;
     }
   } catch (e) { row.hidden = true; return; }
+  MY_TOURNAMENTS = { token, ids: new Set(all.filter(x => x && x.id != null).map(x => String(x.id))) };
   const now = Date.now() / 1000;
   const DAY = 86400;
   const rank = (/** @type {any} */ t) => {
@@ -595,7 +605,10 @@ $('cb-tour-pick').addEventListener('change', () => {
   if (!v) return;
   $('cb-event').value = 'https://www.start.gg/' + v;
   $('cb-event-pick-row').hidden = true;
+  startLoad();   // 選んだらすぐ読み込む
 });
+// イベントが複数ある大会で、イベントを選んだときもすぐ読み込む
+$('cb-event-pick').addEventListener('change', () => { startLoad(); });
 $('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine(); });
 
 // start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
