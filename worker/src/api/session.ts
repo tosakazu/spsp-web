@@ -148,30 +148,44 @@ export async function signState(cfg: Config, nonce: unknown, returnPath: unknown
 }
 
 /**
- * state を検証して payload を返す。改ざん・期限切れ・使用済みは null。
+ * state が通らなかった理由 (errors の note に残す。利用者への応答は state_invalid のまま)。
+ *   malformed = 無い・形が違う・中身が読めない / bad_sig = 署名が合わない (改ざん・鍵の入れ替え)
+ *   expired = 有効期間切れ / future = 発行時刻が未来 (時計のずれ) / reused = 使用済み (同じリンクを二度開いた等)
+ */
+export type StateFailReason = 'malformed' | 'bad_sig' | 'expired' | 'future' | 'reused';
+
+/**
+ * state を検証する。通れば { payload }、通らなければ { reason }。
  * consume=true のときだけ「使用済み」に記録する (単回使用)。
  */
-export async function verifyState(cfg: Config, store: Store, state: unknown, consume: boolean, now: number = Date.now()): Promise<StatePayload | null> {
-  if (typeof state !== 'string' || !state || state.length > 4096) return null;
+export async function checkStateToken(cfg: Config, store: Store, state: unknown, consume: boolean, now: number = Date.now()): Promise<{ payload: StatePayload } | { reason: StateFailReason }> {
+  if (typeof state !== 'string' || !state || state.length > 4096) return { reason: 'malformed' };
   const parts = state.split('.');
-  if (parts.length !== 2) return null;
-  if (!timingSafeEq(parts[1], await signPayload(cfg, parts[0]))) return null;
+  if (parts.length !== 2) return { reason: 'malformed' };
+  if (!timingSafeEq(parts[1], await signPayload(cfg, parts[0]))) return { reason: 'bad_sig' };
 
   let payload: StatePayload;
   try {
     payload = JSON.parse(base64UrlToUtf8(parts[0]));
   } catch (_) {
-    return null;
+    return { reason: 'malformed' };
   }
-  if (!payload || typeof payload.t !== 'number') return null;
+  if (!payload || typeof payload.t !== 'number') return { reason: 'malformed' };
   const age = now - payload.t;
-  if (age < 0 || age > cfg.stateTtlMs) return null;   // 期限切れ / 未来日付
+  if (age < 0) return { reason: 'future' };
+  if (age > cfg.stateTtlMs) return { reason: 'expired' };
 
   // 署名部分をキーにする (state 全体だとキー長の上限に当たりうる)。
   const key = STATE_USED_PREFIX + parts[1].slice(0, 100);
   const fresh = await store.checkState(key, consume, payload.t + cfg.stateTtlMs, now);
-  if (!fresh) return null;                            // 使い回し
-  return payload;
+  if (!fresh) return { reason: 'reused' };
+  return { payload };
+}
+
+/** state を検証して payload を返す。改ざん・期限切れ・使用済みは null (理由が要るときは checkStateToken)。 */
+export async function verifyState(cfg: Config, store: Store, state: unknown, consume: boolean, now: number = Date.now()): Promise<StatePayload | null> {
+  const r = await checkStateToken(cfg, store, state, consume, now);
+  return 'payload' in r ? r.payload : null;
 }
 
 /**

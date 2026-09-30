@@ -15,7 +15,7 @@ import { authenticateCode, oauthErrorMessage } from './oauth.ts';
 import { checkRateLimit, guardFor } from './ratelimit.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
-import { verifyState } from './session.ts';
+import { checkStateToken } from './session.ts';
 import { dayKey, formatIso } from './time.ts';
 
 /**
@@ -52,10 +52,11 @@ export async function handlePost(cfg: Config, store: Store, fetchFn: FetchFn, re
     return err('body_invalid', '本文が長すぎます (' + BODY_MAX + '文字まで)。');
   }
 
-  if (!(await verifyState(cfg, store, req.state, true, now))) {
+  const st = await checkStateToken(cfg, store, req.state, true, now);
+  if ('reason' in st) {
     return err('state_invalid',
       '認証の照合に失敗しました。時間が経ちすぎたか、同じリンクを二度開いた可能性があります。'
-      + '投稿ページからやり直してください。');
+      + '投稿ページからやり直してください。', st.reason);
   }
 
   // ── 2-3. start.gg で本人確認 ──

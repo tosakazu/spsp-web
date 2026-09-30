@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { makeEnv, post, rawPost, beginState, loginToken, OK_TOKEN, OK_USER, b64urlJson } from './_env.mjs';
-import { issueSessionToken, verifySessionToken, verifyState, signState, base64UrlEncode, base64UrlDecode, timingSafeEq } from '../src/api/session.ts';
+import { issueSessionToken, verifySessionToken, verifyState, checkStateToken, signState, base64UrlEncode, base64UrlDecode, timingSafeEq } from '../src/api/session.ts';
 
 const env = (o) => makeEnv(Object.assign({ token: OK_TOKEN, user: OK_USER }, o || {}));
 
@@ -79,7 +79,7 @@ test('begin_login は署名付き state を返す', async () => {
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.state.split('.').length, 2, 'payload.署名 の形になっていない');
   assert.ok(r.state.split('.')[1].length > 20, '署名が短すぎる');
-  assert.strictEqual(r.ttlMs, 5 * 60 * 1000);
+  assert.strictEqual(r.ttlMs, 30 * 60 * 1000);   // 5 分では start.gg の画面で手間取ると切れていた (2026-09-30 に 30 分)
 });
 
 test('state が無い login は通らない', async () => {
@@ -215,4 +215,46 @@ test('login: 失敗理由ごとのメッセージ (4xx / 5xx / 本文 error / �
     assert.strictEqual(r.error.code, 'auth_failed', JSON.stringify(o));
     assert.match(r.error.message, re, JSON.stringify(o));
   }
+});
+
+test('state が通らない理由を errors の note に分けて残す (応答は state_invalid のまま)', async () => {
+  const e = env();
+  const noteOf = async (state, nowMs) => {
+    e.nowMs = nowMs === undefined ? null : nowMs;
+    const before = e.store.errors.length;
+    const body = { action: 'login', code: 'CODE-1' };
+    if (state !== undefined) body.state = state;
+    const r = await rawPost(e, body);
+    assert.strictEqual(r.error.code, 'state_invalid');
+    assert.strictEqual(e.store.errors.length, before + 1);
+    const row = e.store.errors[e.store.errors.length - 1];
+    assert.strictEqual(row.action, 'login');
+    return row.note;
+  };
+  assert.strictEqual(await noteOf(undefined), 'malformed');
+  assert.strictEqual(await noteOf('no-dot'), 'malformed');
+  const garbage = Buffer.from('not json').toString('base64url');
+  const { signPayload } = await import('../src/api/session.ts');
+  assert.strictEqual(await noteOf(garbage + '.' + await signPayload(e.cfg, garbage)), 'malformed', '署名は合うが中身が読めない');
+  const payload = Buffer.from(JSON.stringify({ n: 'x', r: '/', t: Date.now() })).toString('base64url');
+  assert.strictEqual(await noteOf(payload + '.FAKE'), 'bad_sig');
+  const t0 = 1_800_000_000_000;
+  const old = await signState(e.cfg, 'N', '/spsp/vote.html', 'login', t0);
+  assert.strictEqual(await noteOf(old, t0 + e.cfg.stateTtlMs + 1), 'expired');
+  assert.strictEqual(await noteOf(old, t0 - 1), 'future');
+  const st = await signState(e.cfg, 'N', '/spsp/vote.html', 'login', t0);
+  e.nowMs = t0 + 1000;
+  assert.strictEqual((await rawPost(e, { action: 'login', code: 'CODE-1', state: st })).ok, true);
+  assert.strictEqual(await noteOf(st, t0 + 2000), 'reused');
+  // 利用者への応答に理由は出さない
+  const r = await rawPost(e, { action: 'login', code: 'CODE-1', state: st });
+  assert.doesNotMatch(JSON.stringify(r), /reused|expired|bad_sig|malformed/);
+});
+
+test('checkStateToken: 期限ちょうどは通り、1 ms 過ぎたら expired', async () => {
+  const e = env();
+  const now = 1_800_000_000_000;
+  const st = await signState(e.cfg, 'N', '/', 'login', now);
+  assert.ok('payload' in await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs));
+  assert.deepStrictEqual(await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs + 1), { reason: 'expired' });
 });

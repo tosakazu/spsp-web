@@ -69,8 +69,11 @@ export const EXPORT_KEY_LABEL = 'spsp:export_votes:v1';
 
 /** セッショントークンの有効期間の既定 (180 日)。 */
 export const SESSION_TTL_MS_DEFAULT = 180 * 24 * 3600 * 1000;
-/** 署名付き state の有効期間の既定 (5 分)。 */
-export const STATE_TTL_MS_DEFAULT = 5 * 60 * 1000;
+/**
+ * 署名付き state の有効期間の既定 (30 分)。start.gg の画面で手間取る人がいて 5 分では切れていた (2026-09-30)。
+ * state は署名つき・単回使用なので、延ばしても安全性はほぼ変わらない。
+ */
+export const STATE_TTL_MS_DEFAULT = 30 * 60 * 1000;
 
 /** クライアントから受け付けるエラー種別。ここに無いものは記録しない (詰め込み防止)。 */
 export const CLIENT_ERROR_KINDS: Record<string, 1> = {

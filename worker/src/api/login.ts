@@ -5,17 +5,18 @@ import type { FetchFn } from './oauth.ts';
 import { authenticateCode, oauthErrorMessage } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
-import { issueSessionToken, verifySessionToken, verifyState } from './session.ts';
+import { checkStateToken, issueSessionToken, verifySessionToken } from './session.ts';
 
 export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || req.code.length === 0) {
     return err('bad_request', '認証コードがありません。');
   }
   // 署名 state の検証 (ここで単回使用にする)。
-  if (!(await verifyState(cfg, store, req.state, true, now))) {
+  const st = await checkStateToken(cfg, store, req.state, true, now);
+  if ('reason' in st) {
     return err('state_invalid',
       '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
-      + '同じリンクを二度開いた可能性があります。投票ページからやり直してください。');
+      + '同じリンクを二度開いた可能性があります。投票ページからやり直してください。', st.reason);
   }
   const auth = await authenticateCode(cfg, req.code, fetchFn);
   if (!auth.user) {
