@@ -67,6 +67,14 @@
     <!-- 3. 設定 (読み込んだあとに出す。本戦の順位・DQ の有無から候補を作る。変えるとすぐ一覧に反映) -->
     <div class="cb-sec" id="cb-settings" hidden>
       <h2 data-i18n="class.h.settings">設定</h2>
+      <!-- 集計対象にするか: 一番大事なので設定の一番上に、目立つ枠で -->
+      <label class="cb-counted" for="cb-counted">
+        <input type="checkbox" id="cb-counted" checked>
+        <span class="cb-counted-text">
+          <strong data-i18n="class.counted">SPSP の集計対象にする</strong>
+          <span class="cb-counted-note" data-i18n="class.counted_note">チェックすると、終わったあと SPSP のランキングに入ります</span>
+        </span>
+      </label>
       <div class="cb-grid">
         <div>
           <label class="cb-label" for="cb-letter" data-i18n="class.letter">クラス</label>
@@ -111,7 +119,6 @@
           <span id="cb-av-groups" class="cb-av-groups"></span>
         </div>
       </details>
-      <label class="cb-opt"><input type="checkbox" id="cb-counted" checked> <span data-i18n="class.counted">SPSP の集計対象にする</span></label>
     </div>
 
 

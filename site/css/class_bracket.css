@@ -132,3 +132,11 @@ body {
 .cb-seg button:hover { color: #374151; background: #f3f4f6; }
 .cb-seg button.on { background: #dc2626; color: #fff; }
 .cb-empty td { text-align: center; color: #9ca3af; padding: 14px 6px; cursor: default; }
+
+/* 集計対象にする (設定の一番上・目立つ枠) */
+.cb-counted { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 2px solid #fecaca; background: #fef2f2; border-radius: 10px; cursor: pointer; }
+.cb-counted input[type="checkbox"] { width: 20px; height: 20px; flex: none; accent-color: #dc2626; }
+.cb-counted-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cb-counted-text strong { font-size: 15px; color: #111827; }
+.cb-counted-note { font-size: 11px; color: #6b7280; }
+.cb-counted:has(input:not(:checked)) { border-color: #e5e7eb; background: #f9fafb; }

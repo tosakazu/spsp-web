@@ -90,6 +90,7 @@ window.SPSP_I18N.ja = {
   'class.seeding.spsp': 'SPSP の順位',
   'class.seeding.random': 'ランダム',
   'class.counted': 'SPSP の集計対象にする',
+  'class.counted_note': 'チェックすると、終わったあと SPSP のランキングに入ります',
   'class.load': '読み込む',
   'class.create': 'Challonge に作成',
   'class.done': '作成しました',
