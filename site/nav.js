@@ -306,7 +306,8 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
         .nav { padding:4px 12px; gap:8px; flex-wrap:wrap; }
         .nav .brand { font-size:14px; margin-right:8px; }
         .nav .brand a { font-size:14px; }
-        .nav a, .nav-trigger { padding:3px 6px; font-size:12px; }
+        .nav a, .nav-trigger, .nav-user .nav-menu button { padding:3px 6px; font-size:12px; }   /* メニューのボタン (ログイン・ログアウト) もリンクと同じ */
+        .nav-user-name { padding:4px 6px 2px; }
         /* 2 行目 = バージョン行 (meta) と言語 / 地域ピル。1 行目はブランドとメニューだけ */
         .nav-tail { display:flex; flex-basis:100%; align-items:center; gap:6px; }
         .nav .meta { width:auto; flex:1 1 auto; margin-left:0; font-size:10px; }
@@ -329,7 +330,8 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       }
       @media (max-width:380px) {
         .nav .brand, .nav .brand a { font-size:13px; }
-        .nav a, .nav-trigger { font-size:11px; }
+        .nav a, .nav-trigger, .nav-user .nav-menu button { font-size:11px; }
+        .nav-user-name { font-size:10px; }
       }
     `;
     document.head.appendChild(style);
