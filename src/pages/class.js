@@ -370,27 +370,20 @@ async function create() {
   }
 }
 
-/** 名前の無いログイン (名前を返す前の Worker でログインした等) は、このページから Challonge に聞いて足す (Challonge の API はブラウザから呼べる) */
+/** 名前の無いログイン (名前を返す前の Worker でログインした等) は、Worker (challonge_me) に聞いて足す
+ * (Challonge の API は実際の応答に CORS のヘッダが無く、ページから直接は読めない) */
 /** 聞きに行ったトークン (1 つのトークンにつき 1 回だけ。失敗しても繰り返さない) */
 let userTriedFor = '';
 async function fillChallongeUser() {
   const tok = challongeToken();
-  if (!tok || challongeUser() || userTriedFor === tok) return;
+  if (!tok || challongeUser() || userTriedFor === tok || !SpspLogin.apiAvailable()) return;
   userTriedFor = tok;
+  const r = await SpspLogin.api({ action: 'challonge_me', challonge_token: tok });
   try {
-    const res = await fetch('https://api.challonge.com/v2.1/me.json', {
-      headers: { Authorization: 'Bearer ' + tok, 'Authorization-Type': 'v2', Accept: 'application/json', 'Content-Type': 'application/vnd.api+json' },
-    });
-    if (res.status === 401) {
-      try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e) { /* 表示だけ変える */ }
-    } else if (res.ok) {
-      const j = await res.json();
-      const a = (j && j.data && j.data.attributes) || {};
-      const name = [a.username, a.name, a.email].find(v => typeof v === 'string' && v.trim());
-      if (name) {
-        const cur = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
-        if (cur && cur.token === tok) sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify(Object.assign(cur, { user: String(name).trim().slice(0, 100) })));
-      }
+    if (r && r.ok === false && r.error && r.error.code === 'challonge_auth') sessionStorage.removeItem(CHALLONGE_TOKEN_KEY);
+    else if (r && r.ok && typeof r.username === 'string' && r.username) {
+      const cur = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
+      if (cur && cur.token === tok) sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify(Object.assign(cur, { user: r.username })));
     }
   } catch (e) { /* 名前は出せないまま (ログイン済みの表示) */ }
   renderChallongeState();
