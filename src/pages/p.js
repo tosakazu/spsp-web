@@ -335,8 +335,8 @@ async function buildYosouSection() {
   if (!UID || !META) return;
   const yosouLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById('yosou-link'));
   if (yosouLink) yosouLink.href = SPSP.langRoot + 'sim/?uid=' + UID;
+  // 欄 (見出し・大会・スコア予想のボタン) は次の集計対象大会があるときだけ出す
   const yosouSection = document.getElementById('yosou-section');
-  if (yosouSection) yosouSection.style.display = '';
   try {
     const up = await fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
       .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); });
@@ -356,6 +356,7 @@ async function buildYosouSection() {
       .filter(eid => up.events[eid] && up.events[eid].start_at * 1000 > Date.now() && passes(up.events[eid]))
       .sort((a, b) => up.events[a].start_at - up.events[b].start_at);
     if (!eids.length) return;
+    if (yosouSection) yosouSection.style.display = '';
     const ev = up.events[eids[0]];
     const d = new Date(ev.start_at * 1000);
     const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);   // 表示言語の曜日 (ja: 日 / en: Sun)
@@ -379,7 +380,7 @@ async function buildYosouSection() {
     if (slug) {
       draw(`<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>`);
     }
-  } catch (e) { /* ドラフトデータ未配置時は ボタンのみ表示 */ }
+  } catch (e) { /* 予定のデータが読めなければ欄ごと出さない */ }
 }
 
 /** @type {PMeta | null} */
