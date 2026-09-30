@@ -11,7 +11,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
-import { eventSlugOf, selectTargets, seedOrder, participantName, challongeToken, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
+import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -21,7 +21,7 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-counted'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-place-min', 'cb-place-max', 'cb-seeding', 'cb-exclude-dq', 'cb-counted'];
 
 /** @typedef {import('../../site/js/class_bracket.js').ClassEntrant} ClassEntrant */
 
@@ -48,22 +48,48 @@ async function sgg(token, query, variables = {}) {
   return j.data;
 }
 
-/** 読み込んだ内容 (作成で使う)
- * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[] }} */
+/** 読み込んだ内容 (作成で使う)。seeded = 全員のシード順、off = 外した人 (start.gg のユーザー ID)
+ * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, seeded: ClassEntrant[], off: Set<number> }} */
 let loaded = null;
+/** 作成に使う人 (外した人を除いたシード順) */
+const activeSeeded = () => (loaded ? loaded.seeded.filter(p => !loaded?.off.has(p.userId)) : []);
+
+/** URL からイベントの slug を決める。大会の URL なら候補から: 1 つならそれ、複数なら選んでもらう (選択欄を出して null)
+ * @param {string} token @returns {Promise<string | null>} */
+async function resolveEventSlug(token) {
+  const parsed = parseStartggUrl($('cb-event').value);
+  if (!parsed) { status(i18n('class.err.url'), 'error'); return null; }
+  if (parsed.eventSlug) return `tournament/${parsed.tournamentSlug}/event/${parsed.eventSlug}`;
+  const row = $('cb-event-pick-row');
+  const pick = $('cb-event-pick');
+  // 前回この大会で選択欄を出していれば、選んだもの
+  if (!row.hidden && pick.dataset.tournament === parsed.tournamentSlug && pick.value) return pick.value;
+  const d = await sgg(token, 'query($slug: String) { tournament(slug: $slug) { events { id slug name numEntrants type videogame { id } } } }', { slug: parsed.tournamentSlug });
+  /** @type {any[]} */
+  const events = pickEvents(/** @type {any[]} */ ((d.tournament && d.tournament.events) || []));
+  if (!events.length) { status(i18n('class.err.event'), 'error'); return null; }
+  if (events.length === 1) return events[0].slug;
+  pick.innerHTML = events.map((/** @type {any} */ e) =>
+    `<option value="${escapeHtml(e.slug)}">${escapeHtml(e.name)}${e.numEntrants != null ? ` (${e.numEntrants})` : ''}</option>`).join('');
+  pick.dataset.tournament = parsed.tournamentSlug;
+  row.hidden = false;
+  status(i18n('class.err.event_pick'), 'error');
+  return null;
+}
 
 async function load() {
   loaded = null;
   $('cb-preview').hidden = true;
   $('cb-done').hidden = true;
-  const slug = eventSlugOf($('cb-event').value);
   const token = String($('cb-sgg-key').value || '').trim();
   const min = parseInt($('cb-place-min').value, 10);
   const maxRaw = String($('cb-place-max').value || '').trim();
   const max = maxRaw ? parseInt(maxRaw, 10) : null;
-  if (!slug) return status(i18n('class.err.url'), 'error');
+  if (!parseStartggUrl($('cb-event').value)) return status(i18n('class.err.url'), 'error');
   if (!token) return status(i18n('class.err.startgg_key'), 'error');
   if (!(min >= 1) || (max != null && !(max >= min))) return status(i18n('class.err.range'), 'error');
+  const slug = await resolveEventSlug(token);
+  if (!slug) return;
 
   status(i18n('class.step.check'));
   // 1. TO か (大会の owner か admins に自分がいるか)
@@ -106,17 +132,35 @@ async function load() {
   }
 
   // 3. 対象とシード順
-  const targets = selectTargets(standings, min, max);
+  const targets = selectTargets(standings, min, max, !!$('cb-exclude-dq').checked);
   if (targets.length < 2) return status(i18n('class.err.too_few'), 'error');
   const method = /** @type {'random' | 'main_result' | 'spsp'} */ ($('cb-seeding').value);
   const rankOf = method === 'spsp' ? await spspRanks() : () => null;
   const seeded = seedOrder(targets, method, rankOf);
-  loaded = { token, event: ev, seeded };
-  $('cb-preview-title').textContent = i18n('class.preview', { n: seeded.length, name: className(ev) });
-  $('cb-list').innerHTML = seeded.map(p =>
-    `<li><span class="cb-name">${escapeHtml(participantName(p))}</span><span class="cb-place">${p.placement != null ? escapeHtml(i18n('class.main_place', { n: p.placement })) : ''}</span></li>`).join('');
+  loaded = { token, event: ev, seeded, off: new Set() };
+  renderList();
   $('cb-preview').hidden = false;
   status(i18n('class.step.ready'), 'ok');
+}
+
+/** 対象の一覧。チェックを外した人は作成に入れない (シード番号は入れる人だけで詰める) */
+function renderList() {
+  if (!loaded) return;
+  const ev = loaded.event;
+  const off = loaded.off;
+  let n = 0;
+  $('cb-list').innerHTML = loaded.seeded.map(p => {
+    const on = !off.has(p.userId);
+    if (on) n++;
+    return `<li class="${on ? '' : 'off'}"><label class="cb-row">
+      <input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}>
+      <span class="cb-seed">${on ? n : ''}</span>
+      <span class="cb-name">${escapeHtml(participantName(p))}</span>${p.dq ? `<span class="cb-dq">DQ</span>` : ''}
+      <span class="cb-place">${p.placement != null ? escapeHtml(i18n('class.main_place', { n: p.placement })) : ''}</span>
+    </label></li>`;
+  }).join('');
+  $('cb-preview-title').textContent = i18n('class.preview', { n, name: className(ev) });
+  $('cb-create').disabled = n < 2;
 }
 
 /** SPSP の総合順位 (players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
@@ -149,7 +193,7 @@ async function create() {
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
       seeding: $('cb-seeding').value,
       // 名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID (取得側が選手に結びつける)
-      participants: loaded.seeded.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
+      participants: activeSeeded().map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
     });
     const url = r && r.challonge && r.challonge.url;
     if (url) {
@@ -226,6 +270,78 @@ $('cb-create').addEventListener('click', () => {
   create().catch(e => { status(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
+$('cb-list').addEventListener('change', (/** @type {Event} */ e) => {
+  const el = /** @type {HTMLInputElement} */ (e.target);
+  if (!loaded || !el.dataset.uid) return;
+  const uid = Number(el.dataset.uid);
+  if (el.checked) loaded.off.delete(uid); else loaded.off.add(uid);
+  renderList();
+});
+// URL を変えたらイベントの選択欄は隠す (別の大会の選択が残らないように)
+$('cb-event').addEventListener('input', () => { $('cb-event-pick-row').hidden = true; });
+
+/** キーで管理できる大会 (tournamentView admin) を、開催中 → これから → 最近終わった の順に選択欄へ。
+ * 取れなければ欄は出さない (URL を入れればよい) */
+async function loadMyTournaments() {
+  const token = String($('cb-sgg-key').value || '').trim();
+  const row = $('cb-tour-pick-row');
+  if (!token) { row.hidden = true; return; }
+  /** @type {any[]} */
+  let all = [];
+  try {
+    for (let page = 1; page <= 4; page++) {
+      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
+        nodes { id name slug startAt endAt } } } }`, { page });
+      const nodes = (d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
+      all = all.concat(nodes);
+      if (nodes.length < 50) break;
+    }
+  } catch (e) { row.hidden = true; return; }
+  const now = Date.now() / 1000;
+  const DAY = 86400;
+  const rank = (/** @type {any} */ t) => {
+    const s = t.startAt || 0, e = t.endAt || s;
+    if (s <= now + DAY / 2 && e >= now - DAY / 2) return [0, -s];   // 開催中 (前後半日)
+    if (s > now) return [1, s];                                       // これから (近い順)
+    return [2, -e];                                                   // 終わった (新しい順)
+  };
+  const list = all.filter(t => t && t.slug)
+    .map(t => ({ t, k: rank(t) }))
+    .sort((x, y) => (x.k[0] - y.k[0]) || (x.k[1] - y.k[1]))
+    .slice(0, 30);
+  if (!list.length) { row.hidden = true; return; }
+  const fmt = (/** @type {number} */ s) => new Date(s * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  $('cb-tour-pick').innerHTML = `<option value="">${escapeHtml(i18n('class.tour_pick_none'))}</option>` + list.map(({ t, k }) =>
+    `<option value="${escapeHtml(t.slug)}">${k[0] === 0 ? escapeHtml(i18n('class.tour_live')) + ' ' : ''}${escapeHtml(t.name)}${t.startAt ? ` (${fmt(t.startAt)})` : ''}</option>`).join('');
+  // 開催中が 1 つだけなら、URL が空のときはそれを選んでおく
+  const live = list.filter(x => x.k[0] === 0);
+  if (live.length === 1 && !String($('cb-event').value || '').trim()) {
+    $('cb-tour-pick').value = live[0].t.slug;
+    $('cb-event').value = 'https://www.start.gg/' + live[0].t.slug;
+  }
+  row.hidden = false;
+}
+$('cb-tour-pick').addEventListener('change', () => {
+  const v = $('cb-tour-pick').value;
+  if (!v) return;
+  $('cb-event').value = 'https://www.start.gg/' + v;
+  $('cb-event-pick-row').hidden = true;
+});
+$('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); });
+
+// start.gg のキー: 「ブラウザに保存」を押したときだけ保存 (シード機能と同じ場所。どちらで保存しても両方で使える)
+const SGG_TOKEN_KEY = 'spsp_startgg_token';
+try { const t0 = localStorage.getItem(SGG_TOKEN_KEY); if (t0) $('cb-sgg-key').value = t0; } catch (e) { /* 入れてもらう */ }
+loadMyTournaments();
+$('cb-sgg-save').addEventListener('click', () => {
+  const b = $('cb-sgg-save');
+  const v = String($('cb-sgg-key').value || '').trim();
+  if (!v) return status(i18n('class.err.startgg_key'), 'error');
+  try { localStorage.setItem(SGG_TOKEN_KEY, v); } catch (e) { return; }
+  b.textContent = i18n('class.key_saved');
+  b.disabled = true;
+  setTimeout(() => { b.textContent = i18n('class.key_save'); b.disabled = false; }, 1500);
+});
 
 // Challonge のログインから戻った (?challonge=1): 入力を戻し、印はアドレスバーから消す
 restoreForm();

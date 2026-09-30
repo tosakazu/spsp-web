@@ -1,7 +1,8 @@
 // @ts-check
 // class_bracket.js — 下位クラス作成 (class/index.html) の計算部分。画面と通信は src/pages/class.js (docs/class_bracket_design.md)。
-//   eventSlugOf(url)                      start.gg のイベント URL → "tournament/<t>/event/<e>" (読めなければ '')
-//   selectTargets(standings, min, max)    本戦の順位から対象の選手 (min 位〜max 位、max が null なら最後まで。DQ と順位の無い人は除く)
+//   parseStartggUrl(url)                  start.gg の URL → { tournamentSlug, eventSlug } (大会のページでもよい。eventSlug は無ければ null。読めなければ null)
+//   pickEvents(events)                    大会のイベントから候補 (スマブラSP の 1on1。無ければ全部)
+//   selectTargets(standings, min, max, excludeDq)  本戦の順位から対象の選手 (min 位〜max 位、max が null なら最後まで。順位の無い人は除く。excludeDq なら DQ も除く)
 //   seedOrder(targets, method, rankOf, rand)  シード順に並べる (random / main_result = 本戦の順位、同率はランダム / spsp = SPSP の順位、無い人は後ろにランダム)
 //   participantName(p)                    Challonge の参加者名 = 「start.gg の名前 (discriminator)」
 //   CHALLONGE_TOKEN_KEY / challongeToken()  Challonge でログインしたトークン (callback.js が sessionStorage に置く。期限切れは null)
@@ -9,15 +10,28 @@
 /** 本戦の 1 人 (start.gg の standings の 1 件を平たくしたもの)
  * @typedef {{ userId: number, discriminator: string, gamerTag: string, placement: number | null, dq: boolean }} ClassEntrant */
 
-/** @param {string} url */
-export function eventSlugOf(url) {
-  const m = /start\.gg\/(tournament\/[^/?#]+\/event\/[^/?#]+)/.exec(String(url || '').trim());
-  return m ? m[1] : '';
+/** シード機能 (seeding/app/40_startgg.js の parseEventUrl) と同じ読み方: イベントの URL・大会の URL (/details などが付いてもよい)・slug
+ * @param {string} url @returns {{ tournamentSlug: string, eventSlug: string | null } | null} */
+export function parseStartggUrl(url) {
+  const s = String(url || '').trim();
+  const m = s.match(/tournament\/([^/\s?#]+)\/event\/([^/\s?#]+)/);
+  if (m) return { tournamentSlug: m[1], eventSlug: m[2] };
+  const t = s.match(/tournament\/([^/\s?#]+)(?:\/(?!event\/)[^\s?#]*)?(?:[?#].*)?$/);
+  return t ? { tournamentSlug: t[1], eventSlug: null } : null;
 }
 
-/** @param {ClassEntrant[]} standings @param {number} min @param {number | null} max */
-export function selectTargets(standings, min, max) {
-  return standings.filter(p => !p.dq && p.placement != null && p.placement >= min && (max == null || p.placement <= max));
+const SSBU_VIDEOGAME_ID = 1386;
+const SINGLES_EVENT_TYPE = 1;
+
+/** @template {{ videogame?: { id: number | string } | null, type?: number | string | null }} E @param {E[]} events @returns {E[]} */
+export function pickEvents(events) {
+  const ssbu = events.filter(e => e.videogame && Number(e.videogame.id) === SSBU_VIDEOGAME_ID && Number(e.type) === SINGLES_EVENT_TYPE);
+  return ssbu.length ? ssbu : events.slice();
+}
+
+/** @param {ClassEntrant[]} standings @param {number} min @param {number | null} max @param {boolean} [excludeDq] */
+export function selectTargets(standings, min, max, excludeDq = true) {
+  return standings.filter(p => !(excludeDq && p.dq) && p.placement != null && p.placement >= min && (max == null || p.placement <= max));
 }
 
 /** Fisher–Yates (rand は 0〜1 を返す関数。テストで固定できるように渡す)
@@ -61,7 +75,7 @@ export function challongeToken(now = Date.now()) {
   } catch (e) { return null; }
 }
 
-const API = { eventSlugOf, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
+const API = { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspClassBracket = API;
 export default API;

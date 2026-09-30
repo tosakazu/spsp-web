@@ -16,12 +16,24 @@ function load() {
 const zero = () => 0;
 const P = (userId, placement, extra = {}) => ({ userId, discriminator: 'd' + userId, gamerTag: 'p' + userId, placement, dq: false, ...extra });
 
-test('eventSlugOf: イベント URL から slug を取る', () => {
+test('parseStartggUrl: イベントの URL・大会の URL・slug', () => {
   const C = load();
-  assert.strictEqual(C.eventSlugOf('https://www.start.gg/tournament/kagaribi-15/event/singles/overview'), 'tournament/kagaribi-15/event/singles');
-  assert.strictEqual(C.eventSlugOf('start.gg/tournament/a/event/b?x=1'), 'tournament/a/event/b');
-  assert.strictEqual(C.eventSlugOf('https://www.start.gg/tournament/a/details'), '');
-  assert.strictEqual(C.eventSlugOf(''), '');
+  const j = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepStrictEqual(j(C.parseStartggUrl('https://www.start.gg/tournament/kagaribi-15/event/singles/overview')), { tournamentSlug: 'kagaribi-15', eventSlug: 'singles' });
+  assert.deepStrictEqual(j(C.parseStartggUrl('start.gg/tournament/a/event/b?x=1')), { tournamentSlug: 'a', eventSlug: 'b' });
+  assert.deepStrictEqual(j(C.parseStartggUrl('https://www.start.gg/tournament/a/details')), { tournamentSlug: 'a', eventSlug: null });
+  assert.deepStrictEqual(j(C.parseStartggUrl('https://www.start.gg/tournament/a')), { tournamentSlug: 'a', eventSlug: null });
+  assert.strictEqual(C.parseStartggUrl('https://example.com/'), null);
+  assert.strictEqual(C.parseStartggUrl(''), null);
+});
+
+test('pickEvents: スマブラSP の 1on1 だけ。無ければ全部', () => {
+  const C = load();
+  const sp = { id: 1, videogame: { id: 1386 }, type: 1 };
+  const sp2 = { id: 2, videogame: { id: 1386 }, type: 5 };
+  const other = { id: 3, videogame: { id: 1 }, type: 1 };
+  assert.deepStrictEqual(C.pickEvents([sp, sp2, other]).map(e => e.id), [1]);
+  assert.deepStrictEqual(C.pickEvents([sp2, other]).map(e => e.id), [2, 3]);
 });
 
 test('selectTargets: 範囲内だけ、DQ と順位なしは除く、max=null は最後まで', () => {
@@ -29,6 +41,7 @@ test('selectTargets: 範囲内だけ、DQ と順位なしは除く、max=null �
   const st = [P(1, 1), P(2, 9), P(3, 13), P(4, 13, { dq: true }), P(5, null), P(6, 25)];
   assert.deepStrictEqual(C.selectTargets(st, 9, null).map(p => p.userId), [2, 3, 6]);
   assert.deepStrictEqual(C.selectTargets(st, 9, 13).map(p => p.userId), [2, 3]);
+  assert.deepStrictEqual(C.selectTargets(st, 9, 13, false).map(p => p.userId), [2, 3, 4]);
 });
 
 test('seedOrder: main_result は本戦の順位順、同率の中はシャッフル順', () => {

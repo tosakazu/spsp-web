@@ -18,8 +18,8 @@
 .cb-status { font-size: 13px; color: #6b7280; min-height: 1.4em; margin-bottom: 10px; }
 .cb-status.error { color: #b91c1c; font-weight: 600; }
 .cb-status.ok { color: #047857; font-weight: 600; }
-.cb-list { margin: 0; padding: 0 0 0 2.2em; max-height: 360px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 8px; font-size: 13px; }
-.cb-list li { padding: 5px 10px 5px 4px; border-bottom: 1px solid #f3f4f6; }
+.cb-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; border: 1px solid #f3f4f6; border-radius: 8px; font-size: 13px; }
+.cb-list li { padding: 5px 10px; border-bottom: 1px solid #f3f4f6; }
 .cb-list li:last-child { border-bottom: 0; }
 .cb-name { font-weight: 600; }
 .cb-place { color: #9ca3af; font-size: 11px; margin-left: 8px; }
@@ -29,3 +29,11 @@
 .cb-connect-state { font-size: 13px; color: #6b7280; }
 .cb-connect-state.on { color: #047857; font-weight: 700; }
 .cb-connect .cb-btn { height: 34px; padding: 0 14px; font-size: 13px; }
+.cb-key { display: flex; gap: 6px; }
+.cb-key input { flex: 1; }
+.cb-btn-sm { height: 36px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
+.cb-list li.off { color: #9ca3af; }
+.cb-list li.off .cb-name { text-decoration: line-through; font-weight: 400; }
+.cb-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.cb-seed { min-width: 2.2em; color: #6b7280; font-size: 11px; text-align: right; }
+.cb-dq { color: #b91c1c; font-size: 11px; margin-left: 6px; }

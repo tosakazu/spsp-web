@@ -30,12 +30,25 @@
       </div>
     </div>
     <label class="cb-field">
-      <span data-i18n="class.event_url">本戦の start.gg イベントの URL</span>
-      <input type="url" id="cb-event" placeholder="https://www.start.gg/tournament/…/event/…" autocomplete="off">
+      <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
+      <span class="cb-key">
+        <input type="password" id="cb-sgg-key" autocomplete="off">
+        <button type="button" class="cb-btn cb-btn-sm" id="cb-sgg-save" data-i18n="class.key_save">ブラウザに保存</button>
+      </span>
+    </label>
+    <!-- キーで管理できる大会のうち、開催中・近いものから選べる (選ぶと URL に入る) -->
+    <label class="cb-field" id="cb-tour-pick-row" hidden>
+      <span data-i18n="class.tour_pick">管理している大会から選ぶ</span>
+      <select id="cb-tour-pick"></select>
     </label>
     <label class="cb-field">
-      <span data-i18n="class.startgg_key">start.gg の API キー (その大会の admin)</span>
-      <input type="password" id="cb-sgg-key" autocomplete="off">
+      <span data-i18n="class.event_url">本戦の start.gg の URL (大会のページでも可)</span>
+      <input type="url" id="cb-event" placeholder="https://www.start.gg/tournament/…" autocomplete="off">
+    </label>
+    <!-- 大会にイベントが複数あるときだけ出す -->
+    <label class="cb-field" id="cb-event-pick-row" hidden>
+      <span data-i18n="class.event_pick">イベント</span>
+      <select id="cb-event-pick"></select>
     </label>
   </section>
 
@@ -71,6 +84,10 @@
       </select>
     </label>
     <label class="cb-check">
+      <input type="checkbox" id="cb-exclude-dq" checked>
+      <span data-i18n="class.exclude_dq">DQ の人を除く</span>
+    </label>
+    <label class="cb-check">
       <input type="checkbox" id="cb-counted" checked>
       <span data-i18n="class.counted">SPSP の集計対象にする</span>
     </label>
@@ -84,7 +101,7 @@
   <!-- 読み込んだら: 対象の選手とシード順。確かめてから作成 -->
   <section class="cb-sec" id="cb-preview" hidden>
     <h2 class="cb-h2"><span id="cb-preview-title"></span></h2>
-    <ol class="cb-list" id="cb-list"></ol>
+    <ul class="cb-list" id="cb-list"></ul>
     <div class="cb-actions">
       <button type="button" class="cb-btn cb-btn-main" id="cb-create" data-i18n="class.create">Challonge に作成</button>
     </div>
