@@ -367,12 +367,11 @@ async function buildYosouSection() {
     const rest = ` ・ ${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` +
       i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' });
     t.textContent = ev.tournament_name + rest;
-    // 大会名は start.gg へのリンク (開催予定の一覧 upcoming.json の slug から。イベントのページ、無ければ大会のページ)
+    // 大会名は start.gg の大会のホームへのリンク (開催予定の一覧 upcoming.json の大会の slug から)
     const upList = await fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
     const tour = upList && Array.isArray(upList.tournaments)
       ? upList.tournaments.find((/** @type {any} */ x) => x.tournament_id === ev.tournament_id) : null;
-    const evInfo = tour && Array.isArray(tour.events) ? tour.events.find((/** @type {any} */ x) => String(x.event_id) === eids[0]) : null;
-    const slug = (evInfo && evInfo.event_slug) || (tour && tour.tournament_slug) || '';
+    const slug = (tour && tour.tournament_slug) || '';
     if (slug) {
       t.innerHTML = `<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>${escapeHtml(rest)}`;
     }
