@@ -439,7 +439,7 @@ window.SPSP_I18N.en = {
   'card_edit.title_pre': 'First',
   'card_edit.title_post': 'Second',
   'card_edit.title_none': 'None',
-  'card_edit.title_note': 'Unlocked {have} / {total}. You get one more every {every} tournaments',
+  'card_edit.title_note': 'Unlocked {have} / {total}. You get {n} more for each tournament where you play at least one match',
   'card_edit.tour': 'Tournament',
   'card_edit.sort.date': 'Date',
   'card_edit.sort.pts': 'Points',

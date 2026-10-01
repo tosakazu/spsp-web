@@ -7,9 +7,9 @@
 //
 // 解放のしかた (unlock):
 //   'initial' = 最初から全員が持っている
-//   'random'  = 大会に RANDOM_EVERY 回出るごとに 1 つ、まだ持っていないランダム解放の二つ名から引く。
-//               k 回目の抽選は「選手 ID・k・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
-//               候補は「その回の大会の日付 (公開日より前なら公開日) までに追加されていて、まだ廃止されていない」ものだけ。
+//   'random'  = 大会で 1 試合以上するごとに DRAWS_PER_TOURNAMENT (2) つ、まだ持っていないランダム解放の二つ名から引く。
+//               k 回目の抽選 (通し番号) は「選手 ID・k・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
+//               候補は「その大会の日付 (公開日より前なら公開日) までに追加されていて、まだ廃止されていない」ものだけ。
 //               → あとで二つ名を足しても、過去に引いたものは変わらない (足した日より後の抽選から出る)
 // 二つ名は消さない: やめるときは retired (廃止日) を付ける。持っている人は持ったまま、廃止日より後の抽選には出ない
 //
@@ -21,8 +21,8 @@
 
 /** 二つ名を公開した日。これより前の大会での抽選は、この日の一覧から引く */
 export const TITLE_LAUNCH = '2026-10-01';
-/** ランダム解放: 大会に何回出るごとに 1 つ */
-export const RANDOM_EVERY = 10;
+/** ランダム解放: 1 試合以上した大会 1 つにつき何個 */
+export const DRAWS_PER_TOURNAMENT = 2;
 
 /** @type {Record<string, Title[]>} */
 export const TITLES = {
@@ -67,17 +67,17 @@ export function hash32(s) {
   return h >>> 0;
 }
 
-/** 数える大会 = 本戦の出場 (下位クラスの仮想大会は本戦と同じ日の同じ大会なので数えない)。日付・ID の順
- * @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null }[]} tournaments */
+/** 数える大会 = 本戦で 1 試合以上したもの (下位クラスの仮想大会は本戦と同じ日の同じ大会なので数えない)。日付・ID の順
+ * @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }[]} tournaments */
 export function countedTournaments(tournaments) {
   return (tournaments || [])
-    .filter(t => t && t.date && (t.parent_event_id == null || t.parent_event_id === ''))
+    .filter(t => t && t.date && (t.parent_event_id == null || t.parent_event_id === '') && ((t.wins || 0) + (t.losses || 0)) >= 1)
     .slice()
     .sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : String(a.event_id).localeCompare(String(b.event_id))));
 }
 
 /** その選手が持っている二つ名。uid = start.gg のユーザー ID
- * @param {string} lang @param {number | string} uid @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null }[]} tournaments
+ * @param {string} lang @param {number | string} uid @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }[]} tournaments
  * @returns {Map<string, OwnedTitle>} */
 export function ownedTitles(lang, uid, tournaments) {
   const list = TITLES[lang] || [];
@@ -85,9 +85,9 @@ export function ownedTitles(lang, uid, tournaments) {
   const owned = new Map();
   for (const t of list) if (t.unlock === 'initial') owned.set(t.id, { at: TITLE_LAUNCH, how: 'initial' });
   const tours = countedTournaments(tournaments);
-  const draws = Math.floor(tours.length / RANDOM_EVERY);
+  const draws = tours.length * DRAWS_PER_TOURNAMENT;
   for (let k = 1; k <= draws; k++) {
-    const d = String(tours[k * RANDOM_EVERY - 1].date).slice(0, 10);
+    const d = String(tours[Math.ceil(k / DRAWS_PER_TOURNAMENT) - 1].date).slice(0, 10);
     const at = d < TITLE_LAUNCH ? TITLE_LAUNCH : d;
     /** @type {Title | null} */
     let best = null;
@@ -102,7 +102,7 @@ export function ownedTitles(lang, uid, tournaments) {
   return owned;
 }
 
-const API = { TITLES, TITLE_LAUNCH, RANDOM_EVERY, titleById, usableIn, hash32, countedTournaments, ownedTitles };
+const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;
 export default API;
