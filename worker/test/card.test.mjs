@@ -33,7 +33,7 @@ test('validateCardSettings: 許す形と弾く形', () => {
   assert.deepStrictEqual(plain(validateCardSettings(GOOD)), GOOD);
   assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null });
   assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null });
-  for (const c of ['red', 'blue', 'green', 'purple', 'orange']) assert.ok(validateCardSettings({ template: 'standard', color: c, ach: null }));
+  for (const c of ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray']) assert.ok(validateCardSettings({ template: 'standard', color: c, ach: null }));
   const bads = [
     null, 'x', [], {},
     { template: 'fancy', color: 'red' }, { color: 'red' },
@@ -165,4 +165,19 @@ test('card_put: tour を文字列で送っても整数で保存・返す', async
   assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406 });
   assert.strictEqual(JSON.parse(e.store.cards.get('4242').settings).tour, 1702406);
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings, put.settings);
+});
+
+test('card_put: 追加の色 (teal / yellow / gray) も保存できる。それ以外の色は bad_settings', async () => {
+  const e = env();
+  const token = await loginToken(e);
+  let t = Date.parse('2026-10-01T03:00:00Z');
+  for (const color of ['teal', 'yellow', 'gray']) {
+    e.nowMs = t; t += CARD_RATE_MIN_INTERVAL_MS + 1;
+    const r = await post(e, { action: 'card_put', token, settings: { template: 'standard', color } });
+    assert.strictEqual(r.ok, true, color);
+    assert.strictEqual(r.settings.color, color);
+    assert.strictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.color, color);
+  }
+  e.nowMs = t;
+  assert.strictEqual((await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'grey' } })).error.code, 'bad_settings');
 });
