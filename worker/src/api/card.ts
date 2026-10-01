@@ -14,7 +14,7 @@ import {
 } from '../config.ts';
 import type { Store } from '../store.ts';
 import type { TitleTour } from './titles.ts';
-import { ownedTitles, titleById } from './titles.ts';
+import { ownedTitles, titleById, usableIn } from './titles.ts';
 import type { DataFetch } from './vote.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
@@ -33,9 +33,9 @@ export interface CardSettings {
   title: CardTitle | null;   // 二つ名 (前半・後半の id)。null = 付けない
 }
 
-/** 二つ名の id (site/js/titles.js の一覧。言語-前後-連番)。 */
+/** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
 export interface CardTitle { pre: string | null; post: string | null }
-const TITLE_ID = /^[a-z]{2}-[ps]-\d{4}$/;
+const TITLE_ID = /^[a-z]{2}-\d{4}$/;
 
 /**
  * settings を確かめて正規化したものを返す。形が違えば null。
@@ -81,10 +81,10 @@ export function validateCardSettings(v: unknown): CardSettings | null {
   return { template: o.template, color: o.color, ach, tour, title };
 }
 
-/** 二つ名の id が一覧にあり、前半は part 'pre'・後半は 'post' か。 */
+/** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
 export function titleIdsValid(lang: string, t: CardTitle): boolean {
-  if (t.pre !== null) { const x = titleById(lang, t.pre); if (!x || x.part !== 'pre') return false; }
-  if (t.post !== null) { const x = titleById(lang, t.post); if (!x || x.part !== 'post') return false; }
+  if (t.pre !== null) { const x = titleById(lang, t.pre); if (!x || !usableIn(x, 'pre')) return false; }
+  if (t.post !== null) { const x = titleById(lang, t.post); if (!x || !usableIn(x, 'post')) return false; }
   return true;
 }
 

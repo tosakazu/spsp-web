@@ -6,12 +6,14 @@
 // @ts-ignore -- JS (型は下で付ける)
 import * as T from '../../../site/js/titles.js';
 
-export interface Title { id: string; part: 'pre' | 'post'; text: string; unlock: string; added: string; retired?: string }
+export interface Title { id: string; part: 'pre' | 'post' | 'both'; text: string; unlock: string; added: string; retired?: string }
 export interface OwnedTitle { at: string; how: string }
 export interface TitleTour { date?: string; event_id?: number | string; parent_event_id?: number | string | null }
 
 /** 一覧から 1 つ (無ければ null)。 */
 export const titleById: (lang: string, id: string | null | undefined) => Title | null = T.titleById;
+/** その二つ名を前半 (pre) / 後半 (post) に使えるか (part 'both' はどちらでも) */
+export const usableIn: (t: Title, slot: 'pre' | 'post') => boolean = T.usableIn;
 /** その選手が持っている二つ名 (id → 解放日)。uid = start.gg のユーザー ID、tournaments = 公開データの players/<uid>.json の tournaments */
 export const ownedTitles: (lang: string, uid: number | string, tournaments: TitleTour[]) => Map<string, OwnedTitle> = T.ownedTitles;
 
