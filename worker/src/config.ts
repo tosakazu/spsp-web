@@ -73,7 +73,8 @@ export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participan
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
-export const CARD_ACH_KEY_MAX = 300;                 // 実績の key 1 つの長さ (文字数)
+export const CARD_ACH_KEY_MAX = 300;
+export const CARD_TITLE_FETCH_TIMEOUT_MS = 5 * 1000;  // 二つ名を持っているかの確認で選手データを読む待ち時間                 // 実績の key 1 つの長さ (文字数)
 
 /** errors テーブル。無制限に伸ばさない。超えたら古い行から間引く。 */
 export const ERRORS_MAX_ROWS = 3000;
@@ -125,6 +126,8 @@ export interface Config {
   challongeClientId?: string;
   challongeClientSecret?: string;
   challongeRedirectUri?: string;
+  /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
+  titleLang?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -157,6 +160,7 @@ export function configFromEnv(env: Env): Config {
     challongeClientId: env.CHALLONGE_CLIENT_ID || undefined,
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
+    titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),
     tsOffsetMin: parseOffset(env.TS_OFFSET),
