@@ -28,7 +28,7 @@
 
 ## 表示・編集
 
-- カード (`js/player_card.js`): `model.title = { pre, post }` (文字)。片方・両方が空でもよい。両方空なら名前を帯の上下の真ん中に。
+- カード (`js/player_card.js`): `model.title = { pre, post }` (文字)。片方・両方が空でもよい。空でも名前の位置は変えない (二つ名の欄を空ける)。
   フォントは「コーポレート・ロゴ ver2 Bold」(LOGOTYPE.JP、SIL OFL 1.1、予約フォント名なし)。二つ名の文字だけに絞った woff2
   (`tools/fonts/build_title_font.mjs` → `site/fonts/corporate-logo-title.woff2`、24 KB)。**二つ名を足したら作り直す**
   (`tests/frontend/titles.test.cjs` が足りない文字を見つける)。

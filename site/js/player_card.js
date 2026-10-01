@@ -31,7 +31,7 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 /** @typedef {{ name: string, href?: string, date?: string, place?: number | null, placeUnit: string, nent?: number | null, dq?: boolean,
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
- * title = 二つ名 (前半・後半の文字。どちらか・両方が空でもよい。無ければ名前を帯の上下の真ん中に)
+ * title = 二つ名 (前半・後半の文字。どちらか・両方が空でもよい。無くても名前の位置は同じ)
  * @typedef {{ name: string, title?: { pre: string, post: string } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
@@ -216,8 +216,8 @@ function fitAll(root) {
     fitWidth(title, Math.max(120, maxW), 16, 9);
   }
   const name = q('.pc-name');
-  // 二つ名があるときは名前の箱が二つ名の下から (高さ 53.6)。2 行にしても二つ名に重ならない高さまで
-  if (name) fitTwoLines(name, 377, root.querySelector('.pc-titled') ? 52 : 54, 43, 26, 14);
+  // 名前の箱は二つ名の欄の下から (高さ 53.6、二つ名が無くても同じ位置)。2 行にしても二つ名に重ならない高さまで
+  if (name) fitTwoLines(name, 377, 52, 43, 26, 14);
   const tour = q('.pc-tour');
   if (tour) fitTwoLines(tour, 207, 34, 18, 13, 9);
   const big = q('.pc-big');

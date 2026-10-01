@@ -28,10 +28,9 @@
 .pc-pin { width: 9.37px; height: 14.5px; fill: var(--pc-light); flex: none; }
 .pc-loc-name { font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 14px; color: var(--pc-light); text-transform: uppercase; }
 .pc-loc-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 12px; color: var(--pc-light); opacity: .81; margin-left: -3px; align-self: flex-end; margin-bottom: 1px; }
-.pc-name { position: absolute; left: 12px; top: 0; width: 377px; height: 89px; display: flex; align-items: center; font-size: 43px; }   /* 二つ名が無ければ帯の上下の真ん中 */
-/* 二つ名があるときは二つ名の下: 下ぞろえで、文字の下 (ベースライン) を Figma の位置 (帯の上から約 72px) にそろえる。
-   43px・行の高さ 1.2 の箱の上からベースラインまで約 42px → 箱の下を 81.6px に */
-.pc-titled .pc-name { top: 32px; height: 53.6px; align-items: flex-end; }
+/* 名前は二つ名の下: 下ぞろえで、文字の下 (ベースライン) を Figma の位置 (帯の上から約 72px) にそろえる。
+   43px・行の高さ 1.2 の箱の上からベースラインまで約 42px → 箱の下を 85.6px に。二つ名が無くても同じ位置 (二つ名の欄は空ける) */
+.pc-name { position: absolute; left: 12px; top: 32px; width: 377px; height: 53.6px; display: flex; align-items: flex-end; font-size: 43px; }
 .pc-name-t { display: block; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 .pc-name.pc-wrap .pc-name-t, .pc-tour.pc-wrap .pc-tour-a {
   white-space: normal; line-height: 1.12; word-break: break-word;
