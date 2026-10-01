@@ -17,7 +17,7 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
-import { ownedTitles, titleById } from './titles.js';
+import { ownedTitles, titleById, usableIn } from './titles.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -210,13 +210,13 @@ export function buildCardModel(data, settings) {
   const byKey = new Map(all.map(a => [a.key, a]));
   const picked = (st.ach || []).map(k => byKey.get(k)).filter(a => a);
   const manual = picked.length > 0;
-  // 二つ名: 選んだ id のうち、持っているものだけ (持っていない・一覧に無い id は出さない)
+  // 二つ名: 選んだ id のうち、持っていて、その位置 (前半 / 後半) に使えるものだけ (持っていない・一覧に無い id は出さない)
   const owned = st.title ? ownedTitlesOf(data) : null;
-  const titleText = (/** @type {string | null | undefined} */ id) => {
+  const titleText = (/** @type {string | null | undefined} */ id, /** @type {'pre' | 'post'} */ slot) => {
     const t = owned && id && owned.has(id) ? titleById(titleLang(), id) : null;
-    return t ? t.text : '';
+    return t && usableIn(t, slot) ? t.text : '';
   };
-  const title = st.title ? { pre: titleText(st.title.pre), post: titleText(st.title.post) } : null;
+  const title = st.title ? { pre: titleText(st.title.pre, 'pre'), post: titleText(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)
     name: SPSPFormat.stripTeamTag(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
@@ -280,7 +280,7 @@ function normalize(s) {
 /** @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
 function normTitle(t) {
   if (!t || typeof t !== 'object') return null;
-  const id = (/** @type {any} */ v) => (typeof v === 'string' && /^[a-z]{2}-[ps]-\d{4}$/.test(v) ? v : null);
+  const id = (/** @type {any} */ v) => (typeof v === 'string' && /^[a-z]{2}-\d{4}$/.test(v) ? v : null);
   const pre = id(t.pre), post = id(t.post);
   return pre || post ? { pre, post } : null;
 }

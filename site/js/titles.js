@@ -13,10 +13,10 @@
 //               → あとで二つ名を足しても、過去に引いたものは変わらない (足した日より後の抽選から出る)
 // 二つ名は消さない: やめるときは retired (廃止日) を付ける。持っている人は持ったまま、廃止日より後の抽選には出ない
 //
-// 一覧の 1 件: { id, part: 'pre' | 'post', text, unlock: 'initial' | 'random', added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD' }
-//   id は言語 + 前後 + 連番 (ja-p-0001 / ja-s-0001)。一度使った id は別の文言に使い回さない
+// 一覧の 1 件: { id, part: 'pre' | 'post' | 'both', text, unlock: 'initial' | 'random', added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD' }
+//   part = 使える位置 (前半だけ / 後半だけ / どちらでも)。id は言語 + 連番 (ja-0001)。一度使った id は別の文言に使い回さない
 
-/** @typedef {{ id: string, part: 'pre' | 'post', text: string, unlock: 'initial' | 'random', added: string, retired?: string }} Title */
+/** @typedef {{ id: string, part: 'pre' | 'post' | 'both', text: string, unlock: 'initial' | 'random', added: string, retired?: string }} Title */
 /** @typedef {{ at: string, how: 'initial' | 'random' }} OwnedTitle */
 
 /** 二つ名を公開した日。これより前の大会での抽選は、この日の一覧から引く */
@@ -28,23 +28,28 @@ export const RANDOM_EVERY = 10;
 export const TITLES = {
   // Figma「submit」ver.1.5 のサンプル (あとで大量に足す)
   ja: [
-    { id: 'ja-p-0001', part: 'pre', text: '1000年に1度の', unlock: 'initial', added: '2026-10-01' },
-    { id: 'ja-p-0002', part: 'pre', text: 'SSQMの', unlock: 'random', added: '2026-10-01' },
-    { id: 'ja-p-0003', part: 'pre', text: 'プロ観戦勢', unlock: 'random', added: '2026-10-01' },
-    { id: 'ja-p-0004', part: 'pre', text: '発生', unlock: 'random', added: '2026-10-01' },
-    { id: 'ja-s-0001', part: 'post', text: 'トリックスター', unlock: 'initial', added: '2026-10-01' },
-    { id: 'ja-s-0002', part: 'post', text: '支配者', unlock: 'random', added: '2026-10-01' },
-    { id: 'ja-s-0003', part: 'post', text: '!みんな元気でね!', unlock: 'random', added: '2026-10-01' },
-    { id: 'ja-s-0004', part: 'post', text: '1f', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0001', part: 'pre', text: '1000年に1度の', unlock: 'initial', added: '2026-10-01' },
+    { id: 'ja-0002', part: 'pre', text: 'SSQMの', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0003', part: 'both', text: 'プロ観戦勢', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0004', part: 'pre', text: '発生', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0005', part: 'post', text: 'トリックスター', unlock: 'initial', added: '2026-10-01' },
+    { id: 'ja-0006', part: 'post', text: '支配者', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0007', part: 'post', text: '!みんな元気でね!', unlock: 'random', added: '2026-10-01' },
+    { id: 'ja-0008', part: 'post', text: '1f', unlock: 'random', added: '2026-10-01' },
   ],
   // 北米 (英語の一覧は日本語の訳ではなく別に作る。今は仮)
   en: [
-    { id: 'en-p-0001', part: 'pre', text: 'Once-in-a-Millennium', unlock: 'initial', added: '2026-10-01' },
-    { id: 'en-p-0002', part: 'pre', text: 'Frame-1', unlock: 'random', added: '2026-10-01' },
-    { id: 'en-s-0001', part: 'post', text: 'Trickster', unlock: 'initial', added: '2026-10-01' },
-    { id: 'en-s-0002', part: 'post', text: 'Overlord', unlock: 'random', added: '2026-10-01' },
+    { id: 'en-0001', part: 'pre', text: 'Once-in-a-Millennium', unlock: 'initial', added: '2026-10-01' },
+    { id: 'en-0002', part: 'both', text: 'Frame-1', unlock: 'random', added: '2026-10-01' },
+    { id: 'en-0003', part: 'post', text: 'Trickster', unlock: 'initial', added: '2026-10-01' },
+    { id: 'en-0004', part: 'post', text: 'Overlord', unlock: 'random', added: '2026-10-01' },
   ],
 };
+
+/** その二つ名を前半 (pre) / 後半 (post) に使えるか @param {Title} t @param {'pre' | 'post'} slot */
+export function usableIn(t, slot) {
+  return t.part === 'both' || t.part === slot;
+}
 
 /** @param {string} lang @param {string | null | undefined} id @returns {Title | null} */
 export function titleById(lang, id) {
@@ -97,7 +102,7 @@ export function ownedTitles(lang, uid, tournaments) {
   return owned;
 }
 
-const API = { TITLES, TITLE_LAUNCH, RANDOM_EVERY, titleById, hash32, countedTournaments, ownedTitles };
+const API = { TITLES, TITLE_LAUNCH, RANDOM_EVERY, titleById, usableIn, hash32, countedTournaments, ownedTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;
 export default API;

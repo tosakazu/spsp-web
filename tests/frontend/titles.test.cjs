@@ -18,15 +18,15 @@ function tours(n, start = '2026-01-01') {
   return Array.from({ length: n }, (_, i) => ({ event_id: 1000 + i, date: new Date(d0 + i * 864e5).toISOString().slice(0, 10) }));
 }
 
-test('一覧: id は重複なし・言語の接頭辞・前後 (part) と id の形が合う・日付の形', () => {
+test('一覧: id は重複なし・言語の接頭辞と連番・使える位置 (part)・日付の形', () => {
   const T = load();
   for (const [lang, list] of Object.entries(T.TITLES)) {
     const ids = new Set();
     for (const t of list) {
       assert.ok(!ids.has(t.id), `重複 ${t.id}`);
       ids.add(t.id);
-      assert.match(t.id, new RegExp(`^${lang}-[ps]-\\d{4}$`));
-      assert.strictEqual(t.id.split('-')[1] === 'p' ? 'pre' : 'post', t.part, t.id);
+      assert.match(t.id, new RegExp(`^${lang}-\\d{4}$`));
+      assert.ok(['pre', 'post', 'both'].includes(t.part), t.id);
       assert.ok(t.text && t.text.length <= 30, t.id);
       assert.ok(['initial', 'random'].includes(t.unlock), t.id);
       assert.match(t.added, /^\d{4}-\d{2}-\d{2}$/);
@@ -58,7 +58,7 @@ test('あとで二つ名を足しても、それより前に引いたものは�
   const T = load();
   const before = T.ownedTitles('ja', 42, tours(30, '2026-10-02'));
   // 11/01 に 3 つ追加 (30 回目の大会は 10/31 なので、どの抽選にも入らない)
-  for (let i = 0; i < 3; i++) T.TITLES.ja.push({ id: `ja-p-90${i}0`, part: 'pre', text: 'x' + i, unlock: 'random', added: '2026-11-01' });
+  for (let i = 0; i < 3; i++) T.TITLES.ja.push({ id: `ja-90${i}0`, part: 'pre', text: 'x' + i, unlock: 'random', added: '2026-11-01' });
   const after = T.ownedTitles('ja', 42, tours(30, '2026-10-02'));
   assert.deepStrictEqual([...after.entries()], [...before.entries()]);
   // 追加日より後の抽選には出うる
@@ -93,4 +93,13 @@ test('二つ名の文字はすべてフォント (site/fonts/corporate-logo-titl
   const missing = [];
   for (const list of Object.values(T.TITLES)) for (const t of list) for (const ch of t.text) if (!have.has(ch)) missing.push(`${t.id}:${ch}`);
   assert.deepStrictEqual(missing, []);
+});
+
+test('使える位置: both は前半・後半どちらでも、pre / post はその位置だけ', () => {
+  const T = load();
+  const t = (part) => ({ id: 'ja-9999', part, text: 'x', unlock: 'random', added: '2026-10-01' });
+  assert.strictEqual(T.usableIn(t('both'), 'pre') && T.usableIn(t('both'), 'post'), true);
+  assert.strictEqual(T.usableIn(t('pre'), 'pre'), true);
+  assert.strictEqual(T.usableIn(t('pre'), 'post'), false);
+  assert.strictEqual(T.usableIn(t('post'), 'pre'), false);
 });

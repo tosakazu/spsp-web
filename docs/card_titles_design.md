@@ -5,8 +5,9 @@
 
 ## 二つ名の一覧 (ID 管理)
 
-- `site/js/titles.js` の `TITLES[lang]`。1 件 = `{ id, part: 'pre' | 'post', text, unlock: 'initial' | 'random', added, retired? }`。
-- **id**: `<言語>-<p|s>-<4 桁>` (`ja-p-0001` = 日本語の前半、`ja-s-0001` = 後半)。カードの設定にも id だけを保存する。
+- `site/js/titles.js` の `TITLES[lang]`。1 件 = `{ id, part: 'pre' | 'post' | 'both', text, unlock: 'initial' | 'random', added, retired? }`。
+- **使える位置 (part)**: 前半だけ / 後半だけ / どちらでも (`usableIn(t, slot)`)。「どちらでも」は前半・後半の両方のリールに出る。
+- **id**: `<言語>-<4 桁>` (`ja-0001`)。位置は id に含めない (あとで位置を変えても id はそのまま)。カードの設定にも id だけを保存する。
   一度使った id は別の文言に使い回さない。
 - **言語ごとに別の一覧**: 日本の地域は `ja`、北米は `en` (`region/config.js` の `titleLang`)。英語は日本語の訳ではなく別に作る。
   表示の言語 (UI) を切り替えても二つ名の表記は変えない。
@@ -39,5 +40,5 @@
 
 ## Worker (spsp backend)
 
-`card_put` の `title`: id の形・一覧にあること・前後 (part) が合うこと・**持っていること** (`ownedTitles` を同じファイルから使い、
+`card_put` の `title`: id の形 (`^[a-z]{2}-\d{4}$`)・一覧にあること・その位置に使えること (`usableIn`)・**持っていること** (`ownedTitles` を同じファイルから使い、
 `https://data.spsp.games/jp/players/<uid>.json` の `tournaments` で計算)。取れなければ保存しない (`title_unverified`)。

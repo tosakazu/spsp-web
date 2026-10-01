@@ -12,7 +12,7 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
-import { TITLES, RANDOM_EVERY } from '../../site/js/titles.js';
+import { TITLES, RANDOM_EVERY, usableIn } from '../../site/js/titles.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, ownedTitlesOf, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -151,7 +151,7 @@ async function main() {
       const box = $('ce-title-' + part);
       /** @type {HTMLElement} */ (box.closest('.ce-reel')).style.setProperty('--c', hex);
       if (!box.childElementCount) {
-        const mine = titleList.filter(x => x.part === part && owned.has(x.id));
+        const mine = titleList.filter(x => usableIn(x, part) && owned.has(x.id));   // 「どちらでも」は前半・後半の両方のリールに出る
         box.innerHTML =
           `<div class="ce-reel-item none" role="option" data-tid="">${escapeHtml(i18n('card_edit.title_none'))}</div>` +
           mine.map(x => `<div class="ce-reel-item" role="option" data-tid="${escapeHtml(x.id)}"><span class="ce-reel-text">${escapeHtml(x.text)}</span>${
