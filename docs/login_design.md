@@ -92,7 +92,7 @@ POST /api  {action:'me', token}
 | 欄 | 検証 |
 |---|---|
 | template | `standard` のみ (増えたらサーバの表も増やす) |
-| color | `red` `blue` `green` `purple` `orange` のどれか |
+| color | `red` `blue` `green` `purple` `orange` `teal` `yellow` `gray` のどれか (2026-10-01 に 3 色追加) |
 | ach | null、または文字列の配列 (0〜12 個、各 300 文字以内、重複なし)。中身 (実績の key) はサーバでは解釈しない |
 
 **読む (だれでも)**

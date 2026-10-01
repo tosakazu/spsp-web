@@ -71,7 +71,7 @@ export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
 export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
 export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
-export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange'];
+export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
 export const CARD_ACH_KEY_MAX = 300;                 // 実績の key 1 つの長さ (文字数)
 
