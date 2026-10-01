@@ -207,6 +207,28 @@ function utcOffsetMs(off) {
     var dupKeys = new Set();
     nameCount.forEach(function (c, k) { if (c > 1) dupKeys.add(k); });
     if (dupKeys.size) note += ' <span class="warn">⚠ ' + esc(i18n('priority.warn.dup_names', { n: dupKeys.size })) + '</span>';
+    // 同じ名前の人を名前ごとにまとめた欄 (表の上)。ここで「除外」する
+    var dupBox = document.getElementById('dup-box');
+    if (dupBox) {
+      /** @type {Map<string, Row[]>} */
+      var groups = new Map();
+      rows.forEach(function (r) { var k = nameKey(r.display); if (dupKeys.has(k)) { if (!groups.has(k)) groups.set(k, []); /** @type {Row[]} */ (groups.get(k)).push(r); } });
+      dupBox.hidden = !groups.size;
+      var html = '<div class="dup-head">⚠ ' + esc(i18n('priority.dup_head')) + '</div>';
+      groups.forEach(function (list) {
+        html += '<div class="dup-group"><div class="dup-name">' + esc(list[0].display.slice(list[0].display.lastIndexOf('|') + 1).trim()) + '</div>' +
+          list.map(function (r) {
+            var disc = DISC[String(r.uid)];
+            return '<div class="dup-item"><span class="rk">' + (r.ens ? '#' + r.ens : '—') + '</span>' +
+              // @ts-ignore SPSP.langRoot は string | undefined
+              '<a class="nm" href="' + SPSPLinks.playerHref(SPSP.langRoot, r.uid) + '" target="_blank" rel="noopener" style="color:inherit">' + esc(r.display) + '</a>' +
+              '<span class="ds">' + (disc ? esc(disc) : '—') + '</span>' +
+              (r.origin === 'manual' ? '<span class="manual-badge">' + i18n('priority.badge.manual') + '</span>' : r.origin === 'csv' ? '<span class="csv-badge">CSV</span>' : '') +
+              '<button type="button" class="dup-x" data-uid="' + r.uid + '">' + i18n('priority.dup_remove') + '</button></div>';
+          }).join('') + '</div>';
+      });
+      dupBox.innerHTML = groups.size ? html : '';
+    }
     var previewNote = document.getElementById('preview-note');
     if (previewNote) previewNote.innerHTML = note;
 
@@ -224,8 +246,7 @@ function utcOffsetMs(off) {
           (r.prov ? '<span class="prov-badge">' + i18n('table.provisional') + '</span>' : '') +
           (r.origin === 'manual' ? '<span class="manual-badge">' + i18n('priority.badge.manual') + '</span>'
             : r.origin === 'csv' ? '<span class="csv-badge">CSV</span>' : '') +
-          (dup ? '<span class="dup-badge">' + i18n('priority.badge.dup') + '</span>' +
-            '<button type="button" class="dup-x" data-uid="' + r.uid + '">' + i18n('priority.dup_remove') + '</button>' : '') + '</td>' +
+          (dup ? '<span class="dup-badge">' + i18n('priority.badge.dup') + '</span>' : '') + '</td>' +
         '<td class="col-disc' + (disc ? '' : ' nodisc') + '">' + (disc ? esc(disc) : '—') + '</td>' +
         '</tr>';
     }).join('');
@@ -528,8 +549,8 @@ function utcOffsetMs(off) {
     renderAddChips = setupPlayerPicker('padd-input', 'padd-suggest', 'padd-chips', manualUids, removeUids);
     renderRemoveChips = setupPlayerPicker('prem-input', 'prem-suggest', 'prem-chips', removeUids, manualUids);
 
-    // 同名の行の「除外」: 手動・CSV で足した人ならその一覧から外し、自動で選ばれた人は手動除去に入れる (次の順位の人が繰り上がる)
-    var ptb = document.getElementById('ptbody');
+    // 同名の欄の「除外」: 手動・CSV で足した人ならその一覧から外し、自動で選ばれた人は手動除去に入れる (次の順位の人が繰り上がる)
+    var ptb = document.getElementById('dup-box');
     if (ptb) ptb.addEventListener('click', function (e) {
       var b = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest('.dup-x') : null);
       if (!b) return;
