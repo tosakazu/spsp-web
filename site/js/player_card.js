@@ -185,7 +185,12 @@ function splitTwo(s) {
 function fitAll(root) {
   const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
   const title = q('.pc-title');
-  if (title) fitWidth(title, 330, 16, 9);   // 二つ名は 1 行 (右上の地域の手前まで)
+  if (title) {
+    // 二つ名は 1 行で、右上の地域の手前 (10px あける) まで。地域が無ければカードの右端の手前まで
+    const loc = q('.pc-loc');
+    const maxW = (loc ? loc.offsetLeft : W - 12) - title.offsetLeft - 10;
+    fitWidth(title, Math.max(120, maxW), 16, 9);
+  }
   const name = q('.pc-name');
   // 二つ名があるときは名前の箱が二つ名の下から (高さ 53.6)。2 行にしても二つ名に重ならない高さまで
   if (name) fitTwoLines(name, 377, root.querySelector('.pc-titled') ? 52 : 54, 43, 26, 14);

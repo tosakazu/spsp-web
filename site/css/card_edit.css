@@ -103,6 +103,6 @@ a.ce-login { display: inline-flex; align-items: center; text-decoration: none; }
   background: #fff; color: #111827; font-size: 13px; font-family: "SPSP Title", inherit; cursor: pointer; white-space: nowrap;
 }
 .ce-title-chip.none { color: #9ca3af; font-family: inherit; }
-.ce-title-chip.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); color: var(--c); font-weight: 700; }
+.ce-title-chip.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); color: var(--c); }   /* 太字にしない (幅が変わって並びがずれる) */
 .ce-title-new { font-family: inherit; font-size: 9px; font-weight: 700; color: #fff; background: #dc2626; border-radius: 4px; padding: 1px 4px; }
 .ce-title-note { font-size: 11px; color: #9ca3af; }

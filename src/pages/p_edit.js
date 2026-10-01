@@ -142,12 +142,22 @@ async function main() {
     paintTours();
   }
 
-  /** 二つ名の札: 「なし」+ 持っているもの (一覧の順)。選んだものは今の色の枠 @param {string} hex */
+  /** 二つ名の札: 「なし」+ 持っているもの (一覧の順)。選んだものは今の色の枠。
+   * 札は最初に 1 回だけ作り、あとは選択の印と色だけ変える (作り直すと欄の高さやスクロールが動いて画面がずれる) @param {string} hex */
   function paintTitles(hex) {
     for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
       const cur = st.title ? st.title[part] : null;
+      const box = $('ce-title-' + part);
+      if (box.childElementCount) {
+        for (const b of /** @type {HTMLElement[]} */ (Array.from(box.children))) {
+          const on = (b.getAttribute('data-tid') || null) === cur;
+          b.classList.toggle('on', on);
+          b.style.setProperty('--c', hex);
+        }
+        continue;
+      }
       const mine = titleList.filter(x => x.part === part && owned.has(x.id));
-      $('ce-title-' + part).innerHTML =
+      box.innerHTML =
         `<button type="button" class="ce-title-chip none${!cur ? ' on' : ''}" data-part="${part}" data-tid="" style="--c:${hex}">${escapeHtml(i18n('card_edit.title_none'))}</button>` +
         mine.map(x => `<button type="button" class="ce-title-chip${cur === x.id ? ' on' : ''}" data-part="${part}" data-tid="${escapeHtml(x.id)}" style="--c:${hex}">${escapeHtml(x.text)}${
           newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</button>`).join('');
