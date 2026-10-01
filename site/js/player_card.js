@@ -70,7 +70,31 @@ const ARROW_SVG = '<svg class="pc-arrow" viewBox="0 0 12 4.33" aria-hidden="true
 /** @param {PCardAch} a */
 function achPill(a) {
   const { emoji, text } = splitEmoji(a.label);
-  return `<span class="pc-ach-pill">${emoji ? `<span class="pc-ach-emoji">${escapeHtml(emoji)}</span>` : ''}<span class="pc-ach-text">${latinRuns(text, 'pc-lat')}</span></span>`;
+  return `<span class="pc-ach-pill">${emoji ? `<span class="pc-ach-emoji">${escapeHtml(emoji)}</span>` : ''}<span class="pc-ach-text" data-text="${escapeHtml(text)}">${latinRuns(text, 'pc-lat')}</span></span>`;
+}
+
+// 実績の札の後ろの「結果」(準優勝 × 2 / 優勝 ×3 / 4位 / Top 8 以上 …)。長すぎるときもここは残し、前 (大会名など) を「…」で縮める
+const ACH_TAIL = /\s+(\S+\s*[×x]\s*\d+|Top\s*\d+\s*\S*|\S+)$/;
+/** 札を行の幅に収める: まず文字を 8px まで小さくし、それでも入らなければ大会名などの後ろを「…」で切る (結果の部分は残す)。入ったら true
+ * @param {HTMLElement} p @param {number} maxW */
+function fitPill(p, maxW) {
+  // 札には max-width があり、はみ出しが幅に出ないことがあるので、測る間は外す (本来の幅で測る)
+  p.style.maxWidth = 'none';
+  try { return fitPillInner(p, maxW); } finally { p.style.maxWidth = ''; }
+}
+/** @param {HTMLElement} p @param {number} maxW */
+function fitPillInner(p, maxW) {
+  if (fitWidth(p, maxW, 10, 8)) return true;
+  const span = /** @type {HTMLElement | null} */ (p.querySelector('.pc-ach-text'));
+  const text = span ? span.getAttribute('data-text') || '' : '';
+  const m = ACH_TAIL.exec(text);
+  if (!span || !m) return false;
+  const head = text.slice(0, m.index), tail = m[1];
+  for (let n = head.length - 1; n >= 1; n--) {
+    span.innerHTML = latinRuns(head.slice(0, n).replace(/\s+$/, '') + '… ' + tail, 'pc-lat');
+    if (Math.max(p.scrollWidth, p.offsetWidth) <= maxW + 0.5) return true;
+  }
+  return false;
 }
 
 /** @param {PCardModel} m */
@@ -253,7 +277,7 @@ function placeAuto(list) {
   {
     const ROW_W = 206, GAP = 3;
     const rows = /** @type {HTMLElement[]} */ (Array.from(list.querySelectorAll('.pc-ach-row')));
-    rows.forEach(r => { const p = /** @type {HTMLElement | null} */ (r.firstElementChild); if (p) fitWidth(p, ROW_W, 10, 8); });
+    rows.forEach(r => { const p = /** @type {HTMLElement | null} */ (r.firstElementChild); if (p) fitPill(p, ROW_W); });
     /** @param {HTMLElement} r */
     const rowWidth = r => Array.from(r.children).reduce((w, c, i) => w + /** @type {HTMLElement} */ (c).offsetWidth + (i ? GAP : 0), 0);
     const spare = list.querySelector('.pc-ach-spare');
@@ -283,7 +307,7 @@ function finishAch(list) {
   const top = Math.max(4, Math.round((INNER_H - full) / 2));   // 見出しの位置 (固定)
   const areaTop = top + label.offsetHeight + GAP;
   const areaH = INNER_H - top - areaTop;                        // 見出しの下の残り (上の余白と同じだけ下も空ける)
-  label.style.top = top + 'px';
+  label.style.top = (top + 2) + 'px';   // 見出しの字面を Figma (箱の上から 10px) に合わせる (並びの位置はそのまま)
   list.style.top = (areaTop + Math.max(0, Math.round((areaH - list.offsetHeight) / 2))) + 'px';
 }
 
@@ -311,7 +335,7 @@ function placeManual(list) {
     if (rows >= ACH_ROWS) { p.remove(); ok = false; continue; }
     row = newRow();
     row.appendChild(p);
-    if (!fitWidth(p, ACH_ROW_W, 10, 8)) { p.remove(); ok = false; }
+    if (!fitPill(p, ACH_ROW_W)) { p.remove(); ok = false; }
   }
   spare.remove();
   return ok;
