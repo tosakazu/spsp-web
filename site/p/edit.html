@@ -54,10 +54,11 @@
       <details class="ce-sec ce-fold">
         <summary><h2>
           <span data-i18n="card_edit.achievements">実績</span>
-          <span class="ce-fold-sum" id="ce-ach-sum"></span>
+          <!-- リセットは見出しのすぐ右 (隠れていても場所を取るので、右端の「自動」を大会の行とそろえるため) -->
           <button type="button" class="ce-reset" id="ce-reset" data-i18n-attr="title:card_edit.reset,aria-label:card_edit.reset" title="リセット" aria-label="リセット">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
           </button>
+          <span class="ce-fold-sum" id="ce-ach-sum"></span>
           <svg class="ce-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </h2></summary>
         <div class="ce-achs" id="ce-achs"></div>
