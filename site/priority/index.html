@@ -100,6 +100,14 @@
     display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
     font-size: 10px; font-weight: 600; background: #fef3c7; color: #92400e; vertical-align: 1px;
   }
+  /* 同じ名前の人 (警告だけ。同じ人なら「除外」) */
+  #ptable tr.dup-row td { background: #fffbeb; }
+  .dup-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 9px; margin-left: 5px;
+    font-size: 10px; font-weight: 600; background: #fde68a; color: #92400e; vertical-align: 1px;
+  }
+  .dup-x { margin-left: 6px; padding: 1px 8px; font-size: 11px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; }
+  .dup-x:hover { background: #f3f4f6; }
   .csv-btn {
     display: inline-block; padding: 6px 10px; font-size: 12px; cursor: pointer;
     border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
