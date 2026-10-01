@@ -66,7 +66,8 @@ export const CLASS_PARTICIPANTS_MAX = 512;
 
 /** Challonge (OAuth と API v2.1)。scope は取得側 (smash_database、client credentials の application:manage) と
  *  確認済み: TO が SPSP のアプリ経由で作ったトーナメントは /v2.1/application/tournaments に出る (2026-10-01)。 */
-export const CHALLONGE_AUTHORIZE_URL = 'https://api.challonge.com/oauth/authorize';
+// 許可画面は challonge.com で開く (api.challonge.com だと、ログインしていない人のログイン画面が {"error": "authentication required"} になって先へ進めない)
+export const CHALLONGE_AUTHORIZE_URL = 'https://challonge.com/oauth/authorize';
 export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
 export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
 export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';

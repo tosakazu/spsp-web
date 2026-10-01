@@ -47,7 +47,7 @@ test('challonge_begin: Challonge の認可 URL (client_id・scope・戻り先・
   const r = await post(e, { action: 'challonge_begin', nonce: 'N1', returnPath: '/jp/class/' });
   assert.strictEqual(r.ok, true);
   const u = new URL(r.url);
-  assert.strictEqual(u.origin + u.pathname, 'https://api.challonge.com/oauth/authorize');
+  assert.strictEqual(u.origin + u.pathname, 'https://challonge.com/oauth/authorize');
   assert.strictEqual(u.searchParams.get('client_id'), 'ch-client');
   assert.strictEqual(u.searchParams.get('redirect_uri'), 'https://spsp-web-preview.tosakazu.workers.dev/callback.html');
   assert.strictEqual(u.searchParams.get('response_type'), 'code');
