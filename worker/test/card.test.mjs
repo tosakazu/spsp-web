@@ -196,9 +196,10 @@ function titleEnv(tours) {
   if (tours === 'hang') e.ctx.dataFetch = () => { e.hangStarted = true; return new Promise(() => {}); };
   return e;
 }
-const toursN = (n) => Array.from({ length: n }, (_, i) => ({ date: '2026-0' + (1 + Math.floor(i / 28)) + '-' + String(1 + (i % 28)).padStart(2, '0'), event_id: 1000 + i }));
+/** 本戦の大会 n 個 (1 試合以上した = wins + losses >= 1)。games = 各大会の試合数 */
+const toursN = (n, games = 1) => Array.from({ length: n }, (_, i) => ({ date: '2026-0' + (1 + Math.floor(i / 28)) + '-' + String(1 + (i % 28)).padStart(2, '0'), event_id: 1000 + i, wins: games > 0 ? 1 : 0, losses: Math.max(0, games - 1) }));
 const withTitle = (title) => ({ template: 'standard', color: 'red', title });
-/** uid 4242 が 10 大会で引くランダムの二つ名 (前半か後半か、どちらか 1 つ) */
+/** uid 4242 が引いたランダムの二つ名 (1 試合以上した本戦 1 つにつき 2 つ) */
 function drawnFor(tours) { return [...ownedTitles('ja', '4242', tours)].filter(([, v]) => v.how === 'random').map(([k]) => k); }
 
 test('titles: 一覧は site/js/titles.js のもの、言語は地域から (北米は en)', () => {
@@ -223,10 +224,20 @@ test('card_put: 最初から持っている二つ名は保存でき、card_get �
   assert.ok(e.fetches.some((f) => f.url === 'data:/players/4242.json'), '公開データを読む');
 });
 
-test('card_put: 大会 10 回で引いた二つ名は保存でき、持っていないものは title_not_owned', async () => {
-  const tours = toursN(10);
+test('二つ名の獲得: 1 試合以上した本戦 1 つにつき 2 つ。試合 0 の大会・下位クラスの仮想大会は数えない', () => {
+  assert.strictEqual(drawnFor([]).length, 0);
+  assert.strictEqual(drawnFor(toursN(1)).length, 2);
+  assert.strictEqual(drawnFor(toursN(2)).length, 4);
+  assert.strictEqual(drawnFor(toursN(3, 0)).length, 0, '試合 0 (wins + losses = 0) は数えない');
+  assert.strictEqual(drawnFor([{ date: '2026-02-01', event_id: 5, wins: 0, losses: 1 }]).length, 2, '負けだけでも 1 試合');
+  assert.strictEqual(drawnFor([{ date: '2026-02-01', event_id: 6, parent_event_id: 5, wins: 3, losses: 1 }]).length, 0, '下位クラスの仮想大会');
+  assert.deepStrictEqual(drawnFor(toursN(1)), drawnFor(toursN(1)), '同じ入力なら同じ結果');
+});
+
+test('card_put: 1 試合以上した大会 1 つで引いた 2 つは保存でき、引いていないもの・試合 0 なら title_not_owned', async () => {
+  const tours = toursN(1);
   const drawn = drawnFor(tours);
-  assert.strictEqual(drawn.length, 1);
+  assert.strictEqual(drawn.length, 2);
   const id = drawn[0];
   const slot = usableIn(titleById('ja', id), 'pre') ? 'pre' : 'post';
   const put = (x) => withTitle(slot === 'pre' ? { pre: x, post: null } : { pre: null, post: x });
@@ -236,23 +247,24 @@ test('card_put: 大会 10 回で引いた二つ名は保存でき、持ってい
   assert.strictEqual(ok1.ok, true, JSON.stringify(ok1));
   // 同じ位置に使えるランダム解放で、引いていないもの
   const other = ['ja-0002', 'ja-0003', 'ja-0004', 'ja-0006', 'ja-0007', 'ja-0008']
-    .find((x) => x !== id && usableIn(titleById('ja', x), slot));
+    .find((x) => !drawn.includes(x) && usableIn(titleById('ja', x), slot));
+  assert.ok(other, '引いていない候補がある');
   e = titleEnv(tours);
   token = await loginToken(e);
   const ng = await post(e, { action: 'card_put', token, settings: put(other) });
   assert.strictEqual(ng.error.code, 'title_not_owned');
   assert.strictEqual(e.store.cards.size, 0);
-  // 大会 9 回ではランダムは持っていない
-  e = titleEnv(toursN(9));
+  // 試合 0 の大会ばかりならランダムは持っていない
+  e = titleEnv(toursN(5, 0));
   token = await loginToken(e);
   assert.strictEqual((await post(e, { action: 'card_put', token, settings: put(id) })).error.code, 'title_not_owned');
 });
 
 test('card_put: どちらでも使える二つ名 (both、ja-0003) は前半にも後半にも置ける。同じ id を前後両方に置くのも今は許す', async () => {
   // ja-0003 を引く大会の数を探す (同じ入力なら必ず同じ結果)
-  let n = 10;
-  while (n <= 200 && !ownedTitles('ja', '4242', toursN(n)).has('ja-0003')) n += 10;
-  assert.ok(n <= 200, 'ja-0003 を引ける');
+  let n = 1;
+  while (n <= 20 && !ownedTitles('ja', '4242', toursN(n)).has('ja-0003')) n += 1;
+  assert.ok(n <= 20, 'ja-0003 を引ける');
   for (const title of [{ pre: 'ja-0003', post: 'ja-0005' }, { pre: 'ja-0001', post: 'ja-0003' }, { pre: 'ja-0003', post: 'ja-0003' }]) {
     const e = titleEnv(toursN(n));
     const token = await loginToken(e);

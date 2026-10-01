@@ -8,7 +8,7 @@ import * as T from '../../../site/js/titles.js';
 
 export interface Title { id: string; part: 'pre' | 'post' | 'both'; text: string; unlock: string; added: string; retired?: string }
 export interface OwnedTitle { at: string; how: string }
-export interface TitleTour { date?: string; event_id?: number | string; parent_event_id?: number | string | null }
+export interface TitleTour { date?: string; event_id?: number | string; parent_event_id?: number | string | null; wins?: number; losses?: number }
 
 /** 一覧から 1 つ (無ければ null)。 */
 export const titleById: (lang: string, id: string | null | undefined) => Title | null = T.titleById;
