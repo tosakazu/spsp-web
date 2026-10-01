@@ -10,13 +10,16 @@ import { escapeHtml } from './html.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
 
-/** カードの色 (Figma「work」ページの色違い Frame 18〜21 と「submit」の赤)。変えるのはアクセント色 (--pc-red) だけ */
+/** カードの色 (Figma「work」ページの色違い Frame 18〜21・34・36・41 と「submit」の赤)。変えるのはアクセント色 (--pc-red) だけ */
 export const COLORS = [
   { id: 'red', hex: '#df1b1b' },
   { id: 'blue', hex: '#1b25df' },
   { id: 'green', hex: '#1ca01e' },
   { id: 'purple', hex: '#ac17ec' },
   { id: 'orange', hex: '#fa7d00' },
+  { id: 'teal', hex: '#04b6aa' },
+  { id: 'yellow', hex: '#ffc800' },
+  { id: 'gray', hex: '#6b6b70' },
 ];
 /** テンプレート (今は Figma「submit」の 1 種類) */
 export const TEMPLATES = [{ id: 'standard' }];
