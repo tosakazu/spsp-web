@@ -10,9 +10,12 @@
  */
 import type { Config } from '../config.ts';
 import {
-  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
+  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_TITLE_FETCH_TIMEOUT_MS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
 } from '../config.ts';
 import type { Store } from '../store.ts';
+import type { TitleTour } from './titles.ts';
+import { ownedTitles, titleById } from './titles.ts';
+import type { DataFetch } from './vote.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
@@ -27,7 +30,12 @@ export interface CardSettings {
   color: string;
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
+  title: CardTitle | null;   // 二つ名 (前半・後半の id)。null = 付けない
 }
+
+/** 二つ名の id (site/js/titles.js の一覧。言語-前後-連番)。 */
+export interface CardTitle { pre: string | null; post: string | null }
+const TITLE_ID = /^[a-z]{2}-[ps]-\d{4}$/;
 
 /**
  * settings を確かめて正規化したものを返す。形が違えば null。
@@ -39,7 +47,7 @@ export interface CardSettings {
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -58,7 +66,51 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     if (!/^[1-9]\d{0,11}$/.test(t)) return null;
     tour = Number(t);
   }
-  return { template: o.template, color: o.color, ach, tour };
+  let title: CardTitle | null = null;
+  if (o.title !== undefined && o.title !== null) {
+    if (typeof o.title !== 'object' || Array.isArray(o.title)) return null;
+    const tt = o.title as Record<string, unknown>;
+    for (const k of Object.keys(tt)) if (k !== 'pre' && k !== 'post') return null;
+    const one = (x: unknown): string | null | undefined => (x === undefined || x === null ? null
+      : typeof x === 'string' && TITLE_ID.test(x) ? x : undefined);
+    const pre = one(tt.pre);
+    const post = one(tt.post);
+    if (pre === undefined || post === undefined) return null;
+    title = pre === null && post === null ? null : { pre, post };   // 両方 null なら付けない
+  }
+  return { template: o.template, color: o.color, ach, tour, title };
+}
+
+/** 二つ名の id が一覧にあり、前半は part 'pre'・後半は 'post' か。 */
+export function titleIdsValid(lang: string, t: CardTitle): boolean {
+  if (t.pre !== null) { const x = titleById(lang, t.pre); if (!x || x.part !== 'pre') return false; }
+  if (t.post !== null) { const x = titleById(lang, t.post); if (!x || x.part !== 'post') return false; }
+  return true;
+}
+
+/**
+ * 公開データの players/<uid>.json の tournaments (二つ名を持っているかの計算用)。
+ * 404 (SPSP にデータが無い選手) は大会 0 件 (= 最初から持っている二つ名だけ)。それ以外の失敗・時間切れは null。
+ */
+export async function fetchPlayerTournaments(dataFetch: DataFetch, uid: string): Promise<TitleTour[] | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), CARD_TITLE_FETCH_TIMEOUT_MS); });
+  const read = (async (): Promise<TitleTour[] | null> => {
+    try {
+      const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
+      if (res.status === 404) return [];
+      if (res.status !== 200) return null;
+      const rec = await res.json() as { tournaments?: unknown };
+      return Array.isArray(rec && rec.tournaments) ? rec.tournaments as TitleTour[] : [];
+    } catch (_) {
+      return null;
+    }
+  })();
+  try {
+    return await Promise.race([read, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /** uid の形 (start.gg のユーザー ID = 数字)。 */
@@ -95,7 +147,7 @@ export async function handleCardGet(store: Store, req: Record<string, unknown>):
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
-export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+export async function handleCardPut(cfg: Config, store: Store, dataFetch: DataFetch, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const sess = await verifySessionToken(cfg, req.token, now);
   if (!sess) return err('invalid_session', MSG_INVALID_SESSION);
   const uid = validUid(sess.id);
@@ -105,6 +157,20 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
   if (req.settings !== null) {
     settings = validateCardSettings(req.settings);
     if (!settings) return err('bad_settings', 'カードの設定の形式が不正です。');
+  }
+
+  // 二つ名: 一覧にある id か (前後も合っているか) → その選手が持っているか (公開データの大会から計算。読めなければ保存しない)
+  if (settings && settings.title) {
+    const lang = cfg.titleLang || 'ja';
+    if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
+    const tours = await fetchPlayerTournaments(dataFetch, uid);
+    if (tours === null) {
+      return err('title_unverified', '二つ名を持っているか確認できませんでした。時間をおいてやり直してください。', 'title_fetch');
+    }
+    const owned = ownedTitles(lang, uid, tours);
+    for (const id of [settings.title.pre, settings.title.post]) {
+      if (id !== null && !owned.has(id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
+    }
   }
 
   const updatedAt = formatIso(now, cfg.tsOffsetMin);

@@ -74,7 +74,7 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'card_get':
         return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'card_put':
-        res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
+        res = await handleCardPut(ctx.cfg, ctx.store, ctx.dataFetch, r, now); break;
       case 'class_create':
         res = await handleClassCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_mine':
@@ -124,7 +124,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     if (sess) uid = sess.id;
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
-  const NOTE_ACTIONS = ['login', 'post', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
+  const NOTE_ACTIONS = ['login', 'post', 'card_put', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

@@ -7,7 +7,7 @@ import { issueSessionToken } from '../src/api/session.ts';
 import { CARD_RATE_MIN_INTERVAL_MS, CARD_RATE_MAX_PER_DAY } from '../src/config.ts';
 
 const env = (o) => makeEnv(Object.assign({ token: OK_TOKEN, user: OK_USER }, o || {}));
-const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718 };
+const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718, title: null };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限切れは invalid_session で記録しない', async () => {
@@ -31,8 +31,8 @@ test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限
 
 test('validateCardSettings: 許す形と弾く形', () => {
   assert.deepStrictEqual(plain(validateCardSettings(GOOD)), GOOD);
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null });
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null, title: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null, title: null });
   for (const c of ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray']) assert.ok(validateCardSettings({ template: 'standard', color: c, ach: null }));
   const bads = [
     null, 'x', [], {},
@@ -162,7 +162,7 @@ test('card_put: tour を文字列で送っても整数で保存・返す', async
   const e = env();
   const token = await loginToken(e);
   const put = await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'red', tour: '1702406' } });
-  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406 });
+  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406, title: null });
   assert.strictEqual(JSON.parse(e.store.cards.get('4242').settings).tour, 1702406);
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings, put.settings);
 });
@@ -180,4 +180,123 @@ test('card_put: 追加の色 (teal / yellow / gray) も保存できる。それ�
   }
   e.nowMs = t;
   assert.strictEqual((await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'grey' } })).error.code, 'bad_settings');
+});
+
+// ── 二つ名 (title) ── site/js/titles.js の一覧と ownedTitles をそのまま使う
+import { ownedTitles, titleById, titleLang } from '../src/api/titles.ts';
+
+/** 選手データ (players/<uid>.json) の応答を決めた env。tours = 大会の配列 / null = 404 / 'fail' = 500 / 'throw' = 例外 / 'hang' = 返らない */
+function titleEnv(tours) {
+  let player;
+  if (tours === null) player = { status: 404, body: {} };
+  else if (tours === 'fail') player = { status: 500, body: {} };
+  else if (tours === 'throw') player = null;
+  else player = { status: 200, body: { user_id: 4242, tournaments: tours } };
+  const e = env({ player });
+  if (tours === 'hang') e.ctx.dataFetch = () => { e.hangStarted = true; return new Promise(() => {}); };
+  return e;
+}
+const toursN = (n) => Array.from({ length: n }, (_, i) => ({ date: '2026-0' + (1 + Math.floor(i / 28)) + '-' + String(1 + (i % 28)).padStart(2, '0'), event_id: 1000 + i }));
+const withTitle = (title) => ({ template: 'standard', color: 'red', title });
+/** uid 4242 が 10 大会で引くランダムの二つ名 (前半か後半か、どちらか 1 つ) */
+function drawnFor(tours) { return [...ownedTitles('ja', '4242', tours)].filter(([, v]) => v.how === 'random').map(([k]) => k); }
+
+test('titles: 一覧は site/js/titles.js のもの、言語は地域から (北米は en)', () => {
+  assert.strictEqual(titleById('ja', 'ja-p-0001').part, 'pre');
+  assert.strictEqual(titleById('ja', 'ja-s-0001').part, 'post');
+  assert.strictEqual(titleById('ja', 'ja-x-9999'), null);
+  assert.strictEqual(titleLang('/na'), 'en');
+  assert.strictEqual(titleLang('/jp'), 'ja');
+  assert.strictEqual(titleLang(undefined), 'ja');
+});
+
+test('card_put: 最初から持っている二つ名は保存でき、card_get がそのまま返す', async () => {
+  const e = titleEnv([]);
+  const token = await loginToken(e);
+  const r = await post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-p-0001', post: 'ja-s-0001' }) });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual(r.settings.title, { pre: 'ja-p-0001', post: 'ja-s-0001' });
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.title, { pre: 'ja-p-0001', post: 'ja-s-0001' });
+  assert.ok(e.fetches.some((f) => f.url === 'data:/players/4242.json'), '公開データを読む');
+});
+
+test('card_put: 大会 10 回で引いた二つ名は保存でき、持っていないものは title_not_owned', async () => {
+  const tours = toursN(10);
+  const drawn = drawnFor(tours);
+  assert.strictEqual(drawn.length, 1);
+  const id = drawn[0];
+  const isPre = titleById('ja', id).part === 'pre';
+  let e = titleEnv(tours);
+  let token = await loginToken(e);
+  const ok1 = await post(e, { action: 'card_put', token, settings: withTitle(isPre ? { pre: id, post: null } : { pre: null, post: id }) });
+  assert.strictEqual(ok1.ok, true, JSON.stringify(ok1));
+  // 同じ側のランダム解放で、引いていないもの
+  const other = (isPre ? ['ja-p-0002', 'ja-p-0003', 'ja-p-0004'] : ['ja-s-0002', 'ja-s-0003', 'ja-s-0004']).find((x) => x !== id);
+  e = titleEnv(tours);
+  token = await loginToken(e);
+  const ng = await post(e, { action: 'card_put', token, settings: withTitle(isPre ? { pre: other, post: null } : { pre: null, post: other }) });
+  assert.strictEqual(ng.error.code, 'title_not_owned');
+  assert.strictEqual(e.store.cards.size, 0);
+  // 大会 9 回ではランダムは持っていない
+  e = titleEnv(toursN(9));
+  token = await loginToken(e);
+  assert.strictEqual((await post(e, { action: 'card_put', token, settings: withTitle(isPre ? { pre: id, post: null } : { pre: null, post: id }) })).error.code, 'title_not_owned');
+});
+
+test('card_put: 前後の取り違え・一覧に無い id・形の違いは bad_settings (選手データは読まない)', async () => {
+  for (const title of [
+    { pre: 'ja-s-0001', post: null }, { pre: null, post: 'ja-p-0001' },
+    { pre: 'ja-p-9999', post: null }, { pre: 'en-p-0001', post: null },
+  ]) {
+    const e = titleEnv([]);
+    const token = await loginToken(e);
+    const before = e.fetches.length;
+    const r = await post(e, { action: 'card_put', token, settings: withTitle(title) });
+    assert.strictEqual(r.error.code, 'bad_settings', JSON.stringify(title));
+    assert.strictEqual(e.fetches.length, before, '選手データは読まない');
+  }
+  for (const title of [{ pre: 'JA-p-0001', post: null }, { pre: 'ja-p-1', post: null }, { pre: 1, post: null }, { pre: null, post: null, x: 1 }, 'ja-p-0001', []]) {
+    assert.strictEqual(validateCardSettings(withTitle(title)), null, JSON.stringify(title));
+  }
+});
+
+test('card_put: title が null・両方 null・省略なら付けない (選手データは読まない)', async () => {
+  for (const title of [null, { pre: null, post: null }, undefined]) {
+    const e = titleEnv('throw');
+    const token = await loginToken(e);
+    const s = { template: 'standard', color: 'red' };
+    if (title !== undefined) s.title = title;
+    const r = await post(e, { action: 'card_put', token, settings: s });
+    assert.strictEqual(r.ok, true, JSON.stringify(title));
+    assert.strictEqual(r.settings.title, null);
+    assert.ok(!e.fetches.some((f) => String(f.url).includes('/players/')));
+  }
+});
+
+test('card_put: 選手データが読めなければ title_unverified で保存しない (失敗・例外・時間切れ)。404 は大会 0 件として扱う', async () => {
+  for (const tours of ['fail', 'throw']) {
+    const e = titleEnv(tours);
+    const token = await loginToken(e);
+    const r = await post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-p-0001', post: null }) });
+    assert.strictEqual(r.error.code, 'title_unverified', String(tours));
+    assert.strictEqual(e.store.cards.size, 0);
+  }
+  const e404 = titleEnv(null);
+  const t404 = await loginToken(e404);
+  assert.strictEqual((await post(e404, { action: 'card_put', token: t404, settings: withTitle({ pre: 'ja-p-0001', post: null }) })).ok, true);
+});
+
+test('card_put: 選手データが 5 秒返らなければ title_unverified', async (t) => {
+  const e = titleEnv('hang');
+  const token = await loginToken(e);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const p = post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-p-0001', post: null }) });
+  // 選手データを読みに行く (= 時間切れの setTimeout が仕掛けられる) まで待ってから 5 秒進める。
+  // その前のトークン検証 (crypto.subtle) は実時間で進むので、setImmediate で待つ
+  for (let i = 0; i < 100000 && !e.hangStarted; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(e.hangStarted);
+  await new Promise((r) => setImmediate(r));
+  t.mock.timers.tick(4999);
+  t.mock.timers.tick(1);
+  assert.strictEqual((await p).error.code, 'title_unverified');
 });
