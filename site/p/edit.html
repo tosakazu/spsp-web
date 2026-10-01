@@ -53,8 +53,13 @@
       <!-- 二つ名: 前半・後半を、持っているものから選ぶ (「なし」も可)。新しく獲得したものに NEW (js/titles.js・js/title_notice.js) -->
       <section class="ce-sec">
         <h2 data-i18n="card_edit.title">二つ名</h2>
-        <div class="ce-title-row"><span class="ce-title-lbl" data-i18n="card_edit.title_pre">前半</span><div class="ce-title-chips" id="ce-title-pre"></div></div>
-        <div class="ce-title-row"><span class="ce-title-lbl" data-i18n="card_edit.title_post">後半</span><div class="ce-title-chips" id="ce-title-post"></div></div>
+        <!-- 前半・後半それぞれ縦に回すリール (真ん中の帯に止まったものを選ぶ。項目を押すとそこまで回る) -->
+        <div class="ce-reels">
+          <div class="ce-reel-col"><div class="ce-reel-lbl" data-i18n="card_edit.title_pre">前半</div>
+            <div class="ce-reel"><div class="ce-reel-band" aria-hidden="true"></div><div class="ce-reel-scroll" id="ce-title-pre" role="listbox" tabindex="0" data-i18n-attr="aria-label:card_edit.title_pre"></div></div></div>
+          <div class="ce-reel-col"><div class="ce-reel-lbl" data-i18n="card_edit.title_post">後半</div>
+            <div class="ce-reel"><div class="ce-reel-band" aria-hidden="true"></div><div class="ce-reel-scroll" id="ce-title-post" role="listbox" tabindex="0" data-i18n-attr="aria-label:card_edit.title_post"></div></div></div>
+        </div>
         <div class="ce-title-note" id="ce-title-note"></div>
       </section>
       <!-- 実績と大会は最初は畳んでおく (見出しの右に今の選択) -->

@@ -142,36 +142,71 @@ async function main() {
     paintTours();
   }
 
-  /** 二つ名の札: 「なし」+ 持っているもの (一覧の順)。選んだものは今の色の枠。
-   * 札は最初に 1 回だけ作り、あとは選択の印と色だけ変える (作り直すと欄の高さやスクロールが動いて画面がずれる) @param {string} hex */
+  /** 二つ名のリール: 「なし」+ 持っているもの (一覧の順)。真ん中の帯に止まったものが選ばれる。
+   * 項目は最初に 1 回だけ作り、あとは選択の印と色だけ変える (作り直すとスクロールが動いて画面がずれる) @param {string} hex */
+  const REEL_H = 40;
   function paintTitles(hex) {
     for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
       const cur = st.title ? st.title[part] : null;
       const box = $('ce-title-' + part);
-      if (box.childElementCount) {
-        for (const b of /** @type {HTMLElement[]} */ (Array.from(box.children))) {
-          const on = (b.getAttribute('data-tid') || null) === cur;
-          b.classList.toggle('on', on);
-          b.style.setProperty('--c', hex);
-        }
-        continue;
+      /** @type {HTMLElement} */ (box.closest('.ce-reel')).style.setProperty('--c', hex);
+      if (!box.childElementCount) {
+        const mine = titleList.filter(x => x.part === part && owned.has(x.id));
+        box.innerHTML =
+          `<div class="ce-reel-item none" role="option" data-tid="">${escapeHtml(i18n('card_edit.title_none'))}</div>` +
+          mine.map(x => `<div class="ce-reel-item" role="option" data-tid="${escapeHtml(x.id)}"><span class="ce-reel-text">${escapeHtml(x.text)}</span>${
+            newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</div>`).join('');
       }
-      const mine = titleList.filter(x => x.part === part && owned.has(x.id));
-      box.innerHTML =
-        `<button type="button" class="ce-title-chip none${!cur ? ' on' : ''}" data-part="${part}" data-tid="" style="--c:${hex}">${escapeHtml(i18n('card_edit.title_none'))}</button>` +
-        mine.map(x => `<button type="button" class="ce-title-chip${cur === x.id ? ' on' : ''}" data-part="${part}" data-tid="${escapeHtml(x.id)}" style="--c:${hex}">${escapeHtml(x.text)}${
-          newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</button>`).join('');
+      // リールの真ん中が今の選択と違えば (最初・「デフォルトに戻す」など、リール以外で変わったとき) そこまで回す
+      const items = Array.from(box.children);
+      const want = Math.max(0, items.findIndex(c => (c.getAttribute('data-tid') || null) === cur));
+      const centered = Math.round(box.scrollTop / REEL_H);
+      if (centered !== want && !box.dataset.spinning) box.scrollTop = want * REEL_H;
+      for (const c of /** @type {HTMLElement[]} */ (Array.from(box.children))) {
+        const on = (c.getAttribute('data-tid') || null) === cur;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-selected', String(on));
+      }
     }
     const have = titleList.filter(x => owned.has(x.id)).length;
     $('ce-title-note').textContent = i18n('card_edit.title_note', { have, total: titleList.length, every: RANDOM_EVERY });
   }
-  for (const part of ['pre', 'post']) {
-    $('ce-title-' + part).addEventListener('click', (/** @type {MouseEvent} */ e) => {
-      const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-tid]'));
-      if (!b) return;
-      const next = { pre: st.title ? st.title.pre : null, post: st.title ? st.title.post : null };
-      next[/** @type {'pre' | 'post'} */ (part)] = b.getAttribute('data-tid') || null;
-      update({ title: next.pre || next.post ? next : null });
+  /** 真ん中に止まった項目を選ぶ @param {'pre' | 'post'} part */
+  const pickCentered = part => {
+    const box = $('ce-title-' + part);
+    delete box.dataset.spinning;
+    const items = Array.from(box.children);
+    const idx = Math.min(items.length - 1, Math.max(0, Math.round(box.scrollTop / REEL_H)));
+    const tid = items[idx] ? items[idx].getAttribute('data-tid') || null : null;
+    const cur = st.title ? st.title[part] : null;
+    if (tid === cur) return;
+    const next = { pre: st.title ? st.title.pre : null, post: st.title ? st.title.post : null };
+    next[part] = tid;
+    update({ title: next.pre || next.post ? next : null });
+  };
+  for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
+    const box = $('ce-title-' + part);
+    // 回し終わったら選ぶ (scrollend が無いブラウザは、止まってから 150ms 後)
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let timer = null;
+    box.addEventListener('scroll', () => {
+      box.dataset.spinning = '1';   // 回している間は、描き直しでリールを動かさない
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => pickCentered(part), 150);
+    }, { passive: true });
+    box.addEventListener('scrollend', () => { if (timer) clearTimeout(timer); pickCentered(part); });
+    // 項目を押したらそこまで回す
+    box.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+      const it = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('.ce-reel-item'));
+      if (!it) return;
+      const idx = Array.from(box.children).indexOf(it);
+      box.scrollTo({ top: idx * REEL_H, behavior: 'smooth' });
+    });
+    // キーボード: 上下で 1 つずつ
+    box.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      box.scrollBy({ top: e.key === 'ArrowDown' ? REEL_H : -REEL_H, behavior: 'smooth' });
     });
   }
 
