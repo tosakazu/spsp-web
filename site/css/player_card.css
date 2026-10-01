@@ -1,6 +1,8 @@
 /* player_card.css — プレイヤーページ最上部の選手カード (js/player_card.js)。
    Figma「submit」(514×333) の座標をそのまま使い、.pc-in を表示幅に合わせて transform: scale で縮める。
    文字の top はデザインの字面 (cap) 上端から font-size × 0.2 ほど上にずらしている (line-height: 1 の箱の上端) */
+/* 二つ名のフォント: コーポレート・ロゴ ver2 Bold (SIL OFL 1.1、site/fonts/OFL.txt)。二つ名の文字だけに絞った版 (tools/fonts/build_title_font.mjs) */
+@font-face { font-family: "SPSP Title"; src: url("../fonts/corporate-logo-title.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 .pcard {
   /* カードはデザインどおりの色で固定 (ブラウザの強制ダークモードでもカードだけは反転させない。ページのほかの部分はブラウザに任せる) */
   color-scheme: only light; forced-color-adjust: none;
@@ -19,27 +21,30 @@
 
 /* ── 上の帯 ── */
 .pc-head { position: absolute; left: 0; top: 0; width: 514px; height: 89px; background: var(--pc-red); color: #fff; }
-.pc-loc { position: absolute; left: 12px; top: 12px; height: 14.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* 二つ名 (Figma ver.1.5: 左上、16px)。地域は右上へ移った */
+.pc-title { position: absolute; left: 13px; top: 11px; height: 17px; display: flex; align-items: flex-end; gap: 4px; white-space: nowrap;
+  font-family: "SPSP Title", "IBM Plex Sans JP", sans-serif; font-weight: 700; font-size: 16px; line-height: 1; color: #fff; }
+.pc-loc { position: absolute; right: 12px; top: 12px; height: 14.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .pc-pin { width: 9.37px; height: 14.5px; fill: var(--pc-light); flex: none; }
 .pc-loc-name { font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 15px; color: var(--pc-light); text-transform: uppercase; }
 .pc-loc-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 13px; color: var(--pc-light); opacity: .81; margin-left: -3px; align-self: flex-end; margin-bottom: 1px; }
-.pc-name { position: absolute; left: 12px; top: 26.5px; width: 377px; height: 62.5px; display: flex; align-items: center; font-size: 43px; }   /* 場所の行の下から帯の下までの真ん中 (上下の余白をそろえる) */
+.pc-name { position: absolute; left: 12px; top: 0; width: 377px; height: 89px; display: flex; align-items: center; font-size: 43px; }   /* 二つ名が無ければ帯の上下の真ん中 */
+/* 二つ名があるときは二つ名の下: 下ぞろえで、文字の下 (ベースライン) を Figma の位置 (帯の上から約 72px) にそろえる。
+   43px・行の高さ 1.2 の箱の上からベースラインまで約 42px → 箱の下を 81.6px に */
+.pc-titled .pc-name { top: 28px; height: 53.6px; align-items: flex-end; }
 .pc-name-t { display: block; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 .pc-name.pc-wrap .pc-name-t, .pc-tour.pc-wrap .pc-tour-a {
   white-space: normal; line-height: 1.12; word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.pc-date { position: absolute; right: 12px; top: 13px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
-.pc-date-lbl { font-size: 10px; }
-.pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 11px; }
-.pc-chars { position: absolute; right: 12px; top: 41px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }   /* 列は右に寄せ、行は左ぞろえ */
-.pc-char { display: flex; align-items: center; gap: 3px; height: 13px; font-size: 12px; white-space: nowrap; text-transform: uppercase; }
+.pc-chars { position: absolute; right: 12px; top: 45px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }   /* 右ぞろえ (Figma ver.1.5) */
+.pc-char { display: flex; align-items: center; gap: 3px; height: 15px; font-size: 14px; white-space: nowrap; text-transform: uppercase; }
 .pc-char-sq { width: 10px; height: 13px; background: #fff; flex: none; }   /* 絵文字の無いキャラだけ (デザインの ■) */
 .pc-char-emoji { font-size: 1em; line-height: 1; flex: none; }   /* キャラの絵文字 (data/char_emoji.json) */
 .pc-char-name { font-weight: 500; }
 .pc-char.main .pc-char-name { font-weight: 700; }
 .pc-char.pc-wrap { height: auto; align-items: flex-start; }
-.pc-char.pc-wrap .pc-char-name { text-align: left; line-height: 1.08; }   /* 改行は js が入れる (幅は長い方の行に合う) */
+.pc-char.pc-wrap .pc-char-name { text-align: right; line-height: 1.08; }   /* 改行は js が入れる (幅は長い方の行に合う) */
 .pc-char-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: .786em; opacity: .9; margin-left: -1px; align-self: flex-end; }
 
 /* ── 主な実績 (左上の箱) ── */
@@ -97,6 +102,10 @@
   text-transform: uppercase; color: #c3c3c3; opacity: .45; white-space: nowrap; pointer-events: none;
 }
 .pc-overall-lbl { position: absolute; left: 14px; top: 14px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
+/* 評価日は総合評価の見出しの下 (Figma ver.1.5) */
+.pc-date { position: absolute; left: 14px; top: 37px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
+.pc-date-lbl { font-size: 9px; }
+.pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 10px; }
 .pc-pills { position: absolute; right: 8px; top: 13px; display: flex; gap: 2px; font-size: 14px; white-space: nowrap; }
 .pc-pill {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;

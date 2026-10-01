@@ -31,7 +31,8 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 /** @typedef {{ name: string, href?: string, date?: string, place?: number | null, placeUnit: string, nent?: number | null, dq?: boolean,
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
- * @typedef {{ name: string, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
+ * title = 二つ名 (前半・後半の文字。どちらか・両方が空でもよい。無ければ名前を帯の上下の真ん中に)
+ * @typedef {{ name: string, title?: { pre: string, post: string } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
  *              totalTournaments: number, totalMatches: number,
@@ -109,12 +110,16 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
+  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
+  // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
+  const title = hasTitle && m.title ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
+    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
-    <div class="pc-head">
+    <div class="pc-head${hasTitle ? ' pc-titled' : ''}">
+      ${title}
       ${loc}
       <div class="pc-name"><span class="pc-name-t">${escapeHtml(m.name)}</span></div>
-      <div class="pc-date"><span class="pc-date-lbl">${escapeHtml(L.evalDate)}</span><span class="pc-date-v">${escapeHtml(m.evalDate || '')}</span></div>
       <div class="pc-chars">${chars}</div>
     </div>
     <div class="pc-ach"><div class="pc-label">${escapeHtml(L.achievements)}</div><div class="pc-ach-list">${ach}</div></div>
@@ -122,6 +127,7 @@ function cardHtml(m) {
     <div class="pc-overall">
       <div class="pc-bgword">Overall<br>Rank</div>
       <div class="pc-overall-lbl">${escapeHtml(L.overall)}</div>
+      <div class="pc-date"><span class="pc-date-lbl">${escapeHtml(L.evalDate)}</span><span class="pc-date-v">${escapeHtml(m.evalDate || '')}</span></div>
       <div class="pc-pills">${pills}</div>
       <div class="pc-big"><span class="pc-big-h">#</span><span class="pc-big-n">${m.rank != null ? m.rank : '—'}</span></div>
       <div class="pc-tot pc-tot-t"><span class="pc-tot-lbl">Total Tournaments</span><span class="pc-tot-line"></span><span class="pc-tot-v">${m.totalTournaments.toLocaleString('en-US')}</span></div>
@@ -178,8 +184,11 @@ function splitTwo(s) {
 /** @param {HTMLElement} root */
 function fitAll(root) {
   const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
+  const title = q('.pc-title');
+  if (title) fitWidth(title, 330, 16, 9);   // 二つ名は 1 行 (右上の地域の手前まで)
   const name = q('.pc-name');
-  if (name) fitTwoLines(name, 377, 54, 43, 26, 14);
+  // 二つ名があるときは名前の箱が二つ名の下から (高さ 53.6)。2 行にしても二つ名に重ならない高さまで
+  if (name) fitTwoLines(name, 377, root.querySelector('.pc-titled') ? 52 : 54, 43, 26, 14);
   const tour = q('.pc-tour');
   if (tour) fitTwoLines(tour, 207, 34, 18, 13, 9);
   const big = q('.pc-big');
@@ -191,9 +200,9 @@ function fitAll(root) {
   const perf = q('.pc-perf');
   if (perf) fitWidth(perf, 106, 15, 8);
   const pills = q('.pc-pills');
-  if (pills) fitWidth(pills, 186, 14, 9);
-  // キャラ名は 12px (デザインの 14px より小さめ) から 10px まで詰めて、それでも入らなければ 2 行にして 12px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
-  // 2 行のキャラがあって帯の下にはみ出すなら、キャラの列を上へずらす (評価日の下まで)
+  if (pills) fitWidth(pills, 186, 18, 9);
+  // キャラ名は 14px (Figma ver.1.5) から 10px まで詰めて、それでも入らなければ 2 行にして 12px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
+  // 2 行のキャラがあって帯の下にはみ出すなら、キャラの列を上へずらす (右上の地域の下まで)
   // 折り返しは自分で改行を入れる (CSS の折り返しだと名前の箱が最大幅のままになり、■ と文字が離れる)
   //   切れ目の無い名前 (「ドンキーコング」) は 1 行のまま 8px まで詰める。
   //   2 つとも 2 行で帯に入りきらないときは、2 つ目 (サブキャラ) を 1 行に戻す
@@ -202,7 +211,7 @@ function fitAll(root) {
   const wrapped = [];
   for (const c of charEls) {
     const nameEl = /** @type {HTMLElement | null} */ (c.querySelector('.pc-char-name'));
-    if (!nameEl || fitWidth(c, 108, 12, 10)) continue;
+    if (!nameEl || fitWidth(c, 108, 14, 10)) continue;
     const text = nameEl.textContent || '';
     const parts = splitTwo(text);
     if (!parts) { fitWidth(c, 108, 10, 8); continue; }
@@ -213,7 +222,7 @@ function fitAll(root) {
   }
   const chars = q('.pc-chars');
   if (chars) {
-    const MAX_H = 85 - 29;   // 評価日の下 (29) から帯の下 (89) の少し上まで
+    const MAX_H = 85 - 33;   // 地域の下 (33) から帯の下 (89) の少し上まで
     if (chars.offsetHeight > MAX_H && wrapped.length > 1) {
       const last = /** @type {{ el: HTMLElement, nameEl: HTMLElement, text: string }} */ (wrapped[wrapped.length - 1]);
       last.nameEl.textContent = last.text;
@@ -221,10 +230,10 @@ function fitAll(root) {
       fitWidth(last.el, 108, 10, 7);
     }
     // メインとサブで文字の大きさがちぐはぐにならないよう、小さい方に揃える
-    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 12);
+    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 14);
     const common = Math.min(...sizes);
     charEls.forEach(c => { c.style.fontSize = common + 'px'; });
-    chars.style.top = Math.max(29, Math.min(41, 85 - chars.offsetHeight)) + 'px';
+    chars.style.top = Math.max(33, Math.min(45, 85 - chars.offsetHeight)) + 'px';
   }
   // 実績: 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
   const list = q('.pc-ach-list');

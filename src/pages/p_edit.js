@@ -11,7 +11,9 @@ import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
-import { loadCardData, buildCardModel, cardAchievements, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import SpspTitleNotice from '../../site/js/title_notice.js';
+import { TITLES, RANDOM_EVERY } from '../../site/js/titles.js';
+import { loadCardData, buildCardModel, cardAchievements, titleLang, ownedTitlesOf, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -106,6 +108,11 @@ async function main() {
   /** @type {{ fits: (labels: string[]) => boolean, destroy: () => void } | null} */
   let tester = null;
   const labelOf = new Map(all.map(a => [a.key, a.label]));
+  // 二つ名: 持っているもの (出た大会から計算) と、まだ見ていない新しいもの (NEW)。開いた時点で既読にする (NEW はこのページを開いている間だけ出す)
+  const owned = ownedTitlesOf(data);
+  const newIds = new Set(SpspTitleNotice.newSince(owned, uid));
+  SpspTitleNotice.markSeen(uid, owned);
+  const titleList = TITLES[titleLang()] || [];
 
   function paint() {
     const hex = (COLORS.find(c => c.id === st.color) || COLORS[0]).hex;
@@ -114,6 +121,7 @@ async function main() {
       `<span class="ce-tpl-head"></span><span class="ce-tpl-box"></span><span class="ce-tpl-side"></span></button>`).join('');
     colEl.innerHTML = COLORS.map(c =>
       `<button type="button" class="ce-color${c.id === st.color ? ' on' : ''}" data-color="${c.id}" style="--c:${c.hex}" aria-label="${escapeHtml(i18n('card_edit.color.' + c.id))}" aria-pressed="${c.id === st.color}"></button>`).join('');
+    paintTitles(hex);
     const picked = (st.ach || []).filter(k => labelOf.has(k));
     const pickedLabels = picked.map(k => /** @type {string} */ (labelOf.get(k)));
     achEl.innerHTML = all.map(a => {
@@ -132,6 +140,29 @@ async function main() {
     const tsel = st.tour != null ? tours.find(t => t.event_id === st.tour) : null;
     $('ce-tour-sum').textContent = tsel ? String(tsel.name || '') : i18n('card_edit.auto');
     paintTours();
+  }
+
+  /** 二つ名の札: 「なし」+ 持っているもの (一覧の順)。選んだものは今の色の枠 @param {string} hex */
+  function paintTitles(hex) {
+    for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
+      const cur = st.title ? st.title[part] : null;
+      const mine = titleList.filter(x => x.part === part && owned.has(x.id));
+      $('ce-title-' + part).innerHTML =
+        `<button type="button" class="ce-title-chip none${!cur ? ' on' : ''}" data-part="${part}" data-tid="" style="--c:${hex}">${escapeHtml(i18n('card_edit.title_none'))}</button>` +
+        mine.map(x => `<button type="button" class="ce-title-chip${cur === x.id ? ' on' : ''}" data-part="${part}" data-tid="${escapeHtml(x.id)}" style="--c:${hex}">${escapeHtml(x.text)}${
+          newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</button>`).join('');
+    }
+    const have = titleList.filter(x => owned.has(x.id)).length;
+    $('ce-title-note').textContent = i18n('card_edit.title_note', { have, total: titleList.length, every: RANDOM_EVERY });
+  }
+  for (const part of ['pre', 'post']) {
+    $('ce-title-' + part).addEventListener('click', (/** @type {MouseEvent} */ e) => {
+      const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-tid]'));
+      if (!b) return;
+      const next = { pre: st.title ? st.title.pre : null, post: st.title ? st.title.post : null };
+      next[/** @type {'pre' | 'post'} */ (part)] = b.getAttribute('data-tid') || null;
+      update({ title: next.pre || next.post ? next : null });
+    });
   }
 
   // 大会: カード左下に出す大会を選ぶ。並べ替え (日付 = 新しい順 / ポイント = 今の重み / ポイント (減衰なし) = 素点) と大会名の検索。

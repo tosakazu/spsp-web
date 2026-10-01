@@ -17,6 +17,7 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
+import { ownedTitles, titleById } from './titles.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -26,10 +27,17 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
  *             charIdx: any, charEmoji: any }} CardData */
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
- * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null }} CardSettings */
+ * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null };
+
+/** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
+export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
+
+/** その選手が持っている二つ名 (js/titles.js ownedTitles。出た大会から毎回同じ結果) @param {CardData} data */
+export const ownedTitlesOf = data => ownedTitles(titleLang(), data.uid, (data.player && data.player.tournaments) || []);
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)
@@ -202,9 +210,16 @@ export function buildCardModel(data, settings) {
   const byKey = new Map(all.map(a => [a.key, a]));
   const picked = (st.ach || []).map(k => byKey.get(k)).filter(a => a);
   const manual = picked.length > 0;
+  // 二つ名: 選んだ id のうち、持っているものだけ (持っていない・一覧に無い id は出さない)
+  const owned = st.title ? ownedTitlesOf(data) : null;
+  const titleText = (/** @type {string | null | undefined} */ id) => {
+    const t = owned && id && owned.has(id) ? titleById(titleLang(), id) : null;
+    return t ? t.text : '';
+  };
+  const title = st.title ? { pre: titleText(st.title.pre), post: titleText(st.title.post) } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)
-    name: SPSPFormat.stripTeamTag(rec.display), loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.stripTeamTag(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
@@ -259,7 +274,15 @@ function normalize(s) {
   if (!s || typeof s !== 'object') return null;
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
-           tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null };
+           tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
+           title: normTitle(s.title) };
+}
+/** @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
+function normTitle(t) {
+  if (!t || typeof t !== 'object') return null;
+  const id = (/** @type {any} */ v) => (typeof v === 'string' && /^[a-z]{2}-[ps]-\d{4}$/.test(v) ? v : null);
+  const pre = id(t.pre), post = id(t.post);
+  return pre || post ? { pre, post } : null;
 }
 const loadLocalApplied = (/** @type {number} */ uid) => normalize(readMap(APPLIED_KEY)[String(uid)]);
 
@@ -289,5 +312,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, titleLang, ownedTitlesOf, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, putApplied, loadDraft, saveDraft, clearDraft };

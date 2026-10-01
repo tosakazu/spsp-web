@@ -50,6 +50,13 @@
         <h2 data-i18n="card_edit.color">カラー</h2>
         <div class="ce-colors" id="ce-colors"></div>
       </section>
+      <!-- 二つ名: 前半・後半を、持っているものから選ぶ (「なし」も可)。新しく獲得したものに NEW (js/titles.js・js/title_notice.js) -->
+      <section class="ce-sec">
+        <h2 data-i18n="card_edit.title">二つ名</h2>
+        <div class="ce-title-row"><span class="ce-title-lbl" data-i18n="card_edit.title_pre">前半</span><div class="ce-title-chips" id="ce-title-pre"></div></div>
+        <div class="ce-title-row"><span class="ce-title-lbl" data-i18n="card_edit.title_post">後半</span><div class="ce-title-chips" id="ce-title-post"></div></div>
+        <div class="ce-title-note" id="ce-title-note"></div>
+      </section>
       <!-- 実績と大会は最初は畳んでおく (見出しの右に今の選択) -->
       <details class="ce-sec ce-fold">
         <summary><h2>

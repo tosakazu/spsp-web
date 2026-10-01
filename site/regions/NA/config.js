@@ -19,6 +19,7 @@
     support: { contact: '' },      // TODO: 北米版の問い合わせ先 (空なら案内を出さない)
     features: { blog: false, vote: false, seeding: true, prefRanking: true, sim: true },   // vote は北米用 OAuth/GAS ができてから
     geo: { unitKey: 'state' },
+    titleLang: 'en',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
     calendar: { weekendRealLabel: false },   // 「実質休日 / 実質平日」に相当する概念は北米では未定義
   };
   global.SPSPSite = site;

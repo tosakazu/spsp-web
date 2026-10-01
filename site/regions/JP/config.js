@@ -25,6 +25,7 @@
     // ブログは spsp.games (site/ 直配信) にだけある (gh-pages には rsync しない: deploy/deploy_v4.sh)
     features: { blog: /spsp\.games$/.test(host), vote: true, seeding: true, prefRanking: true, sim: true },
     geo: { unitKey: 'prefecture' },
+    titleLang: 'ja',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
     calendar: { weekendRealLabel: true },   // 「実質休日 / 実質平日」の概念を出す
     // シードツールの地域まとめ (南関東 / 京阪神) と都道府県の一覧は data/geo.json (smash_database の地域モジュールが定義。docs/geo_json.md)。ここには置かない
   };
