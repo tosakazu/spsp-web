@@ -171,7 +171,20 @@ export function bitsTitles(lang, bits) {
   return (TITLES[lang] || []).filter(t => bitsHas(bits, t.id));
 }
 
-const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles,
+/** 選手のファイル (players/<uid>.json) から持っている二つ名。正本は記録 (D1) で、ビルドが title_bits として写したもの。
+ * 記録がまだ無い (同期前・新しい人) ときだけ、出た大会から計算する。最初から持っているものは常に含む
+ * @param {string} lang @param {number | string} uid @param {any} player @returns {Map<string, { at: string, how: string }>} */
+export function ownedFromPlayer(lang, uid, player) {
+  const bits = player && typeof player.title_bits === 'string' ? player.title_bits : null;
+  if (bits === null) return ownedTitles(lang, uid, (player && player.tournaments) || []);
+  /** @type {Map<string, { at: string, how: string }>} */
+  const m = new Map();
+  for (const t of TITLES[lang] || []) if (t.unlock === 'initial') m.set(t.id, { at: '', how: 'initial' });
+  for (const t of bitsTitles(lang, bits)) m.set(t.id, { at: player.title_updated || '', how: 'record' });
+  return m;
+}
+
+const API = { TITLES, ownedFromPlayer, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles,
   titleNumber, bitsFromIds, bitsHas, bitsOr, bitsNumbers, bitsTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;

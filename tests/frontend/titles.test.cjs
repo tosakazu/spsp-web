@@ -5,7 +5,7 @@ const vm = require('vm');
 const { built } = require('../helpers/built.cjs');
 
 function load() {
-  const ctx = { console };
+  const ctx = { console, btoa, atob };   // ビット列 (base64url) に使う
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(built('js/titles.js'), ctx);
@@ -103,4 +103,19 @@ test('使える位置: both は前半・後半どちらでも、pre / post は�
   assert.strictEqual(T.usableIn(t('pre'), 'pre'), true);
   assert.strictEqual(T.usableIn(t('pre'), 'post'), false);
   assert.strictEqual(T.usableIn(t('post'), 'pre'), false);
+});
+
+test('ownedFromPlayer: 記録 (title_bits) があればそれ + 最初から持っているもの。無ければ計算', () => {
+  const T = load();
+  const initial = T.TITLES.ja.filter(t => t.unlock === 'initial').map(t => t.id);
+  const randomIds = T.TITLES.ja.filter(t => t.unlock === 'random').map(t => t.id);
+  const rec = T.ownedFromPlayer('ja', 7, { title_bits: T.bitsFromIds([randomIds[0]]), title_updated: '2026-10-05', tournaments: [] });
+  assert.strictEqual(JSON.stringify([...rec.keys()].sort()), JSON.stringify([...initial, randomIds[0]].sort()));
+  assert.strictEqual(rec.get(randomIds[0]).at, '2026-10-05');
+  // 記録が空文字 = 記録はあるが何も持っていない → 最初から持っているものだけ (出場記録があっても計算しない)
+  const empty = T.ownedFromPlayer('ja', 7, { title_bits: '', tournaments: tours(3) });
+  assert.strictEqual(empty.size, initial.length);
+  // 記録が無い (同期前) → 計算
+  const calc = T.ownedFromPlayer('ja', 7, { tournaments: tours(1) });
+  assert.strictEqual(calc.size, initial.length + 2);
 });

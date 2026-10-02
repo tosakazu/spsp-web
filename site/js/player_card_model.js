@@ -17,7 +17,7 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
-import { ownedTitles, titleById, usableIn } from './titles.js';
+import { titleById, usableIn, ownedFromPlayer } from './titles.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -36,8 +36,10 @@ export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null,
 /** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
 
-/** その選手が持っている二つ名 (js/titles.js ownedTitles。出た大会から毎回同じ結果) @param {CardData} data */
-export const ownedTitlesOf = data => ownedTitles(titleLang(), data.uid, (data.player && data.player.tournaments) || []);
+/** その選手が持っている二つ名。正本は記録 (D1) で、ビルドが選手のファイルに title_bits として写したもの (docs/card_titles_design.md)。
+ * 記録がまだ無い (同期前・新しい人) ときだけ、出た大会から計算する (js/titles.js ownedTitles)。最初から持っているものは常に含む
+ * @param {CardData} data @returns {Map<string, { at: string, how: string }>} */
+export const ownedTitlesOf = data => ownedFromPlayer(titleLang(), data.uid, data.player);
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)
