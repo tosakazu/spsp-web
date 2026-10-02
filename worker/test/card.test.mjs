@@ -182,25 +182,20 @@ test('card_put: 追加の色 (teal / yellow / gray) も保存できる。それ�
   assert.strictEqual((await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'grey' } })).error.code, 'bad_settings');
 });
 
-// ── 二つ名 (title) ── site/js/titles.js の一覧と ownedTitles をそのまま使う
-import { ownedTitles, titleById, titleLang, usableIn } from '../src/api/titles.ts';
+// ── 二つ名 (title) ── 一覧と位置の判定は site/js/titles.js、持っているかは記録 (D1 title_owned)
+import { bitsFromIds, titleById, titleLang, usableIn } from '../src/api/titles.ts';
 
-/** 選手データ (players/<uid>.json) の応答を決めた env。tours = 大会の配列 / null = 404 / 'fail' = 500 / 'throw' = 例外 / 'hang' = 返らない */
-function titleEnv(tours) {
-  let player;
-  if (tours === null) player = { status: 404, body: {} };
-  else if (tours === 'fail') player = { status: 500, body: {} };
-  else if (tours === 'throw') player = null;
-  else player = { status: 200, body: { user_id: 4242, tournaments: tours } };
-  const e = env({ player });
-  if (tours === 'hang') e.ctx.dataFetch = () => { e.hangStarted = true; return new Promise(() => {}); };
+const withTitle = (title) => ({ template: 'standard', color: 'red', title });
+/** 記録 (title_owned) を ids で入れた env。ids = null なら記録なし */
+function titleEnv(ids) {
+  const e = env();
+  if (ids) e.store.titleOwned.set('4242|ja', { bits: bitsFromIds(ids), updated: '2026-10-02' });
   return e;
 }
-/** 本戦の大会 n 個 (1 試合以上した = wins + losses >= 1)。games = 各大会の試合数 */
-const toursN = (n, games = 1) => Array.from({ length: n }, (_, i) => ({ date: '2026-0' + (1 + Math.floor(i / 28)) + '-' + String(1 + (i % 28)).padStart(2, '0'), event_id: 1000 + i, wins: games > 0 ? 1 : 0, losses: Math.max(0, games - 1) }));
-const withTitle = (title) => ({ template: 'standard', color: 'red', title });
-/** uid 4242 が引いたランダムの二つ名 (1 試合以上した本戦 1 つにつき 2 つ) */
-function drawnFor(tours) { return [...ownedTitles('ja', '4242', tours)].filter(([, v]) => v.how === 'random').map(([k]) => k); }
+async function putTitle(e, title) {
+  const token = await loginToken(e);
+  return post(e, { action: 'card_put', token, settings: withTitle(title) });
+}
 
 test('titles: 一覧は site/js/titles.js のもの、言語は地域から (北米は en)', () => {
   assert.strictEqual(titleById('ja', 'ja-0001').part, 'pre');
@@ -214,120 +209,66 @@ test('titles: 一覧は site/js/titles.js のもの、言語は地域から (北
   assert.strictEqual(titleLang(undefined), 'ja');
 });
 
-test('card_put: 最初から持っている二つ名は保存でき、card_get がそのまま返す', async () => {
-  const e = titleEnv([]);
-  const token = await loginToken(e);
-  const r = await post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-0001', post: 'ja-0005' }) });
-  assert.strictEqual(r.ok, true, JSON.stringify(r));
-  assert.deepStrictEqual(r.settings.title, { pre: 'ja-0001', post: 'ja-0005' });
-  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.title, { pre: 'ja-0001', post: 'ja-0005' });
-  assert.ok(e.fetches.some((f) => f.url === 'data:/players/4242.json'), '公開データを読む');
-});
-
-test('二つ名の獲得: 1 試合以上した本戦 1 つにつき 2 つ。試合 0 の大会・下位クラスの仮想大会は数えない', () => {
-  assert.strictEqual(drawnFor([]).length, 0);
-  assert.strictEqual(drawnFor(toursN(1)).length, 2);
-  assert.strictEqual(drawnFor(toursN(2)).length, 4);
-  assert.strictEqual(drawnFor(toursN(3, 0)).length, 0, '試合 0 (wins + losses = 0) は数えない');
-  assert.strictEqual(drawnFor([{ date: '2026-02-01', event_id: 5, wins: 0, losses: 1 }]).length, 2, '負けだけでも 1 試合');
-  assert.strictEqual(drawnFor([{ date: '2026-02-01', event_id: 6, parent_event_id: 5, wins: 3, losses: 1 }]).length, 0, '下位クラスの仮想大会');
-  assert.deepStrictEqual(drawnFor(toursN(1)), drawnFor(toursN(1)), '同じ入力なら同じ結果');
-});
-
-test('card_put: 1 試合以上した大会 1 つで引いた 2 つは保存でき、引いていないもの・試合 0 なら title_not_owned', async () => {
-  const tours = toursN(1);
-  const drawn = drawnFor(tours);
-  assert.strictEqual(drawn.length, 2);
-  const id = drawn[0];
-  const slot = usableIn(titleById('ja', id), 'pre') ? 'pre' : 'post';
-  const put = (x) => withTitle(slot === 'pre' ? { pre: x, post: null } : { pre: null, post: x });
-  let e = titleEnv(tours);
-  let token = await loginToken(e);
-  const ok1 = await post(e, { action: 'card_put', token, settings: put(id) });
-  assert.strictEqual(ok1.ok, true, JSON.stringify(ok1));
-  // 同じ位置に使えるランダム解放で、引いていないもの
-  const other = ['ja-0002', 'ja-0003', 'ja-0004', 'ja-0006', 'ja-0007', 'ja-0008']
-    .find((x) => !drawn.includes(x) && usableIn(titleById('ja', x), slot));
-  assert.ok(other, '引いていない候補がある');
-  e = titleEnv(tours);
-  token = await loginToken(e);
-  const ng = await post(e, { action: 'card_put', token, settings: put(other) });
-  assert.strictEqual(ng.error.code, 'title_not_owned');
-  assert.strictEqual(e.store.cards.size, 0);
-  // 試合 0 の大会ばかりならランダムは持っていない
-  e = titleEnv(toursN(5, 0));
-  token = await loginToken(e);
-  assert.strictEqual((await post(e, { action: 'card_put', token, settings: put(id) })).error.code, 'title_not_owned');
-});
-
-test('card_put: どちらでも使える二つ名 (both、ja-0003) は前半にも後半にも置ける。同じ id を前後両方に置くのも今は許す', async () => {
-  // ja-0003 を引く大会の数を探す (同じ入力なら必ず同じ結果)
-  let n = 1;
-  while (n <= 20 && !ownedTitles('ja', '4242', toursN(n)).has('ja-0003')) n += 1;
-  assert.ok(n <= 20, 'ja-0003 を引ける');
+test('card_put: 記録にある二つ名は保存でき、card_get がそのまま返す (公開データは読まない)', async () => {
+  const e = titleEnv(['ja-0001', 'ja-0003', 'ja-0005']);
   for (const title of [{ pre: 'ja-0003', post: 'ja-0005' }, { pre: 'ja-0001', post: 'ja-0003' }, { pre: 'ja-0003', post: 'ja-0003' }]) {
-    const e = titleEnv(toursN(n));
-    const token = await loginToken(e);
-    const r = await post(e, { action: 'card_put', token, settings: withTitle(title) });
+    e.nowMs = (e.nowMs || Date.now()) + 60000;
+    const r = await putTitle(e, title);
     assert.strictEqual(r.ok, true, JSON.stringify(title) + ' ' + JSON.stringify(r));
     assert.deepStrictEqual(r.settings.title, title);
+    assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.title, title);
   }
+  assert.ok(!e.fetches.some((f) => String(f.url).includes('/players/')), '公開データは読まない');
 });
 
-test('card_put: 前後の取り違え・一覧に無い id・形の違いは bad_settings (選手データは読まない)', async () => {
+test('card_put: 記録に無いランダムの二つ名は title_not_owned (記録があれば最初からの二つ名も記録どおり)', async () => {
+  let e = titleEnv(['ja-0001', 'ja-0005']);
+  let r = await putTitle(e, { pre: 'ja-0003', post: null });
+  assert.strictEqual(r.error.code, 'title_not_owned');
+  assert.strictEqual(e.store.cards.size, 0);
+  // 記録があっても最初からの二つ名は持っている扱い (初回の記録より前に一覧に足された initial でも使える)
+  e = titleEnv(['ja-0003']);
+  r = await putTitle(e, { pre: 'ja-0001', post: 'ja-0005' });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+});
+
+test('card_put: 記録がまだ無い選手は、最初から持っている二つ名だけ使える', async () => {
+  let e = titleEnv(null);
+  assert.strictEqual((await putTitle(e, { pre: 'ja-0001', post: 'ja-0005' })).ok, true);
+  e = titleEnv(null);
+  assert.strictEqual((await putTitle(e, { pre: null, post: 'ja-0006' })).error.code, 'title_not_owned');
+});
+
+test('card_put: 位置の取り違え・一覧に無い id・形の違いは bad_settings', async () => {
   for (const title of [
     { pre: 'ja-0005', post: null }, { pre: null, post: 'ja-0001' },
     { pre: 'ja-9999', post: null }, { pre: 'en-0001', post: null },
   ]) {
-    const e = titleEnv([]);
-    const token = await loginToken(e);
-    const before = e.fetches.length;
-    const r = await post(e, { action: 'card_put', token, settings: withTitle(title) });
-    assert.strictEqual(r.error.code, 'bad_settings', JSON.stringify(title));
-    assert.strictEqual(e.fetches.length, before, '選手データは読まない');
+    const e = titleEnv(['ja-0001', 'ja-0005', 'ja-9999']);
+    assert.strictEqual((await putTitle(e, title)).error.code, 'bad_settings', JSON.stringify(title));
   }
-  for (const title of [{ pre: 'JA-0001', post: null }, { pre: 'ja-1', post: null }, { pre: 'ja-p-0001', post: null }, { pre: 1, post: null }, { pre: null, post: null, x: 1 }, 'ja-p-0001', []]) {
+  for (const title of [{ pre: 'JA-0001', post: null }, { pre: 'ja-1', post: null }, { pre: 'ja-p-0001', post: null }, { pre: 1, post: null }, { pre: null, post: null, x: 1 }, 'ja-0001', []]) {
     assert.strictEqual(validateCardSettings(withTitle(title)), null, JSON.stringify(title));
   }
 });
 
-test('card_put: title が null・両方 null・省略なら付けない (選手データは読まない)', async () => {
+test('card_put: title が null・両方 null・省略なら付けない (記録は見ない)', async () => {
   for (const title of [null, { pre: null, post: null }, undefined]) {
-    const e = titleEnv('throw');
+    const e = titleEnv(null);
+    e.store.getTitleOwned = async () => { throw new Error('must not read'); };
     const token = await loginToken(e);
-    const s = { template: 'standard', color: 'red' };
-    if (title !== undefined) s.title = title;
-    const r = await post(e, { action: 'card_put', token, settings: s });
+    const st = { template: 'standard', color: 'red' };
+    if (title !== undefined) st.title = title;
+    const r = await post(e, { action: 'card_put', token, settings: st });
     assert.strictEqual(r.ok, true, JSON.stringify(title));
     assert.strictEqual(r.settings.title, null);
-    assert.ok(!e.fetches.some((f) => String(f.url).includes('/players/')));
   }
 });
 
-test('card_put: 選手データが読めなければ title_unverified で保存しない (失敗・例外・時間切れ)。404 は大会 0 件として扱う', async () => {
-  for (const tours of ['fail', 'throw']) {
-    const e = titleEnv(tours);
-    const token = await loginToken(e);
-    const r = await post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-0001', post: null }) });
-    assert.strictEqual(r.error.code, 'title_unverified', String(tours));
-    assert.strictEqual(e.store.cards.size, 0);
-  }
-  const e404 = titleEnv(null);
-  const t404 = await loginToken(e404);
-  assert.strictEqual((await post(e404, { action: 'card_put', token: t404, settings: withTitle({ pre: 'ja-0001', post: null }) })).ok, true);
-});
-
-test('card_put: 選手データが 5 秒返らなければ title_unverified', async (t) => {
-  const e = titleEnv('hang');
-  const token = await loginToken(e);
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const p = post(e, { action: 'card_put', token, settings: withTitle({ pre: 'ja-0001', post: null }) });
-  // 選手データを読みに行く (= 時間切れの setTimeout が仕掛けられる) まで待ってから 5 秒進める。
-  // その前のトークン検証 (crypto.subtle) は実時間で進むので、setImmediate で待つ
-  for (let i = 0; i < 100000 && !e.hangStarted; i++) await new Promise((r) => setImmediate(r));
-  assert.ok(e.hangStarted);
-  await new Promise((r) => setImmediate(r));
-  t.mock.timers.tick(4999);
-  t.mock.timers.tick(1);
-  assert.strictEqual((await p).error.code, 'title_unverified');
+test('card_put: 記録が読めない (D1 の失敗) は internal で保存しない', async () => {
+  const e = titleEnv(null);
+  e.store.getTitleOwned = async () => { throw new Error('D1 down'); };
+  const r = await putTitle(e, { pre: 'ja-0001', post: null });
+  assert.strictEqual(r.error.code, 'internal');
+  assert.strictEqual(e.store.cards.size, 0);
 });

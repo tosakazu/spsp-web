@@ -10,12 +10,10 @@
  */
 import type { Config } from '../config.ts';
 import {
-  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_TITLE_FETCH_TIMEOUT_MS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
+  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
 } from '../config.ts';
 import type { Store } from '../store.ts';
-import type { TitleTour } from './titles.ts';
-import { ownedTitles, titleById, usableIn } from './titles.ts';
-import type { DataFetch } from './vote.ts';
+import { bitsHas, titleById, usableIn } from './titles.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
@@ -89,28 +87,13 @@ export function titleIdsValid(lang: string, t: CardTitle): boolean {
 }
 
 /**
- * 公開データの players/<uid>.json の tournaments (二つ名を持っているかの計算用)。
- * 404 (SPSP にデータが無い選手) は大会 0 件 (= 最初から持っている二つ名だけ)。それ以外の失敗・時間切れは null。
+ * その選手がその二つ名を持っているか。記録 (D1 title_owned、毎日の title_sync が 0 → 1 にだけ書く) にあれば持っている。
+ * 記録がまだ無い選手 (初回の記録の前・新しい選手) は、最初から持っている二つ名 (unlock 'initial') だけ持っているとみなす。
  */
-export async function fetchPlayerTournaments(dataFetch: DataFetch, uid: string): Promise<TitleTour[] | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), CARD_TITLE_FETCH_TIMEOUT_MS); });
-  const read = (async (): Promise<TitleTour[] | null> => {
-    try {
-      const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
-      if (res.status === 404) return [];
-      if (res.status !== 200) return null;
-      const rec = await res.json() as { tournaments?: unknown };
-      return Array.isArray(rec && rec.tournaments) ? rec.tournaments as TitleTour[] : [];
-    } catch (_) {
-      return null;
-    }
-  })();
-  try {
-    return await Promise.race([read, timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
+export function titleOwned(lang: string, row: { bits: string } | null, id: string): boolean {
+  if (row && bitsHas(row.bits, id)) return true;
+  const t = titleById(lang, id);
+  return !!t && t.unlock === 'initial';
 }
 
 /** uid の形 (start.gg のユーザー ID = 数字)。 */
@@ -147,7 +130,7 @@ export async function handleCardGet(store: Store, req: Record<string, unknown>):
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
-export async function handleCardPut(cfg: Config, store: Store, dataFetch: DataFetch, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const sess = await verifySessionToken(cfg, req.token, now);
   if (!sess) return err('invalid_session', MSG_INVALID_SESSION);
   const uid = validUid(sess.id);
@@ -159,17 +142,13 @@ export async function handleCardPut(cfg: Config, store: Store, dataFetch: DataFe
     if (!settings) return err('bad_settings', 'カードの設定の形式が不正です。');
   }
 
-  // 二つ名: 一覧にある id か (前後も合っているか) → その選手が持っているか (公開データの大会から計算。読めなければ保存しない)
+  // 二つ名: 一覧にある id か (その位置に使えるか) → その選手が持っているか (記録 title_owned。記録が無ければ最初からの二つ名だけ)
   if (settings && settings.title) {
     const lang = cfg.titleLang || 'ja';
     if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
-    const tours = await fetchPlayerTournaments(dataFetch, uid);
-    if (tours === null) {
-      return err('title_unverified', '二つ名を持っているか確認できませんでした。時間をおいてやり直してください。', 'title_fetch');
-    }
-    const owned = ownedTitles(lang, uid, tours);
+    const row = await store.getTitleOwned(uid, lang);
     for (const id of [settings.title.pre, settings.title.post]) {
-      if (id !== null && !owned.has(id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
+      if (id !== null && !titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
     }
   }
 

@@ -117,6 +117,9 @@ export interface ClassRecord {
 
 export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplicate' } | { status: 'rate_limited' };
 
+/** title_owned の 1 行。 */
+export interface TitleOwnedRow { bits: string; updated: string }
+
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
@@ -157,6 +160,12 @@ export interface Store {
   listClassMine(userId: string, sinceMs: number): Promise<ClassMineItem[]>;
   /** waiting の行だけ deleted にする。結果: 'deleted' / 'done' (取得済みなので消さなかった) / 'missing' (無い・もう削除済み)。 */
   markClassDeleted(id: number, deletedAt: string): Promise<'deleted' | 'done' | 'missing'>;
+  /** 持っている二つ名の記録 (無ければ null)。 */
+  getTitleOwned(uid: string, lang: string): Promise<TitleOwnedRow | null>;
+  /** 複数人分 (uid → 行、無い人は入らない)。 */
+  getTitleOwnedMany(uids: string[], lang: string): Promise<Map<string, TitleOwnedRow>>;
+  /** 行を置き換える (呼び出し側が OR 済みの値を渡す)。 */
+  putTitleOwnedMany(lang: string, rows: { uid: string; bits: string; updated: string }[]): Promise<void>;
   /** 連投条件 (user_id と action ごと) を満たすときだけ記録する。記録したら true。 */
   recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
 }

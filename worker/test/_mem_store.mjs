@@ -9,6 +9,7 @@ export class MemStore {
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
     this.classActions = [];  // { user_id, action, ts_ms, day }
+    this.titleOwned = new Map();   // 'uid|lang' → { bits, updated }
   }
 
   async recentActivity(table, userId, dayKey) {
@@ -127,6 +128,21 @@ export class MemStore {
     const r = this.classes.find((x) => x.id === id);
     if (r && r.status === 'waiting') { r.status = 'deleted'; r.deleted_at = deletedAt; return 'deleted'; }
     return r && r.status === 'done' ? 'done' : 'missing';
+  }
+
+  async getTitleOwned(uid, lang) {
+    const r = this.titleOwned.get(String(Number(uid)) + '|' + lang);
+    return r ? { ...r } : null;
+  }
+
+  async getTitleOwnedMany(uids, lang) {
+    const out = new Map();
+    for (const u of uids) { const r = await this.getTitleOwned(u, lang); if (r) out.set(String(u), r); }
+    return out;
+  }
+
+  async putTitleOwnedMany(lang, rows) {
+    for (const r of rows) this.titleOwned.set(String(Number(r.uid)) + '|' + lang, { bits: r.bits, updated: r.updated });
   }
 
   async recordClassAction(action, g) {

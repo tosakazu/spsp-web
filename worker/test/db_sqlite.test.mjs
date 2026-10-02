@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -137,4 +137,19 @@ test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は ra
   assert.strictEqual(await store.recordClassAction('delete', ga(t0 + 1000)), true, 'action ごとに別');
   assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 3000)), true);
   assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 6000)), false, '当日上限');
+});
+
+test('title_owned: 読み書き・複数人 (90 人ずつ)・置き換え', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store } = fresh();
+  assert.strictEqual(await store.getTitleOwned('1', 'ja'), null);
+  const rows = Array.from({ length: 205 }, (_, i) => ({ uid: String(i + 1), bits: 'Ag', updated: '2026-10-02' }));
+  await store.putTitleOwnedMany('ja', rows);
+  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Ag', updated: '2026-10-02' });
+  assert.strictEqual(await store.getTitleOwned('1', 'en'), null);
+  const m = await store.getTitleOwnedMany(['1', '100', '205', '999'], 'ja');
+  assert.deepStrictEqual([...m.keys()].sort(), ['1', '100', '205']);
+  const all = await store.getTitleOwnedMany(rows.map((r) => r.uid), 'ja');
+  assert.strictEqual(all.size, 205);
+  await store.putTitleOwnedMany('ja', [{ uid: '1', bits: 'Bg', updated: '2026-10-03' }]);
+  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Bg', updated: '2026-10-03' });
 });

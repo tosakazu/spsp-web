@@ -102,7 +102,77 @@ export function ownedTitles(lang, uid, tournaments) {
   return owned;
 }
 
-const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles };
+// ── 持っている二つ名の記録 (D1 title_owned.bits、docs/card_titles_design.md「持っている二つ名の記録」) ──
+// ビット列 = 二つ名の通し番号 (id の 4 桁、ja-0001 → 1) を位置にしたもの。位置 n は (n >> 3) バイト目の (n & 7) ビット目 (下位から)。
+// base64url (詰め物の = なし) の文字列で持つ。空 ("") = 何も持っていない。ページ・Worker・記録の処理で同じ関数を使う
+
+/** id の通し番号 (ja-0123 → 123)。形が違えば null @param {string} id @returns {number | null} */
+export function titleNumber(id) {
+  const m = /^[a-z]{2}-(\d{4})$/.exec(String(id || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/** @param {string} bits @returns {Uint8Array} */
+function bitsBytes(bits) {
+  const b64 = String(bits || '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!b64) return new Uint8Array(0);
+  const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** 末尾の 0 のバイトは落とす (同じ中身なら同じ文字列) @param {Uint8Array} bytes @returns {string} */
+function bytesBits(bytes) {
+  let n = bytes.length;
+  while (n > 0 && bytes[n - 1] === 0) n--;
+  let bin = '';
+  for (let i = 0; i < n; i++) bin += String.fromCharCode(bytes[i]);
+  return n ? btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : '';
+}
+
+/** id の並びからビット列 (形の違う id は無視) @param {Iterable<string>} ids @returns {string} */
+export function bitsFromIds(ids) {
+  /** @type {number[]} */
+  const nums = [];
+  for (const id of ids || []) { const n = titleNumber(id); if (n !== null) nums.push(n); }
+  const bytes = new Uint8Array(nums.length ? (Math.max(...nums) >> 3) + 1 : 0);
+  for (const n of nums) bytes[n >> 3] |= 1 << (n & 7);
+  return bytesBits(bytes);
+}
+
+/** ビット列にその id があるか @param {string} bits @param {string} id */
+export function bitsHas(bits, id) {
+  const n = titleNumber(id);
+  if (n === null) return false;
+  const bytes = bitsBytes(bits);
+  return (n >> 3) < bytes.length && (bytes[n >> 3] & (1 << (n & 7))) !== 0;
+}
+
+/** 2 つのビット列の OR @param {string} a @param {string} b @returns {string} */
+export function bitsOr(a, b) {
+  const x = bitsBytes(a), y = bitsBytes(b);
+  const out = new Uint8Array(Math.max(x.length, y.length));
+  for (let i = 0; i < out.length; i++) out[i] = (x[i] || 0) | (y[i] || 0);
+  return bytesBits(out);
+}
+
+/** ビット列の通し番号 (昇順) @param {string} bits @returns {number[]} */
+export function bitsNumbers(bits) {
+  const bytes = bitsBytes(bits);
+  /** @type {number[]} */
+  const out = [];
+  for (let i = 0; i < bytes.length; i++) for (let j = 0; j < 8; j++) if (bytes[i] & (1 << j)) out.push(i * 8 + j);
+  return out;
+}
+
+/** ビット列の二つ名 (その言語の一覧にあるものだけ) @param {string} lang @param {string} bits @returns {Title[]} */
+export function bitsTitles(lang, bits) {
+  return (TITLES[lang] || []).filter(t => bitsHas(bits, t.id));
+}
+
+const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles,
+  titleNumber, bitsFromIds, bitsHas, bitsOr, bitsNumbers, bitsTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;
 export default API;

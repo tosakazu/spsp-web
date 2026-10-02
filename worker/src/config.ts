@@ -31,6 +31,8 @@ export interface Env {
   /** Challonge OAuth アプリ (下位クラスを TO の Challonge アカウントで作る) */
   CHALLONGE_CLIENT_ID?: string;
   CHALLONGE_CLIENT_SECRET?: string;
+  /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
+  TITLE_SYNC_KEY?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
@@ -74,8 +76,9 @@ export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participan
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
-export const CARD_ACH_KEY_MAX = 300;
-export const CARD_TITLE_FETCH_TIMEOUT_MS = 5 * 1000;  // 二つ名を持っているかの確認で選手データを読む待ち時間                 // 実績の key 1 つの長さ (文字数)
+export const CARD_ACH_KEY_MAX = 300;                 // 実績の key 1 つの長さ (文字数)
+export const TITLE_SYNC_MAX_ITEMS = 500;             // title_sync 1 回で受け付ける選手の数
+export const TITLE_SYNC_MAX_IDS = 2000;              // 1 人分の id の数
 
 /** errors テーブル。無制限に伸ばさない。超えたら古い行から間引く。 */
 export const ERRORS_MAX_ROWS = 3000;
@@ -129,6 +132,7 @@ export interface Config {
   challongeRedirectUri?: string;
   /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
   titleLang?: string;
+  titleSyncKey?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -161,6 +165,7 @@ export function configFromEnv(env: Env): Config {
     challongeClientId: env.CHALLONGE_CLIENT_ID || undefined,
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
+    titleSyncKey: env.TITLE_SYNC_KEY || undefined,
     titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),

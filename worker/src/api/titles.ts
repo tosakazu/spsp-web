@@ -10,6 +10,11 @@ export interface Title { id: string; part: 'pre' | 'post' | 'both'; text: string
 export interface OwnedTitle { at: string; how: string }
 export interface TitleTour { date?: string; event_id?: number | string; parent_event_id?: number | string | null; wins?: number; losses?: number }
 
+/** ビット列 (D1 title_owned.bits) の読み書き。titles.js と同じもの */
+export const bitsFromIds: (ids: Iterable<string>) => string = T.bitsFromIds;
+export const bitsHas: (bits: string, id: string) => boolean = T.bitsHas;
+export const bitsOr: (a: string, b: string) => string = T.bitsOr;
+export const TITLES: Record<string, Title[]> = T.TITLES;
 /** 一覧から 1 つ (無ければ null)。 */
 export const titleById: (lang: string, id: string | null | undefined) => Title | null = T.titleById;
 /** その二つ名を前半 (pre) / 後半 (post) に使えるか (part 'both' はどちらでも) */

@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type {
-  CardRow, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+  CardRow, TitleOwnedRow, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -217,6 +217,34 @@ export class D1Store implements Store {
     if ((res.meta?.changes ?? 0) > 0) return 'deleted';
     const r = await this.db.prepare('SELECT status FROM class_brackets WHERE id = ?').bind(id).first<{ status: string }>();
     return r && r.status === 'done' ? 'done' : 'missing';
+  }
+
+  async getTitleOwned(uid: string, lang: string): Promise<TitleOwnedRow | null> {
+    const r = await this.db.prepare('SELECT bits, updated FROM title_owned WHERE uid = ? AND lang = ?')
+      .bind(Number(uid), lang).first<TitleOwnedRow>();
+    return r ? { bits: String(r.bits), updated: String(r.updated) } : null;
+  }
+
+  async getTitleOwnedMany(uids: string[], lang: string): Promise<Map<string, TitleOwnedRow>> {
+    const out = new Map<string, TitleOwnedRow>();
+    // D1 は 1 文の bind が 100 個まで
+    for (let i = 0; i < uids.length; i += 90) {
+      const part = uids.slice(i, i + 90);
+      const r = await this.db.prepare(
+        `SELECT uid, bits, updated FROM title_owned WHERE lang = ? AND uid IN (${part.map(() => '?').join(',')})`)
+        .bind(lang, ...part.map(Number)).all<{ uid: number; bits: string; updated: string }>();
+      for (const x of r.results || []) out.set(String(x.uid), { bits: String(x.bits), updated: String(x.updated) });
+    }
+    return out;
+  }
+
+  async putTitleOwnedMany(lang: string, rows: { uid: string; bits: string; updated: string }[]): Promise<void> {
+    for (let i = 0; i < rows.length; i += 100) {
+      await this.db.batch(rows.slice(i, i + 100).map((r) => this.db.prepare(
+        `INSERT INTO title_owned (uid, lang, bits, updated) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (uid, lang) DO UPDATE SET bits = excluded.bits, updated = excluded.updated`)
+        .bind(Number(r.uid), lang, r.bits, r.updated)));
+    }
   }
 
   async recordClassAction(action: string, g: RateGuard): Promise<boolean> {
