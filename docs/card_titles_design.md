@@ -42,3 +42,17 @@
 
 `card_put` の `title`: id の形 (`^[a-z]{2}-\d{4}$`)・一覧にあること・その位置に使えること (`usableIn`)・**持っていること** (`ownedTitles` を同じファイルから使い、
 `https://data.spsp.games/jp/players/<uid>.json` の `tournaments` で計算)。取れなければ保存しない (`title_unverified`)。
+
+## 持っている二つ名の記録 (2026-10-02 決定: ビット列 + 最終更新日)
+
+計算だけ (上) だと、アカウントの統合・大会の取り直し・日付の変更で出場記録が変わったとき、持っていた二つ名が入れ替わったり消えたりする。
+そこで、計算した結果を **記録して、消さない** (0 → 1 にしかしない)。持っているもの = 記録にあるもの。
+
+- D1 `title_owned (uid INTEGER, lang TEXT, bits TEXT, updated TEXT, PRIMARY KEY (uid, lang))`
+  - `bits` = 二つ名の通し番号 (id の 4 桁、`ja-0001` → 1) を位置にしたビット列 (base64url、位置 n = n 番目のビット)。
+    二つ名を足すと長さが伸びるだけ。最多でも約 2,000 ビット = 数百バイト。
+  - `updated` = 最後にビットが増えた日 (YYYY-MM-DD)。
+- 記録: 毎日のビルドの後に、全選手について `ownedTitles` を計算し、記録に **OR** する (Worker の `title_sync`、鍵付き。増えた人だけ `updated` を更新)。
+  初回は全員分。計算の関数は `site/js/titles.js` (ページ・Worker・記録の処理で同じもの)。
+- 読む: `GET /api/titles?uid=&lang=` → `{ ok, bits, updated }` (誰でも読める。キャッシュ短め)。カード・編集ページ・保存時のチェックはこれを見る。
+- NEW: ブラウザに前回見た `bits` を保存しておき、今の `bits` で増えた分に NEW。ヘッダーの印は `updated` が前回見た日より新しいとき。
