@@ -152,4 +152,8 @@ test('title_owned: 読み書き・複数人 (90 人ずつ)・置き換え', { sk
   assert.strictEqual(all.size, 205);
   await store.putTitleOwnedMany('ja', [{ uid: '1', bits: 'Bg', updated: '2026-10-03' }]);
   assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Bg', updated: '2026-10-03' });
+  const page = await store.listTitleOwned('ja', 100, 3);
+  assert.deepStrictEqual(page.map((x) => x.uid), [101, 102, 103]);
+  assert.deepStrictEqual(page[0], { uid: 101, bits: 'Ag', updated: '2026-10-02' });
+  assert.deepStrictEqual((await store.listTitleOwned('ja', 204, 10)).map((x) => x.uid), [205]);
 });

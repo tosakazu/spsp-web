@@ -79,6 +79,7 @@ export const CARD_ACH_MAX = 12;                      // 載せる実績の数
 export const CARD_ACH_KEY_MAX = 300;                 // 実績の key 1 つの長さ (文字数)
 export const TITLE_SYNC_MAX_ITEMS = 500;             // title_sync 1 回で受け付ける選手の数
 export const TITLE_SYNC_MAX_IDS = 2000;              // 1 人分の id の数
+export const TITLE_EXPORT_MAX = 2000;                // title_export 1 回の件数
 
 /** errors テーブル。無制限に伸ばさない。超えたら古い行から間引く。 */
 export const ERRORS_MAX_ROWS = 3000;

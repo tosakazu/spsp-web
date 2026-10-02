@@ -7,6 +7,7 @@ import { TITLE_SYNC_MAX_ITEMS } from '../src/config.ts';
 
 const KEY = 'title-sync-key-DO-NOT-LEAK';
 const env = (o) => makeEnv(Object.assign({ cfg: { titleSyncKey: KEY } }, o || {}));
+const r0date = (e) => new Date((e.nowMs ?? Date.now()) + 9 * 3600e3).toISOString().slice(0, 10);
 const sync = (e, items, extra) => post(e, Object.assign({ action: 'title_sync', key: KEY, lang: 'ja', items }, extra || {}));
 
 test('ビット列: id の通し番号が位置。作る・ある・OR・番号の一覧', () => {
@@ -34,7 +35,11 @@ test('title_sync: 記録に OR する。消さない。増えた人だけ update
   const e = env();
   e.nowMs = Date.parse('2026-10-02T03:00:00Z');   // JST 12:00
   let r = await sync(e, [{ uid: 4242, ids: ['ja-0001', 'ja-0005'] }, { uid: '7', ids: ['ja-0003'] }, { uid: 8, ids: [] }]);
-  assert.deepStrictEqual(r, { ok: true, changed: 2, received: 3 });
+  assert.deepStrictEqual(r, { ok: true, changed: 2, received: 3, items: [
+    { uid: 4242, bits: T.bitsFromIds(['ja-0001', 'ja-0005']), updated: '2026-10-02' },
+    { uid: 7, bits: T.bitsFromIds(['ja-0003']), updated: '2026-10-02' },
+    { uid: 8, bits: '', updated: null },
+  ] });
   assert.deepStrictEqual(await post(e, { action: 'title_get', uid: '4242', lang: 'ja' }),
     { ok: true, bits: T.bitsFromIds(['ja-0001', 'ja-0005']), updated: '2026-10-02' });
   assert.deepStrictEqual(await post(e, { action: 'title_get', uid: 8, lang: 'ja' }), { ok: true, bits: '', updated: null }, '何も持っていなければ行を作らない');
@@ -42,6 +47,11 @@ test('title_sync: 記録に OR する。消さない。増えた人だけ update
   e.nowMs += 24 * 3600e3;
   r = await sync(e, [{ uid: 4242, ids: ['ja-0001'] }, { uid: 7, ids: ['ja-0003', 'ja-0006'] }]);
   assert.strictEqual(r.changed, 1);
+  // 応答は OR 後の記録 (減って届いた 4242 も記録どおり、日付も前のまま)
+  assert.deepStrictEqual(r.items, [
+    { uid: 4242, bits: T.bitsFromIds(['ja-0001', 'ja-0005']), updated: '2026-10-02' },
+    { uid: 7, bits: T.bitsFromIds(['ja-0003', 'ja-0006']), updated: '2026-10-03' },
+  ]);
   assert.deepStrictEqual(await post(e, { action: 'title_get', uid: 4242, lang: 'ja' }),
     { ok: true, bits: T.bitsFromIds(['ja-0001', 'ja-0005']), updated: '2026-10-02' });
   assert.deepStrictEqual(await post(e, { action: 'title_get', uid: 7, lang: 'ja' }),
@@ -89,7 +99,8 @@ test('title_sync: 入力の誤りは bad_request で何も書かない (一覧�
   }
   assert.strictEqual(e.store.titleOwned.size, 0);
   assert.deepStrictEqual(await sync(e, Array.from({ length: TITLE_SYNC_MAX_ITEMS }, (_, i) => ({ uid: i + 1, ids: ['ja-0001'] }))),
-    { ok: true, changed: TITLE_SYNC_MAX_ITEMS, received: TITLE_SYNC_MAX_ITEMS }, 'ちょうど上限は可');
+    { ok: true, changed: TITLE_SYNC_MAX_ITEMS, received: TITLE_SYNC_MAX_ITEMS,
+      items: Array.from({ length: TITLE_SYNC_MAX_ITEMS }, (_, i) => ({ uid: i + 1, bits: T.bitsFromIds(['ja-0001']), updated: r0date(e) })) }, 'ちょうど上限は可');
 });
 
 test('GET /api/titles?uid=&lang=: だれでも読める (public, max-age=60)。lang 省略は ja、不正は bad_request で no-store', async () => {
@@ -105,4 +116,27 @@ test('GET /api/titles?uid=&lang=: だれでも読める (public, max-age=60)。l
     assert.strictEqual(b.json.error.code, 'bad_request', q);
     assert.strictEqual(b.headers.get('Cache-Control'), 'no-store', q);
   }
+});
+
+test('title_export: 鍵つき。uid の昇順にページ送り (next_after)、言語ごと', async () => {
+  const e = env();
+  await sync(e, [5, 1, 9, 3, 7].map((uid) => ({ uid, ids: ['ja-000' + (uid % 8 || 1)] })), { date: '2026-10-01' });
+  await sync(e, [{ uid: 2, ids: ['en-0002'] }], { lang: 'en', date: '2026-10-01' });
+  const ex = (o) => post(e, Object.assign({ action: 'title_export', key: KEY, lang: 'ja' }, o || {}));
+  let r = await ex({ limit: 2 });
+  assert.deepStrictEqual(r.items.map((x) => x.uid), [1, 3]);
+  assert.strictEqual(r.next_after, 3);
+  assert.deepStrictEqual(r.items[0], { uid: 1, bits: T.bitsFromIds(['ja-0001']), updated: '2026-10-01' });
+  r = await ex({ limit: 2, after_uid: 3 });
+  assert.deepStrictEqual(r.items.map((x) => x.uid), [5, 7]);
+  r = await ex({ limit: 2, after_uid: r.next_after });
+  assert.deepStrictEqual(r.items.map((x) => x.uid), [9]);
+  assert.strictEqual(r.next_after, null);
+  assert.deepStrictEqual((await ex()).items.map((x) => x.uid), [1, 3, 5, 7, 9]);
+  assert.deepStrictEqual((await ex({ lang: 'en' })).items.map((x) => x.uid), [2]);
+  assert.strictEqual((await ex({ key: 'wrong' })).error.code, 'auth_failed');
+  for (const o of [{ limit: 0 }, { limit: 2001 }, { limit: 1.5 }, { after_uid: 'x' }, { lang: 'fr' }]) {
+    assert.strictEqual((await ex(o)).error.code, 'bad_request', JSON.stringify(o));
+  }
+  assert.strictEqual((await post(makeEnv({}), { action: 'title_export', key: '', lang: 'ja' })).error.code, 'internal');
 });

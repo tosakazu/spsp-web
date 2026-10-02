@@ -166,6 +166,8 @@ export interface Store {
   getTitleOwnedMany(uids: string[], lang: string): Promise<Map<string, TitleOwnedRow>>;
   /** 行を置き換える (呼び出し側が OR 済みの値を渡す)。 */
   putTitleOwnedMany(lang: string, rows: { uid: string; bits: string; updated: string }[]): Promise<void>;
+  /** uid の昇順に、afterUid より後を limit 件 (復旧用の書き出し)。 */
+  listTitleOwned(lang: string, afterUid: number, limit: number): Promise<{ uid: number; bits: string; updated: string }[]>;
   /** 連投条件 (user_id と action ごと) を満たすときだけ記録する。記録したら true。 */
   recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
 }

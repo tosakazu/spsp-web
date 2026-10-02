@@ -145,6 +145,12 @@ export class MemStore {
     for (const r of rows) this.titleOwned.set(String(Number(r.uid)) + '|' + lang, { bits: r.bits, updated: r.updated });
   }
 
+  async listTitleOwned(lang, afterUid, limit) {
+    return [...this.titleOwned.entries()].filter(([k]) => k.endsWith('|' + lang))
+      .map(([k, v]) => ({ uid: Number(k.split('|')[0]), bits: v.bits, updated: v.updated }))
+      .filter((x) => x.uid > afterUid).sort((a, b) => a.uid - b.uid).slice(0, limit);
+  }
+
   async recordClassAction(action, g) {
     const mine = this.classActions.filter((r) => r.user_id === g.userId && r.action === action);
     if (mine.some((r) => r.ts_ms > g.nowMs - g.minIntervalMs)) return false;

@@ -247,6 +247,12 @@ export class D1Store implements Store {
     }
   }
 
+  async listTitleOwned(lang: string, afterUid: number, limit: number): Promise<{ uid: number; bits: string; updated: string }[]> {
+    const r = await this.db.prepare('SELECT uid, bits, updated FROM title_owned WHERE lang = ? AND uid > ? ORDER BY uid ASC LIMIT ?')
+      .bind(lang, afterUid, limit).all<{ uid: number; bits: string; updated: string }>();
+    return (r.results || []).map((x) => ({ uid: Number(x.uid), bits: String(x.bits), updated: String(x.updated) }));
+  }
+
   async recordClassAction(action: string, g: RateGuard): Promise<boolean> {
     const res = await this.db.prepare(
       `INSERT INTO class_actions (user_id, action, ts_ms, day)
