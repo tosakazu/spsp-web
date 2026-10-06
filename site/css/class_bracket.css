@@ -144,3 +144,16 @@ body {
 .cb-url-row { display: flex; align-items: center; gap: 8px; }
 .cb-url-row a { flex: 1; min-width: 0; word-break: break-all; }
 .cb-copy-btn { flex: none; white-space: nowrap; }
+
+/* 本戦に出ていない人の追加 */
+.cb-extra { margin: 0 0 8px; }
+.cb-extra-row { position: relative; }
+.cb-card .cb-extra input[type="search"] { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px dashed #d1d5db; border-radius: 8px; font-family: inherit; }
+.cb-extra-sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.cb-extra-sug .it { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
+.cb-extra-sug .it:hover { background: #f3f4f6; }
+.cb-extra-sug .meta { color: #9ca3af; font-size: 11px; white-space: nowrap; }
+.cb-extra-note { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+.cb-badge.extra { background: #e0e7ff; color: #3730a3; }
+.cb-x { margin-left: 6px; border: 0; background: none; color: #9ca3af; cursor: pointer; font-size: 14px; padding: 0 4px; }
+.cb-x:hover { color: #b91c1c; }

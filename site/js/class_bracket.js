@@ -10,7 +10,8 @@
 //   challongeUser()                        そのログインの Challonge のアカウント名 (表示用。分からなければ null)
 
 /** 本戦の 1 人 (start.gg の standings の 1 件を平たくしたもの)
- * @typedef {{ userId: number, discriminator: string, gamerTag: string, placement: number | null, dq: boolean }} ClassEntrant */
+ * extra = 本戦に出ていない人を手で足した (シードは本戦の最速敗退と同じ、SPSP には常に集計しない。Challonge の misc に :nocount)
+ * @typedef {{ userId: number, discriminator: string, gamerTag: string, placement: number | null, dq: boolean, extra?: boolean }} ClassEntrant */
 
 /** シード機能 (seeding/app/40_startgg.js の parseEventUrl) と同じ読み方: イベントの URL・大会の URL (/details などが付いてもよい)・slug
  * @param {string} url @returns {{ tournamentSlug: string, eventSlug: string | null } | null} */

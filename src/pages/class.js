@@ -71,7 +71,7 @@ async function sgg(token, query, variables = {}) {
  * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, standings: ClassEntrant[], off: Set<number>,
  *   targets: ClassEntrant[], seeded: ClassEntrant[], order: ClassEntrant[], display: ClassEntrant[],
  *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> },
- *   mainPairs: Set<string> | null, rngSeed: number, touched: Set<number> }} */
+ *   mainPairs: Set<string> | null, rngSeed: number, touched: Set<number>, extras: ClassEntrant[] }} */
 let loaded = null;
 
 /** 決まった種から 0〜1 を返す (mulberry32)。同じ設定なら同率の並びが毎回同じになる
@@ -233,6 +233,9 @@ async function recompute() {
   const max = maxV ? Number(maxV) : null;
   // DQ の人も一覧には出す (最初は外す。手で入れた人は設定を変えても外さない)
   L.targets = selectTargets(L.standings, min, max, false);
+  // 手で足した人 (本戦に出ていない): 本戦の最速敗退の順位として並べる (同率の中の順はシードの方法どおり)
+  const lowest = Math.max(0, ...L.standings.map(s => s.placement || 0)) || null;
+  L.targets = L.targets.concat(L.extras.map(x => ({ ...x, placement: lowest })));
   for (const p of L.targets) if (p.dq && !L.touched.has(p.userId)) L.off.add(p.userId);
   const method = /** @type {'random' | 'main_result' | 'main_spsp' | 'spsp'} */ ($('cb-seeding').value);
   const rankOf = (method === 'spsp' || method === 'main_spsp') ? await spspRanks() : () => null;
@@ -352,7 +355,7 @@ async function load() {
 
   // 3. 設定の候補 (本戦の順位・DQ) を出し、対象と並びを作る
   loaded = { token, event: ev, standings, off: new Set(), targets: [], seeded: [], order: [], display: [], avoid: null, mainPairs: null,
-    rngSeed: Math.floor(Math.random() * 0x7fffffff), touched: new Set() };
+    rngSeed: Math.floor(Math.random() * 0x7fffffff), touched: new Set(), extras: [] };
   $('cb-search').value = '';
   listFilter = 'all';
   fillPlaceOptions();
@@ -360,6 +363,46 @@ async function load() {
   $('cb-preview').hidden = false;
   await recompute();
   status(i18n('class.step.ready'), 'ok');
+}
+
+/** 本戦に出ていない人の候補 (SPSP の選手。latest_tjpr_full.jsonl の名前と discriminators.json)。最初に追加欄を使うときに 1 回だけ読む
+ * @type {Promise<{ uid: number, tag: string, disc: string, rank: number | null }[]> | null} */
+let allPlayersP = null;
+function allPlayers() {
+  if (!allPlayersP) {
+    allPlayersP = Promise.all([
+      fetch(SPSP.data + 'latest_tjpr_full.jsonl').then(r => (r.ok ? r.text() : '')),
+      fetch(SPSP.data + 'data/discriminators.json').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
+    ]).then(([text, disc]) => text.split('\n').filter(Boolean).map(line => {
+      try {
+        const j = JSON.parse(line);
+        const d = String(j.display || '');
+        const tag = d.slice(d.lastIndexOf('|') + 1).trim();   // チーム名を外す (start.gg の名前)
+        return { uid: Number(j.user_id), tag, disc: String(disc[String(j.user_id)] || ''), rank: (j.ranks && j.ranks.ensemble) || null };
+      } catch (e) { return null; }
+    }).filter(/** @returns {x is { uid: number, tag: string, disc: string, rank: number | null }} */ (x) => !!(x && x.tag && x.disc))
+      .sort((a, b) => (a.rank || Infinity) - (b.rank || Infinity)));
+  }
+  return allPlayersP;
+}
+
+/** 追加欄の候補を出す */
+async function renderExtraSug() {
+  const box = $('cb-extra-sug');
+  const q = String($('cb-extra-q').value || '').trim().toLowerCase();
+  if (!q || !loaded) { box.hidden = true; return; }
+  const L = loaded;
+  const taken = new Set(L.standings.map(s => s.userId).concat(L.extras.map(x => x.userId)));
+  const list = await allPlayers();
+  if (String($('cb-extra-q').value || '').trim().toLowerCase() !== q) return;   // 打っている途中で変わった
+  const hits = [];
+  for (const p of list) {
+    if (taken.has(p.uid)) continue;
+    if (p.tag.toLowerCase().includes(q) || p.disc.toLowerCase().includes(q)) { hits.push(p); if (hits.length >= 20) break; }
+  }
+  box.innerHTML = hits.map(p => `<div class="it" data-uid="${p.uid}"><span>${escapeHtml(p.tag)}</span><span class="meta">${p.rank ? '#' + p.rank + ' · ' : ''}${escapeHtml(p.disc)}</span></div>`).join('') ||
+    `<div class="it"><span class="meta">${escapeHtml(i18n('class.extra_none'))}</span></div>`;
+  box.hidden = false;
 }
 
 /** 一覧の絞り込み ('all' | 'on' = 出る人 | 'off' = 出ない人) */
@@ -383,8 +426,9 @@ function renderList() {
     return `<tr class="${on ? '' : 'off'}" data-uid="${p.userId}">
       <td class="col-on"><input type="checkbox" data-uid="${p.userId}"${on ? ' checked' : ''}></td>
       <td class="col-no">${on ? seed : ''}</td>
-      <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? `<span class="cb-badge">${escapeHtml(i18n('class.main_dq'))}</span>` : ''}</td>
-      <td class="col-place">${p.placement != null ? p.placement : ''}</td>
+      <td><span class="name">${escapeHtml(p.gamerTag)}</span>${p.discriminator ? `<span class="disc">${escapeHtml(p.discriminator)}</span>` : ''}${p.dq ? `<span class="cb-badge">${escapeHtml(i18n('class.main_dq'))}</span>` : ''}${
+        p.extra ? `<span class="cb-badge extra" title="${escapeHtml(i18n('class.extra_note'))}">${escapeHtml(i18n('class.extra_badge'))}</span><button type="button" class="cb-x" data-extra-del="${p.userId}" aria-label="${escapeHtml(i18n('class.extra_del'))}">×</button>` : ''}</td>
+      <td class="col-place">${p.extra ? '—' : p.placement != null ? p.placement : ''}</td>
     </tr>`;
   }).join('') || `<tr class="cb-empty"><td colspan="4">${escapeHtml(i18n('class.filter.empty'))}</td></tr>`;
   const n = L.order.length, total = L.display.length;
@@ -440,7 +484,8 @@ async function create() {
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
       seeding: $('cb-seeding').value,
       // 名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID (取得側が選手に結びつける)
-      participants: loaded.order.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}` })),
+      // 手で足した人 (本戦に出ていない) は :nocount = 取り込みで SPSP に集計しない
+      participants: loaded.order.map((p, i) => ({ name: participantName(p), seed: i + 1, misc: `startgg:${p.userId}${p.extra ? ':nocount' : ''}` })),
     });
     const url = r && r.challonge && r.challonge.url;
     if (url) {
@@ -545,6 +590,21 @@ $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
+// 本戦に出ていない人を追加 / 消す
+$('cb-extra-q').addEventListener('input', () => { renderExtraSug(); });
+$('cb-extra-q').addEventListener('blur', () => { setTimeout(() => { $('cb-extra-sug').hidden = true; }, 200); });
+$('cb-extra-sug').addEventListener('mousedown', async (/** @type {MouseEvent} */ e) => {
+  const it = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-uid]'));
+  if (!it || !loaded) return;
+  e.preventDefault();
+  const uid = Number(it.dataset.uid);
+  const p = (await allPlayers()).find(x => x.uid === uid);
+  if (!p || loaded.extras.some(x => x.userId === uid)) return;
+  loaded.extras.push({ userId: uid, discriminator: p.disc, gamerTag: p.tag, placement: null, dq: false, extra: true });
+  $('cb-extra-q').value = '';
+  $('cb-extra-sug').hidden = true;
+  recompute();
+});
 
 $('cb-seg').addEventListener('click', (/** @type {MouseEvent} */ e) => {
   const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-f]'));
@@ -555,6 +615,15 @@ $('cb-seg').addEventListener('click', (/** @type {MouseEvent} */ e) => {
 renderGroupToggles();
 // 行のどこを押してもオン・オフ (チェックボックスそのものも)。外す・戻すたびに被り回避をかけ直す
 $('cb-list').addEventListener('click', (/** @type {MouseEvent} */ e) => {
+  // 足した人の × = 一覧から消す
+  const del = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-extra-del]'));
+  if (del && loaded) {
+    const uid = Number(del.dataset.extraDel);
+    loaded.extras = loaded.extras.filter(x => x.userId !== uid);
+    loaded.off.delete(uid);
+    recompute();
+    return;
+  }
   const tr = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('tr[data-uid]'));
   if (!loaded || !tr) return;
   const uid = Number(tr.dataset.uid);
