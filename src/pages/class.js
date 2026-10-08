@@ -471,6 +471,12 @@ async function create() {
   if (!loaded) return;
   const chToken = challongeToken();
   if (!chToken) { renderChallongeState(); return createStatus(i18n('class.err.challonge_login'), 'error'); }
+  // 作成前の確認: 特に「集計対象にするか」は既定がチェック付きで、再読み込みで戻ることがあるので、押す前に必ず見せる
+  const counted = !!$('cb-counted').checked;
+  if (!confirm(i18n('class.create_confirm', {
+    name: loaded.event.tournament.name, letter: i18n('ach.class.' + $('cb-letter').value), n: loaded.order.length,
+    counted: counted ? i18n('class.create_confirm.yes') : i18n('class.create_confirm.no'),
+  }))) return;
   const btn = $('cb-create');
   btn.disabled = true;
   try {
@@ -480,7 +486,7 @@ async function create() {
     const r = await SpspLogin.api({
       action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
       parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
-      format: $('cb-format').value, counted: !!$('cb-counted').checked,
+      format: $('cb-format').value, counted,   // 確認で見せた値をそのまま送る
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
       seeding: $('cb-seeding').value,
       // 名前 = start.gg の名前 (discriminator)、misc = start.gg のユーザー ID (取得側が選手に結びつける)
