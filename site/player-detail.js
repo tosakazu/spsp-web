@@ -150,7 +150,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         const dCol = m.won ? '#16a34a' : '#2563eb';
         const mark = m.won ? '◯' : '✗';
         const oppLink = m.opp_uid
-          ? `<a href="${paths.pPath}?uid=${m.opp_uid}" style="color:${dCol};text-decoration:none;font-weight:500" onclick="event.stopPropagation()">${escapeHtml(m.opp_display || '')}</a>`
+          ? `<a href="${paths.pPath}?uid=${m.opp_uid}" style="color:${dCol};text-decoration:none;font-weight:500">${escapeHtml(m.opp_display || '')}</a>`
           : `<span style="color:${dCol}">${escapeHtml(m.opp_display || '')}</span>`;
         return `<span style="color:${dCol}">${mark}</span> ${oppLink}`;
       }).join(' · ') + (ms.length > max ? ` <span style="color:#9ca3af">${i18n('detail.others', { n: ms.length - max })}</span>` : '');
@@ -203,7 +203,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       return `
         <tr class="${cls} tour-main-row">
           <td>${t.date}</td>
-          <td>${t.event_id ? `<a href="${paths.tPath}?id=${t.event_id}" style="color:#dc2626;text-decoration:none" onclick="event.stopPropagation()">${escapeHtml(t.name)}</a>` : escapeHtml(t.name)} ${smTag}${preTag}${resTag}${lcTag} / <span style="color:#6b7280">${escapeHtml(t.event)}</span></td>
+          <td>${t.event_id ? `<a href="${paths.tPath}?id=${t.event_id}" style="color:#dc2626;text-decoration:none">${escapeHtml(t.name)}</a>` : escapeHtml(t.name)} ${smTag}${preTag}${resTag}${lcTag} / <span style="color:#6b7280">${escapeHtml(t.event)}</span></td>
           <td class="num">${t.place || '−'}</td>
           <td class="num">${t.nent}</td>
           <td>${dayTag}</td>
@@ -293,14 +293,14 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         return `<div class="h2h-match">
           <span class="h2h-date">${m.date}</span>
           <span class="h2h-tname">${m.event_id
-            ? `<a href="${paths.tPath}?id=${m.event_id}" onclick="event.stopPropagation()">${escapeHtml(m.tournament_name || '')}</a>`
+            ? `<a href="${paths.tPath}?id=${m.event_id}">${escapeHtml(m.tournament_name || '')}</a>`
             : escapeHtml(m.tournament_name || '')}</span>
           <span class="h2h-delta ${cls}">${sign}${d.toFixed(1)}</span>
         </div>`;
       }).join('');
       return `<div class="h2h-opp h2h-${kind}">
         <div class="h2h-head">
-          <a class="h2h-opp-name" href="${paths.pPath}?uid=${uid}" onclick="event.stopPropagation()">${escapeHtml(oName)}</a>
+          <a class="h2h-opp-name" href="${paths.pPath}?uid=${uid}">${escapeHtml(oName)}</a>
           <span class="h2h-rank">${rankBadge}</span>
         </div>
         ${rows}

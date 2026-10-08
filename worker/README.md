@@ -55,6 +55,7 @@ has no `action`. CORS is `*`; auth travels in the body (no cookies). Body limit 
 | Class brackets (Challonge) | `challonge_begin`, `challonge_token`, `challonge_me`, `class_create`, `class_mine`, `class_delete`, `class_waitlist` (`GET /api/class_waitlist`), `class_done` | TOs create lower-class brackets on their own Challonge account. start.gg and Challonge tokens are used per request and never stored. `class_done` is key-protected and called by the data importer. See [docs/class_bracket_design.md](../docs/class_bracket_design.md). |
 | Posts | `post` | Ported but not public yet. (`post.ts`) |
 | Logging / export | `client_error`, `export_votes` (`GET /api/export/votes`), `export_errors` (`GET /api/export/errors`) | Failures are logged to D1 with codes only (no tokens or secrets). Exports are key-protected and read by the build. |
+| CSP reports | `POST /api/csp-report` (sent by browsers), `csp_export` | Violations of the site CSP are counted per (directive, blocked origin or inline/eval, path); query strings are not stored. Capped at 500 keys and 60 reports per IP per minute. `csp_export` uses the export key. (`csp.ts`) |
 
 ## Storage (D1, `migrations/`)
 
@@ -65,7 +66,8 @@ has no `action`. CORS is `*`; auth travels in the body (no cookies). Body limit 
 | `used_states` | single-use OAuth `state` values (0001) |
 | `card_settings`, `card_writes` | player card settings and their rate-limit log (0002) |
 | `class_brackets`, `class_actions` | registered lower-class brackets (soft delete via `deleted_at`) and rate-limit log (0003, 0004) |
-| `title_owned` | owned title bits and draw counts per player (0005, 0007, 0008; 0006 is intentionally unused) |
+| `title_owned` | owned title bits and draw counts per player (0005, 0007, 0008) |
+| `csp_reports` | aggregated CSP violation reports (0006) |
 
 Session tokens are stateless, so there is no session table.
 
@@ -75,7 +77,7 @@ applied to the remote database by a maintainer before (or together with) the dep
 ## Configuration
 
 - **Vars** (public, in `wrangler.toml`, per environment): `STARTGG_CLIENT_ID`, `REDIRECT_URI`,
-  `CHALLONGE_REDIRECT_URI`, `DATA_ORIGIN` (URL, or `assets:/<prefix>` to read from the Worker's own
+  `CHALLONGE_REDIRECT_URI`, `CSP_MODE` (`report-only` / `enforce`, the site CSP; the string is `SITE_CSP` in `src/index.ts`, and `scripts/assemble_dist.sh` writes it into `_headers` for static assets), `DATA_ORIGIN` (URL, or `assets:/<prefix>` to read from the Worker's own
   assets), `SITE_PREFIX`, `TS_OFFSET`, `SESSION_TTL_MS`, `STATE_TTL_MS`, `VOTE_TESTER_UIDS`.
 - **Secrets** (set with `wrangler secret put`, never committed): `STARTGG_CLIENT_SECRET`,
   `SESSION_SECRET`, `EXPORT_KEY` (optional), `CHALLONGE_CLIENT_ID`, `CHALLONGE_CLIENT_SECRET`,

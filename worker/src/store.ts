@@ -121,6 +121,8 @@ export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplic
 export interface TitleOwnedRow { bits: string; updated: string; n_pre: number; n_post: number }
 /** title_sync の 1 人分。prev = 同期の道具が読んだときの行 (無ければ null)。prev のままのときだけ書く */
 export interface TitleOwnedWrite { uid: string; prev: { bits: string; n_pre: number; n_post: number } | null; bits: string; n_pre: number; n_post: number }
+/** csp_reports の 1 行 (書き出し用)。 */
+export interface CspRow { directive: string; blocked: string; path: string; hits: number; first_seen: string; last_seen: string }
 
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
@@ -139,6 +141,10 @@ export interface Store {
    * consume=true のときは同時に「使用済み」として記録する (expiresMs まで保持)。
    */
   checkState(key: string, consume: boolean, expiresMs: number, nowMs: number): Promise<boolean>;
+  /** CSP の違反を数える。同じ key があれば hits+1、無ければ maxKeys 未満のときだけ追加。 */
+  recordCsp(key: string, e: { directive: string; blocked: string; path: string }, ts: string, maxKeys: number): Promise<void>;
+  /** 多い順。 */
+  listCsp(): Promise<CspRow[]>;
   /** プレイヤーカードの設定。無ければ null。 */
   getCardSettings(uid: string): Promise<CardRow | null>;
   /**

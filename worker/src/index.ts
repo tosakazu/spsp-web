@@ -56,6 +56,20 @@ export const NOT_FOUND_PAGE = '/_errors/404';
 /** callback.html の CSP。site/callback.html の meta と同じで、connect-src だけ自分自身 (= /api)。 */
 export const CALLBACK_CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'";
 
+/**
+ * サイト (HTML) の CSP。セキュリティレビュー M4。段階 1 = CSP_MODE "report-only" (本番・preview・na とも) で違反を集め、
+ * 段階 2 で同じ文字列を "enforce" (Content-Security-Policy) にする。報告の先は POST /api/csp-report (api/csp.ts)。
+ * Worker を通らない静的アセットには、scripts/assemble_dist.sh が同じ文字列を dist-cf/_headers に書く (ここが正本)。
+ * インラインの <script> と onclick 等の属性は使わない (script-src に 'unsafe-inline' を入れないため)。
+ */
+export const SITE_CSP = "default-src 'self'; "
+  + "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com; "
+  + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+  + "img-src 'self' data: blob: https:; "
+  + "connect-src 'self' https://data.spsp.games https://api.start.gg https://docs.google.com https://*.googleusercontent.com "
+  + "https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; "
+  + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/csp-report";
+
 const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN',
@@ -63,13 +77,22 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
-/** アセット応答にヘッダを足す (Response は immutable なことがあるので作り直す)。 */
-export function withSecurityHeaders(res: Response, pathname: string): Response {
+/**
+ * アセット応答にヘッダを足す (Response は immutable なことがあるので作り直す)。
+ * cspMode (env.CSP_MODE): HTML の応答に SITE_CSP を "report-only" / "enforce" で付ける。callback は下の厳しい CSP のまま
+ */
+export function withSecurityHeaders(res: Response, pathname: string, cspMode?: string): Response {
   const out = new Response(res.body, res);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
-  if (/\/callback(\.html)?$/.test(pathname)) {   // 静的配信は /jp/callback.html → /jp/callback に寄せる (html_handling) ので両方
+  const isCallback = /\/callback(\.html)?$/.test(pathname);
+  if (!isCallback && /^text\/html\b/i.test(out.headers.get('Content-Type') || '')) {
+    if (cspMode === 'report-only') out.headers.set('Content-Security-Policy-Report-Only', SITE_CSP);
+    else if (cspMode === 'enforce') out.headers.set('Content-Security-Policy', SITE_CSP);
+  }
+  if (isCallback) {   // 静的配信は /jp/callback.html → /jp/callback に寄せる (html_handling) ので両方
     // INV-8: 認可コードが URL に載るページ。外部リソース禁止・referrer も送らない。
     out.headers.set('Content-Security-Policy', CALLBACK_CSP);
+    out.headers.delete('Content-Security-Policy-Report-Only');   // _headers の分 (callback は上の厳しい CSP だけ)
     out.headers.set('Referrer-Policy', 'no-referrer');
     out.headers.set('Cache-Control', 'no-store');
   }
@@ -155,9 +178,9 @@ export default {
     if (res.status === 404 && (request.method === 'GET' || request.method === 'HEAD')) {
       const page = await env.ASSETS.fetch(new Request(new URL(NOT_FOUND_PAGE, url).toString(), { method: 'GET' }));
       if (page.ok) {
-        return withSecurityHeaders(new Response(request.method === 'HEAD' ? null : page.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }), url.pathname);
+        return withSecurityHeaders(new Response(request.method === 'HEAD' ? null : page.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }), url.pathname, env.CSP_MODE);
       }
     }
-    return withSecurityHeaders(res, url.pathname);
+    return withSecurityHeaders(res, url.pathname, env.CSP_MODE);
   },
 } satisfies ExportedHandler<Env>;

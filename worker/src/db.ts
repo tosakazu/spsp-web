@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type {
-  CardRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+  CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -260,5 +260,20 @@ export class D1Store implements Store {
     if ((res.meta?.changes ?? 0) === 0) return false;
     await this.db.prepare('DELETE FROM class_actions WHERE ts_ms < ?').bind(g.nowMs - 2 * 24 * 3600 * 1000).run();
     return true;
+  }
+
+  async recordCsp(key: string, e: { directive: string; blocked: string; path: string }, ts: string, maxKeys: number): Promise<void> {
+    const up = await this.db.prepare('UPDATE csp_reports SET hits = hits + 1, last_seen = ? WHERE key = ?').bind(ts, key).run();
+    if ((up.meta?.changes ?? 0) > 0) return;
+    await this.db.prepare(
+      `INSERT OR IGNORE INTO csp_reports (key, directive, blocked, path, hits, first_seen, last_seen)
+       SELECT ?1, ?2, ?3, ?4, 1, ?5, ?5 WHERE (SELECT COUNT(*) FROM csp_reports) < ?6`)
+      .bind(key, e.directive, e.blocked, e.path, ts, maxKeys).run();
+  }
+
+  async listCsp(): Promise<CspRow[]> {
+    const r = await this.db.prepare(
+      'SELECT directive, blocked, path, hits, first_seen, last_seen FROM csp_reports ORDER BY hits DESC, key ASC').all<CspRow>();
+    return (r.results || []).map((x) => ({ ...x, hits: Number(x.hits) }));
   }
 }

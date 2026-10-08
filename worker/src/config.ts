@@ -20,6 +20,8 @@ export interface Env {
   TS_OFFSET?: string;
   SESSION_TTL_MS?: string;
   STATE_TTL_MS?: string;
+  /** サイトの CSP: "report-only" (Content-Security-Policy-Report-Only) / "enforce" (Content-Security-Policy) / 未設定 (付けない) */
+  CSP_MODE?: string;
   /** 投票の資格判定を免除するテスト用 uid (カンマ区切り)。免除された投票は status='debug' で保存し、集計しない。 */
   VOTE_TESTER_UIDS?: string;
   // secrets
@@ -73,6 +75,9 @@ export const CHALLONGE_AUTHORIZE_URL = 'https://challonge.com/oauth/authorize';
 export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
 export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
 export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';
+/** CSP の違反報告 (POST /api/csp-report)。 */
+export const CSP_REPORT_MAX_KEYS = 500;              // まとめた組の数の上限 (超えた新しい組は捨てる)
+export const CSP_REPORT_PER_IP_PER_MIN = 60;         // 同じ IP から 1 分に受ける報告の数 (isolate ごと)
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
