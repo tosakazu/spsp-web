@@ -31,7 +31,7 @@ SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
 /** 出場大会 (players/<uid>.json の tournaments[] / top_tjpr_contribs[] / top_spr[] の 1 件。ビルド v4/output.py が出す) */
 /** @typedef {{ event_id?: number | null, parent_event_id?: number | null, name?: string, event?: string, tournament_name?: string, date?: string, ts?: number,
  *              place?: number | null, nent?: number | null, seed?: number | null, spr?: number | null, perf_rank?: number | null,
- *              is_dq?: boolean, is_weekend?: boolean, is_restricted?: boolean, is_lower_class?: boolean, is_awaiting_resume?: boolean, is_gf_missing?: boolean,
+ *              is_dq?: boolean, is_weekend?: boolean, is_restricted?: boolean, is_lower_class?: boolean, is_random_seed?: boolean, is_awaiting_resume?: boolean, is_gf_missing?: boolean,
  *              pretour_ranks?: Record<string, number | null | undefined>, rank_delta_ensemble?: number | null,
  *              bt_used?: boolean, bt_d?: number, bt_internal_d?: number, tjpr_w?: number, tjpr_raw?: number, tjpr_lv?: number, tjpr_age?: number,
  *              [k: string]: any }} PTour */
@@ -75,8 +75,9 @@ SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
 /** @typedef {{ name: string, emoji: string }} CharEmoji */
 
 // 出場大会の行に付くタグ (制限大会 / 下位クラス / 再開待ち・未完了)。以前は 3 か所に同じものがあった
-/** @param {PTour} t @param {'res' | 'lc' | 'status'} kind @returns {string} */
+/** @param {PTour} t @param {'res' | 'lc' | 'rs' | 'status'} kind @returns {string} */
 function playerTourTag(t, kind) {
+  if (kind === 'rs') return t.is_random_seed ? `<span style="color:#6b7280;font-size:9px;padding:1px 5px;background:rgba(107,114,128,0.12);border-radius:8px;margin-left:4px" title="${i18n('tags.title.rs')}">${i18n('tags.rs')}</span>` : '';
   if (kind === 'res') return t.is_restricted ? `<span style="color:#be123c;font-size:9px;padding:1px 5px;background:rgba(225,29,72,0.10);border-radius:8px;margin-left:4px">${i18n('player.tag.res')}</span>` : '';
   if (kind === 'lc') return t.is_lower_class ? `<span style="color:#0369a1;font-size:9px;padding:1px 5px;background:rgba(2,132,199,0.10);border-radius:8px;margin-left:4px">${i18n('tags.lc')}</span>` : '';
   if (t.is_awaiting_resume) return `<span style="color:#1d4ed8;font-size:9px;padding:1px 5px;background:#dbeafe;border-radius:8px;margin-left:4px" title="${i18n('player.tag.resume_title')}">${i18n('tags.resume')}</span>`;
@@ -105,6 +106,7 @@ function buildLatestResultSection() {
   const resTag = playerTourTag(t, 'res');
   const lcTag = playerTourTag(t, 'lc');
   const stTag = playerTourTag(t, 'status');
+  const rsTag = playerTourTag(t, 'rs');
   // 当時全国 → 大会後。改善時のみ (+N) を付ける (悪化時は注記なし)
   let zenHtml = '';
   if (t.pretour_ranks && t.pretour_ranks.ensemble != null) {
@@ -171,7 +173,7 @@ function buildLatestResultSection() {
   if (lrBody) lrBody.innerHTML =
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
-        <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${stTag}</div>
+        <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
         <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
@@ -530,12 +532,13 @@ function tournamentItem(t, valueHtml) {
   const resTag = playerTourTag(t, 'res');
   const lcTag = playerTourTag(t, 'lc');
   const stTag = playerTourTag(t, 'status');
+  const rsTag = playerTourTag(t, 'rs');
   return `
     <div class="tour-item">
       <span class="date-top">${t.date}</span>
       <span class="place">${placeHtml}</span>
       <div class="meta">
-        ${link}${resTag}${lcTag}${stTag}
+        ${link}${resTag}${lcTag}${rsTag}${stTag}
         ${t.event ? `<span style="color:#9ca3af">/ ${escapeHtml(t.event)}</span>` : ''}
         <br><span class="date date-inline">${t.date}</span>${
           (t.pretour_ranks && t.pretour_ranks.ensemble != null)
@@ -976,10 +979,11 @@ function render() {
     const resTag = playerTourTag(t, 'res');
     const lcTag = playerTourTag(t, 'lc');
   const stTag = playerTourTag(t, 'status');
+  const rsTag = playerTourTag(t, 'rs');
     return `<div class="tour-item" style="grid-template-columns:46px 1fr auto">
       <span class="place"><span class="num" style="color:#16a34a">+${t.spr}</span><span class="frac">SPR</span></span>
       <div class="meta">
-        ${link}${resTag}${lcTag}${stTag}
+        ${link}${resTag}${lcTag}${rsTag}${stTag}
         ${t.event ? `<span style="color:#9ca3af">/ ${escapeHtml(t.event)}</span>` : ''}
         <br><span style="font-size:10px;color:#9ca3af">${i18n('player.seed_to_place', { seed: t.seed, place: t.place })}</span>
         <br><span class="date">${t.date}</span> · ${i18n('common.n_players', { n: t.nent })}
@@ -1060,14 +1064,16 @@ function render() {
     const sorted = sortMatches(ms);
     const pName = (typeof t === 'object' && t !== null) ? (/** @type {MainRec} */ (MAIN_REC).display || '') : '';
     const pSeed = (typeof t === 'object' && t !== null) ? t.seed : null;
+    // ランダムシード大会 (シードが強さ順でない) は UF を出さない (ビルドも集計から外している)
+    const noUf = typeof t === 'object' && t !== null && !!t.is_random_seed;
     // モバイル時は各 match-row で本人名を省略するので、展開冒頭に「name + seed」を一回表示.
     const header = (pName || pSeed != null)
       ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
       : '';
-    return header + sorted.map(m => _renderMatchRow(m, pName, pSeed)).join('');
+    return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
   }
-  /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @returns {string} */
-  function _renderMatchRow(m, pName, pSeed) {
+  /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @param {boolean} [noUf] @returns {string} */
+  function _renderMatchRow(m, pName, pSeed, noUf) {
     const scoreColor = m.won ? '#16a34a' : '#2563eb';
     const score = (m.p_score != null && m.o_score != null) ? `${m.p_score}-${m.o_score}` : '—';
     const dInt = m.bt_internal_d != null ? m.bt_internal_d : (m.bt_d || 0);
@@ -1093,7 +1099,7 @@ function render() {
       : escapeHtml(m.opp_display || '');
     // UF: ページ表示中のプレイヤーが自分より高シードを倒した場合のみ表記.
     let ufHtml = '';
-    if (m.won && pSeed != null && m.opp_seed != null && pSeed > m.opp_seed) {
+    if (!noUf && m.won && pSeed != null && m.opp_seed != null && pSeed > m.opp_seed) {
       const uf = placementToW2W(pSeed) - placementToW2W(m.opp_seed);
       if (uf > 0) {
         ufHtml = `<div style="font-size:10px;line-height:1.1;margin-top:1px"><span style="color:#16a34a;font-weight:600">+${uf}</span> <span style="color:#9ca3af">UF</span></div>`;

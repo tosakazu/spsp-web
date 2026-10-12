@@ -257,11 +257,13 @@ window.SPSP_I18N.ja = {
   'tags.uchi': '身内',
   'tags.special': '特殊ルール',
   'tags.small': '小規模',
+  'tags.rs': 'ランダムシード',
   'tags.title.wk_real': 'お盆・年末年始の大規模大会のため、平日開催ですがランキング計算上は休日大会として扱われます',
   'tags.title.wd_real': '土日祝の開催ですが、ランキング計算上は平日大会として扱われます',
   'tags.title.resume': '延期・中断のため再開待ち。その時点までの結果 (完了した試合と確定している順位) で暫定的に集計中。再開・完了後に集計し直されます',
   'tags.title.gf': '決勝(Grand Finals)が未報告のため暫定順位のみ。ポイントは未反映で、結果確定後に集計されます',
   'tags.title.small': '参加者数が少ないためランキング計算対象外',
+  'tags.title.rs': 'シードが強さ順ではない大会 (大会時点の総合評価の順位との相関から判定)。アップセット (UF) とシード超え (SPR) は集計しません',
   'local.all_small_title': '全大会が小規模 (参加者8人未満)。ランキング計算対象外',
 
   // ── 使い手ランキング (c/ranking.html) ──
@@ -538,6 +540,7 @@ window.SPSP_I18N.ja = {
   'tournament.empty.upsets': 'アップセットなし',
   'tournament.empty.tjpr_gain': '順位評価上昇者なし',
   'tournament.empty.spr': 'シード超えなし',
+  'tournament.empty.random_seed': 'ランダムシードの大会のため対象外',
   'tournament.empty.bt_gain': 'BT 上昇なし',
   'tournament.empty.losers_run': 'ルーザーズランなし',
   'tournament.empty.rank_gain': '順位上昇なし',

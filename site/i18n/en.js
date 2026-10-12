@@ -255,11 +255,13 @@ window.SPSP_I18N.en = {
   'tags.uchi': 'Private',
   'tags.special': 'Special rules',
   'tags.small': 'Small',
+  'tags.rs': 'Random seeds',
   'tags.title.wk_real': 'Held on a weekday during Obon or the New Year holidays as a major event, so it counts as a weekend tournament',
   'tags.title.wd_real': 'Held on a weekend or holiday, but counts as a weekday tournament',
   'tags.title.resume': 'Postponed or interrupted; provisionally counted with the results so far (completed matches and settled placements). Recounted once it resumes and finishes',
   'tags.title.gf': 'Grand Finals not reported, so placements are provisional. Points are not applied until the result is final',
   'tags.title.small': 'Too few entrants to count toward the ranking',
+  'tags.title.rs': 'Seeds do not follow strength (judged from how they correlate with the overall ranking at the time). Upsets (UF) and seed outperformance (SPR) are not counted',
   'local.all_small_title': 'Every event is small (fewer than 8 entrants). Not counted toward the ranking',
 
   // ── Character ranking (c/ranking.html) ──
@@ -536,6 +538,7 @@ window.SPSP_I18N.en = {
   'tournament.empty.upsets': 'No upsets',
   'tournament.empty.tjpr_gain': 'No placement-rating gains',
   'tournament.empty.spr': 'No seed outperformances',
+  'tournament.empty.random_seed': 'Not counted: seeds were random',
   'tournament.empty.bt_gain': 'No head-to-head gains',
   'tournament.empty.losers_run': 'No losers runs',
   'tournament.empty.rank_gain': 'No rank climbs',
