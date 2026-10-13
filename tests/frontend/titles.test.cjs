@@ -104,3 +104,28 @@ test('使える位置: both は前半・後半どちらでも、pre / post は�
   assert.strictEqual(T.usableIn(t('pre'), 'post'), false);
   assert.strictEqual(T.usableIn(t('post'), 'pre'), false);
 });
+
+test('抽選の割合: 前半と後半は 1:1、後半のうち技名 (kind move) は 1/3。件数の比には引きずられない', () => {
+  const T = load();
+  const list = [];
+  const add = (part, kind, n) => { for (let i = 0; i < n; i++) list.push({ id: `zz-${String(list.length + 1).padStart(4, '0')}`, part, text: 'x', unlock: 'random', added: '2026-10-01', ...(kind ? { kind } : {}) }); };
+  add('pre', null, 100); add('post', null, 100); add('post', 'move', 300);
+  T.TITLES.zz = list;
+  const c = { pre: 0, post: 0, move: 0 };
+  for (let uid = 1; uid <= 1500; uid++) {
+    for (const id of T.ownedTitles('zz', uid, tours(2, '2026-10-02')).keys()) {
+      const x = list.find(y => y.id === id);
+      c[x.kind === 'move' ? 'move' : x.part]++;
+    }
+  }
+  const all = c.pre + c.post + c.move;
+  assert.strictEqual(all, 1500 * 4);
+  assert.ok(Math.abs(c.pre / all - 0.5) < 0.03, JSON.stringify(c));
+  assert.ok(Math.abs(c.move / (c.post + c.move) - 1 / 3) < 0.03, JSON.stringify(c));
+});
+
+test('抽選の枠が空なら位置だけの枠、それも空なら全体から引く', () => {
+  const T = load();
+  T.TITLES.zy = [{ id: 'zy-0001', part: 'pre', text: 'x', unlock: 'random', added: '2026-10-01' }];
+  for (let uid = 1; uid <= 20; uid++) assert.ok(T.ownedTitles('zy', uid, tours(1, '2026-10-02')).has('zy-0001'));
+});

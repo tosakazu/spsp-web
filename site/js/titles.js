@@ -8,21 +8,26 @@
 // 解放のしかた (unlock):
 //   'initial' = 最初から全員が持っている
 //   'random'  = 大会で 1 試合以上するごとに DRAWS_PER_TOURNAMENT (2) つ、まだ持っていないランダム解放の二つ名から引く。
-//               k 回目の抽選 (通し番号) は「選手 ID・k・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
+//               k 回目の抽選 (通し番号) は、まず位置を前半 / 後半 1:1 で決め (「選手 ID・k・side」のハッシュ)、
+//               後半なら技名 (kind 'move') か否かを MOVE_SHARE (技名 1/3) で決め (「選手 ID・k・kind」のハッシュ)、
+//               その中で「選手 ID・k・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
+//               決めた枠に引けるものが無いときは位置だけの枠、それも無ければ全体から引く。
 //               候補は「その大会の日付 (公開日より前なら公開日) までに追加されていて、まだ廃止されていない」ものだけ。
 //               → あとで二つ名を足しても、過去に引いたものは変わらない (足した日より後の抽選から出る)
 // 二つ名は消さない: やめるときは retired (廃止日) を付ける。持っている人は持ったまま、廃止日より後の抽選には出ない
 //
-// 一覧の 1 件: { id, part: 'pre' | 'post' | 'both', text, unlock: 'initial' | 'random', added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD' }
-//   part = 使える位置 (前半だけ / 後半だけ / どちらでも)。id は言語 + 連番 (ja-0001)。一度使った id は別の文言に使い回さない
+// 一覧の 1 件: { id, part: 'pre' | 'post' | 'both', text, unlock: 'initial' | 'random', added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD', kind?: 'move' }
+//   part = 使える位置 (前半だけ / 後半だけ / どちらでも)。kind 'move' = スマブラの技名 (抽選で後半の MOVE_SHARE だけ出す)。id は言語 + 連番 (ja-0001)。一度使った id は別の文言に使い回さない
 
-/** @typedef {{ id: string, part: 'pre' | 'post' | 'both', text: string, unlock: 'initial' | 'random', added: string, retired?: string }} Title */
+/** @typedef {{ id: string, part: 'pre' | 'post' | 'both', text: string, unlock: 'initial' | 'random', added: string, retired?: string, kind?: 'move' }} Title */
 /** @typedef {{ at: string, how: 'initial' | 'random' }} OwnedTitle */
 
 /** 二つ名を公開した日。これより前の大会での抽選は、この日の一覧から引く */
 export const TITLE_LAUNCH = '2026-10-01';
 /** ランダム解放: 1 試合以上した大会 1 つにつき何個 */
 export const DRAWS_PER_TOURNAMENT = 2;
+/** ランダム解放で後半を引くとき、技名 (kind 'move') を引く割合 (num / den)。前半と後半は 1:1 */
+export const MOVE_SHARE = { num: 1, den: 3 };
 
 /** @type {Record<string, Title[]>} */
 export const TITLES = {
@@ -76,6 +81,33 @@ export function countedTournaments(tournaments) {
     .sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : String(a.event_id).localeCompare(String(b.event_id))));
 }
 
+/** k 回目の抽選で引く 1 つ (ownedTitles の中身)。位置 1:1 → 後半なら技名か否か → 枠の中でハッシュ最小
+ * @param {Title[]} list @param {Map<string, OwnedTitle>} owned @param {number | string} uid @param {number} k @param {string} at
+ * @returns {Title | null} */
+function drawOne(list, owned, uid, k, at) {
+  // ハッシュの上の位で割合を決める (FNV-1a の下の位は文字の偶奇に引きずられるので使わない)
+  const side = hash32(`${uid}|${k}|side`) < 0x80000000 ? 'pre' : 'post';
+  const wantMove = hash32(`${uid}|${k}|kind`) < 0x100000000 / MOVE_SHARE.den * MOVE_SHARE.num;
+  /** @type {((t: Title) => boolean)[]} */
+  const slots = [
+    t => usableIn(t, side) && (side === 'pre' || (t.kind === 'move') === wantMove),
+    t => usableIn(t, side),
+    () => true,
+  ];
+  for (const inSlot of slots) {
+    /** @type {Title | null} */
+    let best = null;
+    let bestH = Infinity;
+    for (const t of list) {
+      if (t.unlock !== 'random' || owned.has(t.id) || t.added > at || (t.retired && t.retired <= at) || !inSlot(t)) continue;
+      const h = hash32(`${uid}|${k}|${t.id}`);
+      if (h < bestH) { bestH = h; best = t; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
 /** その選手が持っている二つ名。uid = start.gg のユーザー ID
  * @param {string} lang @param {number | string} uid @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }[]} tournaments
  * @returns {Map<string, OwnedTitle>} */
@@ -89,14 +121,7 @@ export function ownedTitles(lang, uid, tournaments) {
   for (let k = 1; k <= draws; k++) {
     const d = String(tours[Math.ceil(k / DRAWS_PER_TOURNAMENT) - 1].date).slice(0, 10);
     const at = d < TITLE_LAUNCH ? TITLE_LAUNCH : d;
-    /** @type {Title | null} */
-    let best = null;
-    let bestH = Infinity;
-    for (const t of list) {
-      if (t.unlock !== 'random' || owned.has(t.id) || t.added > at || (t.retired && t.retired <= at)) continue;
-      const h = hash32(`${uid}|${k}|${t.id}`);
-      if (h < bestH) { bestH = h; best = t; }
-    }
+    const best = drawOne(list, owned, uid, k, at);
     if (best) owned.set(best.id, { at, how: 'random' });
   }
   return owned;
@@ -171,7 +196,7 @@ export function bitsTitles(lang, bits) {
   return (TITLES[lang] || []).filter(t => bitsHas(bits, t.id));
 }
 
-const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, titleById, usableIn, hash32, countedTournaments, ownedTitles,
+const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, MOVE_SHARE, titleById, usableIn, hash32, countedTournaments, ownedTitles,
   titleNumber, bitsFromIds, bitsHas, bitsOr, bitsNumbers, bitsTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;
