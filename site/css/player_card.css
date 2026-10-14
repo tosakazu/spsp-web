@@ -110,26 +110,29 @@
 
 /* ── 総合評価 (右の赤い箱) ── */
 .pc-overall { position: absolute; left: 231px; top: 94px; width: 280px; height: 236px; background: var(--pc-red); color: #fff; overflow: hidden; }
-/* 順位の後ろの「OVERALL RANK」: 横は総合評価の赤い枠の真ん中、高さは Figma ver.1.5 の字面 (カードの上から 160px) にそろえる
-   (デザイナーの指摘で 49px → 56px。画素で突き合わせて 7px 下げた) */
+/* 順位の後ろの「OVERALL RANK」: 横は総合評価の赤い枠の真ん中、高さは Figma ver.1.51 の字面 (カードの上から 165px) にそろえる
+   (デザイナーの指摘で 49px → 56px、ver.1.51 と画素で突き合わせて 57px) */
 .pc-bgword {
-  position: absolute; left: 0; right: 0; top: 56px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  position: absolute; left: 0; right: 0; top: 57px; display: flex; flex-direction: column; align-items: center; text-align: center;
   font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 57px; line-height: 61px;
   text-transform: uppercase; color: #c3c3c3; opacity: .45; white-space: nowrap; pointer-events: none;
 }
-.pc-overall-lbl { position: absolute; left: 14px; top: 15px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
+/* ver.1.51 (95:401) で総合評価の中の位置を数 px ずつ直した: 見出し -1、評価日 +3、Lv の札 -2、順位 +4、TOTAL +2、URL を追加 */
+.pc-overall-lbl { position: absolute; left: 14px; top: 14px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
 /* 評価日は総合評価の見出しの下 (Figma ver.1.5) */
-.pc-date { position: absolute; left: 14px; top: 37px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
+.pc-date { position: absolute; left: 14px; top: 40px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
 .pc-date-lbl { font-size: 9px; }
 .pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 10px; }
-.pc-pills { position: absolute; right: 8px; top: 12px; display: flex; gap: 2px; font-size: 14px; white-space: nowrap; }
+/* サイトの URL (評価日の右、右寄せ。Figma ver.1.51) */
+.pc-url { position: absolute; right: 10px; top: 39px; font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 10px; line-height: 12.1px; color: #d9d9d9; opacity: .75; white-space: nowrap; }
+.pc-pills { position: absolute; right: 8px; top: 10px; display: flex; gap: 2px; font-size: 14px; white-space: nowrap; }
 .pc-pill {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
   min-width: 3.5em; height: 1.28em; padding: 0 .25em; border: 2px solid #fff; border-radius: 19px;
   font-weight: 600; font-size: 1em;
 }
 .pc-big {
-  position: absolute; left: 139px; top: 114px; transform: translate(-50%, -50%);
+  position: absolute; left: 139px; top: 119px; transform: translate(-50%, -50%);
   display: flex; align-items: baseline; white-space: nowrap; font-family: "Zalando Sans", sans-serif; font-size: 91px; line-height: 1;
 }
 .pc-big-h { font-weight: 900; font-size: .55em; }
@@ -137,8 +140,8 @@
 /* TOTAL: ラベル・線・数字を 1 行に並べる。線と数字はラベル (2 行のときも) の上下の真ん中 */
 .pc-tot { position: absolute; left: 15px; right: 11px; display: flex; align-items: center; gap: 10px; pointer-events: none;
   font-family: "Zalando Sans Expanded", sans-serif; font-weight: 500; color: var(--pc-light); text-transform: uppercase; }
-.pc-tot-t { top: 186px; }
-.pc-tot-m { top: 212px; }
+.pc-tot-t { top: 188px; }
+.pc-tot-m { top: 214px; }
 .pc-tot-lbl { flex: none; width: 104px; font-size: 9px; line-height: 11px; }
 .pc-tot-line { flex: 1; height: 1px; background: var(--pc-light); opacity: .85; }
 .pc-tot-v { flex: none; font-size: 11px; line-height: 11px; white-space: nowrap; }
