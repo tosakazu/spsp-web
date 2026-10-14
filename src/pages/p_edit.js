@@ -179,6 +179,13 @@ async function main() {
           mine.map(x => `<div class="ce-reel-item" role="option" data-tid="${escapeHtml(x.id)}"><span class="ce-reel-text">${escapeHtml(x.text)}</span>${
             newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</div>`).join('');
       }
+      if (box.dataset.fitted !== '1') {
+        box.dataset.fitted = '1';
+        fitReelText(box);
+        // 二つ名の字体 (SPSP Title) が後から来ると幅が変わるので、読み込んだら測り直す
+        const fonts = /** @type {any} */ (document).fonts;
+        if (fonts && fonts.ready) fonts.ready.then(() => fitReelText(box)).catch(() => {});
+      }
       // 選択の印は、前の選択と今の選択の 2 つだけ付け替える (操作のたびに数千の項目を見直さない)
       if (marked[part] !== cur) {
         const mark = (/** @type {string | null | undefined} */ tid, /** @type {boolean} */ on) => {
@@ -197,6 +204,14 @@ async function main() {
       if (centered !== want && !box.dataset.spinning) box.scrollTop = want * REEL_H;
     }
     $('ce-title-note').textContent = titleNote;
+  }
+  /** 長い二つ名: 2 行に折り返しても行 (40px) に入らなければ、入るまで字を小さくする (最小 9px) @param {HTMLElement} box */
+  function fitReelText(box) {
+    for (const t of /** @type {HTMLElement[]} */ (Array.from(box.querySelectorAll('.ce-reel-text')))) {
+      let size = 15;
+      if (t.style.fontSize) t.style.fontSize = '';   // 前に小さくしたものだけ戻す (書かなければレイアウトの測り直しが要らない)
+      while (t.offsetHeight > REEL_H - 2 && size > 9) { size -= 1; t.style.fontSize = size + 'px'; }
+    }
   }
   /** 真ん中に止まった項目を選ぶ @param {'pre' | 'post'} part */
   const pickCentered = part => {
@@ -229,6 +244,22 @@ async function main() {
       const idx = Array.from(box.children).indexOf(it);
       box.scrollTo({ top: idx * REEL_H, behavior: 'smooth' });
     });
+    // 触ったときに選択 (フォーカス) で画面がずれないように: ブラウザはフォーカスした部分が見えるよう画面を動かすことがあり、
+    // 上に貼り付いたカードのプレビューにリールが隠れていると、回している間に画面ごとスクロールして見える
+    box.addEventListener('pointerdown', () => {
+      if (document.activeElement !== box) box.focus({ preventScroll: true });
+    });
+    // マウスホイール: 1 回で 1 つずつ回し、画面には伝えない (端まで回したあとに画面がスクロールしないように)
+    /** @type {number} */
+    let wheelAt = 0;
+    box.addEventListener('wheel', (/** @type {WheelEvent} */ e) => {
+      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - wheelAt < 120 && Math.abs(e.deltaY) < 40) return;   // トラックパッドの細かい連続は間引く
+      wheelAt = now;
+      box.scrollBy({ top: e.deltaY > 0 ? REEL_H : -REEL_H, behavior: 'smooth' });
+    }, { passive: false });
     // キーボード: 上下で 1 つずつ
     box.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;

@@ -464,10 +464,13 @@ async function captureCanvas(el) {
   clone.style.transform = 'none';
   box.appendChild(clone);
   document.body.appendChild(box);
+  // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
+  const sx = window.scrollX, sy = window.scrollY;
   try {
-    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333 });
+    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 });
   } finally {
     box.remove();
+    if (window.scrollX !== sx || window.scrollY !== sy) window.scrollTo(sx, sy);
   }
 }
 
