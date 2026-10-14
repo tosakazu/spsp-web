@@ -56,7 +56,7 @@ test('最初の配布: 大会に出ていなくても initial は全部 + 前半
   const T = load();
   const owned = T.ownedTitles('ja', 123, []);
   for (const t of T.TITLES.ja.filter(x => x.unlock === 'initial')) assert.ok(owned.has(t.id), t.id);
-  mk(T, 'zz', { pre: 50, post: 50, move: 50 });
+  mk(T, 'zz', { pre: 300, post: 300, move: 300 });
   const z = T.ownedTitles('zz', 123, []);
   const c = count(T, 'zz', z);
   assert.strictEqual(c.pre, T.INITIAL_DRAWS.pre);
