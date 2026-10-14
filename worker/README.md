@@ -27,6 +27,7 @@ worker/
   migrations/0002_card_settings.sql プレイヤーカードの設定 (card_settings / card_writes)
   migrations/0003_class_brackets.sql 下位クラスの登録 (class_brackets)
   migrations/0005_title_owned.sql   持っている二つ名の記録 (title_owned、D1 が正本)
+  migrations/0007_title_owned_without_rowid.sql  title_owned を WITHOUT ROWID に (1 行の書き込みを 1 回に。0006 は別ブランチの csp_reports)
   migrations/0004_class_delete.sql   下位クラスの削除 (deleted_at 列) と class_mine / class_delete の連投判定 (class_actions)
   scripts/import_votes.mjs シートの内容 → D1 の INSERT
   scripts/assemble_dist.sh npm run build:cf の後に assets/_headers を dist-cf/ に写す

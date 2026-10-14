@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0007_title_owned_without_rowid.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -156,4 +156,16 @@ test('title_owned: 読み書き・複数人 (90 人ずつ)・置き換え', { sk
   assert.deepStrictEqual(page.map((x) => x.uid), [101, 102, 103]);
   assert.deepStrictEqual(page[0], { uid: 101, bits: 'Ag', updated: '2026-10-02' });
   assert.deepStrictEqual((await store.listTitleOwned('ja', 204, 10)).map((x) => x.uid), [205]);
+});
+
+test('title_owned: 0007 で WITHOUT ROWID に作り直し、0005 の行はそのまま残る', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const db = new DatabaseSync(':memory:');
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  db.prepare('INSERT INTO title_owned (uid, lang, bits, updated) VALUES (?, ?, ?, ?)').run(7, 'ja', 'Ag', '2026-10-02');
+  db.exec(fs.readFileSync(new URL('../migrations/0007_title_owned_without_rowid.sql', import.meta.url), 'utf8'));
+  assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'title_owned'").get().sql, /WITHOUT ROWID/);
+  const store = new D1Store(d1Like(db));
+  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Ag', updated: '2026-10-02' });
+  await store.putTitleOwnedMany('ja', [{ uid: '7', bits: 'Bg', updated: '2026-10-03' }]);
+  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Bg', updated: '2026-10-03' });
 });
