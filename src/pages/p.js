@@ -1278,7 +1278,7 @@ function render() {
   buildYosouSection();
   buildLatestResultSection();
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
-  SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined)).catch(() => {});
+  SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();
 }
 

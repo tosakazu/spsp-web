@@ -323,7 +323,8 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       .my-notice .my-notice-items { flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:2px 14px; }
       .my-notice a.my-notice-item { color:#065f46; text-decoration:none; }
       .my-notice a.my-notice-item:hover { text-decoration:underline; }
-      .my-notice a.my-notice-item.lv { font-weight:600; }
+      .my-notice .my-notice-item { color:#065f46; }
+      .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
       .my-notice .ticker-close { flex:none; width:22px; height:22px; border:none; background:none; color:#059669;
                                  cursor:pointer; font-size:16px; line-height:1; border-radius:4px; }

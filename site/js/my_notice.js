@@ -4,7 +4,7 @@
 //   items(uid, titlesN)        出すお知らせの配列 [{kind, ...}]。titlesN = 新しい二つ名の数 (js/title_notice.js の checkNew)
 //   dismiss(uid, titlesN)      × で閉じた: 今の順位・Lv を「見た」にして、二つ名はこの数まで出さない
 //   render(el, uid, opts)      お知らせの帯を el に描く (無ければ隠す)。× で閉じる
-//   showForSelf(el, recOf)     ログイン中なら recOf(本人の uid) の記録 (ranks / scores) を observe して帯を描く。
+//   showForSelf(el, recOf, o)  ログイン中なら recOf(本人の uid) の記録 (ranks / scores) を observe して帯を描く。
 //                              recOf が undefined を返したら何もしない (他人のプレイヤーページ)
 // 比べる相手は「前に閉じたときの順位・Lv」。下がったときは黙ってその値に合わせる (次に上がった分だけ出す)。
 // 初めて見るときは何も出さない (今の値を基準にする)。記録はこのブラウザだけ (二つ名の NEW と同じ)。
@@ -101,10 +101,10 @@ export function text(it) {
   return t('notice.me.titles', { n: it.n });
 }
 
-/** 見た目の確認用 (?mynotice=demo): ログインも記録も見ずに 3 種類を出す。× は隠すだけ @param {HTMLElement} el */
-function renderDemo(el) {
+/** 見た目の確認用 (?mynotice=demo): ログインも記録も見ずに 3 種類を出す。× は隠すだけ。リンクは押しても移らない @param {HTMLElement} el @param {boolean} selfPage */
+function renderDemo(el, selfPage) {
   const list = [{ kind: 'rank', from: 50, to: 35 }, { kind: 'lv', from: 3, to: 4 }, { kind: 'titles', n: 2 }];
-  el.innerHTML = `<div class="my-notice-items">${list.map(it => `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
+  el.innerHTML = `<div class="my-notice-items">${list.map(it => (selfPage && it.kind !== 'titles') ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>` : `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
   el.style.display = '';
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', () => { el.style.display = 'none'; });
@@ -113,7 +113,8 @@ function renderDemo(el) {
 /**
  * お知らせの帯を el に描く (トップの速報・通知と同じ形、× で閉じる)
  * @param {HTMLElement} el @param {number | string} uid
- * @param {{titlesN?: number, root?: string}} [opts]  root = サイトのルートへの相対 (リンク用)
+ * @param {{titlesN?: number, root?: string, selfPage?: boolean}} [opts]  root = サイトのルートへの相対 (リンク用)。
+ *   selfPage = 自分のプレイヤーページ (順位・Lv はリンクにしない。押しても同じページなので)
  */
 export function render(el, uid, opts) {
   const o = opts || {};
@@ -125,7 +126,9 @@ export function render(el, uid, opts) {
   const id = encodeURIComponent(String(uid));
   const href = (/** @type {any} */ it) => it.kind === 'titles' ? page('p/edit.html') + '?uid=' + id : page('p/index.html') + '?uid=' + id;
   el.innerHTML =
-    `<div class="my-notice-items">${list.map(it => `<a class="my-notice-item ${it.kind}" href="${href(it)}">${text(it)}</a>`).join('')}</div>` +
+    `<div class="my-notice-items">${list.map(it => (o.selfPage && it.kind !== 'titles')
+      ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>`
+      : `<a class="my-notice-item ${it.kind}" href="${href(it)}">${text(it)}</a>`).join('')}</div>` +
     `<button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}" title="${esc(t('common.close'))}">×</button>`;
   el.style.display = '';
   const btn = el.querySelector('.ticker-close');
@@ -147,10 +150,10 @@ export function observeRec(uid, rec) {
   observe(uid, { rank: rec && rec.ranks && rec.ranks.ensemble, lv: sc.shared_cascade_lv || sc.tjpr_level });
 }
 
-/** @param {HTMLElement | null} el @param {(uid: number) => any} recOf */
-export async function showForSelf(el, recOf) {
+/** @param {HTMLElement | null} el @param {(uid: number) => any} recOf @param {{selfPage?: boolean}} [opts] */
+export async function showForSelf(el, recOf, opts) {
   if (!el) return;
-  if (/[?&]mynotice=demo\b/.test(location.search)) { renderDemo(el); return; }   // 見た目の確認用 (記録は変えない)
+  if (/[?&]mynotice=demo\b/.test(location.search)) { renderDemo(el, !!(opts && opts.selfPage)); return; }   // 見た目の確認用 (記録は変えない)
   try { await SpspLogin.verify(); } catch (e) { /* 前のセッションのまま */ }
   const sess = SpspLogin.session();
   if (!sess) return;
@@ -159,7 +162,7 @@ export async function showForSelf(el, recOf) {
   if (rec === undefined) return;
   observeRec(uid, rec);   // 一覧に居ない (圏外) なら null: 基準も null にして、次に載ったときは出さない
   const n = await titlesNew(uid);
-  render(el, uid, { titlesN: n });
+  render(el, uid, { titlesN: n, selfPage: !!(opts && opts.selfPage) });
   navChanged();
 }
 
