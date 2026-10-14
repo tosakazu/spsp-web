@@ -2,31 +2,43 @@
 // titles.js — プレイヤーカードの二つ名 (前半 + 後半)。一覧 (ID 管理) と、選手ごとに持っている二つ名の計算 (docs/card_titles_design.md)。
 //   TITLES[lang]             二つ名の一覧。言語ごとに別の一覧 (日本の地域は ja、北米は en)。表示の言語を切り替えても表記は変えない
 //   titleById(lang, id)      一覧から 1 つ
-//   ownedTitles(lang, uid, tournaments)  その選手が持っている二つ名 (Map: id → { at: 'YYYY-MM-DD', how })。
-//                            保存はしない: 選手のデータ (出た大会と日付) から毎回同じ結果になるように計算する (ページと Worker で同じ関数)
+//   ownedTitles(lang, uid, tournaments, profile)  その選手が持っている二つ名 (Map: id → { at: 'YYYY-MM-DD', how })。
+//                            保存はしない: 選手のデータ (出た大会と日付・メインキャラ・都道府県) から毎回同じ結果になるように計算する (ページと Worker で同じ関数)
 //
 // 解放のしかた (unlock):
 //   'initial' = 最初から全員が持っている
-//   'random'  = 大会で 1 試合以上するごとに DRAWS_PER_TOURNAMENT (2) つ、まだ持っていないランダム解放の二つ名から引く。
-//               k 回目の抽選 (通し番号) は、まず位置を前半 / 後半 1:1 で決め (「選手 ID・k・side」のハッシュ)、
-//               後半なら技名 (kind 'move') か否かを MOVE_SHARE (技名 1/3) で決め (「選手 ID・k・kind」のハッシュ)、
-//               その中で「選手 ID・k・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
-//               決めた枠に引けるものが無いときは位置だけの枠、それも無ければ全体から引く。
-//               候補は「その大会の日付 (公開日より前なら公開日) までに追加されていて、まだ廃止されていない」ものだけ。
+//   'char'    = メインキャラ (profile.chars) が chars のどれかなら持っている (「◯◯使い」「◯◯使いの」)
+//   'pref'    = 都道府県 (profile.pref、geo.json の id) が pref なら持っている (「神奈川の」)
+//   'random'  = 抽選で引く。まだ持っていないランダム解放の二つ名から 1 つずつ:
+//               最初の配布 = 全員に前半 INITIAL_DRAWS.pre・後半 INITIAL_DRAWS.post (日付は公開日)
+//               大会 = 公開日以降の大会だけ (公開前の大会はさかのぼらない)。本戦で 1 試合以上した大会 1 つにつき前半 PRE_PER_TOURNAMENT、
+//                      本戦の試合 POST_PER_MATCHES.matches 試合ごとに後半 POST_PER_MATCHES.posts
+//                      (試合数の端数は次の大会に持ち越す。DQ の試合は選手データの勝ち負けに入っていない)
+//               後半は、技名 (kind 'move') か否かを MOVE_SHARE (技名 1/3) で決め (「選手 ID・抽選の名前・kind」のハッシュ)、
+//               その中で「選手 ID・抽選の名前・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
+//               技名 / 技名以外の片方を引き切ったら、もう片方から引く。前半・後半それぞれ、引き切ったらそれ以上は増えない。
+//               候補は「その大会の日付 (最初の配布は公開日) までに追加されていて、まだ廃止されていない」ものだけ。
 //               → あとで二つ名を足しても、過去に引いたものは変わらない (足した日より後の抽選から出る)
 // 二つ名は消さない: やめるときは retired (廃止日) を付ける。持っている人は持ったまま、廃止日より後の抽選には出ない
 //
-// 一覧の 1 件: { id, part: 'pre' | 'post' | 'both', text, unlock: 'initial' | 'random', added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD', kind?: 'move' }
+// 一覧の 1 件: { id, part: 'pre' | 'post' | 'both', text, unlock, added: 'YYYY-MM-DD', retired?: 'YYYY-MM-DD', kind?: 'move', chars?: number[], pref?: string }
 //   part = 使える位置 (前半だけ / 後半だけ / どちらでも)。kind 'move' = スマブラの技名 (抽選で後半の MOVE_SHARE だけ出す)。id は言語 + 連番 (ja-0001)。一度使った id は別の文言に使い回さない
+//   chars = start.gg のキャラ ID (unlock 'char')。「ピーチ / デイジー」のような 1 つの ID は、ピーチ使いとデイジー使いの両方に入れる
 
-/** @typedef {{ id: string, part: 'pre' | 'post' | 'both', text: string, unlock: 'initial' | 'random', added: string, retired?: string, kind?: 'move' }} Title */
-/** @typedef {{ at: string, how: 'initial' | 'random' }} OwnedTitle */
+/** @typedef {{ id: string, part: 'pre' | 'post' | 'both', text: string, unlock: 'initial' | 'random' | 'char' | 'pref', added: string, retired?: string, kind?: 'move', chars?: number[], pref?: string }} Title */
+/** @typedef {{ at: string, how: 'initial' | 'char' | 'pref' | 'start' | 'random' }} OwnedTitle */
+/** 抽選以外で解放するための選手の情報。chars = メインキャラの start.gg キャラ ID、pref = 都道府県 (geo.json の id、例 '神奈川県')
+ * @typedef {{ chars?: (number | string)[] | null, pref?: string | null }} TitleProfile */
 
-/** 二つ名を公開した日。これより前の大会での抽選は、この日の一覧から引く */
+/** 二つ名を公開した日。これより前の大会では配らない (代わりに全員に INITIAL_DRAWS) */
 export const TITLE_LAUNCH = '2026-10-01';
-/** ランダム解放: 1 試合以上した大会 1 つにつき何個 */
-export const DRAWS_PER_TOURNAMENT = 2;
-/** ランダム解放で後半を引くとき、技名 (kind 'move') を引く割合 (num / den)。前半と後半は 1:1 */
+/** 最初の配布: 全員に前半・後半それぞれ何個 (2026-10-14 の案。数は仮) */
+export const INITIAL_DRAWS = { pre: 20, post: 40 };
+/** 前半: 本戦で 1 試合以上した大会 1 つにつき何個 */
+export const PRE_PER_TOURNAMENT = 2;
+/** 後半: 本戦の matches 試合ごとに posts 個 */
+export const POST_PER_MATCHES = { posts: 1, matches: 1 };
+/** ランダム解放で後半を引くとき、技名 (kind 'move') を引く割合 (num / den) */
 export const MOVE_SHARE = { num: 1, den: 3 };
 
 /** @type {Record<string, Title[]>} */
@@ -81,26 +93,22 @@ export function countedTournaments(tournaments) {
     .sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : String(a.event_id).localeCompare(String(b.event_id))));
 }
 
-/** k 回目の抽選で引く 1 つ (ownedTitles の中身)。位置 1:1 → 後半なら技名か否か → 枠の中でハッシュ最小
- * @param {Title[]} list @param {Map<string, OwnedTitle>} owned @param {number | string} uid @param {number} k @param {string} at
+/** 1 回の抽選で引く 1 つ (ownedTitles の中身)。後半なら技名か否か → 枠の中でハッシュ最小
+ * @param {Title[]} list @param {Map<string, OwnedTitle>} owned @param {number | string} uid
+ * @param {'pre' | 'post'} side @param {string} key 抽選の名前 (前半 / 後半・最初の配布 / 大会・通し番号。選手の中で重ならない) @param {string} at
  * @returns {Title | null} */
-function drawOne(list, owned, uid, k, at) {
+function drawOne(list, owned, uid, side, key, at) {
   // ハッシュの上の位で割合を決める (FNV-1a の下の位は文字の偶奇に引きずられるので使わない)
-  const side = hash32(`${uid}|${k}|side`) < 0x80000000 ? 'pre' : 'post';
-  const wantMove = hash32(`${uid}|${k}|kind`) < 0x100000000 / MOVE_SHARE.den * MOVE_SHARE.num;
+  const wantMove = hash32(`${uid}|${key}|kind`) < 0x100000000 / MOVE_SHARE.den * MOVE_SHARE.num;
   /** @type {((t: Title) => boolean)[]} */
-  const slots = [
-    t => usableIn(t, side) && (side === 'pre' || (t.kind === 'move') === wantMove),
-    t => usableIn(t, side),
-    () => true,
-  ];
+  const slots = side === 'post' ? [t => (t.kind === 'move') === wantMove, () => true] : [() => true];
   for (const inSlot of slots) {
     /** @type {Title | null} */
     let best = null;
     let bestH = Infinity;
     for (const t of list) {
-      if (t.unlock !== 'random' || owned.has(t.id) || t.added > at || (t.retired && t.retired <= at) || !inSlot(t)) continue;
-      const h = hash32(`${uid}|${k}|${t.id}`);
+      if (t.unlock !== 'random' || owned.has(t.id) || !usableIn(t, side) || t.added > at || (t.retired && t.retired <= at) || !inSlot(t)) continue;
+      const h = hash32(`${uid}|${key}|${t.id}`);
       if (h < bestH) { bestH = h; best = t; }
     }
     if (best) return best;
@@ -110,19 +118,34 @@ function drawOne(list, owned, uid, k, at) {
 
 /** その選手が持っている二つ名。uid = start.gg のユーザー ID
  * @param {string} lang @param {number | string} uid @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }[]} tournaments
+ * @param {TitleProfile} [profile]
  * @returns {Map<string, OwnedTitle>} */
-export function ownedTitles(lang, uid, tournaments) {
+export function ownedTitles(lang, uid, tournaments, profile) {
   const list = TITLES[lang] || [];
+  const chars = new Set(((profile && profile.chars) || []).map(String));
+  const pref = (profile && profile.pref) || null;
   /** @type {Map<string, OwnedTitle>} */
   const owned = new Map();
-  for (const t of list) if (t.unlock === 'initial') owned.set(t.id, { at: TITLE_LAUNCH, how: 'initial' });
-  const tours = countedTournaments(tournaments);
-  const draws = tours.length * DRAWS_PER_TOURNAMENT;
-  for (let k = 1; k <= draws; k++) {
-    const d = String(tours[Math.ceil(k / DRAWS_PER_TOURNAMENT) - 1].date).slice(0, 10);
-    const at = d < TITLE_LAUNCH ? TITLE_LAUNCH : d;
-    const best = drawOne(list, owned, uid, k, at);
-    if (best) owned.set(best.id, { at, how: 'random' });
+  for (const t of list) {
+    if (t.unlock === 'initial') owned.set(t.id, { at: TITLE_LAUNCH, how: 'initial' });
+    else if (t.retired) continue;   // キャラ・都道府県のもの: 廃止後は新しく持たない (持っていた人は記録 title_owned に残る)
+    else if (t.unlock === 'char' && (t.chars || []).some(c => chars.has(String(c)))) owned.set(t.id, { at: TITLE_LAUNCH, how: 'char' });
+    else if (t.unlock === 'pref' && pref && t.pref === pref) owned.set(t.id, { at: TITLE_LAUNCH, how: 'pref' });
+  }
+  /** @param {'pre' | 'post'} side @param {string} key @param {string} at @param {OwnedTitle['how']} how */
+  const draw = (side, key, at, how) => {
+    const best = drawOne(list, owned, uid, side, key, at);
+    if (best) owned.set(best.id, { at, how });
+  };
+  for (let i = 1; i <= INITIAL_DRAWS.pre; i++) draw('pre', `pre|start|${i}`, TITLE_LAUNCH, 'start');
+  for (let i = 1; i <= INITIAL_DRAWS.post; i++) draw('post', `post|start|${i}`, TITLE_LAUNCH, 'start');
+  let nPre = 0, nPost = 0, matches = 0;
+  for (const t of countedTournaments(tournaments)) {
+    const at = String(t.date).slice(0, 10);
+    if (at < TITLE_LAUNCH) continue;
+    for (let i = 0; i < PRE_PER_TOURNAMENT; i++) draw('pre', `pre|${++nPre}`, at, 'random');
+    matches += (t.wins || 0) + (t.losses || 0);
+    while (nPost < Math.floor(matches / POST_PER_MATCHES.matches) * POST_PER_MATCHES.posts) draw('post', `post|${++nPost}`, at, 'random');
   }
   return owned;
 }
@@ -196,7 +219,7 @@ export function bitsTitles(lang, bits) {
   return (TITLES[lang] || []).filter(t => bitsHas(bits, t.id));
 }
 
-const API = { TITLES, TITLE_LAUNCH, DRAWS_PER_TOURNAMENT, MOVE_SHARE, titleById, usableIn, hash32, countedTournaments, ownedTitles,
+const API = { TITLES, TITLE_LAUNCH, INITIAL_DRAWS, PRE_PER_TOURNAMENT, POST_PER_MATCHES, MOVE_SHARE, titleById, usableIn, hash32, countedTournaments, ownedTitles,
   titleNumber, bitsFromIds, bitsHas, bitsOr, bitsNumbers, bitsTitles };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspTitles = API;

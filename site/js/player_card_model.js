@@ -36,8 +36,13 @@ export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null,
 /** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
 
-/** その選手が持っている二つ名 (js/titles.js ownedTitles。出た大会から毎回同じ結果) @param {CardData} data */
-export const ownedTitlesOf = data => ownedTitles(titleLang(), data.uid, (data.player && data.player.tournaments) || []);
+/** その選手が持っている二つ名 (js/titles.js ownedTitles。出た大会・メインキャラ・都道府県から毎回同じ結果) @param {CardData} data */
+export const ownedTitlesOf = data => {
+  const p = data.player || {};
+  const main = (p.characters || [])[0];   // メインキャラ (ビルドがキャラ投票を反映した並びの先頭)
+  return ownedTitles(titleLang(), data.uid, p.tournaments || [],
+    { chars: main ? [main.id] : [], pref: (data.prefs && data.prefs[String(data.uid)]) || null });
+};
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)

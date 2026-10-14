@@ -12,7 +12,7 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
-import { TITLES, DRAWS_PER_TOURNAMENT, usableIn } from '../../site/js/titles.js';
+import { TITLES, PRE_PER_TOURNAMENT, POST_PER_MATCHES, usableIn } from '../../site/js/titles.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, ownedTitlesOf, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -169,7 +169,7 @@ async function main() {
       }
     }
     const have = titleList.filter(x => owned.has(x.id)).length;
-    $('ce-title-note').textContent = i18n('card_edit.title_note', { have, total: titleList.length, n: DRAWS_PER_TOURNAMENT });
+    $('ce-title-note').textContent = i18n('card_edit.title_note', { have, total: titleList.length, pre: PRE_PER_TOURNAMENT, m: POST_PER_MATCHES.matches, post: POST_PER_MATCHES.posts });
   }
   /** 真ん中に止まった項目を選ぶ @param {'pre' | 'post'} part */
   const pickCentered = part => {
