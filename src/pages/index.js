@@ -16,6 +16,7 @@ import '../../site/nav.js';
 import '../../site/share.js';
 import SPSPLogo from '../../site/logo.js';
 import SPSPShare from '../../site/share.js';
+import SpspMyNotice from '../../site/js/my_notice.js';
 /** 地域の暦日の時差 (region/config.js utcOffset。無ければ止まらないよう空 = UTC ではなく、設定は必ずある前提) */
 const SITE_UTC_OFFSET = /** @type {SpspSiteConfig} */ (window.SPSP.site).utcOffset;
 
@@ -75,6 +76,8 @@ async function loadData() {
     await INTRO_GATE;          // アニメーションを最後まで (タップで飛ばせる)
     render();
     fadeInOnce(document.querySelector('.table-wrap'));
+    // ログイン中なら速報の上に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
+    SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) || null).catch(() => {});
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }

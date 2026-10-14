@@ -5,6 +5,7 @@ window.SPSP_I18N_REGION = window.SPSP_I18N_REGION || {};
 window.SPSP_I18N_REGION.NA = {
   en: {
     'nav.ranking.national': 'North America ranking',
+    'notice.me.rank': 'NA rank up: #{from} → #{to}',
     'ranking.subtitle': 'Super Smash Bros. Ultimate player ranking based on tournaments in North America',
     'ranking.share.title': 'SPSP — Smash Ultimate player ranking / North America',
     'ranking.share.text': 'SPSP Smash Ultimate player ranking for North America',
@@ -36,6 +37,7 @@ window.SPSP_I18N_REGION.NA = {
   },
   ja: {
     'nav.ranking.national': '北米ランキング',
+    'notice.me.rank': '北米順位が {from} 位 → {to} 位に上がりました',
     'ranking.subtitle': '北米大会を対象にしたスマブラSPプレイヤーランキング',
     'ranking.share.title': 'SPSP — スマブラSP プレイヤーランキング / 北米',
     'ranking.share.text': 'SPSP スマブラSP 北米プレイヤーランキング',
