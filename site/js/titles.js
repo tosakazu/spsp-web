@@ -12,7 +12,7 @@
 //   'random'  = 抽選で引く。まだ持っていないランダム解放の二つ名から 1 つずつ:
 //               最初の配布 = 全員に前半 INITIAL_DRAWS.pre・後半 INITIAL_DRAWS.post (日付は公開日)
 //               大会 = 公開日以降の大会だけ (公開前の大会はさかのぼらない)。本戦で 1 試合以上した大会 1 つにつき前半 PRE_PER_TOURNAMENT、
-//                      本戦の試合 POST_PER_MATCHES.matches 試合ごとに後半 POST_PER_MATCHES.posts
+//                      試合 POST_PER_MATCHES.matches 試合ごとに後半 POST_PER_MATCHES.posts。試合数は本戦と下位クラス (B〜E クラスの仮想大会の行) の合計
 //                      (試合数の端数は次の大会に持ち越す。DQ の試合は選手データの勝ち負けに入っていない)
 //               後半は、技名 (kind 'move') か否かを MOVE_SHARE (技名 1/3) で決め (「選手 ID・抽選の名前・kind」のハッシュ)、
 //               その中で「選手 ID・抽選の名前・二つ名 ID」のハッシュがいちばん小さいもの (同じ入力なら必ず同じ結果)。
@@ -84,13 +84,23 @@ export function hash32(s) {
   return h >>> 0;
 }
 
-/** 数える大会 = 本戦で 1 試合以上したもの (下位クラスの仮想大会は本戦と同じ日の同じ大会なので数えない)。日付・ID の順
- * @param {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }[]} tournaments */
-export function countedTournaments(tournaments) {
+/** @typedef {{ date?: string, event_id?: number | string, parent_event_id?: number | string | null, wins?: number, losses?: number }} TourRow */
+
+/** 下位クラスの仮想大会 (本戦の中の B〜E クラス。parent_event_id = 本戦) か @param {TourRow} t */
+const isClassRow = t => !(t.parent_event_id == null || t.parent_event_id === '');
+
+/** 1 試合以上した行 (本戦・下位クラスとも)。日付・ID の順 @param {TourRow[]} tournaments @returns {TourRow[]} */
+function playedRows(tournaments) {
   return (tournaments || [])
-    .filter(t => t && t.date && (t.parent_event_id == null || t.parent_event_id === '') && ((t.wins || 0) + (t.losses || 0)) >= 1)
+    .filter(t => t && t.date && ((t.wins || 0) + (t.losses || 0)) >= 1)
     .slice()
     .sort((a, b) => (String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : String(a.event_id).localeCompare(String(b.event_id))));
+}
+
+/** 数える大会 = 本戦で 1 試合以上したもの (下位クラスの仮想大会は本戦と同じ日の同じ大会なので数えない)。日付・ID の順
+ * @param {TourRow[]} tournaments */
+export function countedTournaments(tournaments) {
+  return playedRows(tournaments).filter(t => !isClassRow(t));
 }
 
 /** 1 回の抽選で引く 1 つ (ownedTitles の中身)。後半なら技名か否か → 枠の中でハッシュ最小
@@ -140,10 +150,11 @@ export function ownedTitles(lang, uid, tournaments, profile) {
   for (let i = 1; i <= INITIAL_DRAWS.pre; i++) draw('pre', `pre|start|${i}`, TITLE_LAUNCH, 'start');
   for (let i = 1; i <= INITIAL_DRAWS.post; i++) draw('post', `post|start|${i}`, TITLE_LAUNCH, 'start');
   let nPre = 0, nPost = 0, matches = 0;
-  for (const t of countedTournaments(tournaments)) {
+  // 前半は本戦の行だけ、後半の試合数は下位クラスの試合も足す (2026-10-14 ユーザー決定)
+  for (const t of playedRows(tournaments)) {
     const at = String(t.date).slice(0, 10);
     if (at < TITLE_LAUNCH) continue;
-    for (let i = 0; i < PRE_PER_TOURNAMENT; i++) draw('pre', `pre|${++nPre}`, at, 'random');
+    if (!isClassRow(t)) for (let i = 0; i < PRE_PER_TOURNAMENT; i++) draw('pre', `pre|${++nPre}`, at, 'random');
     matches += (t.wins || 0) + (t.losses || 0);
     while (nPost < Math.floor(matches / POST_PER_MATCHES.matches) * POST_PER_MATCHES.posts) draw('post', `post|${++nPost}`, at, 'random');
   }

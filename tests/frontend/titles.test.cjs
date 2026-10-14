@@ -64,7 +64,7 @@ test('最初の配布: 大会に出ていなくても initial は全部 + 前半
   for (const v of z.values()) assert.deepStrictEqual({ ...v }, { at: T.TITLE_LAUNCH, how: 'start' });
 });
 
-test('大会: 1 試合以上した本戦 1 つにつき前半 PRE_PER_TOURNAMENT、本戦の試合数に応じて後半 (端数は持ち越し)・同じ入力なら同じ結果', () => {
+test('大会: 1 試合以上した本戦 1 つにつき前半 PRE_PER_TOURNAMENT、本戦と下位クラスの試合数に応じて後半 (端数は持ち越し)・同じ入力なら同じ結果', () => {
   const T = load();
   mk(T, 'zz', { pre: 300, post: 300, move: 300 });
   const pp = T.PRE_PER_TOURNAMENT;
@@ -77,10 +77,15 @@ test('大会: 1 試合以上した本戦 1 つにつき前半 PRE_PER_TOURNAMENT
   assert.deepStrictEqual(diff([one(0, 4, 1)]), { pre: pp, post: postsFor(T, 5) });
   const a = [...T.ownedTitles('zz', 7, tours(3)).entries()];
   assert.deepStrictEqual([...T.ownedTitles('zz', 7, tours(3)).entries()], a);
-  // 試合 0 の大会と下位クラスの仮想大会は数えない
+  // 試合 0 の大会は数えない。下位クラスの仮想大会は前半には数えず、試合は後半の数に足す
   const noMatch = [{ event_id: 'z', date: '2026-11-02', wins: 0, losses: 0 }];
   const classOnly = [{ event_id: 'c', date: '2026-11-01', parent_event_id: 1000, wins: 2, losses: 1 }];
-  assert.deepStrictEqual(diff(noMatch.concat(classOnly)), { pre: 0, post: 0 });
+  assert.deepStrictEqual(diff(noMatch), { pre: 0, post: 0 });
+  assert.deepStrictEqual(diff(noMatch.concat(classOnly)), { pre: 0, post: postsFor(T, 3) });
+  // 本戦 0 勝 2 敗 → B クラスで 4 試合: 前半は本戦の 1 大会分、後半は 6 試合分
+  const main = { event_id: 3000, date: '2026-11-03', wins: 0, losses: 2 };
+  const cls = { event_id: 3001, date: '2026-11-03', parent_event_id: 3000, wins: 3, losses: 1 };
+  assert.deepStrictEqual(diff([main, cls]), { pre: pp, post: postsFor(T, 6) });
 });
 
 test('公開日より前の大会では配らない (さかのぼらない)', () => {
