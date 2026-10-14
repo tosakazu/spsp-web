@@ -1,4 +1,5 @@
 // 持っている二つ名の記録: ビット列 (site/js/titles.js)・title_sync (鍵つき、OR だけ)・GET /api/titles。docs/card_titles_design.md
+import './_titles_fixture.mjs';   // 二つ名の一覧はテスト用の 8 件 (ほかの import より先)
 import test from 'node:test';
 import assert from 'node:assert';
 import { makeEnv, post, http } from './_env.mjs';

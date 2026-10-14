@@ -1,4 +1,5 @@
 // ログイン確認 (me) とプレイヤーカードの設定 (card_get / card_put、GET /api/card)。docs/login_design.md
+import './_titles_fixture.mjs';   // 二つ名の一覧はテスト用の 8 件 (ほかの import より先)
 import test from 'node:test';
 import assert from 'node:assert';
 import { makeEnv, post, http, loginToken, OK_TOKEN, OK_USER } from './_env.mjs';
