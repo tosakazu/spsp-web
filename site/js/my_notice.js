@@ -104,7 +104,7 @@ export function text(it) {
 /** 見た目の確認用 (?mynotice=demo): ログインも記録も見ずに 3 種類を出す。× は隠すだけ @param {HTMLElement} el */
 function renderDemo(el) {
   const list = [{ kind: 'rank', from: 50, to: 35 }, { kind: 'lv', from: 3, to: 4 }, { kind: 'titles', n: 2 }];
-  el.innerHTML = `<span class="label">${esc(t('notice.me.label'))}</span><div class="my-notice-items">${list.map(it => `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
+  el.innerHTML = `<div class="my-notice-items">${list.map(it => `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
   el.style.display = '';
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', () => { el.style.display = 'none'; });
@@ -125,7 +125,6 @@ export function render(el, uid, opts) {
   const id = encodeURIComponent(String(uid));
   const href = (/** @type {any} */ it) => it.kind === 'titles' ? page('p/edit.html') + '?uid=' + id : page('p/index.html') + '?uid=' + id;
   el.innerHTML =
-    `<span class="label">${esc(t('notice.me.label'))}</span>` +
     `<div class="my-notice-items">${list.map(it => `<a class="my-notice-item ${it.kind}" href="${href(it)}">${text(it)}</a>`).join('')}</div>` +
     `<button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}" title="${esc(t('common.close'))}">×</button>`;
   el.style.display = '';

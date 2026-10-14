@@ -316,7 +316,7 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       a.news-section-me .news-section-title { color:#047857; }
       a.news-section-me:hover { background:#ecfdf5; }
       /* 本人へのお知らせの帯 (トップ・自分のプレイヤーページ。トップの速報・通知の帯と同じ形、js/my_notice.js) */
-      .my-notice { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 4px; border-radius:6px;
+      .my-notice { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border-radius:6px;
                    background:#ecfdf5; border:1px solid #d1fae5; color:#065f46; font-size:12px; line-height:1.4; }
       .my-notice .label { flex:none; padding:2px 8px; border-radius:4px; background:#d1fae5; color:#047857;
                           font-weight:600; font-size:11px; white-space:nowrap; }
