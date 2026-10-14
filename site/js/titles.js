@@ -33,7 +33,7 @@
 /** 二つ名を公開した日。これより前の大会では配らない (代わりに全員に INITIAL_DRAWS) */
 export const TITLE_LAUNCH = '2026-10-01';
 /** 最初の配布: 全員に前半・後半それぞれ何個 (2026-10-14 の案。数は仮) */
-export const INITIAL_DRAWS = { pre: 20, post: 40 };
+export const INITIAL_DRAWS = { pre: 40, post: 80 };
 /** 前半: 本戦で 1 試合以上した大会 1 つにつき何個 */
 export const PRE_PER_TOURNAMENT = 2;
 /** 後半: 本戦の matches 試合ごとに posts 個 */
