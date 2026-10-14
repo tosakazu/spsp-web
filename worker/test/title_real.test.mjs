@@ -11,7 +11,7 @@ import { TITLE_SYNC_MAX_BODY_BYTES } from '../src/api/router.ts';
 const KEY = 'title-sync-key-DO-NOT-LEAK';
 
 /** 公開日から毎日 1 大会 (本戦 5 試合) を n 回 */
-const tours = (n) => Array.from({ length: n }, (_, i) => ({ event_id: 1 + i, date: new Date(Date.parse('2026-10-01') + i * 864e5).toISOString().slice(0, 10), wins: 3, losses: 2 }));
+const tours = (n) => Array.from({ length: n }, (_, i) => ({ event_id: 1 + i, date: new Date(Date.parse(T.TITLE_LAUNCH) + i * 864e5).toISOString().slice(0, 10), wins: 3, losses: 2 }));
 
 test('本物の一覧: 全部引き切った人のビット列も上限に収まり、500 人分 (今と前) が 1 回の body に収まる', async () => {
   const list = T.TITLES.ja;

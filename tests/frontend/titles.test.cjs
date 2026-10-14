@@ -19,8 +19,8 @@ async function load() {
 }
 
 const TODAY = '2026-12-31';
-/** n 回の本戦 (日付は start から 1 日ずつ、各 2 試合) @param {number} n @param {string} start */
-function tours(n, start = '2026-10-02', id0 = 1000) {
+/** n 回の本戦 (日付は start から 1 日ずつ、各 2 試合。既定は公開日 2026-10-15 の翌日から) @param {number} n @param {string} start */
+function tours(n, start = '2026-10-16', id0 = 1000) {
   const d0 = Date.parse(start + 'T00:00:00Z');
   return Array.from({ length: n }, (_, i) => ({ event_id: id0 + i, date: new Date(d0 + i * 864e5).toISOString().slice(0, 10), wins: 1, losses: 1 }));
 }
@@ -109,16 +109,17 @@ test('ビット列: 作る・ある・OR・引き算・数・形', async () => {
   assert.ok(!B.bitsValid('a+b') && !B.bitsValid('A') && !B.bitsValid(1) && !B.bitsValid('AAAA', 2));
 });
 
-test('配る回数 (drawTargets): 本戦 1 大会につき前半 3、試合 2 つごとに後半 3 (端数は持ち越し)。下位クラスは後半の試合数だけ・公開前の大会は数えない', async () => {
+test('配る回数 (drawTargets): 本戦 1 大会につき前半 4、試合 2 つごとに後半 4 (端数は持ち越し)。下位クラスは後半の試合数だけ・公開前の大会は数えない', async () => {
   const { T } = await load();
   assert.deepStrictEqual(T.drawTargets([]), { pre: 0, post: 0 });
-  assert.deepStrictEqual(T.drawTargets(tours(3)), { pre: 9, post: 9 });
-  const odd = [{ event_id: 1, date: '2026-10-02', wins: 1, losses: 0 }, { event_id: 2, date: '2026-10-03', wins: 0, losses: 1 }];
-  assert.deepStrictEqual(T.drawTargets(odd), { pre: 6, post: 3 }, '1 試合 + 1 試合 = 2 試合で後半 3');
-  const withClass = [...tours(1), { event_id: 9, parent_event_id: 1000, date: '2026-10-02', wins: 2, losses: 0 }];
-  assert.deepStrictEqual(T.drawTargets(withClass), { pre: 3, post: 6 });
-  assert.deepStrictEqual(T.drawTargets([{ event_id: 5, date: '2026-10-02', wins: 0, losses: 0 }]), { pre: 0, post: 0 }, '0 試合は数えない');
-  assert.deepStrictEqual(T.drawTargets([...tours(5, '2026-09-20'), ...tours(1, '2026-10-01', 2000)]), { pre: 3, post: 3 }, '公開日の大会から');
+  assert.strictEqual(T.TITLE_LAUNCH, '2026-10-15');
+  assert.deepStrictEqual(T.drawTargets(tours(3)), { pre: 12, post: 12 });
+  const odd = [{ event_id: 1, date: '2026-10-16', wins: 1, losses: 0 }, { event_id: 2, date: '2026-10-17', wins: 0, losses: 1 }];
+  assert.deepStrictEqual(T.drawTargets(odd), { pre: 8, post: 4 }, '1 試合 + 1 試合 = 2 試合で後半 4');
+  const withClass = [...tours(1), { event_id: 9, parent_event_id: 1000, date: '2026-10-16', wins: 2, losses: 0 }];
+  assert.deepStrictEqual(T.drawTargets(withClass), { pre: 4, post: 8 });
+  assert.deepStrictEqual(T.drawTargets([{ event_id: 5, date: '2026-10-16', wins: 0, losses: 0 }]), { pre: 0, post: 0 }, '0 試合は数えない');
+  assert.deepStrictEqual(T.drawTargets([...tours(14, '2026-10-01'), ...tours(1, '2026-10-15', 2000)]), { pre: 4, post: 4 }, '公開日の大会から (前日までの大会はさかのぼらない)');
 });
 
 test('最初の配布: 記録を作るときに INITIAL_COUNTS の数ずつ (前半 50・後半 100、ジャンルごとにちょうど)', async () => {
@@ -161,27 +162,27 @@ test('過去に引いたものは変わらない: 一覧に足しても・ジャ
   T.TITLES.zz = changed;
   // 回数が同じなら何も変わらない
   assert.deepStrictEqual(T.advanceTitles('zz', 5, st, T.drawTargets(tours(10)), null, TODAY), st);
-  // 1 大会増えたら前半 3・後半 3 だけ増え、前のものは全部残る
+  // 1 大会増えたら前半 4・後半 4 だけ増え、前のものは全部残る
   const next = T.advanceTitles('zz', 5, st, T.drawTargets(tours(11)), null, TODAY);
   assert.strictEqual(B.bitsMinus(st.bits, next.bits), '', '前のものは残る');
-  assert.strictEqual(B.bitsCount(B.bitsMinus(next.bits, st.bits)), 6);
+  assert.strictEqual(B.bitsCount(B.bitsMinus(next.bits, st.bits)), 8);
 });
 
 test('遅れて取れた大会・取り消した大会: 引いた回数の差だけ引く (取り消しで減っても消さず、回数が戻るまで引かない)', async () => {
   const { T, B } = await load();
   mkGenres(T, 'zz', BIG);
-  const st = T.advanceTitles('zz', 6, null, T.drawTargets(tours(10, '2026-10-10')), null, TODAY);
+  const st = T.advanceTitles('zz', 6, null, T.drawTargets(tours(10, '2026-10-20')), null, TODAY);
   // 過去の日付の大会が遅れて入った: 増えた 1 大会分だけ足す
-  const late = [...tours(10, '2026-10-10'), ...tours(1, '2026-10-03', 5000)];
+  const late = [...tours(10, '2026-10-20'), ...tours(1, '2026-10-16', 5000)];
   const a = T.advanceTitles('zz', 6, st, T.drawTargets(late), null, TODAY);
   assert.strictEqual(B.bitsMinus(st.bits, a.bits), '');
-  assert.strictEqual(B.bitsCount(B.bitsMinus(a.bits, st.bits)), 6);
+  assert.strictEqual(B.bitsCount(B.bitsMinus(a.bits, st.bits)), 8);
   // 2 大会が取り消された: 何も引かず、回数も記録のまま
-  const b = T.advanceTitles('zz', 6, a, T.drawTargets(tours(9, '2026-10-10')), null, TODAY);
+  const b = T.advanceTitles('zz', 6, a, T.drawTargets(tours(9, '2026-10-20')), null, TODAY);
   assert.deepStrictEqual(b, a);
   // その後 3 大会出た: 11 大会を超えた分 (1 大会分) だけ引く
-  const c = T.advanceTitles('zz', 6, b, T.drawTargets([...tours(9, '2026-10-10'), ...tours(3, '2026-11-01', 6000)]), null, TODAY);
-  assert.strictEqual(B.bitsCount(B.bitsMinus(c.bits, b.bits)), 3 + 3);
+  const c = T.advanceTitles('zz', 6, b, T.drawTargets([...tours(9, '2026-10-20'), ...tours(3, '2026-11-01', 6000)]), null, TODAY);
+  assert.strictEqual(B.bitsCount(B.bitsMinus(c.bits, b.bits)), 4 + 4);
 });
 
 test('大会での抽選: ジャンルは DRAW_WEIGHTS の比 (件数の比には引きずられない)', async () => {

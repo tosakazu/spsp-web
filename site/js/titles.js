@@ -16,7 +16,7 @@
 //   'pref'    = 都道府県 (profile.pref、geo.json の id) が pref なら持っている (「神奈川の」)
 //   'random'  = 抽選で引く。まだ持っていないランダム解放の二つ名から 1 つずつ:
 //               最初の配布 = 記録を初めて作るときに、ジャンルごとに INITIAL_COUNTS の数ずつ (前半 50・後半 100)
-//               大会 = 公開日以降の大会だけ (公開前の大会はさかのぼらない)。DRAW_RULES の数: 本戦で 1 試合以上した大会 1 つにつき前半 prePerTournament、
+//               大会 = 公開日 (2026-10-15) 以降の大会だけ (公開前の大会はさかのぼらない)。DRAW_RULES の数: 本戦で 1 試合以上した大会 1 つにつき前半 prePerTournament、
 //                      試合 post.matches 試合ごとに後半 post.posts。試合数は本戦と下位クラス (B〜E クラスの仮想大会の行) の合計
 //                      (試合数の端数は次の大会に持ち越す。DQ の試合は選手データの勝ち負けに入っていない)
 //               大会での抽選の k 回目は、ジャンルを DRAW_WEIGHTS の比で決め (「選手 ID・位置・k」のハッシュ)、
@@ -38,8 +38,8 @@ import { titleNumber, titleIdOf, bitsFromNumbers, bitsNumbers } from './title_bi
 /** 記録 (D1 title_owned の 1 行)。bits = 持っている二つ名、n_pre / n_post = 大会で引いた回数 (最初の配布は数えない)
  * @typedef {{ bits: string, n_pre: number, n_post: number }} TitleState */
 
-/** 二つ名を公開した日。これより前の大会では配らない */
-export const TITLE_LAUNCH = '2026-10-01';
+/** 二つ名を公開した日。これより前の大会では配らない (さかのぼらない。2026-10-14 ユーザー決定: 10-15 公開) */
+export const TITLE_LAUNCH = '2026-10-15';
 /** 最初の配布: ジャンルごとの数 (前半 50・後半 100、2026-10-14 ユーザー決定)。
  * 汎用は前後の組み合わせが作りやすいので多め、技名は長いものが多いので後半の 4 分の 1 */
 export const INITIAL_COUNTS = {
@@ -51,9 +51,10 @@ export const DRAW_WEIGHTS = {
   pre: { generic: 3, smash: 2, source: 1 },
   post: { generic: 6, smash: 3, move: 3, source: 2 },
 };
-/** 大会で配る数。from 以降の大会にその行を使う。数を変えるときは行を足す (書き換えると過去の大会の回数が変わり、その分をまとめて引くことになる) */
+/** 大会で配る数。from 以降の大会にその行を使う。数を変えるときは行を足す (書き換えると過去の大会の回数が変わり、その分をまとめて引くことになる)。
+ * 前半 4・2 試合ごとに後半 4 = いちばん多く出る人 (年 170 大会ほど) が約 2 年で全部引き切る (2026-10-14 ユーザー決定) */
 export const DRAW_RULES = [
-  { from: TITLE_LAUNCH, prePerTournament: 3, post: { posts: 3, matches: 2 } },
+  { from: TITLE_LAUNCH, prePerTournament: 4, post: { posts: 4, matches: 2 } },
 ];
 /** 今の配る数 (画面の説明用) */
 export const PRE_PER_TOURNAMENT = DRAW_RULES[DRAW_RULES.length - 1].prePerTournament;
@@ -73,13 +74,8 @@ function jaRow(r) {
 /** @type {Record<string, Title[]>} */
 export const TITLES = {
   ja: JA_ROWS.map(r => jaRow(r)),
-  // 北米 (英語の一覧は日本語の訳ではなく別に作る。今は仮)
-  en: [
-    { id: 'en-0001', part: 'pre', text: 'Once-in-a-Millennium', unlock: 'initial', added: '2026-10-01' },
-    { id: 'en-0002', part: 'both', text: 'Frame-1', unlock: 'random', added: '2026-10-01' },
-    { id: 'en-0003', part: 'post', text: 'Trickster', unlock: 'initial', added: '2026-10-01' },
-    { id: 'en-0004', part: 'post', text: 'Overlord', unlock: 'random', added: '2026-10-01' },
-  ],
+  // 北米: 英語の一覧は日本語の訳ではなく別に作る。できるまで空 (北米では二つ名を出さない: region/config.js features.titles)
+  en: [],
 };
 
 /** その二つ名を前半 (pre) / 後半 (post) に使えるか @param {Title} t @param {'pre' | 'post'} slot */

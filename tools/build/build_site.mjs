@@ -273,6 +273,14 @@ for (const p of pages) {
 const PAGES_DIR = path.join(ROOT, 'src', 'pages');
 const CONCAT_PAGES = new Set([]);   // 結合方式で出すページ (無し。seeding/app/* も ES module になった 2026-09-15。仕組みは残す)
 let nBundles = 0, nBundleWritten = 0;
+// 日本語の二つ名の一覧 (site/js/titles_ja.js、170 KB) は日本の地域だけに入れる。ほかの地域は空の一覧に差し替える (北米は二つ名を出さない)
+const REGION_PLUGINS = REGION === 'JP' ? [] : [{
+  name: 'titles-ja-only-jp',
+  setup(b) {
+    b.onResolve({ filter: /(^|\/)titles_ja\.js$/ }, () => ({ path: 'titles_ja', namespace: 'spsp-empty' }));
+    b.onLoad({ filter: /.*/, namespace: 'spsp-empty' }, () => ({ contents: 'export const JA_ROWS = [];', loader: 'js' }));
+  },
+}];
 if (fs.existsSync(PAGES_DIR)) {
   for (const f of fs.readdirSync(PAGES_DIR).filter((x) => /\.(js|ts)$/.test(x)).sort()) {
     const id = f.replace(/\.(js|ts)$/, '');
@@ -312,8 +320,8 @@ if (fs.existsSync(PAGES_DIR)) {
     } else {
       // 本物の束ね: esbuild が import の依存グラフどおりに 1 本の古典 script (IIFE) にする。各ファイルはモジュール scope。
       // 共通モジュールは window.SPSPXxx にも置く (移行中の互換) ので、ページのコードは今までどおりグローバルでも import でも使える
-      const res = esbuild.buildSync({ entryPoints: [entry], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'esnext',
-        charset: 'utf8', minify: false, sourcemap: false, legalComments: 'inline', logLevel: 'silent', absWorkingDir: ROOT });
+      const res = await esbuild.build({ entryPoints: [entry], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'esnext',
+        charset: 'utf8', minify: false, sourcemap: false, legalComments: 'inline', logLevel: 'silent', absWorkingDir: ROOT, plugins: REGION_PLUGINS });
       out = res.outputFiles[0].text;
     }
     if (writeIfChanged(path.join(OUT, 'assets', id + '.js'), out)) nBundleWritten++;

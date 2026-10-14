@@ -396,7 +396,7 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
     // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)
     trigger.classList.remove('has-new');
-    if (SpspTitleNotice) {
+    if (SpspTitleNotice && !(SITE && SITE.features && SITE.features.titles === false)) {   // 二つ名の無い地域 (北米) では見ない
       const myId = String(sess.user.id);
       SpspTitleNotice.checkNew(myId).then(n => {
         const now = SpspLogin && SpspLogin.session();

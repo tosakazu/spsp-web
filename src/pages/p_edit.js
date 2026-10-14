@@ -61,7 +61,9 @@ async function main() {
 
   await SpspLogin.verify();   // 無効なトークンはここで消える
   // 適用済み (サーバ) — 「適用」を押せるかの比較にも使う。持っている二つ名 (記録) も一緒に読む
-  const [appliedRes, ownedRec] = await Promise.all([fetchApplied(uid), SpspTitleNotice.fetchOwned(uid)]);
+  const titlesOn = !(SPSP.site && SPSP.site.features && SPSP.site.features.titles === false);   // 二つ名の無い地域 (北米) は欄ごと出さない
+  if (!titlesOn) $('ce-title-sec').style.display = 'none';
+  const [appliedRes, ownedRec] = await Promise.all([fetchApplied(uid), titlesOn ? SpspTitleNotice.fetchOwned(uid) : Promise.resolve(null)]);
   /** @type {CardSettings | null} */
   let applied = appliedRes;
   /** @type {CardSettings} */
@@ -73,7 +75,7 @@ async function main() {
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const mainChar = ((data.player && data.player.characters) || [])[0];
   const ownedBits = ownedRec ? ownedRec.bits
-    : SpspLogin.apiAvailable() ? ''
+    : !titlesOn || SpspLogin.apiAvailable() ? ''
     : simulateTitles(lang, uid, (data.player && data.player.tournaments) || [],
                      { chars: mainChar ? [mainChar.id] : [], pref: (data.prefs && data.prefs[String(uid)]) || null }, today);
   const recordPending = !!ownedRec && ownedRec.updated === null;   // 記録がまだ無い (次の同期で配られる)
@@ -125,6 +127,7 @@ async function main() {
   // 二つ名: まだ見ていない新しいもの (NEW)。開いた時点で既読にする (NEW はこのページを開いている間だけ出す)
   const newIds = new Set(bitsTitles(lang, SpspTitleNotice.newSince(ownedBits, uid)).map(t => t.id));
   if (ownedRec) SpspTitleNotice.markSeen(uid, ownedBits);
+  // (二つ名の無い地域では titleList が空なので、下のリールは「なし」だけ。欄は上で隠してある)
   const titleList = TITLES[lang] || [];
   // 獲得数と全体 (全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない) は開いている間は変わらないので 1 回だけ
   const titleNote = recordPending ? i18n('card_edit.title_pending')
