@@ -182,7 +182,7 @@ function render() {
   const st = SPSPTags.statusTag(TOURNEY, { resume: 'chip resume', gf: 'chip gf' });
   if (st) chips.push(st);
   chips.push(SPSPTags.dayTag(TOURNEY, { wk: 'chip wk', wd: 'chip wd' }));
-  chips.push(...SPSPTags.flagTags(TOURNEY, { pre: 'chip pre', res: 'chip res', lc: 'chip lc' }));
+  chips.push(...SPSPTags.flagTags(TOURNEY, { pre: 'chip pre', res: 'chip res', lc: 'chip lc', rs: 'chip rs' }));
   // 開催地の都道府県 (tournament_prefectures.json[TID])。
   const locHtml = TOURNEY_PREF ? `📍${escapeHtml(SPSPGeo.unitName(TOURNEY_PREF))} · ` : '';
   const metaLine = document.getElementById('meta-line');
@@ -249,8 +249,10 @@ function render() {
   // ページ送り (../js/pager.js、p/ と共通)
   const setupPaginated = SPSPPager.setupPaginated;
 
+  // ランダムシード大会はアップセット・シード超えを集計しない (ビルドも出さない)
+  const RANDOM_SEED = !!TOURNEY.is_random_seed;
   setupPaginated(hl.top_match_upsets, 'top-upsets', 'top-upsets-pager',
-    renderMatchUpsets, i18n('tournament.empty.upsets'));
+    renderMatchUpsets, (RANDOM_SEED ? i18n('tournament.empty.random_seed') : i18n('tournament.empty.upsets')));
   // 順位評価上昇 = 当時この大会でのスコア上昇分 (tjpr_pts_at)。
   // 旧ビルドの JSON は tjpr_raw 順のままなのでクライアント側でも sort し直す。
   const tjprGains = (hl.top_contrib_points || [])
@@ -260,8 +262,8 @@ function render() {
     arr => renderHl(arr, p => `+${((p.tjpr_pts_at || 0) * TJPR_SCALE).toFixed(1)}<span class="frac">pt</span>`, i18n('tournament.empty.tjpr_gain')),
     i18n('tournament.empty.tjpr_gain'));
   setupPaginated(hl.top_spr_gains, 'top-spr', 'top-spr-pager',
-    arr => renderHl(arr, p => `+${p.spr}<span class="frac">SPR</span>`, i18n('tournament.empty.spr')),
-    i18n('tournament.empty.spr'));
+    arr => renderHl(arr, p => `+${p.spr}<span class="frac">SPR</span>`, (RANDOM_SEED ? i18n('tournament.empty.random_seed') : i18n('tournament.empty.spr'))),
+    (RANDOM_SEED ? i18n('tournament.empty.random_seed') : i18n('tournament.empty.spr')));
   setupPaginated(hl.top_bt_gains, 'top-bt', 'top-bt-pager',
     arr => renderHl(arr, p => {
       const peakD = (p.bt_d || 0) * ELO_PER_UNIT;
@@ -433,7 +435,7 @@ function renderPlayerMatches(uid) {
     }
     // UF: 自分が勝って高シードを倒した場合のみ score 下に表記.
     let ufHtml = '';
-    if (won && pSeed != null && oSeed != null && pSeed > oSeed) {
+    if (!(TOURNEY && TOURNEY.is_random_seed) && won && pSeed != null && oSeed != null && pSeed > oSeed) {
       const uf = placementToW2W(pSeed) - placementToW2W(oSeed);
       if (uf > 0) {
         ufHtml = `<div style="font-size:10px;line-height:1.1;margin-top:1px"><span style="color:#16a34a;font-weight:600">+${uf}</span> <span style="color:#9ca3af">UF</span></div>`;

@@ -598,3 +598,27 @@ test('class_delete: リセットに失敗・リセット後も消せないなら
   assert.strictEqual(e.store.errors.at(-1).note, 'delete:http_422');
   assert.strictEqual(e.store.classes[0].status, 'waiting');
 });
+
+test('class_create: 本戦に出ていない人は misc に :nocount を付けて送れる。同じ人の重複は ID で見る', () => {
+  const ps = participants(3);
+  ps[2] = { name: 'Extra (disc)', seed: 3, misc: 'startgg:5555:nocount' };
+  const r = parseClassCreate(body({ participants: ps }));
+  assert.ok('input' in r, JSON.stringify(r));
+  assert.strictEqual(r.input.participants[2].misc, 'startgg:5555:nocount', 'そのまま Challonge に送る');
+  const dup = participants(3);
+  dup[2] = { name: 'Dup', seed: 3, misc: dup[0].misc + ':nocount' };
+  assert.deepStrictEqual(parseClassCreate(body({ participants: dup })), { bad: 'participant_misc' }, 'startgg:1000 と startgg:1000:nocount は同じ人');
+  for (const misc of ['startgg:5555:count', 'startgg:5555:nocount:x', 'startgg:0:nocount', 'startgg::nocount', 'nocount']) {
+    const p = participants(3); p[2] = { name: 'X', seed: 3, misc };
+    assert.deepStrictEqual(parseClassCreate(body({ participants: p })), { bad: 'participant_misc' }, misc);
+  }
+});
+
+test('class_create: :nocount の参加者もそのまま bulk_add に入る', async () => {
+  const e = env(okHandlers());
+  const ps = participants(3);
+  ps[2] = { name: 'Extra (disc)', seed: 3, misc: 'startgg:5555:nocount' };
+  assert.strictEqual((await post(e, body({ participants: ps }))).ok, true);
+  const b = JSON.parse(e.calls.find((c) => c.kind === 'bulk').init.body);
+  assert.strictEqual(b.data.attributes.participants[2].misc, 'startgg:5555:nocount');
+});

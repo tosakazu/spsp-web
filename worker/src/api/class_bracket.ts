@@ -88,10 +88,13 @@ export function parseClassCreate(r: Record<string, unknown>): { input: ClassCrea
     if (!pn || pn.length > PARTICIPANT_NAME_MAX) return { bad: 'participant_name' };
     const seed = posInt(o.seed, 3);
     if (seed === null || seed > CLASS_PARTICIPANTS_MAX || seeds.has(seed)) return { bad: 'participant_seed' };
-    if (typeof o.misc !== 'string' || !/^startgg:[1-9]\d{0,11}$/.test(o.misc) || miscs.has(o.misc)) return { bad: 'participant_misc' };
+    // misc = startgg:<ユーザー ID>。本戦に出ていない人を足したときは :nocount (集計対象のクラスでも SPSP では数えない)。
+    // 同じ人の重複は ID で見る (startgg:123 と startgg:123:nocount は同じ人)
+    const mm = typeof o.misc === 'string' ? /^startgg:([1-9]\d{0,11})(:nocount)?$/.exec(o.misc) : null;
+    if (!mm || miscs.has(mm[1])) return { bad: 'participant_misc' };
     seeds.add(seed);
-    miscs.add(o.misc);
-    participants.push({ name: pn, seed, misc: o.misc });
+    miscs.add(mm[1]);
+    participants.push({ name: pn, seed, misc: o.misc as string });
   }
   return { input: { startggToken: st, challongeToken: ct, parentEventId, classLetter: r.class_letter, name,
     format: r.format, counted: r.counted, placeMin, placeMax, seeding: r.seeding, participants } };

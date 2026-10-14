@@ -133,6 +133,14 @@
           <button type="button" data-f="all" class="on"></button><button type="button" data-f="on"></button><button type="button" data-f="off"></button><button type="button" data-f="dq" hidden></button>
         </div>
       </div>
+      <!-- 本戦に出ていない人を足す (名前で検索)。足した人は本戦の最速敗退と同じシード、SPSP には集計しない -->
+      <div class="cb-extra">
+        <div class="cb-extra-row">
+          <input type="search" id="cb-extra-q" data-i18n-attr="placeholder:class.extra_add" placeholder="本戦に出ていない人を追加 (名前で検索)" autocomplete="off">
+          <div class="cb-extra-sug" id="cb-extra-sug" hidden></div>
+        </div>
+        <div class="cb-extra-note" data-i18n="class.extra_note">追加した人は本戦の最速敗退と同じシードになり、SPSP の集計には入りません</div>
+      </div>
       <div class="cb-table-wrap">
         <table class="cb-table" id="cb-table">
           <thead><tr>

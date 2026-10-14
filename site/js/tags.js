@@ -25,6 +25,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     get resume() { return i18n('tags.resume'); }, get gf() { return i18n('tags.gf'); },
     get pre() { return i18n('tags.pre'); }, get res() { return i18n('tags.res'); }, get lc() { return i18n('tags.lc'); },
     get uchi() { return i18n('tags.uchi'); }, get special() { return i18n('tags.special'); }, get small() { return i18n('tags.small'); },
+    get rs() { return i18n('tags.rs'); },
   };
   var TITLE = {
     get wk_real() { return i18n('tags.title.wk_real'); },
@@ -32,8 +33,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     get resume() { return i18n('tags.title.resume'); },
     get gf() { return i18n('tags.title.gf'); },
     get small() { return i18n('tags.title.small'); },
+    get rs() { return i18n('tags.title.rs'); },
   };
-  var FLAG_KEY = { pre: 'is_pre', res: 'is_restricted', lc: 'is_lower_class', uchi: 'is_uchi', special: 'is_special_rules', small: 'is_small' };
+  var FLAG_KEY = { pre: 'is_pre', res: 'is_restricted', lc: 'is_lower_class', uchi: 'is_uchi', special: 'is_special_rules', small: 'is_small', rs: 'is_random_seed' };
   // ビルド出力の tags 配列 ('weekend', 'pre', 'uchi' … = is_* の名前から is_ を取ったもの。spsp_scripts feat/output-ids から) があればそれを、
   // 無ければ (現行データ) is_* フラグを見る。どちらでも同じ判定になる
   /** @param {any} t @param {string} name 'weekend' など */
@@ -41,7 +43,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     if (t && Array.isArray(t.tags)) return t.tags.indexOf(name) >= 0;
     return !!(t && t['is_' + name]);
   }
-  var FLAG_ORDER = ['pre', 'res', 'lc', 'uchi', 'special', 'small'];
+  var FLAG_ORDER = ['pre', 'res', 'lc', 'uchi', 'special', 'small', 'rs'];
 
   function span(cls, text, title) {
     return '<span class="' + cls + '"' + (title ? ' title="' + title + '"' : '') + '>' + text + '</span>';

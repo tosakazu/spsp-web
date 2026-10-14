@@ -519,6 +519,7 @@
         "lower_class",
         "uchi",
         "special_rules",
+        "random_seed",
         "dq"
       ],
       "description": "大会のタグ (is_* フラグの名前から is_ を取ったもの。ビルド feat/output-ids から。順序はこの enum の順)"
