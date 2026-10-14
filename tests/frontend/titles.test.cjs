@@ -28,6 +28,8 @@ function mk(T, lang, { pre = 0, post = 0, move = 0 }) {
 }
 /** 本戦 m 試合 (公開後・合計) で配る後半の数 */
 const postsFor = (T, m) => Math.floor(m / T.POST_PER_MATCHES.matches) * T.POST_PER_MATCHES.posts;
+/** 最初の配布の数 (ジャンルの合計) */
+const initN = (T, side) => Object.values(T.GENRE_COUNTS[side]).reduce((a, b) => a + b, 0);
 const count = (T, lang, owned) => {
   const c = { pre: 0, post: 0, move: 0 };
   for (const id of owned.keys()) { const x = T.TITLES[lang].find(y => y.id === id); c[x.kind === 'move' ? 'move' : x.part]++; }
@@ -47,20 +49,21 @@ test('一覧: id は重複なし・言語の接頭辞と連番・使える位置
       assert.ok(['initial', 'random', 'char', 'pref'].includes(t.unlock), t.id);
       if (t.unlock === 'char') assert.ok(Array.isArray(t.chars) && t.chars.length > 0, t.id);
       if (t.unlock === 'pref') assert.ok(typeof t.pref === 'string' && t.pref, t.id);
+      if (t.unlock === 'random' && lang === 'ja') assert.ok(['generic', 'smash', 'source', 'move'].includes(T.genreOf(t)) && (t.kind === 'move' || t.genre), `ジャンルが無い ${t.id}`);
       assert.match(t.added, /^\d{4}-\d{2}-\d{2}$/);
     }
   }
 });
 
-test('最初の配布: 大会に出ていなくても initial は全部 + 前半・後半を INITIAL_DRAWS ずつ (日付は公開日)', () => {
+test('最初の配布: 大会に出ていなくても initial は全部 + 前半・後半を GENRE_COUNTS の合計ずつ (日付は公開日)', () => {
   const T = load();
   const owned = T.ownedTitles('ja', 123, []);
   for (const t of T.TITLES.ja.filter(x => x.unlock === 'initial')) assert.ok(owned.has(t.id), t.id);
   mk(T, 'zz', { pre: 300, post: 300, move: 300 });
   const z = T.ownedTitles('zz', 123, []);
   const c = count(T, 'zz', z);
-  assert.strictEqual(c.pre, T.INITIAL_DRAWS.pre);
-  assert.strictEqual(c.post + c.move, T.INITIAL_DRAWS.post);
+  assert.strictEqual(c.pre, initN(T, 'pre'));
+  assert.strictEqual(c.post + c.move, initN(T, 'post'));
   for (const v of z.values()) assert.deepStrictEqual({ ...v }, { at: T.TITLE_LAUNCH, how: 'start' });
 });
 
@@ -155,27 +158,62 @@ test('使える位置: both は前半・後半どちらでも、pre / post は�
   assert.strictEqual(T.usableIn(t('post'), 'pre'), false);
 });
 
-test('抽選の割合: 後半のうち技名 (kind move) は 1/3。件数の比には引きずられない', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 100, post: 100, move: 300 });
-  const c = { pre: 0, post: 0, move: 0 };
-  for (let uid = 1; uid <= 1500; uid++) {
-    const x = count(T, 'zz', T.ownedTitles('zz', uid, tours(2, '2026-10-02')));
-    for (const k of Object.keys(c)) c[k] += x[k];
+/** ジャンルごとの試しの一覧 (件数は ns[side][genre]) */
+function mkGenres(T, lang, ns) {
+  const list = [];
+  for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(ns[side])) for (let i = 0; i < n; i++) {
+    list.push({ id: `${lang}-${String(list.length + 1).padStart(4, '0')}`, part: side, text: 'x', unlock: 'random', added: '2026-10-01',
+      ...(g === 'move' ? { kind: 'move' } : { genre: g }) });
   }
-  assert.strictEqual(c.pre, 1500 * (T.INITIAL_DRAWS.pre + 2 * T.PRE_PER_TOURNAMENT));
-  assert.strictEqual(c.post + c.move, 1500 * (T.INITIAL_DRAWS.post + postsFor(T, 4)));
-  assert.ok(Math.abs(c.move / (c.post + c.move) - 1 / 3) < 0.03, JSON.stringify(c));
+  T.TITLES[lang] = list;
+  return list;
+}
+const byGenre = (T, lang, owned, filter) => {
+  const c = {};
+  for (const [id, v] of owned) { if (filter && !filter(v)) continue; const x = T.TITLES[lang].find(y => y.id === id); const k = `${x.part}:${T.genreOf(x)}`; c[k] = (c[k] || 0) + 1; }
+  return c;
+};
+
+test('最初の配布はジャンルごとに GENRE_COUNTS の数ちょうど', () => {
+  const T = load();
+  mkGenres(T, 'zz', { pre: { generic: 200, smash: 200, source: 200 }, post: { generic: 200, smash: 200, source: 200, move: 200 } });
+  const c = byGenre(T, 'zz', T.ownedTitles('zz', 77, []));
+  const want = {};
+  for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(T.GENRE_COUNTS[side])) want[`${side}:${g}`] = n;
+  assert.deepStrictEqual(c, want);
+});
+
+test('大会での抽選: ジャンルは GENRE_COUNTS の比 (件数の比には引きずられない)', () => {
+  const T = load();
+  mkGenres(T, 'zz', { pre: { generic: 400, smash: 100, source: 800 }, post: { generic: 300, smash: 900, source: 300, move: 900 } });
+  const c = {};
+  for (let uid = 1; uid <= 600; uid++) {
+    const x = byGenre(T, 'zz', T.ownedTitles('zz', uid, tours(4, '2026-10-02')), v => v.how === 'random');
+    for (const [k, n] of Object.entries(x)) c[k] = (c[k] || 0) + n;
+  }
+  for (const side of ['pre', 'post']) {
+    const w = T.GENRE_COUNTS[side];
+    const total = Object.values(w).reduce((a, b) => a + b, 0);
+    const got = Object.keys(w).reduce((n, g) => n + (c[`${side}:${g}`] || 0), 0);
+    for (const [g, n] of Object.entries(w)) assert.ok(Math.abs((c[`${side}:${g}`] || 0) / got - n / total) < 0.03, `${side}:${g} ${JSON.stringify(c)}`);
+  }
+});
+
+test('ジャンルを引き切ったら同じ位置のほかのジャンルから', () => {
+  const T = load();
+  mkGenres(T, 'zz', { pre: { generic: 5, smash: 300 }, post: { generic: 400 } });
+  const c = byGenre(T, 'zz', T.ownedTitles('zz', 3, []));
+  assert.deepStrictEqual(c, { 'pre:generic': 5, 'pre:smash': initN(T, 'pre') - 5, 'post:generic': initN(T, 'post') });
 });
 
 test('技名 / 技名以外の片方を引き切ったらもう片方から。前半・後半をまたいでは引かない', () => {
   const T = load();
   mk(T, 'zz', { pre: 2, post: 300 });   // 技名なし・前半は少ない
   const c = count(T, 'zz', T.ownedTitles('zz', 1, tours(10, '2026-10-02')));
-  assert.deepStrictEqual(c, { pre: 2, post: T.INITIAL_DRAWS.post + postsFor(T, 20), move: 0 });
+  assert.deepStrictEqual(c, { pre: 2, post: initN(T, 'post') + postsFor(T, 20), move: 0 });
   mk(T, 'zz', { pre: 300, move: 300 });   // 技名以外の後半なし
   const d = count(T, 'zz', T.ownedTitles('zz', 1, tours(3, '2026-10-02')));
-  assert.deepStrictEqual(d, { pre: T.INITIAL_DRAWS.pre + 3 * T.PRE_PER_TOURNAMENT, post: 0, move: T.INITIAL_DRAWS.post + postsFor(T, 6) });
+  assert.deepStrictEqual(d, { pre: initN(T, 'pre') + 3 * T.PRE_PER_TOURNAMENT, post: 0, move: initN(T, 'post') + postsFor(T, 6) });
 });
 
 test('キャラ (メインキャラの ID) と都道府県で持つもの', () => {
