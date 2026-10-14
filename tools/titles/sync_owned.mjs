@@ -50,7 +50,8 @@ for (let i = 0; i < items.length; i += BATCH) {
   let j = null;
   for (let attempt = 1; attempt <= 3 && !j; attempt++) {
     try {
-      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      // 1 回 1 MB 前後になるので、大きな body を受ける POST /api/title_sync に送る (/api は 64 KB まで)
+      const r = await fetch(API.replace(/\/$/, '') + '/title_sync', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'title_sync', key: KEY, lang: LANG, items: batch }), signal: AbortSignal.timeout(60000) });
       const body = await r.json().catch(() => null);
       if (body && body.ok) j = body;

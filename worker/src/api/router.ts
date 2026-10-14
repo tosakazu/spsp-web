@@ -43,6 +43,9 @@ export interface ApiContext {
 
 /** POST body の上限 (投稿本文 1000 文字 + token 等で十分)。 */
 export const MAX_BODY_BYTES = 64 * 1024;
+/** 毎日の二つ名の記録 (POST /api/title_sync、鍵つき) だけの上限。1 回 TITLE_SYNC_MAX_ITEMS 人 × 数百の id で 1 MB 前後になる。
+ * パスが title_sync のときだけ使い、body の action も title_sync でなければ断る (ほかの action に大きな body を通さない) */
+export const TITLE_SYNC_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const MSG_BAD_FORMAT = 'リクエストの形式が不正です。';
 
@@ -205,8 +208,9 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     return jsonResponse(getOnlyPostBody());
   }
 
+  const maxBody = sub === 'title_sync' ? TITLE_SYNC_MAX_BODY_BYTES : MAX_BODY_BYTES;
   const len = Number(request.headers.get('content-length') || 0);
-  if (len > MAX_BODY_BYTES) {
+  if (len > maxBody) {
     return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   let text: string;
@@ -216,7 +220,7 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   if (!text) return jsonResponse(await dispatch(ctx, undefined));
-  if (text.length > MAX_BODY_BYTES) return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
+  if (text.length > maxBody) return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
 
   let req: unknown;
   try {
@@ -228,6 +232,10 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
   if (sub && req && typeof req === 'object' && !Array.isArray(req)
       && (req as Record<string, unknown>).action === undefined) {
     (req as Record<string, unknown>).action = sub;
+  }
+  if (sub === 'title_sync' && text.length > MAX_BODY_BYTES
+      && !(req && typeof req === 'object' && (req as Record<string, unknown>).action === 'title_sync')) {
+    return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   return jsonResponse(await dispatch(ctx, req));
 }

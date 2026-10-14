@@ -141,3 +141,21 @@ test('title_export: 鍵つき。uid の昇順にページ送り (next_after)、�
   }
   assert.strictEqual((await post(makeEnv({}), { action: 'title_export', key: '', lang: 'ja' })).error.code, 'internal');
 });
+
+test('title_sync の大きな body: POST /api/title_sync だけ 2 MB まで (action も title_sync のときだけ)。/api は 64 KB のまま', async () => {
+  const e = env();
+  // 300 人 × id 30 個で body を 64 KB より大きくする (同じ id を並べても受け付ける)
+  const items = Array.from({ length: 300 }, (_, i) => ({ uid: 100000 + i, ids: Array(30).fill('ja-0002') }));
+  const body = { action: 'title_sync', key: KEY, lang: 'ja', items };
+  assert.ok(JSON.stringify(body).length > 64 * 1024);
+  const big = await http(e, 'POST', '/api/title_sync', body);
+  assert.strictEqual(big.json.ok, true, JSON.stringify(big.json));
+  assert.strictEqual(big.json.received, 300);
+  // /api には大きすぎる
+  const viaRoot = await http(e, 'POST', '/api', body);
+  assert.strictEqual(viaRoot.json.error.code, 'bad_request');
+  // パスが title_sync でも、ほかの action の大きな body は断る
+  const other = await http(e, 'POST', '/api/title_sync', Object.assign({}, body, { action: 'post' }));
+  assert.strictEqual(other.json.error.code, 'bad_request');
+  assert.strictEqual(other.json.error.message, 'リクエストの形式が不正です。');
+});
