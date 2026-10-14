@@ -9,7 +9,7 @@ export class MemStore {
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
     this.classActions = [];  // { user_id, action, ts_ms, day }
-    this.titleOwned = new Map();   // 'uid|lang' → { bits, updated }
+    this.titleOwned = new Map();   // 'uid|lang' → { bits, updated, n_pre, n_post }
   }
 
   async recentActivity(table, userId, dayKey) {
@@ -135,19 +135,22 @@ export class MemStore {
     return r ? { ...r } : null;
   }
 
-  async getTitleOwnedMany(uids, lang) {
-    const out = new Map();
-    for (const u of uids) { const r = await this.getTitleOwned(u, lang); if (r) out.set(String(u), r); }
-    return out;
-  }
-
-  async putTitleOwnedMany(lang, rows) {
-    for (const r of rows) this.titleOwned.set(String(Number(r.uid)) + '|' + lang, { bits: r.bits, updated: r.updated });
+  async casTitleOwnedMany(lang, rows, date) {
+    const conflicts = [];
+    for (const r of rows) {
+      const k = String(Number(r.uid)) + '|' + lang;
+      const cur = this.titleOwned.get(k);
+      const same = r.prev === null ? !cur
+        : !!cur && cur.bits === r.prev.bits && cur.n_pre === r.prev.n_pre && cur.n_post === r.prev.n_post;
+      if (!same) { conflicts.push(r.uid); continue; }
+      this.titleOwned.set(k, { bits: r.bits, updated: cur && cur.bits === r.bits ? cur.updated : date, n_pre: r.n_pre, n_post: r.n_post });
+    }
+    return conflicts;
   }
 
   async listTitleOwned(lang, afterUid, limit) {
     return [...this.titleOwned.entries()].filter(([k]) => k.endsWith('|' + lang))
-      .map(([k, v]) => ({ uid: Number(k.split('|')[0]), bits: v.bits, updated: v.updated }))
+      .map(([k, v]) => ({ uid: Number(k.split('|')[0]), ...v }))
       .filter((x) => x.uid > afterUid).sort((a, b) => a.uid - b.uid).slice(0, limit);
   }
 

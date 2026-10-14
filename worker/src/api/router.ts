@@ -43,7 +43,7 @@ export interface ApiContext {
 
 /** POST body の上限 (投稿本文 1000 文字 + token 等で十分)。 */
 export const MAX_BODY_BYTES = 64 * 1024;
-/** 毎日の二つ名の記録 (POST /api/title_sync、鍵つき) だけの上限。1 回 TITLE_SYNC_MAX_ITEMS 人 × 数百の id で 1 MB 前後になる。
+/** 毎日の二つ名の記録 (POST /api/title_sync、鍵つき) だけの上限。1 人あたり今と前のビット列 (各 1.2 KB 前後) で、同期の道具は 1 回 1.5 MB までに分けて送る。
  * パスが title_sync のときだけ使い、body の action も title_sync でなければ断る (ほかの action に大きな body を通さない) */
 export const TITLE_SYNC_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -77,7 +77,7 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         // ページを開くたびに呼ばれる確認。期限切れは普通に起きるので記録しない。
         return (await handleMe(ctx.cfg, r, now)).body;
       case 'card_get':
-        return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+        return (await handleCardGet(ctx.cfg, ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'title_get':
         return (await handleTitleGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'title_sync':

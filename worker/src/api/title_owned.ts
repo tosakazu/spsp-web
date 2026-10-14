@@ -2,23 +2,25 @@
  * 持っている二つ名の記録 (D1 title_owned、docs/card_titles_design.md「持っている二つ名の記録」)。
  *
  *   action: "title_get"   { uid, lang }        → { bits, updated }  (GET /api/titles?uid=&lang=。だれでも読める)
- *   action: "title_sync"  { key, lang, items:[{uid, ids:[…]}], date? } → { changed, items:[{uid, bits, updated}] }
- *                         毎日のビルドの後に全選手分を送る (1 回 TITLE_SYNC_MAX_ITEMS 人まで)。記録に OR するだけで消さない。
- *                         ビットが増えた人だけ updated を date (省略時は今日、+09:00) にする。鍵 = Worker の secret TITLE_SYNC_KEY
- *                         items = 送った全員の OR 後の記録 (ビルドがこれを players/<uid>.json の title_bits / title_updated に書く。
- *                         何も持っていない人は bits "" / updated null)
- *   action: "title_export" { key, lang, after_uid?, limit? } → { items:[{uid, bits, updated}], next_after }  (復旧用、uid の昇順)
- * D1 が持ち物の正本。表示は players/<uid>.json (ビルド時に書く) で行い、card_put の確認は D1 を見る。
- * ビット列の形は site/js/titles.js (bitsFromIds / bitsHas / bitsOr) と同じ。
+ *   action: "title_sync"  { key, lang, items:[{uid, prev, bits, n_pre, n_post}], date? } → { changed, conflicts:[uid] }
+ *                         同期の道具 (tools/titles/sync_owned.mjs) が title_export で今の記録を読み、まだ引いていない回を引いて (site/js/titles.js advanceTitles)
+ *                         変わった人だけ送る。prev = 道具が読んだときの行 (無ければ null)。行が prev のままのときだけ書き、
+ *                         違えば (ほかの同期が先に書いた) conflicts に入れて書かない (次の同期で読み直して引く)。
+ *                         ビット列は増えるだけ (prev にあるものを消す送り方は弾く)。回数も減らさない。
+ *                         一覧に無い番号も受ける (Worker の一覧が同期の道具より古いことがあるため。表示と card_put は一覧にあるものだけ使う)。
+ *                         updated はビットが増えたときだけ date (省略時は今日、+09:00) にする。鍵 = Worker の secret TITLE_SYNC_KEY
+ *   action: "title_export" { key, lang, after_uid?, limit? } → { items:[{uid, bits, updated, n_pre, n_post}], next_after }  (uid の昇順)
+ * D1 が持ち物の正本。編集ページ・ヘッダーのお知らせは title_get、カードの表示は card_get の title_text、card_put の確認は D1 を見る。
+ * ビット列の形は site/js/title_bits.js と同じ。
  */
 import type { Config } from '../config.ts';
-import { TITLE_EXPORT_MAX, TITLE_SYNC_MAX_IDS, TITLE_SYNC_MAX_ITEMS, requireSecret } from '../config.ts';
-import type { Store } from '../store.ts';
+import { TITLE_BITS_MAX_BYTES, TITLE_DRAWS_MAX, TITLE_EXPORT_MAX, TITLE_SYNC_MAX_ITEMS, requireSecret } from '../config.ts';
+import type { Store, TitleOwnedWrite } from '../store.ts';
 import { keyMatches } from './export.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { dayKey } from './time.ts';
-import { TITLES, bitsFromIds, bitsOr, titleById } from './titles.ts';
+import { TITLES, bitsOr, bitsValid } from './titles.ts';
 
 function validUid(v: unknown): string | null {
   const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : '') : typeof v === 'string' ? v : '';
@@ -39,7 +41,17 @@ export async function handleTitleGet(store: Store, req: Record<string, unknown>)
   return ok({ bits: row ? row.bits : '', updated: row ? row.updated : null });
 }
 
-/** action: "title_sync" — 鍵つき。記録に OR する (消さない)。 */
+/** 回数 (0〜TITLE_DRAWS_MAX の整数) */
+function validCount(v: unknown): number | null {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= TITLE_DRAWS_MAX ? v : null;
+}
+
+/** ビット列 (形と長さ。末尾の 0 を落とした形だけ受ける = 同じ中身なら同じ文字列なので、prev との比較がずれない) */
+function validBits(v: unknown): string | null {
+  return bitsValid(v, TITLE_BITS_MAX_BYTES) && bitsOr('', v as string) === v ? (v as string) : null;
+}
+
+/** action: "title_sync" — 鍵つき。読んだときのままの行だけ書く (ビット列は増えるだけ)。 */
 export async function handleTitleSync(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const expected = requireSecret(cfg.titleSyncKey, 'TITLE_SYNC_KEY');
   if (!keyMatches(req.key, expected)) return err('auth_failed', '鍵が一致しません。');
@@ -54,39 +66,33 @@ export async function handleTitleSync(cfg: Config, store: Store, req: Record<str
   if (!Array.isArray(items) || items.length > TITLE_SYNC_MAX_ITEMS) {
     return err('bad_request', '選手の並びが不正か、多すぎます (' + TITLE_SYNC_MAX_ITEMS + ' 人まで)。', 'bad:items');
   }
-  // 入力を全部確かめてから書く (途中まで書いて失敗、を避ける)。一覧に無い id は送り手の誤りなので全体を弾く
-  const add = new Map<string, string>();   // uid → 足すビット列 (同じ uid が 2 回来たら合わせる)
+  // 入力を全部確かめてから書く (途中まで書いて失敗、を避ける)
+  const rows: TitleOwnedWrite[] = [];
+  const seen = new Set<string>();
   for (let i = 0; i < items.length; i++) {
-    const it = items[i] as { uid?: unknown; ids?: unknown } | null;
-    const uid = it && validUid(it.uid);
-    if (!uid) return err('bad_request', 'uid が不正です (' + i + ' 番目)。', 'bad:uid');
-    const ids = it.ids;
-    if (!Array.isArray(ids) || ids.length > TITLE_SYNC_MAX_IDS) return err('bad_request', 'ids が不正です (' + i + ' 番目)。', 'bad:ids');
-    for (const id of ids) {
-      if (typeof id !== 'string' || !titleById(lang, id)) return err('bad_request', '一覧に無い二つ名です: ' + String(id).slice(0, 20), 'bad:id');
+    const it = items[i] as Record<string, unknown> | null;
+    const bad = (what: string) => err('bad_request', what + ' が不正です (' + i + ' 番目)。', 'bad:' + what);
+    const uid = it && typeof it === 'object' ? validUid(it.uid) : null;
+    if (!it || !uid || seen.has(uid)) return bad('uid');
+    seen.add(uid);
+    const bits = validBits(it.bits);
+    const nPre = validCount(it.n_pre), nPost = validCount(it.n_post);
+    if (bits === null) return bad('bits');
+    if (nPre === null || nPost === null) return bad('n');
+    let prev: TitleOwnedWrite['prev'] = null;
+    if (it.prev !== null) {
+      const p = it.prev as Record<string, unknown> | undefined;
+      const pb = p && typeof p === 'object' ? validBits(p.bits) : null;
+      const pn = p && typeof p === 'object' ? validCount(p.n_pre) : null, pm = p && typeof p === 'object' ? validCount(p.n_post) : null;
+      if (pb === null || pn === null || pm === null) return bad('prev');
+      prev = { bits: pb, n_pre: pn, n_post: pm };
+      // 消す・回数を戻す送り方は弾く (記録は増えるだけ)
+      if (bitsOr(pb, bits) !== bits || nPre < pn || nPost < pm) return bad('shrink');
     }
-    add.set(uid, bitsOr(add.get(uid) || '', bitsFromIds(ids as string[])));
+    rows.push({ uid, prev, bits, n_pre: nPre, n_post: nPost });
   }
-  const uids = [...add.keys()];
-  const cur = await store.getTitleOwnedMany(uids, lang);
-  const rows: { uid: string; bits: string; updated: string }[] = [];
-  const result: { uid: number; bits: string; updated: string | null }[] = [];
-  for (const uid of uids) {
-    const before = cur.get(uid);
-    const merged = bitsOr(before ? before.bits : '', add.get(uid) || '');
-    if (before && merged === before.bits) {                    // 増えていない (日付も変えない)
-      result.push({ uid: Number(uid), bits: before.bits, updated: before.updated });
-      continue;
-    }
-    if (!before && merged === '') {                            // 何も持っていない人の行は作らない
-      result.push({ uid: Number(uid), bits: '', updated: null });
-      continue;
-    }
-    rows.push({ uid, bits: merged, updated: date });
-    result.push({ uid: Number(uid), bits: merged, updated: date });
-  }
-  if (rows.length) await store.putTitleOwnedMany(lang, rows);
-  return ok({ changed: rows.length, received: items.length, items: result });
+  const conflicts = rows.length ? await store.casTitleOwnedMany(lang, rows, date) : [];
+  return ok({ changed: rows.length - conflicts.length, received: items.length, conflicts: conflicts.map(Number) });
 }
 
 /** action: "title_export" — 鍵つき。uid の昇順に limit 件ずつ (next_after を次の after_uid に。最後は null)。 */

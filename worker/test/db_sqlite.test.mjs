@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0007_title_owned_without_rowid.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -139,33 +139,41 @@ test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は ra
   assert.strictEqual(await store.recordClassAction('mine', ga(t0 + 6000)), false, '当日上限');
 });
 
-test('title_owned: 読み書き・複数人 (90 人ずつ)・置き換え', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+test('title_owned: 読んだときのままの行だけ書く (無ければ作る・あれば prev と一致するときだけ)、updated はビットが変わったときだけ', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
   const { store } = fresh();
   assert.strictEqual(await store.getTitleOwned('1', 'ja'), null);
-  const rows = Array.from({ length: 205 }, (_, i) => ({ uid: String(i + 1), bits: 'Ag', updated: '2026-10-02' }));
-  await store.putTitleOwnedMany('ja', rows);
-  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Ag', updated: '2026-10-02' });
+  const rows = Array.from({ length: 205 }, (_, i) => ({ uid: String(i + 1), prev: null, bits: 'Ag', n_pre: 0, n_post: 0 }));
+  assert.deepStrictEqual(await store.casTitleOwnedMany('ja', rows, '2026-10-02'), []);
+  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Ag', updated: '2026-10-02', n_pre: 0, n_post: 0 });
   assert.strictEqual(await store.getTitleOwned('1', 'en'), null);
-  const m = await store.getTitleOwnedMany(['1', '100', '205', '999'], 'ja');
-  assert.deepStrictEqual([...m.keys()].sort(), ['1', '100', '205']);
-  const all = await store.getTitleOwnedMany(rows.map((r) => r.uid), 'ja');
-  assert.strictEqual(all.size, 205);
-  await store.putTitleOwnedMany('ja', [{ uid: '1', bits: 'Bg', updated: '2026-10-03' }]);
-  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Bg', updated: '2026-10-03' });
+  // 作るつもり (prev null) でもう行がある → 書かない
+  assert.deepStrictEqual(await store.casTitleOwnedMany('ja', [{ uid: '1', prev: null, bits: 'Bg', n_pre: 3, n_post: 0 }], '2026-10-03'), ['1']);
+  // prev が今の行と同じ → 書く (ビットが変わったので updated も変わる)。違えば書かない
+  const prev = { bits: 'Ag', n_pre: 0, n_post: 0 };
+  assert.deepStrictEqual(await store.casTitleOwnedMany('ja', [
+    { uid: '1', prev, bits: 'Bg', n_pre: 3, n_post: 1 },
+    { uid: '2', prev: { bits: 'Ag', n_pre: 1, n_post: 0 }, bits: 'Bg', n_pre: 3, n_post: 1 },
+  ], '2026-10-03'), ['2']);
+  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Bg', updated: '2026-10-03', n_pre: 3, n_post: 1 });
+  assert.deepStrictEqual(await store.getTitleOwned('2', 'ja'), { bits: 'Ag', updated: '2026-10-02', n_pre: 0, n_post: 0 });
+  // 回数だけ増えた (引き切っていてビットは同じ) → updated はそのまま
+  assert.deepStrictEqual(await store.casTitleOwnedMany('ja', [{ uid: '1', prev: { bits: 'Bg', n_pre: 3, n_post: 1 }, bits: 'Bg', n_pre: 6, n_post: 1 }], '2026-10-04'), []);
+  assert.deepStrictEqual(await store.getTitleOwned('1', 'ja'), { bits: 'Bg', updated: '2026-10-03', n_pre: 6, n_post: 1 });
   const page = await store.listTitleOwned('ja', 100, 3);
   assert.deepStrictEqual(page.map((x) => x.uid), [101, 102, 103]);
-  assert.deepStrictEqual(page[0], { uid: 101, bits: 'Ag', updated: '2026-10-02' });
+  assert.deepStrictEqual(page[0], { uid: 101, bits: 'Ag', updated: '2026-10-02', n_pre: 0, n_post: 0 });
   assert.deepStrictEqual((await store.listTitleOwned('ja', 204, 10)).map((x) => x.uid), [205]);
 });
 
-test('title_owned: 0007 で WITHOUT ROWID に作り直し、0005 の行はそのまま残る', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+test('title_owned: 0007 で WITHOUT ROWID に作り直し、0005 の行はそのまま残る。0008 で回数の列 (既定 0)', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
   const db = new DatabaseSync(':memory:');
   for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   db.prepare('INSERT INTO title_owned (uid, lang, bits, updated) VALUES (?, ?, ?, ?)').run(7, 'ja', 'Ag', '2026-10-02');
   db.exec(fs.readFileSync(new URL('../migrations/0007_title_owned_without_rowid.sql', import.meta.url), 'utf8'));
   assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'title_owned'").get().sql, /WITHOUT ROWID/);
+  db.exec(fs.readFileSync(new URL('../migrations/0008_title_owned_draw_counts.sql', import.meta.url), 'utf8'));
   const store = new D1Store(d1Like(db));
-  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Ag', updated: '2026-10-02' });
-  await store.putTitleOwnedMany('ja', [{ uid: '7', bits: 'Bg', updated: '2026-10-03' }]);
-  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Bg', updated: '2026-10-03' });
+  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Ag', updated: '2026-10-02', n_pre: 0, n_post: 0 });
+  assert.deepStrictEqual(await store.casTitleOwnedMany('ja', [{ uid: '7', prev: { bits: 'Ag', n_pre: 0, n_post: 0 }, bits: 'Bg', n_pre: 3, n_post: 0 }], '2026-10-03'), []);
+  assert.deepStrictEqual(await store.getTitleOwned('7', 'ja'), { bits: 'Bg', updated: '2026-10-03', n_pre: 3, n_post: 0 });
 });

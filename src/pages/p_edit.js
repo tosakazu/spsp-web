@@ -12,8 +12,8 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
-import { TITLES, PRE_PER_TOURNAMENT, POST_PER_MATCHES, usableIn } from '../../site/js/titles.js';
-import { loadCardData, buildCardModel, cardAchievements, titleLang, ownedTitlesOf, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import { TITLES, PRE_PER_TOURNAMENT, POST_PER_MATCHES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
+import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -60,13 +60,27 @@ async function main() {
   $('ce-root').style.display = '';
 
   await SpspLogin.verify();   // 無効なトークンはここで消える
-  /** 適用済み (サーバ) — 「適用」を押せるかの比較にも使う @type {CardSettings | null} */
-  let applied = await fetchApplied(uid);
+  // 適用済み (サーバ) — 「適用」を押せるかの比較にも使う。持っている二つ名 (記録) も一緒に読む
+  const [appliedRes, ownedRec] = await Promise.all([fetchApplied(uid), SpspTitleNotice.fetchOwned(uid)]);
+  /** @type {CardSettings | null} */
+  let applied = appliedRes;
   /** @type {CardSettings} */
   let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
-  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st), { live: true });
+  // 二つ名: 持っているものは記録 (D1、GET /api/titles)。API の無い ConoHa のプレビューだけは、記録の代わりに出た大会から計算して見た目を確かめる
+  const lang = titleLang();
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const mainChar = ((data.player && data.player.characters) || [])[0];
+  const ownedBits = ownedRec ? ownedRec.bits
+    : SpspLogin.apiAvailable() ? ''
+    : simulateTitles(lang, uid, (data.player && data.player.tournaments) || [],
+                     { chars: mainChar ? [mainChar.id] : [], pref: (data.prefs && data.prefs[String(uid)]) || null }, today);
+  const recordPending = !!ownedRec && ownedRec.updated === null;   // 記録がまだ無い (次の同期で配られる)
+  const owned = new Set(bitsTitles(lang, ownedBits).map(t => t.id));
+  /** 持っていて、その位置に使えるものの文字 @param {string} id @param {'pre' | 'post'} slot */
+  const titleText = (id, slot) => { const t = owned.has(id) ? titleById(lang, id) : null; return t && usableIn(t, slot) ? t.text : ''; };
+  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st, titleText), { live: true });
   draw();
 
   const owner = ownerState(uid);
@@ -108,11 +122,15 @@ async function main() {
   /** @type {{ fits: (labels: string[]) => boolean, destroy: () => void } | null} */
   let tester = null;
   const labelOf = new Map(all.map(a => [a.key, a.label]));
-  // 二つ名: 持っているもの (出た大会から計算) と、まだ見ていない新しいもの (NEW)。開いた時点で既読にする (NEW はこのページを開いている間だけ出す)
-  const owned = ownedTitlesOf(data);
-  const newIds = new Set(SpspTitleNotice.newSince(owned, uid));
-  SpspTitleNotice.markSeen(uid, owned);
-  const titleList = TITLES[titleLang()] || [];
+  // 二つ名: まだ見ていない新しいもの (NEW)。開いた時点で既読にする (NEW はこのページを開いている間だけ出す)
+  const newIds = new Set(bitsTitles(lang, SpspTitleNotice.newSince(ownedBits, uid)).map(t => t.id));
+  if (ownedRec) SpspTitleNotice.markSeen(uid, ownedBits);
+  const titleList = TITLES[lang] || [];
+  // 獲得数と全体 (全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない) は開いている間は変わらないので 1 回だけ
+  const titleNote = recordPending ? i18n('card_edit.title_pending')
+    : i18n('card_edit.title_note', { have: owned.size, total: obtainableCount(lang, owned, today), pre: PRE_PER_TOURNAMENT, m: POST_PER_MATCHES.matches, post: POST_PER_MATCHES.posts });
+  /** リールの今の印 (変わったものだけ付け替える) @type {Record<'pre' | 'post', string | null | undefined>} */
+  const marked = { pre: undefined, post: undefined };
 
   function paint() {
     const hex = (COLORS.find(c => c.id === st.color) || COLORS[0]).hex;
@@ -157,19 +175,24 @@ async function main() {
           mine.map(x => `<div class="ce-reel-item" role="option" data-tid="${escapeHtml(x.id)}"><span class="ce-reel-text">${escapeHtml(x.text)}</span>${
             newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</div>`).join('');
       }
+      // 選択の印は、前の選択と今の選択の 2 つだけ付け替える (操作のたびに数千の項目を見直さない)
+      if (marked[part] !== cur) {
+        const mark = (/** @type {string | null | undefined} */ tid, /** @type {boolean} */ on) => {
+          if (tid === undefined) return;
+          const c = box.querySelector(`[data-tid="${tid || ''}"]`);   // id は ja-0123 の形だけ (エスケープ不要)
+          if (c) { c.classList.toggle('on', on); c.setAttribute('aria-selected', String(on)); }
+        };
+        mark(marked[part], false);
+        mark(cur, true);
+        marked[part] = cur;
+      }
       // リールの真ん中が今の選択と違えば (最初・「デフォルトに戻す」など、リール以外で変わったとき) そこまで回す
-      const items = Array.from(box.children);
-      const want = Math.max(0, items.findIndex(c => (c.getAttribute('data-tid') || null) === cur));
+      const sel = box.querySelector('.ce-reel-item.on');
+      const want = sel ? Array.prototype.indexOf.call(box.children, sel) : 0;
       const centered = Math.round(box.scrollTop / REEL_H);
       if (centered !== want && !box.dataset.spinning) box.scrollTop = want * REEL_H;
-      for (const c of /** @type {HTMLElement[]} */ (Array.from(box.children))) {
-        const on = (c.getAttribute('data-tid') || null) === cur;
-        c.classList.toggle('on', on);
-        c.setAttribute('aria-selected', String(on));
-      }
     }
-    const have = titleList.filter(x => owned.has(x.id)).length;
-    $('ce-title-note').textContent = i18n('card_edit.title_note', { have, total: titleList.length, pre: PRE_PER_TOURNAMENT, m: POST_PER_MATCHES.matches, post: POST_PER_MATCHES.posts });
+    $('ce-title-note').textContent = titleNote;
   }
   /** 真ん中に止まった項目を選ぶ @param {'pre' | 'post'} part */
   const pickCentered = part => {
@@ -288,7 +311,7 @@ async function main() {
   // 入りきるかの判定は Web フォントを読み終えてから (幅が変わるため)
   const fonts = /** @type {any} */ (document).fonts;
   await (fonts && fonts.ready ? fonts.ready.catch(() => {}) : Promise.resolve());
-  tester = SPSPPlayerCard.makeAchFitTester(buildCardModel(data, st));
+  tester = SPSPPlayerCard.makeAchFitTester(buildCardModel(data, st, titleText));
   paint();
 }
 

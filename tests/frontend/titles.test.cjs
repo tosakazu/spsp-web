@@ -1,44 +1,52 @@
-// tests/frontend/titles.test.cjs — 二つ名の一覧と、持っている二つ名の計算 (js/titles.js、docs/card_titles_design.md)。
+// tests/frontend/titles.test.cjs — 二つ名の一覧と抽選 (js/titles.js)・ビット列 (js/title_bits.js)。docs/card_titles_design.md
+// 抽選は記録 (ビット列 + 引いた回数) に足していくだけ: 過去に引いたものは、一覧や大会のデータが変わっても変わらない
 const test = require('node:test');
 const assert = require('node:assert');
-const vm = require('vm');
-const { built } = require('../helpers/built.cjs');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
-function load() {
-  const ctx = { console, btoa, atob };   // ビット列 (base64url) に使う
-  ctx.window = ctx; ctx.globalThis = ctx;
-  vm.createContext(ctx);
-  vm.runInContext(built('js/titles.js'), ctx);
-  return ctx.SpspTitles;
+const ROOT = path.resolve(__dirname, '../..');
+/** モジュールは 1 回だけ読む。テストが TITLES[lang] に試しの一覧を置くので、本物の一覧 (ja) はテストの最初に控える */
+let mods = null;
+async function load() {
+  if (!mods) {
+    const T = await import(pathToFileURL(path.join(ROOT, 'site/js/titles.js')).href);
+    const B = await import(pathToFileURL(path.join(ROOT, 'site/js/title_bits.js')).href);
+    mods = { T, B, ja: T.TITLES.ja };
+  }
+  return mods;
 }
 
-/** n 回の本戦 (日付は start から 1 日ずつ) @param {number} n @param {string} start */
-function tours(n, start = '2026-10-02') {
+const TODAY = '2026-12-31';
+/** n 回の本戦 (日付は start から 1 日ずつ、各 2 試合) @param {number} n @param {string} start */
+function tours(n, start = '2026-10-02', id0 = 1000) {
   const d0 = Date.parse(start + 'T00:00:00Z');
-  return Array.from({ length: n }, (_, i) => ({ event_id: 1000 + i, date: new Date(d0 + i * 864e5).toISOString().slice(0, 10), wins: 1, losses: 1 }));
+  return Array.from({ length: n }, (_, i) => ({ event_id: id0 + i, date: new Date(d0 + i * 864e5).toISOString().slice(0, 10), wins: 1, losses: 1 }));
 }
-
-/** 試しの一覧を TITLES[lang] に置く (前半・後半・技名の数) @returns {any[]} */
-function mk(T, lang, { pre = 0, post = 0, move = 0 }) {
+/** 試しの一覧を TITLES[lang] に置く。ns[side][genre] = 件数 */
+function mkGenres(T, lang, ns, added = '2026-10-01') {
   const list = [];
-  const add = (part, kind, n) => { for (let i = 0; i < n; i++) list.push({ id: `${lang}-${String(list.length + 1).padStart(4, '0')}`, part, text: 'x', unlock: 'random', added: '2026-10-01', ...(kind ? { kind } : {}) }); };
-  add('pre', null, pre); add('post', null, post); add('post', 'move', move);
+  for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(ns[side] || {})) for (let i = 0; i < n; i++) {
+    list.push({ id: `${lang}-${String(list.length + 1).padStart(4, '0')}`, part: side, text: 'x', unlock: 'random', added,
+      ...(g === 'move' ? { kind: 'move' } : { genre: g }) });
+  }
   T.TITLES[lang] = list;
   return list;
 }
-/** 本戦 m 試合 (公開後・合計) で配る後半の数 */
-const postsFor = (T, m) => Math.floor(m / T.POST_PER_MATCHES.matches) * T.POST_PER_MATCHES.posts;
-/** 最初の配布の数 (ジャンルの合計) */
-const initN = (T, side) => Object.values(T.GENRE_COUNTS[side]).reduce((a, b) => a + b, 0);
-const count = (T, lang, owned) => {
-  const c = { pre: 0, post: 0, move: 0 };
-  for (const id of owned.keys()) { const x = T.TITLES[lang].find(y => y.id === id); c[x.kind === 'move' ? 'move' : x.part]++; }
+const BIG = { pre: { generic: 300, smash: 200, source: 100 }, post: { generic: 600, smash: 300, move: 300, source: 200 } };
+/** 記録の二つ名を位置:ジャンルごとに数える */
+function byGenre(T, B, lang, bits) {
+  const c = {};
+  for (const t of T.bitsTitles(lang, bits)) { const k = `${t.part}:${T.genreOf(t)}`; c[k] = (c[k] || 0) + 1; }
   return c;
-};
+}
+const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 
-test('一覧: id は重複なし・言語の接頭辞と連番・使える位置 (part)・解放のしかた・日付の形', () => {
-  const T = load();
-  for (const [lang, list] of Object.entries(T.TITLES)) {
+test('一覧: id は重複なし・言語の接頭辞と連番・使える位置 (part)・解放のしかた・日付の形', async () => {
+  const { T, ja } = await load();
+  for (const [lang, list] of Object.entries({ ...T.TITLES, ja })) {
+    if (lang.length !== 2) continue;
     const ids = new Set();
     for (const t of list) {
       assert.ok(!ids.has(t.id), `重複 ${t.id}`);
@@ -51,106 +59,32 @@ test('一覧: id は重複なし・言語の接頭辞と連番・使える位置
       if (t.unlock === 'pref') assert.ok(typeof t.pref === 'string' && t.pref, t.id);
       if (t.unlock === 'random' && lang === 'ja') assert.ok(['generic', 'smash', 'source', 'move'].includes(T.genreOf(t)) && (t.kind === 'move' || t.genre), `ジャンルが無い ${t.id}`);
       assert.match(t.added, /^\d{4}-\d{2}-\d{2}$/);
+      if (t.retired) assert.match(t.retired, /^\d{4}-\d{2}-\d{2}$/);
     }
   }
 });
 
-test('最初の配布: 大会に出ていなくても initial は全部 + 前半・後半を GENRE_COUNTS の合計ずつ (日付は公開日)', () => {
-  const T = load();
-  const owned = T.ownedTitles('ja', 123, []);
-  for (const t of T.TITLES.ja.filter(x => x.unlock === 'initial')) assert.ok(owned.has(t.id), t.id);
-  mk(T, 'zz', { pre: 300, post: 300, move: 300 });
-  const z = T.ownedTitles('zz', 123, []);
-  const c = count(T, 'zz', z);
-  assert.strictEqual(c.pre, initN(T, 'pre'));
-  assert.strictEqual(c.post + c.move, initN(T, 'post'));
-  for (const v of z.values()) assert.deepStrictEqual({ ...v }, { at: T.TITLE_LAUNCH, how: 'start' });
+test('公開済みの二つ名は消さない・位置を変えない (titles_frozen.json。足したら tools/titles/freeze_titles.mjs)', async () => {
+  const { ja } = await load();
+  const frozen = JSON.parse(fs.readFileSync(path.join(__dirname, 'titles_frozen.json'), 'utf8'));
+  const part = new Map(ja.map(t => [Number(t.id.slice(3)), t.part]));
+  const bad = [];
+  for (const [p, nums] of Object.entries(frozen.ja)) for (const n of nums) if (part.get(n) !== p) bad.push(`ja-${n}: ${p} → ${part.get(n) || '消えた'}`);
+  assert.deepStrictEqual(bad, []);
+  const known = new Set(Object.values(frozen.ja).flat());
+  assert.deepStrictEqual(ja.filter(t => !known.has(Number(t.id.slice(3)))).map(t => t.id), [], 'まだ固めていない二つ名 (freeze_titles.mjs を実行)');
 });
 
-test('大会: 1 試合以上した本戦 1 つにつき前半 PRE_PER_TOURNAMENT、本戦と下位クラスの試合数に応じて後半 (端数は持ち越し)・同じ入力なら同じ結果', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 300, post: 300, move: 300 });
-  const pp = T.PRE_PER_TOURNAMENT;
-  const s0 = count(T, 'zz', T.ownedTitles('zz', 7, []));
-  const diff = (tv) => { const c = count(T, 'zz', T.ownedTitles('zz', 7, tv)); return { pre: c.pre - s0.pre, post: c.post + c.move - s0.post - s0.move }; };
-  assert.deepStrictEqual(diff(tours(1)), { pre: pp, post: postsFor(T, 2) });   // 1 勝 1 敗 = 2 試合
-  const one = (i, w, l) => ({ event_id: 2000 + i, date: `2026-11-0${i + 1}`, wins: w, losses: l });
-  assert.deepStrictEqual(diff([one(0, 0, 1)]), { pre: pp, post: postsFor(T, 1) });
-  assert.deepStrictEqual(diff([one(0, 0, 1), one(1, 0, 1), one(2, 0, 1)]), { pre: 3 * pp, post: postsFor(T, 3) });   // 試合数は大会をまたいで足す
-  assert.deepStrictEqual(diff([one(0, 4, 1)]), { pre: pp, post: postsFor(T, 5) });
-  const a = [...T.ownedTitles('zz', 7, tours(3)).entries()];
-  assert.deepStrictEqual([...T.ownedTitles('zz', 7, tours(3)).entries()], a);
-  // 試合 0 の大会は数えない。下位クラスの仮想大会は前半には数えず、試合は後半の数に足す
-  const noMatch = [{ event_id: 'z', date: '2026-11-02', wins: 0, losses: 0 }];
-  const classOnly = [{ event_id: 'c', date: '2026-11-01', parent_event_id: 1000, wins: 2, losses: 1 }];
-  assert.deepStrictEqual(diff(noMatch), { pre: 0, post: 0 });
-  assert.deepStrictEqual(diff(noMatch.concat(classOnly)), { pre: 0, post: postsFor(T, 3) });
-  // 本戦 0 勝 2 敗 → B クラスで 4 試合: 前半は本戦の 1 大会分、後半は 6 試合分
-  const main = { event_id: 3000, date: '2026-11-03', wins: 0, losses: 2 };
-  const cls = { event_id: 3001, date: '2026-11-03', parent_event_id: 3000, wins: 3, losses: 1 };
-  assert.deepStrictEqual(diff([main, cls]), { pre: pp, post: postsFor(T, 6) });
-});
-
-test('公開日より前の大会では配らない (さかのぼらない)', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 300, post: 300 });
-  const base = T.ownedTitles('zz', 9, []);
-  const old = T.ownedTitles('zz', 9, tours(30, '2025-01-01'));
-  assert.deepStrictEqual([...old.entries()], [...base.entries()]);
-  // 公開日の前後にまたがるときは、公開日以降の分だけ
-  const mixed = T.ownedTitles('zz', 9, tours(4, '2026-09-29'));   // 09-29, 09-30, 10-01, 10-02
-  assert.strictEqual(mixed.size, base.size + 2 * (T.PRE_PER_TOURNAMENT) + postsFor(T, 4));
-});
-
-test('後半の日付 = その試合数に届いた大会の日付', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 300, post: 300 });
-  const tv = [{ event_id: 1, date: '2026-11-01', wins: 0, losses: 1 }, { event_id: 2, date: '2026-11-05', wins: 1, losses: 1 }];
-  const owned = T.ownedTitles('zz', 3, tv);
-  const posts = [...owned.entries()].filter(([id, v]) => v.how === 'random' && T.TITLES.zz.find(x => x.id === id).part === 'post').map(([, v]) => v.at);
-  const want = [];
-  for (let k = 1; k <= postsFor(T, 3); k++) want.push(postsFor(T, 1) >= k ? '2026-11-01' : '2026-11-05');
-  assert.deepStrictEqual(posts, want);
-});
-
-test('あとで二つ名を足しても、それより前に引いたものは変わらない', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 300, post: 300 });
-  const before = T.ownedTitles('zz', 42, tours(2, '2026-10-02'));
-  // 11/01 に 3 つ追加 (大会は 10/02・10/03 なので、どの抽選にも入らない)
-  for (let i = 0; i < 3; i++) T.TITLES.zz.push({ id: `zz-90${i}0`, part: 'pre', text: 'x' + i, unlock: 'random', added: '2026-11-01' });
-  const after = T.ownedTitles('zz', 42, tours(2, '2026-10-02'));
-  assert.deepStrictEqual([...after.entries()], [...before.entries()]);
-  // 追加日より後の大会の抽選には出うる (11/02 の大会 1 つ・2 試合の分だけ増える)
-  const later = T.ownedTitles('zz', 42, tours(2, '2026-10-02').concat([{ event_id: 'n', date: '2026-11-02', wins: 1, losses: 1 }]));
-  assert.strictEqual(later.size, before.size + T.PRE_PER_TOURNAMENT + postsFor(T, 6) - postsFor(T, 4));
-});
-
-test('廃止したものは廃止日より後の抽選に出ない・持っている人は持ったまま', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 300, post: 300 });
-  const owned = T.ownedTitles('zz', 5, tours(1, '2026-10-02'));
-  const drawn = [...owned.entries()].find(([, v]) => v.how === 'random');
-  assert.ok(drawn);
-  const t = T.TITLES.zz.find(x => x.id === drawn[0]);
-  t.retired = '2026-12-01';
-  assert.ok(T.ownedTitles('zz', 5, tours(1, '2026-10-02')).has(drawn[0]));   // 引いたのは廃止日より前
-  t.retired = '2026-10-02';
-  assert.ok(!T.ownedTitles('zz', 5, tours(1, '2026-10-02')).has(drawn[0]));  // 引く日に廃止済みなら出ない
-});
-
-test('二つ名の文字はすべてフォント (site/fonts/corporate-logo-title.woff2) に入っている (足りなければ tools/fonts/build_title_font.mjs)', () => {
-  const T = load();
-  const fs = require('fs');
-  const path = require('path');
-  const have = new Set(fs.readFileSync(path.resolve(__dirname, '../../site/fonts/corporate-logo-title.chars.txt'), 'utf8').replace(/\n$/, ''));
+test('二つ名の文字はすべてフォントに入っている (足りなければ tools/fonts/build_title_font.mjs)', async () => {
+  const { T, ja } = await load();
+  const have = new Set(fs.readFileSync(path.join(ROOT, 'site/fonts/corporate-logo-title.chars.txt'), 'utf8').replace(/\n$/, ''));
   const missing = [];
-  for (const list of Object.values(T.TITLES)) for (const t of list) for (const ch of t.text) if (!have.has(ch)) missing.push(`${t.id}:${ch}`);
+  for (const list of [ja, T.TITLES.en]) for (const t of list) for (const ch of t.text) if (!have.has(ch)) missing.push(`${t.id}:${ch}`);
   assert.deepStrictEqual(missing, []);
 });
 
-test('使える位置: both は前半・後半どちらでも、pre / post はその位置だけ', () => {
-  const T = load();
+test('使える位置: both は前半・後半どちらでも、pre / post はその位置だけ', async () => {
+  const { T } = await load();
   const t = (part) => ({ id: 'ja-9999', part, text: 'x', unlock: 'random', added: '2026-10-01' });
   assert.strictEqual(T.usableIn(t('both'), 'pre') && T.usableIn(t('both'), 'post'), true);
   assert.strictEqual(T.usableIn(t('pre'), 'pre'), true);
@@ -158,91 +92,192 @@ test('使える位置: both は前半・後半どちらでも、pre / post は�
   assert.strictEqual(T.usableIn(t('post'), 'pre'), false);
 });
 
-/** ジャンルごとの試しの一覧 (件数は ns[side][genre]) */
-function mkGenres(T, lang, ns) {
-  const list = [];
-  for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(ns[side])) for (let i = 0; i < n; i++) {
-    list.push({ id: `${lang}-${String(list.length + 1).padStart(4, '0')}`, part: side, text: 'x', unlock: 'random', added: '2026-10-01',
-      ...(g === 'move' ? { kind: 'move' } : { genre: g }) });
-  }
-  T.TITLES[lang] = list;
-  return list;
-}
-const byGenre = (T, lang, owned, filter) => {
-  const c = {};
-  for (const [id, v] of owned) { if (filter && !filter(v)) continue; const x = T.TITLES[lang].find(y => y.id === id); const k = `${x.part}:${T.genreOf(x)}`; c[k] = (c[k] || 0) + 1; }
-  return c;
-};
-
-test('最初の配布はジャンルごとに GENRE_COUNTS の数ちょうど', () => {
-  const T = load();
-  mkGenres(T, 'zz', { pre: { generic: 200, smash: 200, source: 200 }, post: { generic: 200, smash: 200, source: 200, move: 200 } });
-  const c = byGenre(T, 'zz', T.ownedTitles('zz', 77, []));
-  const want = {};
-  for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(T.GENRE_COUNTS[side])) want[`${side}:${g}`] = n;
-  assert.deepStrictEqual(c, want);
+test('ビット列: 作る・ある・OR・引き算・数・形', async () => {
+  const { B } = await load();
+  const b = B.bitsFromIds(['ja-0001', 'ja-0005', 'ja-0123']);
+  assert.deepStrictEqual(B.bitsNumbers(b), [1, 5, 123]);
+  assert.strictEqual(B.bitsFromIds(['ja-0001']), 'Ag', '1 番 = 1 バイト目の下から 2 ビット目 (0x02)');
+  assert.strictEqual(B.bitsHas(b, 'ja-0005'), true);
+  assert.strictEqual(B.bitsHas(b, 'ja-0999'), false);
+  assert.deepStrictEqual(B.bitsNumbers(B.bitsOr(b, B.bitsFromIds(['ja-0002']))), [1, 2, 5, 123]);
+  assert.deepStrictEqual(B.bitsNumbers(B.bitsMinus(b, B.bitsFromIds(['ja-0005', 'ja-0123', 'ja-0200']))), [1]);
+  assert.strictEqual(B.bitsMinus(b, b), '');
+  assert.strictEqual(B.bitsCount(b), 3);
+  assert.strictEqual(B.bitsFromNumbers([123, 5, 1]), b);
+  assert.strictEqual(B.titleIdOf('ja', 7), 'ja-0007');
+  assert.ok(B.bitsValid(b) && B.bitsValid(''));
+  assert.ok(!B.bitsValid('a+b') && !B.bitsValid('A') && !B.bitsValid(1) && !B.bitsValid('AAAA', 2));
 });
 
-test('大会での抽選: ジャンルは GENRE_COUNTS の比 (件数の比には引きずられない)', () => {
-  const T = load();
-  mkGenres(T, 'zz', { pre: { generic: 400, smash: 100, source: 800 }, post: { generic: 300, smash: 900, source: 300, move: 900 } });
+test('配る回数 (drawTargets): 本戦 1 大会につき前半 3、試合 2 つごとに後半 3 (端数は持ち越し)。下位クラスは後半の試合数だけ・公開前の大会は数えない', async () => {
+  const { T } = await load();
+  assert.deepStrictEqual(T.drawTargets([]), { pre: 0, post: 0 });
+  assert.deepStrictEqual(T.drawTargets(tours(3)), { pre: 9, post: 9 });
+  const odd = [{ event_id: 1, date: '2026-10-02', wins: 1, losses: 0 }, { event_id: 2, date: '2026-10-03', wins: 0, losses: 1 }];
+  assert.deepStrictEqual(T.drawTargets(odd), { pre: 6, post: 3 }, '1 試合 + 1 試合 = 2 試合で後半 3');
+  const withClass = [...tours(1), { event_id: 9, parent_event_id: 1000, date: '2026-10-02', wins: 2, losses: 0 }];
+  assert.deepStrictEqual(T.drawTargets(withClass), { pre: 3, post: 6 });
+  assert.deepStrictEqual(T.drawTargets([{ event_id: 5, date: '2026-10-02', wins: 0, losses: 0 }]), { pre: 0, post: 0 }, '0 試合は数えない');
+  assert.deepStrictEqual(T.drawTargets([...tours(5, '2026-09-20'), ...tours(1, '2026-10-01', 2000)]), { pre: 3, post: 3 }, '公開日の大会から');
+});
+
+test('最初の配布: 記録を作るときに INITIAL_COUNTS の数ずつ (前半 50・後半 100、ジャンルごとにちょうど)', async () => {
+  const { T, B, ja } = await load();
+  assert.strictEqual(sum(T.INITIAL_COUNTS.pre), 50);
+  assert.strictEqual(sum(T.INITIAL_COUNTS.post), 100);
+  T.TITLES.ja = ja;
+  for (const uid of [1, 2, 3, 123456]) {
+    const st = T.advanceTitles('ja', uid, null, { pre: 0, post: 0 }, null, TODAY);
+    assert.deepStrictEqual([st.n_pre, st.n_post], [0, 0]);
+    const c = byGenre(T, B, 'ja', st.bits);
+    for (const side of ['pre', 'post']) for (const [g, n] of Object.entries(T.INITIAL_COUNTS[side])) assert.strictEqual(c[`${side}:${g}`] || 0, n, `${uid} ${side}:${g}`);
+    // 記録があれば最初の配布はしない
+    assert.strictEqual(T.advanceTitles('ja', uid, { bits: '', n_pre: 0, n_post: 0 }, { pre: 0, post: 0 }, null, TODAY).bits, '');
+  }
+});
+
+test('記録に足していく: 差の回数だけ引く。分けて引いてもまとめて引いても同じ (一覧が同じなら)・同じ入力なら同じ結果', async () => {
+  const { T, B, ja } = await load();
+  T.TITLES.ja = ja;
+  for (const uid of [7, 8, 9]) {
+    const tg = T.drawTargets(tours(40));
+    const once = T.advanceTitles('ja', uid, null, tg, null, TODAY);
+    assert.deepStrictEqual([once.n_pre, once.n_post], [tg.pre, tg.post]);
+    assert.strictEqual(B.bitsCount(once.bits), 150 + tg.pre + tg.post);
+    let st = T.advanceTitles('ja', uid, null, { pre: 0, post: 0 }, null, TODAY);
+    for (const k of [5, 17, 40]) st = T.advanceTitles('ja', uid, st, T.drawTargets(tours(k)), null, TODAY);
+    assert.deepStrictEqual(st, once);
+    assert.deepStrictEqual(T.advanceTitles('ja', uid, null, tg, null, TODAY), once);
+  }
+});
+
+test('過去に引いたものは変わらない: 一覧に足しても・ジャンルを変えても・廃止しても、記録の二つ名はそのまま (引くのは増えた回だけ)', async () => {
+  const { T, B } = await load();
+  const list = mkGenres(T, 'zz', BIG);
+  const st = T.advanceTitles('zz', 5, null, T.drawTargets(tours(10)), null, TODAY);
+  // 一覧を大きく変える: 足す・ジャンルを変える・廃止
+  const changed = list.map((t, i) => (i % 3 === 0 ? { ...t, genre: 'smash' } : i % 7 === 0 ? { ...t, retired: '2026-11-01' } : t));
+  for (let i = 0; i < 500; i++) changed.push({ id: `zz-${String(3000 + i).padStart(4, '0')}`, part: i % 2 ? 'pre' : 'post', text: 'y', unlock: 'random', added: '2026-11-01', genre: 'generic' });
+  T.TITLES.zz = changed;
+  // 回数が同じなら何も変わらない
+  assert.deepStrictEqual(T.advanceTitles('zz', 5, st, T.drawTargets(tours(10)), null, TODAY), st);
+  // 1 大会増えたら前半 3・後半 3 だけ増え、前のものは全部残る
+  const next = T.advanceTitles('zz', 5, st, T.drawTargets(tours(11)), null, TODAY);
+  assert.strictEqual(B.bitsMinus(st.bits, next.bits), '', '前のものは残る');
+  assert.strictEqual(B.bitsCount(B.bitsMinus(next.bits, st.bits)), 6);
+});
+
+test('遅れて取れた大会・取り消した大会: 引いた回数の差だけ引く (取り消しで減っても消さず、回数が戻るまで引かない)', async () => {
+  const { T, B } = await load();
+  mkGenres(T, 'zz', BIG);
+  const st = T.advanceTitles('zz', 6, null, T.drawTargets(tours(10, '2026-10-10')), null, TODAY);
+  // 過去の日付の大会が遅れて入った: 増えた 1 大会分だけ足す
+  const late = [...tours(10, '2026-10-10'), ...tours(1, '2026-10-03', 5000)];
+  const a = T.advanceTitles('zz', 6, st, T.drawTargets(late), null, TODAY);
+  assert.strictEqual(B.bitsMinus(st.bits, a.bits), '');
+  assert.strictEqual(B.bitsCount(B.bitsMinus(a.bits, st.bits)), 6);
+  // 2 大会が取り消された: 何も引かず、回数も記録のまま
+  const b = T.advanceTitles('zz', 6, a, T.drawTargets(tours(9, '2026-10-10')), null, TODAY);
+  assert.deepStrictEqual(b, a);
+  // その後 3 大会出た: 11 大会を超えた分 (1 大会分) だけ引く
+  const c = T.advanceTitles('zz', 6, b, T.drawTargets([...tours(9, '2026-10-10'), ...tours(3, '2026-11-01', 6000)]), null, TODAY);
+  assert.strictEqual(B.bitsCount(B.bitsMinus(c.bits, b.bits)), 3 + 3);
+});
+
+test('大会での抽選: ジャンルは DRAW_WEIGHTS の比 (件数の比には引きずられない)', async () => {
+  const { T, B } = await load();
+  mkGenres(T, 'zz', { pre: { generic: 1000, smash: 1000, source: 1000 }, post: { generic: 1000, smash: 1000, move: 1000, source: 1000 } });   // 番号は 4 桁まで
   const c = {};
-  for (let uid = 1; uid <= 600; uid++) {
-    const x = byGenre(T, 'zz', T.ownedTitles('zz', uid, tours(4, '2026-10-02')), v => v.how === 'random');
-    for (const [k, n] of Object.entries(x)) c[k] = (c[k] || 0) + n;
+  for (let uid = 1; uid <= 60; uid++) {
+    const st0 = T.advanceTitles('zz', uid, { bits: '', n_pre: 0, n_post: 0 }, { pre: 0, post: 0 }, null, TODAY);
+    const st = T.advanceTitles('zz', uid, st0, { pre: 60, post: 60 }, null, TODAY);
+    for (const [k, n] of Object.entries(byGenre(T, B, 'zz', st.bits))) c[k] = (c[k] || 0) + n;
   }
   for (const side of ['pre', 'post']) {
-    const w = T.GENRE_COUNTS[side];
-    const total = Object.values(w).reduce((a, b) => a + b, 0);
-    const got = Object.keys(w).reduce((n, g) => n + (c[`${side}:${g}`] || 0), 0);
-    for (const [g, n] of Object.entries(w)) assert.ok(Math.abs((c[`${side}:${g}`] || 0) / got - n / total) < 0.03, `${side}:${g} ${JSON.stringify(c)}`);
+    const w = T.DRAW_WEIGHTS[side], tot = sum(w);
+    for (const [g, n] of Object.entries(w)) {
+      const got = (c[`${side}:${g}`] || 0) / 3600;
+      assert.ok(Math.abs(got - n / tot) < 0.03, `${side}:${g} ${got.toFixed(3)} (目標 ${(n / tot).toFixed(3)})`);
+    }
   }
 });
 
-test('ジャンルを引き切ったら同じ位置のほかのジャンルから', () => {
-  const T = load();
-  mkGenres(T, 'zz', { pre: { generic: 5, smash: 300 }, post: { generic: 400 } });
-  const c = byGenre(T, 'zz', T.ownedTitles('zz', 3, []));
-  assert.deepStrictEqual(c, { 'pre:generic': 5, 'pre:smash': initN(T, 'pre') - 5, 'post:generic': initN(T, 'post') });
+test('ジャンルを引き切ったら同じ位置のほかのジャンルから。前半・後半をまたいでは引かない。全部引き切ったらそれ以上は増えない', async () => {
+  const { T, B } = await load();
+  mkGenres(T, 'zz', { pre: { generic: 60, smash: 2, source: 1 }, post: { generic: 120, move: 3 } });
+  const st = T.advanceTitles('zz', 3, null, { pre: 2, post: 5 }, null, TODAY);
+  const c = byGenre(T, B, 'zz', st.bits);
+  assert.strictEqual(B.bitsCount(st.bits), 50 + 100 + 2 + 5);
+  assert.strictEqual(c['pre:smash'], 2);
+  assert.strictEqual(c['pre:source'], 1);
+  assert.strictEqual(c['post:move'], 3);
+  assert.strictEqual(c['pre:generic'], 50 + 2 - 3);
+  assert.strictEqual(c['post:generic'], 100 + 5 - 3);
+  const all = T.advanceTitles('zz', 3, st, { pre: 500, post: 500 }, null, TODAY);
+  assert.strictEqual(B.bitsCount(all.bits), 63 + 123, '一覧の全部で止まる');
 });
 
-test('技名 / 技名以外の片方を引き切ったらもう片方から。前半・後半をまたいでは引かない', () => {
-  const T = load();
-  mk(T, 'zz', { pre: 2, post: 300 });   // 技名なし・前半は少ない
-  const c = count(T, 'zz', T.ownedTitles('zz', 1, tours(10, '2026-10-02')));
-  assert.deepStrictEqual(c, { pre: 2, post: initN(T, 'post') + postsFor(T, 20), move: 0 });
-  mk(T, 'zz', { pre: 300, move: 300 });   // 技名以外の後半なし
-  const d = count(T, 'zz', T.ownedTitles('zz', 1, tours(3, '2026-10-02')));
-  assert.deepStrictEqual(d, { pre: initN(T, 'pre') + 3 * T.PRE_PER_TOURNAMENT, post: 0, move: initN(T, 'post') + postsFor(T, 6) });
+test('足した日 (added) より前は引かない・廃止日 (retired) からは引かない。持っている人は持ったまま', async () => {
+  const { T, B } = await load();
+  const list = mkGenres(T, 'zz', { pre: { generic: 200 }, post: { generic: 200 } });
+  list.push({ id: 'zz-0901', part: 'pre', text: 'future', unlock: 'random', added: '2027-01-01', genre: 'generic' });
+  for (let uid = 1; uid <= 30; uid++) {
+    const st = T.advanceTitles('zz', uid, null, { pre: 150, post: 0 }, null, '2026-12-31');
+    assert.ok(!B.bitsHas(st.bits, 'zz-0901'), '足した日より前');
+  }
+  // 廃止: 持っている人は持ったまま、その後は引かない
+  const st = T.advanceTitles('zz', 1, null, { pre: 0, post: 0 }, null, TODAY);
+  const ownedPre = T.bitsTitles('zz', st.bits).filter(t => t.part === 'pre').map(t => t.id);
+  T.TITLES.zz = list.map(t => (t.part === 'pre' && !ownedPre.includes(t.id) ? { ...t, retired: '2026-11-01' } : t));
+  const after = T.advanceTitles('zz', 1, st, { pre: 30, post: 0 }, null, TODAY);
+  assert.strictEqual(after.bits, st.bits, '廃止したものは引かない (残りは持っているものだけ)');
+  assert.strictEqual(after.n_pre, 30);
 });
 
-test('キャラ (メインキャラの ID) と都道府県で持つもの', () => {
-  const T = load();
-  const list = mk(T, 'zz', { pre: 100, post: 100 });
+test('キャラ (メインキャラの ID) と都道府県で持つもの: 記録の有無にかかわらず足す。抽選には出ない', async () => {
+  const { T, B } = await load();
+  const list = mkGenres(T, 'zz', { pre: { generic: 100 }, post: { generic: 100 } });
   list.push({ id: 'zz-0801', part: 'post', text: 'ピーチ使い', unlock: 'char', chars: [1317], added: '2026-10-01' });
   list.push({ id: 'zz-0802', part: 'post', text: 'デイジー使い', unlock: 'char', chars: [1277, 1317], added: '2026-10-01' });
   list.push({ id: 'zz-0803', part: 'pre', text: 'デイジー使いの', unlock: 'char', chars: [1277, 1317], added: '2026-10-01' });
   list.push({ id: 'zz-0901', part: 'pre', text: '神奈川の', unlock: 'pref', pref: '神奈川県', added: '2026-10-01' });
   list.push({ id: 'zz-0902', part: 'pre', text: '東京の', unlock: 'pref', pref: '東京都', added: '2026-10-01' });
-  const has = (profile) => ['zz-0801', 'zz-0802', 'zz-0803', 'zz-0901', 'zz-0902'].filter(id => T.ownedTitles('zz', 11, [], profile).has(id));
+  const special = ['zz-0801', 'zz-0802', 'zz-0803', 'zz-0901', 'zz-0902'];
+  const has = (profile, state = null) => special.filter(id => B.bitsHas(T.advanceTitles('zz', 11, state, { pre: 0, post: 0 }, profile, TODAY).bits, id));
   assert.deepStrictEqual(has(undefined), []);
   assert.deepStrictEqual(has({ chars: [1277], pref: '神奈川県' }), ['zz-0802', 'zz-0803', 'zz-0901']);
   assert.deepStrictEqual(has({ chars: ['1317'], pref: null }), ['zz-0801', 'zz-0802', 'zz-0803']);
+  // 記録がある人にも足す (ビットは増えるだけ: キャラを変えても前のものは残る)
+  const st = T.advanceTitles('zz', 11, null, { pre: 0, post: 0 }, { chars: [1317] }, TODAY);
+  const later = T.advanceTitles('zz', 11, st, { pre: 0, post: 0 }, { chars: [1277], pref: '東京都' }, TODAY);
+  assert.strictEqual(B.bitsMinus(st.bits, later.bits), '');
+  assert.ok(B.bitsHas(later.bits, 'zz-0902'));
   // 抽選には出ない
-  for (let uid = 1; uid <= 50; uid++) for (const [id, v] of T.ownedTitles('zz', uid, tours(5))) if (/^zz-0[89]/.test(id)) assert.fail(`${id} ${v.how}`);
+  for (let uid = 1; uid <= 30; uid++) {
+    const x = T.advanceTitles('zz', uid, null, { pre: 40, post: 90 }, null, TODAY);
+    for (const id of special) assert.ok(!B.bitsHas(x.bits, id), `${uid} ${id}`);
+  }
 });
 
-test('ownedFromPlayer: 記録 (title_bits) があればそれ + 最初から持っているもの。無ければ計算', () => {
-  const T = load();
-  const initial = T.TITLES.ja.filter(t => t.unlock === 'initial').map(t => t.id);
-  const randomIds = T.TITLES.ja.filter(t => t.unlock === 'random').map(t => t.id);
-  const rec = T.ownedFromPlayer('ja', 7, { title_bits: T.bitsFromIds([randomIds[0]]), title_updated: '2026-10-05', tournaments: [] });
-  assert.strictEqual(JSON.stringify([...rec.keys()].sort()), JSON.stringify([...initial, randomIds[0]].sort()));
-  assert.strictEqual(rec.get(randomIds[0]).at, '2026-10-05');
-  // 記録が空文字 = 記録はあるが何も持っていない → 最初から持っているものだけ (出場記録があっても計算しない)
-  const empty = T.ownedFromPlayer('ja', 7, { title_bits: '', tournaments: tours(3) });
-  assert.strictEqual(empty.size, initial.length);
-  // 記録が無い (同期前) → 計算
-  const calc = T.ownedFromPlayer('ja', 7, { tournaments: tours(1) }, { chars: [1319] });
-  assert.deepStrictEqual([...calc.entries()], [...T.ownedTitles('ja', 7, tours(1), { chars: [1319] }).entries()]);
+test('持てる数 (obtainableCount): 持っているもの + まだ引けるもの。ほかのキャラ・都道府県・廃止・まだ足していないものは入れない', async () => {
+  const { T } = await load();
+  const list = mkGenres(T, 'zz', { pre: { generic: 10 }, post: { generic: 10 } });
+  list.push({ id: 'zz-0801', part: 'post', text: 'a', unlock: 'char', chars: [1], added: '2026-10-01' });
+  list.push({ id: 'zz-0802', part: 'post', text: 'b', unlock: 'char', chars: [2], added: '2026-10-01' });
+  list.push({ id: 'zz-0803', part: 'pre', text: 'c', unlock: 'random', added: '2027-01-01', genre: 'generic' });
+  list.push({ id: 'zz-0804', part: 'pre', text: 'd', unlock: 'random', added: '2026-10-01', retired: '2026-11-01', genre: 'generic' });
+  assert.strictEqual(T.obtainableCount('zz', new Set(['zz-0801']), TODAY), 21);
+  assert.strictEqual(T.obtainableCount('zz', new Set(['zz-0801', 'zz-0804']), TODAY), 22);
+});
+
+test('本物の一覧: 3 年毎日出ると全部引き切る・1 人の計算は軽い', async () => {
+  const { T, B, ja } = await load();
+  T.TITLES.ja = ja;
+  const random = ja.filter(t => t.unlock === 'random');
+  const t0 = Date.now();
+  const st = T.advanceTitles('ja', 99, null, T.drawTargets(tours(1100)), null, '2029-12-31');
+  assert.strictEqual(B.bitsCount(st.bits), random.length);
+  let st2 = null;
+  for (let uid = 1; uid <= 50; uid++) st2 = T.advanceTitles('ja', uid, null, T.drawTargets(tours(20)), null, TODAY);
+  assert.ok(st2 && Date.now() - t0 < 5000);
 });

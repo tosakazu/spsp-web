@@ -28,6 +28,7 @@ worker/
   migrations/0003_class_brackets.sql 下位クラスの登録 (class_brackets)
   migrations/0005_title_owned.sql   持っている二つ名の記録 (title_owned、D1 が正本)
   migrations/0007_title_owned_without_rowid.sql  title_owned を WITHOUT ROWID に (1 行の書き込みを 1 回に。0006 は別ブランチの csp_reports)
+  migrations/0008_title_owned_draw_counts.sql    title_owned に大会で引いた回数 (n_pre / n_post)
   migrations/0004_class_delete.sql   下位クラスの削除 (deleted_at 列) と class_mine / class_delete の連投判定 (class_actions)
   scripts/import_votes.mjs シートの内容 → D1 の INSERT
   scripts/assemble_dist.sh npm run build:cf の後に assets/_headers を dist-cf/ に写す
@@ -61,12 +62,12 @@ cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
 | `vote` (vote.gs) | `POST /api` `{action:"vote"}` / `POST /api/vote` | `token`, `charId` | `{user, charId, charName}` / `auth_failed` `bad_request` `internal` `bad_char` `not_player` `char_exists` `not_candidate` `rate_limited` |
 | `post` (main.gs) | `POST /api` `{action:"post"}` / `POST /api/post` | `code`, `state`, `body` | `{user}` / `bad_request` `body_invalid` `state_invalid` `auth_failed` `rate_limited` |
 | `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
-| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour}|null, updated_at|null}` / `bad_request` |
+| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour,title}|null, updated_at|null, title_text:{pre,post}|null}` (title_text = 付けている二つ名の文字。一覧に無い・位置に使えないものは "") / `bad_request` |
 | `title_get` | `GET /api/titles?uid=&lang=` (lang 省略は ja、成功は public, max-age=60) | `uid`, `lang` | `{bits, updated}` / 記録が無ければ `{bits:"", updated:null}` |
-| `title_sync` | `POST /api` `{action:"title_sync"}` | `key` (= secret `TITLE_SYNC_KEY`), `lang`, `items:[{uid, ids}]` (500 人まで), `date?` | `{changed, received, items:[{uid, bits, updated}]}` = 送った全員の OR 後の記録 (ビルドが players/<uid>.json に書く)。消さない、増えた人だけ updated。一覧に無い id 等は全体を `bad_request` |
-| `title_export` | `POST /api` `{action:"title_export"}` | `key`, `lang`, `after_uid?`, `limit?` (≤2000) | `{items:[{uid, bits, updated}], next_after}` (uid の昇順、復旧用) |
+| `title_sync` | `POST /api/title_sync` (body 2 MB まで。`/api` は 64 KB) | `key` (= secret `TITLE_SYNC_KEY`), `lang`, `items:[{uid, prev:{bits,n_pre,n_post}|null, bits, n_pre, n_post}]` (500 人まで), `date?` | `{changed, received, conflicts:[uid]}`。行が prev のままのときだけ書く (prev null = 無ければ作る)。違えば conflicts (書かない)。ビット列を減らす・回数を戻す送り方は `bad_request`。一覧に無い番号も受ける。updated はビットが増えたときだけ。送るのは tools/titles/sync_owned.mjs (docs/card_titles_design.md) |
+| `title_export` | `POST /api` `{action:"title_export"}` | `key`, `lang`, `after_uid?`, `limit?` (≤2000) | `{items:[{uid, bits, updated, n_pre, n_post}], next_after}` (uid の昇順。同期の道具が今の記録を読む) |
 | `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (2 秒に 1 回・1 日 300 回) |
-|  | (二つ名) | `settings.title` = `{pre, post}` (id は `ja-0001` の形、両方 null なら付けない。同じ id を前後両方に置くのは今は可) | 一覧 (site/js/titles.js の TITLES[地域の言語]) に無い id・その位置に使えない id (usableIn、part は pre / post / both) は `bad_settings`、持っていない二つ名は `title_not_owned` (公開データの players/<uid>.json の tournaments から ownedTitles で計算)、選手データが読めない (5 秒) と `title_unverified`。言語は SITE_PREFIX (/na = en、他は ja)。titles.js は Worker から相対パスで import (worker/src/api/titles.ts) |
+|  | (二つ名) | `settings.title` = `{pre, post}` (id は `ja-0001` の形、両方 null なら付けない。同じ id を前後両方に置くのは今は可) | 一覧 (site/js/titles.js の TITLES[地域の言語]) に無い id・その位置に使えない id (usableIn、part は pre / post / both) は `bad_settings` (note `title_unknown`)、記録 (D1 title_owned) に無い二つ名は `title_not_owned` (記録がまだ無い選手は unlock initial のものだけ)。選手データ (R2) は読まない。言語は SITE_PREFIX (/na = en、他は ja)。titles.js は Worker から相対パスで import (worker/src/api/titles.ts) |
 | `challonge_begin` | `POST /api` `{action:"challonge_begin"}` | `nonce` (≤128), `returnPath` (≤512) | `{url, ttlMs}` = Challonge の認可画面 (client_id・scope・戻り先 `CHALLONGE_REDIRECT_URI`・state f=challonge は Worker が決める) |
 | `challonge_token` | `POST /api` `{action:"challonge_token"}` | `code`, `state` (f=challonge、単回使用) | `{access_token, expires_in, username}` (username は GET /v2.1/me.json、取れなければ null。どれも保存・記録しない) / `bad_request` `state_invalid` `challonge_auth` `challonge_error` |
 | `challonge_me` | `POST /api` `{action:"challonge_me"}` | `challonge_token` | `{username}` (GET /v2.1/me.json。ブラウザからは応答を読めない = CORS のため Worker 経由) / `challonge_auth` (401) `challonge_error` (理由は errors の note だけ: `me:http_403`、`me:no_username:keys=<キー名>` など) `bad_request` |
@@ -127,7 +128,7 @@ npx wrangler secret put SESSION_SECRET            # GAS のスクリプトプロ
 npx wrangler secret put EXPORT_KEY                # 任意
 npx wrangler secret put CHALLONGE_CLIENT_ID       # Challonge OAuth アプリ (下位クラス)。値は ~/spsp-secrets/challonge_oauth.env
 npx wrangler secret put CHALLONGE_CLIENT_SECRET
-npx wrangler secret put TITLE_SYNC_KEY            # 持っている二つ名の記録 (title_sync / title_export)。値は ~/spsp-secrets/title_sync_key
+npx wrangler secret put TITLE_SYNC_KEY            # 持っている二つ名の記録 (title_sync / title_export)。spsp_scripts の Actions の Secrets にも同じ値
 npx wrangler secret put CLASS_DONE_KEY            # 下位クラスの取得側 (smash_database) と同じ値。openssl rand -hex 32 で作って両方に入れる
 #    preview / na は --env preview / --env na を付けて同じことをする
 ```

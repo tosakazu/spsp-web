@@ -19,7 +19,7 @@ import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
-import { buildCardModel, perfInfoOf, achievementBadge, fetchApplied } from '../../site/js/player_card_model.js';
+import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -441,7 +441,7 @@ async function loadData() {
     if (!UID) { showNotFound(i18n('player.disc_not_found', { d: DISC_PARAM })); return; }
   }
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
-  CARD_SETTINGS = fetchApplied(UID).catch(() => null);
+  CARD_SETTINGS = fetchAppliedCard(UID).catch(() => null);
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
     // SPSPPlayerData.load が以前の 1 ファイルと同じ形に組み立てる (../js/player_data.js)
@@ -670,9 +670,10 @@ function render() {
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
     let drawn = false;
-    const draw = (/** @type {any} */ st) => { drawn = true; SPSPPlayerCard.render(card, buildCardModel(cardData(), st)); };
+    // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
+    const draw = (/** @type {any} */ x) => { drawn = true; SPSPPlayerCard.render(card, buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null)); };
     const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
-    settingsP.then(st => { clearTimeout(timer); if (!drawn || st) draw(st); });
+    settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));

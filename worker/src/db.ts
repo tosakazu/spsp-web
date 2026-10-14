@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type {
-  CardRow, TitleOwnedRow, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+  CardRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -220,37 +220,34 @@ export class D1Store implements Store {
   }
 
   async getTitleOwned(uid: string, lang: string): Promise<TitleOwnedRow | null> {
-    const r = await this.db.prepare('SELECT bits, updated FROM title_owned WHERE uid = ? AND lang = ?')
+    const r = await this.db.prepare('SELECT bits, updated, n_pre, n_post FROM title_owned WHERE uid = ? AND lang = ?')
       .bind(Number(uid), lang).first<TitleOwnedRow>();
-    return r ? { bits: String(r.bits), updated: String(r.updated) } : null;
+    return r ? { bits: String(r.bits), updated: String(r.updated), n_pre: Number(r.n_pre), n_post: Number(r.n_post) } : null;
   }
 
-  async getTitleOwnedMany(uids: string[], lang: string): Promise<Map<string, TitleOwnedRow>> {
-    const out = new Map<string, TitleOwnedRow>();
-    // D1 は 1 文の bind が 100 個まで
-    for (let i = 0; i < uids.length; i += 90) {
-      const part = uids.slice(i, i + 90);
-      const r = await this.db.prepare(
-        `SELECT uid, bits, updated FROM title_owned WHERE lang = ? AND uid IN (${part.map(() => '?').join(',')})`)
-        .bind(lang, ...part.map(Number)).all<{ uid: number; bits: string; updated: string }>();
-      for (const x of r.results || []) out.set(String(x.uid), { bits: String(x.bits), updated: String(x.updated) });
-    }
-    return out;
-  }
-
-  async putTitleOwnedMany(lang: string, rows: { uid: string; bits: string; updated: string }[]): Promise<void> {
+  async casTitleOwnedMany(lang: string, rows: TitleOwnedWrite[], date: string): Promise<string[]> {
+    const conflicts: string[] = [];
     for (let i = 0; i < rows.length; i += 100) {
-      await this.db.batch(rows.slice(i, i + 100).map((r) => this.db.prepare(
-        `INSERT INTO title_owned (uid, lang, bits, updated) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT (uid, lang) DO UPDATE SET bits = excluded.bits, updated = excluded.updated`)
-        .bind(Number(r.uid), lang, r.bits, r.updated)));
+      const part = rows.slice(i, i + 100);
+      const res = await this.db.batch(part.map((r) => (r.prev === null
+        ? this.db.prepare(
+          `INSERT INTO title_owned (uid, lang, bits, updated, n_pre, n_post) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+           ON CONFLICT (uid, lang) DO NOTHING`)
+          .bind(Number(r.uid), lang, r.bits, date, r.n_pre, r.n_post)
+        // SET の右辺は書く前の行を見る: updated はビットが変わったときだけ今日にする
+        : this.db.prepare(
+          `UPDATE title_owned SET updated = CASE WHEN bits = ?3 THEN updated ELSE ?4 END, bits = ?3, n_pre = ?5, n_post = ?6
+           WHERE uid = ?1 AND lang = ?2 AND bits = ?7 AND n_pre = ?8 AND n_post = ?9`)
+          .bind(Number(r.uid), lang, r.bits, date, r.n_pre, r.n_post, r.prev.bits, r.prev.n_pre, r.prev.n_post))));
+      res.forEach((x, j) => { if ((x.meta?.changes ?? 0) === 0) conflicts.push(part[j].uid); });
     }
+    return conflicts;
   }
 
-  async listTitleOwned(lang: string, afterUid: number, limit: number): Promise<{ uid: number; bits: string; updated: string }[]> {
-    const r = await this.db.prepare('SELECT uid, bits, updated FROM title_owned WHERE lang = ? AND uid > ? ORDER BY uid ASC LIMIT ?')
-      .bind(lang, afterUid, limit).all<{ uid: number; bits: string; updated: string }>();
-    return (r.results || []).map((x) => ({ uid: Number(x.uid), bits: String(x.bits), updated: String(x.updated) }));
+  async listTitleOwned(lang: string, afterUid: number, limit: number): Promise<({ uid: number } & TitleOwnedRow)[]> {
+    const r = await this.db.prepare('SELECT uid, bits, updated, n_pre, n_post FROM title_owned WHERE lang = ? AND uid > ? ORDER BY uid ASC LIMIT ?')
+      .bind(lang, afterUid, limit).all<{ uid: number } & TitleOwnedRow>();
+    return (r.results || []).map((x) => ({ uid: Number(x.uid), bits: String(x.bits), updated: String(x.updated), n_pre: Number(x.n_pre), n_post: Number(x.n_post) }));
   }
 
   async recordClassAction(action: string, g: RateGuard): Promise<boolean> {

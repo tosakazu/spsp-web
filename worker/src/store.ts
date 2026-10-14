@@ -117,8 +117,10 @@ export interface ClassRecord {
 
 export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplicate' } | { status: 'rate_limited' };
 
-/** title_owned の 1 行。 */
-export interface TitleOwnedRow { bits: string; updated: string }
+/** title_owned の 1 行。bits = 持っている二つ名、n_pre / n_post = 大会で引いた回数 (site/js/titles.js advanceTitles)、updated = 最後にビットが増えた日 */
+export interface TitleOwnedRow { bits: string; updated: string; n_pre: number; n_post: number }
+/** title_sync の 1 人分。prev = 同期の道具が読んだときの行 (無ければ null)。prev のままのときだけ書く */
+export interface TitleOwnedWrite { uid: string; prev: { bits: string; n_pre: number; n_post: number } | null; bits: string; n_pre: number; n_post: number }
 
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
@@ -162,12 +164,11 @@ export interface Store {
   markClassDeleted(id: number, deletedAt: string): Promise<'deleted' | 'done' | 'missing'>;
   /** 持っている二つ名の記録 (無ければ null)。 */
   getTitleOwned(uid: string, lang: string): Promise<TitleOwnedRow | null>;
-  /** 複数人分 (uid → 行、無い人は入らない)。 */
-  getTitleOwnedMany(uids: string[], lang: string): Promise<Map<string, TitleOwnedRow>>;
-  /** 行を置き換える (呼び出し側が OR 済みの値を渡す)。 */
-  putTitleOwnedMany(lang: string, rows: { uid: string; bits: string; updated: string }[]): Promise<void>;
-  /** uid の昇順に、afterUid より後を limit 件 (復旧用の書き出し)。 */
-  listTitleOwned(lang: string, afterUid: number, limit: number): Promise<{ uid: number; bits: string; updated: string }[]>;
+  /** 行が prev のままのときだけ書く (prev null = 行が無いときだけ作る)。updated はビットが変わったときだけ date にする。
+   * 書けなかった (ほかの同期が先に書いた) uid を返す。 */
+  casTitleOwnedMany(lang: string, rows: TitleOwnedWrite[], date: string): Promise<string[]>;
+  /** uid の昇順に、afterUid より後を limit 件 (同期の道具が今の記録を読む)。 */
+  listTitleOwned(lang: string, afterUid: number, limit: number): Promise<({ uid: number } & TitleOwnedRow)[]>;
   /** 連投条件 (user_id と action ごと) を満たすときだけ記録する。記録したら true。 */
   recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
 }

@@ -7,8 +7,8 @@ import SPSPI18n from './js/i18n.js';
 import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
-import SpspLogin from './js/login.js';
-import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく獲得したら人型アイコンに印 (js/title_notice.js)   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
+import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
+import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく獲得したら人型アイコンに印 (記録のビット列だけ見る。一覧 js/titles.js は読まない)
 
 // ── Google Analytics 4 (gtag.js) ──
 // 全ページに含まれる nav.js から inject することで <head> 編集を省略.

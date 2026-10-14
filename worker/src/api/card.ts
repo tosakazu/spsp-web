@@ -2,7 +2,8 @@
  * プレイヤーカードの設定と、ログイン状態の確認 (docs/login_design.md「バックエンド (Worker) に足すもの」)。
  *
  *   action: "me"        { token }            → { user:{id, slug, gamerTag}, exp } / invalid_session
- *   action: "card_get"  { uid }              → { settings | null, updated_at | null }  (GET /api/card?uid= と同じ)
+ *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
+ *                                            title_text = 二つ名の文字 { pre, post } (付けていなければ null)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
  *
  * card_put で書く uid はトークンの uid だけ (リクエストに uid を持たせない = 他人のカードは書けない)。
@@ -122,11 +123,23 @@ export async function handleMe(cfg: Config, req: Record<string, unknown>, now: n
   return ok({ user: { id: sess.id, slug: sess.slug, gamerTag: sess.gamerTag }, exp: sess.exp });
 }
 
+/** 付けている二つ名の文字。一覧に無い・その位置に使えないものは "" (持っているかは card_put で確かめてある。持ち物は減らない) */
+export function titleTextOf(lang: string, t: CardTitle | null): { pre: string; post: string } | null {
+  if (!t) return null;
+  const text = (id: string | null, slot: 'pre' | 'post'): string => {
+    const x = id === null ? null : titleById(lang, id);
+    return x && usableIn(x, slot) ? x.text : '';
+  };
+  return { pre: text(t.pre, 'pre'), post: text(t.post, 'post') };
+}
+
 /** action: "card_get" — だれでも読める。 */
-export async function handleCardGet(store: Store, req: Record<string, unknown>): Promise<HandlerResult> {
+export async function handleCardGet(cfg: Config, store: Store, req: Record<string, unknown>): Promise<HandlerResult> {
   const uid = validUid(req.uid);
   if (!uid) return err('bad_request', '選手の指定が不正です。');
-  return ok(rowToBody(await store.getCardSettings(uid)));
+  const body = rowToBody(await store.getCardSettings(uid));
+  const s = body.settings as CardSettings | null;
+  return ok({ ...body, title_text: titleTextOf(cfg.titleLang || 'ja', s ? s.title : null) });
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */

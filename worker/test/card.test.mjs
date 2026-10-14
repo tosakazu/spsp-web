@@ -60,8 +60,8 @@ test('card_put → card_get: 本人の行に書け、だれでも読める。upd
   assert.deepStrictEqual(put.settings, GOOD);
   assert.match(put.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/);
   const got = await post(e, { action: 'card_get', uid: '4242' });
-  assert.deepStrictEqual(got, { ok: true, settings: GOOD, updated_at: put.updated_at });
-  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: 7 }), { ok: true, settings: null, updated_at: null });
+  assert.deepStrictEqual(got, { ok: true, settings: GOOD, updated_at: put.updated_at, title_text: null });
+  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: 7 }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
 test('card_put: 書く uid はトークンのものだけ (リクエストの uid は無視)', async () => {
@@ -92,7 +92,7 @@ test('card_put: settings:null で行を消す (既定に戻す)', async () => {
   e.nowMs += CARD_RATE_MIN_INTERVAL_MS + 1;
   const del = await post(e, { action: 'card_put', token, settings: null });
   assert.deepStrictEqual(del, { ok: true, settings: null, updated_at: null });
-  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '4242' }), { ok: true, settings: null, updated_at: null });
+  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '4242' }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
 test('card_put: 連投制限 (間隔と当日件数)。弾いたときは前の設定のまま', async () => {
@@ -126,7 +126,7 @@ test('GET /api/card?uid=: 成功は public, max-age=60、uid 不正は bad_reque
   assert.strictEqual(r.headers.get('Access-Control-Allow-Origin'), '*');
   assert.deepStrictEqual(r.json.settings, GOOD);
   const none = await http(e, 'GET', '/api/card?uid=1');
-  assert.deepStrictEqual(none.json, { ok: true, settings: null, updated_at: null });
+  assert.deepStrictEqual(none.json, { ok: true, settings: null, updated_at: null, title_text: null });
   for (const q of ['', '?uid=', '?uid=abc', '?uid=-1', '?uid=1234567890123']) {
     const b = await http(e, 'GET', '/api/card' + q);
     assert.strictEqual(b.json.error.code, 'bad_request', q);
@@ -143,8 +143,8 @@ test('card_get: 保存済みの行が壊れていれば無いものとして返�
   const e = env();
   e.store.cards.set('5', { settings: '{broken', updated_at: 'x' });
   e.store.cards.set('6', { settings: JSON.stringify({ template: 'old', color: 'red' }), updated_at: 'x' });
-  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '5' }), { ok: true, settings: null, updated_at: null });
-  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '6' }), { ok: true, settings: null, updated_at: null });
+  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '5' }), { ok: true, settings: null, updated_at: null, title_text: null });
+  assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '6' }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
 test('validateCardSettings: tour は event_id (正の整数 1〜12 桁) か null。数字の文字列は整数にする', () => {
@@ -217,9 +217,22 @@ test('card_put: 記録にある二つ名は保存でき、card_get がそのま�
     const r = await putTitle(e, title);
     assert.strictEqual(r.ok, true, JSON.stringify(title) + ' ' + JSON.stringify(r));
     assert.deepStrictEqual(r.settings.title, title);
-    assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.title, title);
+    const got = await post(e, { action: 'card_get', uid: '4242' });
+    assert.deepStrictEqual(got.settings.title, title);
+    // 文字も返す (プレイヤーページは一覧を読まない)
+    assert.deepStrictEqual(got.title_text, { pre: titleById('ja', title.pre).text, post: titleById('ja', title.post).text });
   }
   assert.ok(!e.fetches.some((f) => String(f.url).includes('/players/')), '公開データは読まない');
+});
+
+test('card_get: title_text は付けていなければ null、片方だけなら片方は ""', async () => {
+  const e = titleEnv(['ja-0003']);
+  const token = await loginToken(e);
+  await post(e, { action: 'card_put', token, settings: withTitle({ pre: null, post: 'ja-0003' }) });
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).title_text, { pre: '', post: titleById('ja', 'ja-0003').text });
+  e.nowMs = (e.nowMs || Date.now()) + 60000;
+  await post(e, { action: 'card_put', token, settings: withTitle(null) });
+  assert.strictEqual((await post(e, { action: 'card_get', uid: '4242' })).title_text, null);
 });
 
 test('card_put: 記録に無いランダムの二つ名は title_not_owned (記録があれば最初からの二つ名も記録どおり)', async () => {
