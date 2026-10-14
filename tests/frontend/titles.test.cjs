@@ -5,7 +5,7 @@ const vm = require('vm');
 const { built } = require('../helpers/built.cjs');
 
 function load() {
-  const ctx = { console };
+  const ctx = { console, btoa, atob };   // ビット列 (base64url) に使う
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(built('js/titles.js'), ctx);
@@ -192,4 +192,19 @@ test('キャラ (メインキャラの ID) と都道府県で持つもの', () =
   assert.deepStrictEqual(has({ chars: ['1317'], pref: null }), ['zz-0801', 'zz-0802', 'zz-0803']);
   // 抽選には出ない
   for (let uid = 1; uid <= 50; uid++) for (const [id, v] of T.ownedTitles('zz', uid, tours(5))) if (/^zz-0[89]/.test(id)) assert.fail(`${id} ${v.how}`);
+});
+
+test('ownedFromPlayer: 記録 (title_bits) があればそれ + 最初から持っているもの。無ければ計算', () => {
+  const T = load();
+  const initial = T.TITLES.ja.filter(t => t.unlock === 'initial').map(t => t.id);
+  const randomIds = T.TITLES.ja.filter(t => t.unlock === 'random').map(t => t.id);
+  const rec = T.ownedFromPlayer('ja', 7, { title_bits: T.bitsFromIds([randomIds[0]]), title_updated: '2026-10-05', tournaments: [] });
+  assert.strictEqual(JSON.stringify([...rec.keys()].sort()), JSON.stringify([...initial, randomIds[0]].sort()));
+  assert.strictEqual(rec.get(randomIds[0]).at, '2026-10-05');
+  // 記録が空文字 = 記録はあるが何も持っていない → 最初から持っているものだけ (出場記録があっても計算しない)
+  const empty = T.ownedFromPlayer('ja', 7, { title_bits: '', tournaments: tours(3) });
+  assert.strictEqual(empty.size, initial.length);
+  // 記録が無い (同期前) → 計算
+  const calc = T.ownedFromPlayer('ja', 7, { tournaments: tours(1) }, { chars: [1319] });
+  assert.deepStrictEqual([...calc.entries()], [...T.ownedTitles('ja', 7, tours(1), { chars: [1319] }).entries()]);
 });
