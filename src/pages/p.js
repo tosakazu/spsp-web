@@ -19,6 +19,7 @@ import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
+import SpspMyNotice from '../../site/js/my_notice.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -1276,6 +1277,8 @@ function render() {
 
   buildYosouSection();
   buildLatestResultSection();
+  // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
+  SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();
 }
 
@@ -1950,6 +1953,9 @@ async function capturePng() {
   const latestres = document.getElementById('latestres-section');
   const latestresShown = latestres && latestres.style.display !== 'none';
   if (latestresShown) latestres.style.display = 'none';
+  const myNotice = document.getElementById('my-notice');
+  const myNoticeShown = myNotice && myNotice.style.display !== 'none';
+  if (myNoticeShown) myNotice.style.display = 'none';
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
     const target = document.getElementById('share-top') || document.getElementById('share-card');
@@ -1959,6 +1965,7 @@ async function capturePng() {
     if (toggleBtn) toggleBtn.style.display = '';
     if (yosouShown) yosou.style.display = '';
     if (latestresShown) latestres.style.display = '';
+    if (myNoticeShown) myNotice.style.display = '';
   }
 }
 

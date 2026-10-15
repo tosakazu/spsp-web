@@ -28,6 +28,12 @@ window.SPSP_I18N.ja = {
   'nav.news.announcement': '📌 通知',
   'nav.news.loading': '読み込み中…',
   'nav.news.all': 'すべて見る →',
+  'nav.news.me': '🎉 マイページ',
+  // ログイン中の本人へのお知らせ (js/my_notice.js。トップ・自分のプレイヤーページの帯とベル)
+  'notice.me.rank': '全国順位が {from} 位 → {to} 位に上がりました',
+  'notice.me.lv': 'Lv が {from} → {to} に上がりました',
+  'notice.me.titles': '二つ名を新しく {n} 件入手しました',
+  'notice.me.close': 'お知らせを閉じる',
   'nav.user_aria': '選手向けメニュー',
   'nav.user.vote': 'キャラ投票',
   'nav.user.login': 'start.gg でログイン',

@@ -8,7 +8,7 @@ import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
 import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
-import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく獲得したら人型アイコンに印 (記録のビット列だけ見る。一覧 js/titles.js は読まない)
+import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順位・Lv が上がった、二つ名を入手): ベルの一番上と印 (js/my_notice.js)
 
 // ── Google Analytics 4 (gtag.js) ──
 // 全ページに含まれる nav.js から inject することで <head> 編集を省略.
@@ -180,6 +180,10 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
           </span>
         </button>
         <div class="nav-news-panel" role="menu">
+          <a class="news-section news-section-me" id="__nav_news_me_section" href="${prefix}${pageHref('me.html')}" style="display:none">
+            <div class="news-section-title">${t('nav.news.me')}</div>
+            <div class="news-section-body" id="__nav_news_me"></div>
+          </a>
           <a class="news-section" id="__nav_news_today_section" href="${prefix}news/?filter=auto">
             <div class="news-section-title">${t('nav.news.auto')}</div>
             <div class="news-section-body" id="__nav_news_today">${t('nav.news.loading')}</div>
@@ -254,7 +258,7 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
                                      padding:4px 8px; }
       .nav-news.has-current .nav-news-trigger { color:#dc2626; background:#f3f4f6; }
       .nav-news-bell { position:relative; display:inline-flex; line-height:0; }
-      .nav-news-bell.has-unread::before { content:''; position:absolute; top:-2px; left:-2px;
+      .nav-news-bell.has-unread::before, .nav-news-bell.has-me::before { content:''; position:absolute; top:-2px; left:-2px;
                                             width:7px; height:7px; background:#fca5a5;
                                             border-radius:50%; }
       /* User dropdown (= 選手本人が使う操作をまとめる). ベルと同じ見た目に揃える. */
@@ -308,6 +312,22 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       .news-section-body .news-item .date { color:#9ca3af; font-size:10px;
                                               font-family:ui-monospace,monospace; margin-right:6px; }
       .news-section-body .empty { color:#9ca3af; font-size:11px; }
+      a.news-section-me .news-section-title { color:#047857; }
+      a.news-section-me:hover { background:#ecfdf5; }
+      /* 本人へのお知らせの帯 (トップ・自分のプレイヤーページ。トップの速報・通知の帯と同じ形、js/my_notice.js) */
+      .my-notice { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border-radius:6px;
+                   background:#ecfdf5; border:1px solid #d1fae5; color:#065f46; font-size:12px; line-height:1.4; }
+      .my-notice .label { flex:none; padding:2px 8px; border-radius:4px; background:#d1fae5; color:#047857;
+                          font-weight:600; font-size:11px; white-space:nowrap; }
+      .my-notice .my-notice-items { flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:2px 14px; }
+      .my-notice a.my-notice-item { color:#065f46; text-decoration:none; }
+      .my-notice a.my-notice-item:hover { text-decoration:underline; }
+      .my-notice .my-notice-item { color:#065f46; }
+      .my-notice .my-notice-item.lv { font-weight:600; }
+      .my-notice .d { white-space:nowrap; font-weight:600; }
+      .my-notice .ticker-close { flex:none; width:22px; height:22px; border:none; background:none; color:#059669;
+                                 cursor:pointer; font-size:16px; line-height:1; border-radius:4px; }
+      .my-notice .ticker-close:hover { background:#d1fae5; }
       a.news-section-foot { display:block; padding:8px 14px; border-top:1px solid #f3f4f6;
                             text-align:right; text-decoration:none; color:#dc2626;
                             font-size:11px; transition:background-color .12s; }
@@ -382,6 +402,7 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
     const cls = (/** @type {string} */ k) => (cur === k ? ' class="current"' : '');
     const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
     if (!sess) {
+      renderMyNotice(null);
       trigger.innerHTML = USER_SVG;
       menu.innerHTML = vote + (SpspLogin && SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '');   // ログインはログアウトと同じく一番下
       return;
@@ -396,11 +417,14 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
     // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)
     trigger.classList.remove('has-new');
-    if (SpspTitleNotice && !(SITE && SITE.features && SITE.features.titles === false)) {   // 二つ名の無い地域 (北米) では見ない
+    if (SpspMyNotice) {
       const myId = String(sess.user.id);
-      SpspTitleNotice.checkNew(myId).then(n => {
+      const titlesP = SpspMyNotice.titlesNew(myId);   // 二つ名の無い地域 (北米) では読まずに 0 (順位・Lv のお知らせは出す)
+      titlesP.then(n => {
         const now = SpspLogin && SpspLogin.session();
-        if (!n || !now || String(now.user.id) !== myId) return;
+        if (!now || String(now.user.id) !== myId) return;
+        renderMyNotice(myId, n);
+        if (!n) return;
         trigger.classList.add('has-new');
         const head = menu.querySelector('.nav-user-name');
         if (head && !menu.querySelector('.nav-user-new')) {
@@ -409,6 +433,24 @@ import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく�
       }).catch(() => {});
     }
   }
+  // ベルの一番上に本人へのお知らせ (順位・Lv が上がった、二つ名を入手。押すとマイページ) と、ベルに印
+  /** @type {{uid: string, n: number} | null} */
+  var myNoticeArgs = null;   // var: renderAccount から先に呼ばれても良いように
+  /** @param {string | null} myId @param {number} [n] */
+  function renderMyNotice(myId, n) {
+    const sec = document.getElementById('__nav_news_me_section');
+    const body = document.getElementById('__nav_news_me');
+    const bell = document.querySelector('.nav-news-bell');
+    myNoticeArgs = myId ? { uid: myId, n: n || 0 } : null;
+    const list = (SpspMyNotice && myId) ? SpspMyNotice.items(myId, n) : [];
+    if (sec && body) {
+      body.innerHTML = list.map(it => `<div class="news-item">${SpspMyNotice.text(it)}</div>`).join('');
+      sec.style.display = list.length ? '' : 'none';
+    }
+    if (bell) bell.classList.toggle('has-me', list.length > 0);
+  }
+  // ページ側 (トップ・プレイヤーページ) が順位を記録した・× で閉じたときに付け直す
+  /** @type {any} */ (window).SPSPMyNoticeChanged = () => { if (myNoticeArgs) renderMyNotice(myNoticeArgs.uid, myNoticeArgs.n); };
   if (SpspLogin) {
     SpspLogin.onChange(renderAccount);
     SpspLogin.verify().then(renderAccount).catch(() => {});
