@@ -12,7 +12,7 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
-import { TITLES, PRE_PER_TOURNAMENT, POST_PER_MATCHES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
+import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -132,7 +132,7 @@ async function main() {
   // 獲得数と全体 (全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない) は開いている間は変わらないので 1 回だけ
   // 記録がまだ無い (次の同期で配られる) ときは何も書かない
   const titleNote = recordPending ? ''
-    : i18n('card_edit.title_note', { have: owned.size, total: obtainableCount(lang, owned, today), pre: PRE_PER_TOURNAMENT, m: POST_PER_MATCHES.matches, post: POST_PER_MATCHES.posts });
+    : i18n('card_edit.title_note', { have: owned.size, total: obtainableCount(lang, owned, today) });
   /** リールの今の印 (変わったものだけ付け替える) @type {Record<'pre' | 'post', string | null | undefined>} */
   const marked = { pre: undefined, post: undefined };
 
