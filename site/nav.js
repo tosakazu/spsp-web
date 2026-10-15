@@ -9,7 +9,6 @@ import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでい�
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
 import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
 import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順位・Lv が上がった、二つ名を入手): ベルの一番上と印 (js/my_notice.js)
-import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく獲得したら人型アイコンに印 (記録のビット列だけ見る。一覧 js/titles.js は読まない)
 
 // ── Google Analytics 4 (gtag.js) ──
 // 全ページに含まれる nav.js から inject することで <head> 編集を省略.
