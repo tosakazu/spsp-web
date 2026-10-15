@@ -64,7 +64,7 @@
 
 - カード (`js/player_card.js`): `model.title = { pre, post }` (文字)。片方・両方が空でもよい。空でも名前の位置は変えない。
 - プレイヤーページ: 文字は `GET /api/card` の `title_text` (`{ pre, post }`、Worker が一覧から引く)。**一覧 (titles.js) は読まない**。
-- 編集ページ: 持っているものは `GET /api/titles?uid=&lang=` (`{ bits, updated }`。記録が無ければ `updated: null` で「次のランキング更新で配られます」)。
+- 編集ページ: 持っているものは `GET /api/titles?uid=&lang=` (`{ bits, updated }`。記録が無ければ `updated: null`。そのときは何も書かない = 2026-10-15 ユーザー判断)。
   前半・後半ごとに「なし」+ 持っているもののリール。NEW。「獲得 n / 全体」(全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない)。
   一覧を読むのはこのページだけ。API の無い ConoHa のプレビューだけは、記録の代わりに出た大会から計算して見た目を確かめる (`simulateTitles`)。
 - お知らせ (`js/title_notice.js`): ログイン中は全ページのヘッダーが本人の記録を 6 時間ごとに読み、前に見たビット列より増えていれば人型アイコンに赤い点、
