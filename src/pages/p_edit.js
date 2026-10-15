@@ -10,7 +10,7 @@ import SPSPLinks from '../../site/js/links.js';
 import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
-import SPSPPlayerCard, { COLORS, TEMPLATES } from '../../site/js/player_card.js';
+import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
@@ -129,6 +129,9 @@ async function main() {
   if (ownedRec) SpspTitleNotice.markSeen(uid, ownedBits);
   // (二つ名の無い地域では titleList が空なので、下のリールは「なし」だけ。欄は上で隠してある)
   const titleList = TITLES[lang] || [];
+  // リールの先頭 (選ばない) は既定の二つ名 (前半「スマブラSP」・後半「プレイヤー」)。既定の無い地域は「なし」
+  const defTitle = defaultTitle();
+  const defText = (/** @type {'pre' | 'post'} */ part) => (defTitle ? defTitle[part] : '');
   // 獲得数と全体 (全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない) は開いている間は変わらないので 1 回だけ
   // 記録がまだ無い (次の同期で配られる) ときは何も書かない
   const titleNote = recordPending ? ''
@@ -164,17 +167,18 @@ async function main() {
     paintTours();
   }
 
-  /** 二つ名のリール: 「なし」+ 持っているもの (一覧の順)。真ん中の帯に止まったものが選ばれる。
+  /** 二つ名のリール: 既定 (スマブラSP / プレイヤー、値 'default') +「なし」(null) + 持っているもの (一覧の順)。設定が無ければ既定。真ん中の帯に止まったものが選ばれる。
    * 項目は最初に 1 回だけ作り、あとは選択の印と色だけ変える (作り直すとスクロールが動いて画面がずれる) @param {string} hex */
   const REEL_H = 40;
   function paintTitles(hex) {
     for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
-      const cur = st.title ? st.title[part] : null;
+      const cur = st.title ? st.title[part] : 'default';
       const box = $('ce-title-' + part);
       /** @type {HTMLElement} */ (box.closest('.ce-reel')).style.setProperty('--c', hex);
       if (!box.childElementCount) {
         const mine = titleList.filter(x => usableIn(x, part) && owned.has(x.id));   // 「どちらでも」は前半・後半の両方のリールに出る
         box.innerHTML =
+          (defText(part) ? `<div class="ce-reel-item" role="option" data-tid="default"><span class="ce-reel-text">${escapeHtml(defText(part))}</span></div>` : '') +   // 既定 (スマブラSP / プレイヤー)
           `<div class="ce-reel-item none" role="option" data-tid="">${escapeHtml(i18n('card_edit.title_none'))}</div>` +
           mine.map(x => `<div class="ce-reel-item" role="option" data-tid="${escapeHtml(x.id)}"><span class="ce-reel-text">${escapeHtml(x.text)}</span>${
             newIds.has(x.id) ? '<span class="ce-title-new">NEW</span>' : ''}</div>`).join('');
@@ -219,12 +223,13 @@ async function main() {
     delete box.dataset.spinning;
     const items = Array.from(box.children);
     const idx = Math.min(items.length - 1, Math.max(0, Math.round(box.scrollTop / REEL_H)));
-    const tid = items[idx] ? items[idx].getAttribute('data-tid') || null : null;
-    const cur = st.title ? st.title[part] : null;
+    const tid = items[idx] ? items[idx].getAttribute('data-tid') || null : null;   // '' =「なし」= null
+    const cur = st.title ? st.title[part] : 'default';
     if (tid === cur) return;
-    const next = { pre: st.title ? st.title.pre : null, post: st.title ? st.title.post : null };
+    const next = { pre: st.title ? st.title.pre : 'default', post: st.title ? st.title.post : 'default' };
     next[part] = tid;
-    update({ title: next.pre || next.post ? next : null });
+    // 両方とも既定なら設定なし (null)。「なし / なし」は { pre: null, post: null } のまま (空欄)
+    update({ title: next.pre === 'default' && next.post === 'default' ? null : next });
   };
   for (const part of /** @type {('pre' | 'post')[]} */ (['pre', 'post'])) {
     const box = $('ce-title-' + part);

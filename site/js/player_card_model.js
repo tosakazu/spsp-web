@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null,
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
 
 /** 二つ名の文字。サーバの card_get の title_text ({ pre, post }) か、(id, 位置) → 文字 の関数 (編集ページ。持っていない・使えない位置なら "")
- * @typedef {{ pre: string, post: string } | ((id: string, slot: 'pre' | 'post') => string) | null} TitleText */
+ * @typedef {{ pre: string | null, post: string | null } | ((id: string, slot: 'pre' | 'post') => string) | null} TitleText */
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)
@@ -98,7 +98,27 @@ export function cardAchievements(data) {
   return [...all.filter(isTourAch).sort((a, b) => (achTjprPts(b, ev) - achTjprPts(a, ev)) || (achPriority(b) - achPriority(a))),
           ...all.filter(a => !isTourAch(a))]
     .map(a => ({ key: achKey(a), label: achievementBadge(a).label.replace(/\s*達成/g, '').trim() }))
-    .filter(a => a.label);
+    .filter(a => a.label)
+    .concat(baseAchievements(data));
+}
+
+/** だれでも持てる実績 (カードが空にならないように、ビルドの実績の後ろに付ける。2026-10-15 ユーザー決定): 大会に参加・1 試合以上・
+ * 初出場から N 日 (評価日まで)・大会初勝利。出た大会 (tournaments) から数える。下位クラスの行 (parent_event_id) は「参加」と初出場の日には数えない。
+ * key は日数を含めない (日が進んでも選んだものが外れない)
+ * @param {CardData} data @returns {{ key: string, label: string }[]} */
+function baseAchievements(data) {
+  const tours = /** @type {any[]} */ (data.player.tournaments || []).filter(t => t && t.date);
+  const main = tours.filter(t => t.parent_event_id == null);
+  /** @type {{ key: string, label: string }[]} */
+  const out = [];
+  if (main.length) out.push({ key: 'base:entry', label: i18n('ach.base.entry') });
+  if (tours.some(t => (t.wins || 0) + (t.losses || 0) >= 1)) out.push({ key: 'base:match', label: i18n('ach.base.match') });
+  const first = main.reduce((d, t) => (d && d <= String(t.date).slice(0, 10) ? d : String(t.date).slice(0, 10)), '');
+  const ev = String(data.meta.eval_date || '').slice(0, 10);
+  const days = first && ev ? Math.round((Date.parse(ev + 'T00:00:00Z') - Date.parse(first + 'T00:00:00Z')) / 86400000) : NaN;
+  if (Number.isFinite(days) && days >= 0) out.push({ key: 'base:days', label: i18n('ach.base.days', { n: days }) });
+  if (tours.some(t => (t.wins || 0) >= 1)) out.push({ key: 'base:win', label: i18n('ach.base.win') });
+  return out;
 }
 
 // パフォーマンス = 実際に獲得した順位帯が SPSP 換算で全国何位/Lvいくつ相当か。
@@ -212,8 +232,9 @@ export function buildCardModel(data, settings, titleText) {
   const picked = (st.ach || []).map(k => byKey.get(k)).filter(a => a);
   const manual = picked.length > 0;
   // 二つ名: 文字はサーバ (card_get) か編集ページの一覧から (持っていない・その位置に使えない id は "")
+  // 値: id = その二つ名 / null =「なし」(空欄) / 'default' = 既定 (文字は null にしてカードが地域の既定を入れる)。設定が無ければ両方既定 (title: null)
   const textOf = (/** @type {string | null | undefined} */ id, /** @type {'pre' | 'post'} */ slot) =>
-    !id || !titleText ? '' : typeof titleText === 'function' ? titleText(id, slot) : (titleText[slot] || '');
+    id === 'default' ? null : !id || !titleText ? '' : typeof titleText === 'function' ? titleText(id, slot) : (titleText[slot] || '');
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)

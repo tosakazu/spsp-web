@@ -31,8 +31,8 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 /** @typedef {{ name: string, href?: string, date?: string, place?: number | null, placeUnit: string, nent?: number | null, dq?: boolean,
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
- * title = 二つ名 (前半・後半の文字。どちらか・両方が空でもよい。無くても名前の位置は同じ)
- * @typedef {{ name: string, title?: { pre: string, post: string } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
+ * title = 二つ名 (前半・後半の文字。'' = なし (空欄)、null と title 自体が無いときは地域の既定。無くても名前の位置は同じ)
+ * @typedef {{ name: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
  *              totalTournaments: number, totalMatches: number,
@@ -41,6 +41,14 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 // 数字・英字・記号の並びは欧文フォント (Zalando Sans) で組む (デザインの「Lv.5」「UF 10」「#3」と同じ)
 const LATIN_RUN = /[0-9A-Za-z#.+\-/]+(?:[ ][0-9A-Za-z#.+\-/]+)*/g;
 /** @param {string} s @param {string} cls */
+/** 二つ名を選んでいないときにカードに出す二つ名 (region/config.js titleDefault)。無ければ null
+ * @returns {{ pre: string, post: string } | null} */
+export function defaultTitle() {
+  const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP;
+  const d = S && S.site && S.site.titleDefault;
+  return d && (d.pre || d.post) ? { pre: d.pre || '', post: d.post || '' } : null;
+}
+
 function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
@@ -134,10 +142,16 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
+  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
+  const def = defaultTitle() || { pre: '', post: '' };
+  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
+  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
+  const post = m.title && m.title.post != null ? m.title.post : def.post;
+  const tt = pre || post ? { pre, post } : null;
+  const hasTitle = !!tt;
   // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
-  const title = hasTitle && m.title ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
-    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
+  const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
+    tt.pre ? `<span class="pc-title-pre">${escapeHtml(tt.pre)}</span>` : ''}${tt.post ? `<span class="pc-title-post">${escapeHtml(tt.post)}</span>` : ''}</div>` : '';
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
     <div class="pc-head${hasTitle ? ' pc-titled' : ''}">
