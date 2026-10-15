@@ -296,12 +296,13 @@ function normalize(s) {
            tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
            title: normTitle(s.title) };
 }
-/** @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
+/** 二つ名の値はサーバ (worker/src/api/card.ts の設定の検査) と同じ: id / null =「なし」/ 'default' = 既定。両方既定は null (設定無しと同じ)、「なし / なし」は残す
+ * @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
 function normTitle(t) {
   if (!t || typeof t !== 'object') return null;
-  const id = (/** @type {any} */ v) => (typeof v === 'string' && /^[a-z]{2}-\d{4}$/.test(v) ? v : null);
+  const id = (/** @type {any} */ v) => (v === 'default' || (typeof v === 'string' && /^[a-z]{2}-\d{4}$/.test(v)) ? v : null);
   const pre = id(t.pre), post = id(t.post);
-  return pre || post ? { pre, post } : null;
+  return pre === 'default' && post === 'default' ? null : { pre, post };
 }
 const loadLocalApplied = (/** @type {number} */ uid) => normalize(readMap(APPLIED_KEY)[String(uid)]);
 
