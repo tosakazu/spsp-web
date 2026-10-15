@@ -457,7 +457,7 @@ window.SPSP_I18N.ja = {
   'card_edit.title_pre': '前半',
   'card_edit.title_post': '後半',
   'card_edit.title_none': 'なし',
-  'card_edit.title_note': '獲得 {have} / {total}。大会に出場したり、試合をすると増えます',
+  'card_edit.title_note': '獲得 {have} / {total}。大会に出場すると新しく獲得できます',
   'card_edit.tour': '大会',
   'card_edit.sort.date': '日付',
   'card_edit.sort.pts': 'ポイント',
