@@ -39,7 +39,8 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
  *              labels: { evalDate: string, achievements: string, latest: string, overall: string, national: string, equivalent: string, noAch: string } }} PCardModel */
 
 // 数字・英字・記号の並びは欧文フォント (Zalando Sans) で組む (デザインの「Lv.5」「UF 10」「#3」と同じ)
-const LATIN_RUN = /[0-9A-Za-z#.+\-/]+(?:[ ][0-9A-Za-z#.+\-/]+)*/g;
+// 「!」「?」も含める (「Fly High!」の ! だけ和文フォントで浮いて見えた)
+const LATIN_RUN = /[0-9A-Za-z#.+\-/!?]+(?:[ ][0-9A-Za-z#.+\-/!?]+)*/g;
 /** @param {string} s @param {string} cls */
 /** 二つ名を選んでいないときにカードに出す二つ名 (region/config.js titleDefault)。無ければ null
  * @returns {{ pre: string, post: string } | null} */
