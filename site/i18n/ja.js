@@ -1686,6 +1686,11 @@ window.SPSP_I18N.ja = {
   'ach.tours.20': '🎟️ 大会出場 20+',
   'ach.matches': '⚔ 試合数 {n}+',
   'ach.wins': '🏅 勝利数 {n}+',
+  // だれでも持てる実績 (カード用、js/player_card_model.js baseAchievements)
+  'ach.base.entry': '🎮 大会に参加',
+  'ach.base.match': '⚔ 1 試合以上',
+  'ach.base.days': '📅 初出場から {n} 日',
+  'ach.base.win': '🎉 大会初勝利',
   'ach.same_opp': '🤝 同一相手と対戦 {n}+',
   'ach.tour': '{icon} {name} {bucket}{count}',
   'ach.tour_count': ' ×{n}',
