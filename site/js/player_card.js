@@ -54,7 +54,10 @@ function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
     // 数字だけの並び (「691」「1」) には pc-num も付ける (実績の札では数字だけの並びと英字を含む並びで下げ幅が違う。player_card.css)
-    out += escapeHtml(s.slice(last, off)) + `<span class="${cls}${/^[0-9][0-9,]*$/.test(m) ? ' pc-num' : ''}">${escapeHtml(m)}</span>`;
+    // 数字だけの並びには pc-num、そのうち後ろが空白か終わり (「1 試合以上」「から 691 日」) には pc-num-sp も付ける (画像にしたときの高さが違う。player_card.css)
+    const num = /^[0-9][0-9,]*$/.test(m);
+    const sp = num && /^(\s|$)/.test(s.slice(off + m.length));
+    out += escapeHtml(s.slice(last, off)) + `<span class="${cls}${num ? ' pc-num' : ''}${sp ? ' pc-num-sp' : ''}">${escapeHtml(m)}</span>`;
     last = off + m.length;
     return m;
   });
