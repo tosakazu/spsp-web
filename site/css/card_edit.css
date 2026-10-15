@@ -109,10 +109,11 @@ a.ce-login { display: inline-flex; align-items: center; text-decoration: none; }
 .ce-reel-scroll::-webkit-scrollbar { display: none; }
 .ce-reel-item {
   height: 40px; scroll-snap-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 10px;
-  font-family: "SPSP Title", inherit; font-size: 15px; color: #9ca3af; white-space: nowrap; overflow: hidden; cursor: pointer; user-select: none;
+  font-family: "SPSP Title", inherit; font-size: 15px; color: #9ca3af; overflow: hidden; cursor: pointer; user-select: none;
 }
 .ce-reel-item.none { font-family: inherit; font-size: 13px; }
 .ce-reel-item.on { color: var(--c, #dc2626); }
-.ce-reel-text { overflow: hidden; text-overflow: ellipsis; }
+/* 長い二つ名は「…」で切らずに 2 行に折り返す (行の高さ 40px に 2 行。それでも入らなければ字を小さくする: p_edit.js fitReelText) */
+.ce-reel-text { min-width: 0; text-align: center; line-height: 1.15; overflow-wrap: anywhere; word-break: normal; }
 .ce-title-new { flex: none; font-family: inherit; font-size: 9px; font-weight: 700; color: #fff; background: #dc2626; border-radius: 4px; padding: 1px 4px; }
 .ce-title-note { font-size: 11px; color: #9ca3af; }

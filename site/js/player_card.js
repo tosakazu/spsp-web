@@ -152,6 +152,7 @@ function cardHtml(m) {
       <div class="pc-bgword">Overall<br>Rank</div>
       <div class="pc-overall-lbl">${escapeHtml(L.overall)}</div>
       <div class="pc-date"><span class="pc-date-lbl">${escapeHtml(L.evalDate)}</span><span class="pc-date-v">${escapeHtml(m.evalDate || '')}</span></div>
+      <div class="pc-url">${escapeHtml(siteUrlLabel())}</div>
       <div class="pc-pills">${pills}</div>
       <div class="pc-big"><span class="pc-big-h">#</span><span class="pc-big-n">${m.rank != null ? m.rank : '—'}</span></div>
       <div class="pc-tot pc-tot-t"><span class="pc-tot-lbl">Total Tournaments</span><span class="pc-tot-line"></span><span class="pc-tot-v">${m.totalTournaments.toLocaleString('en-US')}</span></div>
@@ -395,6 +396,13 @@ export function render(el, model, opts = {}) {
   }
 }
 
+/** カードに出すサイトの URL (「spsp.games/jp/」)。ドメインは本番の spsp.games に固定 (preview で撮っても同じ)、地域の部分は設定の正規 URL から */
+function siteUrlLabel() {
+  const site = /** @type {any} */ (typeof window !== 'undefined' ? window : {}).SPSPSite || {};
+  const base = String((site.canonical && site.canonical.base) || '/');
+  return 'spsp.games' + (/^\/(jp|na)\/$/.test(base) ? base : '/' + String(site.region || 'jp').toLowerCase() + '/');
+}
+
 /** ブラウザの強制ダークモード (Samsung Internet など。color-scheme: only light を無視して色を書き換える) では、
  * カードを画像 (保存と同じ capture) にして上に重ねる。画像の色はブラウザが書き換えないので、デザインどおりに見える。
  * 重いので、Samsung Internet か、ダークモードの設定のときだけ (ページが実際に暗くされているかはページからは分からない。
@@ -456,10 +464,13 @@ async function captureCanvas(el) {
   clone.style.transform = 'none';
   box.appendChild(clone);
   document.body.appendChild(box);
+  // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
+  const sx = window.scrollX, sy = window.scrollY;
   try {
-    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333 });
+    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 });
   } finally {
     box.remove();
+    if (window.scrollX !== sx || window.scrollY !== sy) window.scrollTo(sx, sy);
   }
 }
 
