@@ -452,7 +452,6 @@ window.SPSP_I18N.ja = {
   'card_edit.title_post': '後半',
   'card_edit.title_none': 'なし',
   'card_edit.title_note': '獲得 {have} / {total}。大会に出て 1 試合以上すると前半が {pre} つ、{m} 試合ごとに後半が {post} つ増えます',
-  'card_edit.title_pending': '二つ名は次のランキング更新 (数時間おき) で配られます',
   'card_edit.tour': '大会',
   'card_edit.sort.date': '日付',
   'card_edit.sort.pts': 'ポイント',

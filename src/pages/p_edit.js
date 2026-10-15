@@ -130,7 +130,8 @@ async function main() {
   // (二つ名の無い地域では titleList が空なので、下のリールは「なし」だけ。欄は上で隠してある)
   const titleList = TITLES[lang] || [];
   // 獲得数と全体 (全体 = 持っているもの + まだ引けるもの。ほかのキャラ・都道府県のものは入れない) は開いている間は変わらないので 1 回だけ
-  const titleNote = recordPending ? i18n('card_edit.title_pending')
+  // 記録がまだ無い (次の同期で配られる) ときは何も書かない
+  const titleNote = recordPending ? ''
     : i18n('card_edit.title_note', { have: owned.size, total: obtainableCount(lang, owned, today), pre: PRE_PER_TOURNAMENT, m: POST_PER_MATCHES.matches, post: POST_PER_MATCHES.posts });
   /** リールの今の印 (変わったものだけ付け替える) @type {Record<'pre' | 'post', string | null | undefined>} */
   const marked = { pre: undefined, post: undefined };
