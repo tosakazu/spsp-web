@@ -450,7 +450,6 @@ window.SPSP_I18N.en = {
   'card_edit.title_post': 'Second',
   'card_edit.title_none': 'None',
   'card_edit.title_note': 'Unlocked {have} / {total}. Each tournament where you play at least one match gives {pre} more first-half titles, and every {m} matches give {post} more second-half titles',
-  'card_edit.title_pending': 'Your titles will be handed out at the next ranking update (every few hours)',
   'card_edit.tour': 'Tournament',
   'card_edit.sort.date': 'Date',
   'card_edit.sort.pts': 'Points',
