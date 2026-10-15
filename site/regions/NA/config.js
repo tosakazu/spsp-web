@@ -20,6 +20,7 @@
     features: { blog: false, vote: false, seeding: true, prefRanking: true, sim: true, titles: false },   // vote は北米用 OAuth/GAS ができてから。titles (二つ名) は英語の一覧ができてから
     geo: { unitKey: 'state' },
     titleLang: 'en',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
+    titleDefault: { pre: '', post: '' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない
     calendar: { weekendRealLabel: false },   // 「実質休日 / 実質平日」に相当する概念は北米では未定義
   };
   global.SPSPSite = site;

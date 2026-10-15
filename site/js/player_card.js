@@ -41,6 +41,14 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 // 数字・英字・記号の並びは欧文フォント (Zalando Sans) で組む (デザインの「Lv.5」「UF 10」「#3」と同じ)
 const LATIN_RUN = /[0-9A-Za-z#.+\-/]+(?:[ ][0-9A-Za-z#.+\-/]+)*/g;
 /** @param {string} s @param {string} cls */
+/** 二つ名を選んでいないときにカードに出す二つ名 (region/config.js titleDefault)。無ければ null
+ * @returns {{ pre: string, post: string } | null} */
+function defaultTitle() {
+  const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP;
+  const d = S && S.site && S.site.titleDefault;
+  return d && (d.pre || d.post) ? { pre: d.pre || '', post: d.post || '' } : null;
+}
+
 function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
@@ -134,10 +142,13 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
+  // 二つ名を何も選んでいない (前半・後半とも空) ときは地域の既定 (region/config.js titleDefault)。既定の無い地域 (北米) は空のまま
+  const picked = m.title && (m.title.pre || m.title.post) ? m.title : null;
+  const tt = picked || defaultTitle();
+  const hasTitle = !!tt;
   // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
-  const title = hasTitle && m.title ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
-    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
+  const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
+    tt.pre ? `<span class="pc-title-pre">${escapeHtml(tt.pre)}</span>` : ''}${tt.post ? `<span class="pc-title-post">${escapeHtml(tt.post)}</span>` : ''}</div>` : '';
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
     <div class="pc-head${hasTitle ? ' pc-titled' : ''}">

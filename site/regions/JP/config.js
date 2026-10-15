@@ -26,6 +26,7 @@
     features: { blog: /spsp\.games$/.test(host), vote: true, seeding: true, prefRanking: true, sim: true, titles: true },
     geo: { unitKey: 'prefecture' },
     titleLang: 'ja',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
+    titleDefault: { pre: 'スマブラSP', post: 'プレイヤー' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない
     calendar: { weekendRealLabel: true },   // 「実質休日 / 実質平日」の概念を出す
     // シードツールの地域まとめ (南関東 / 京阪神) と都道府県の一覧は data/geo.json (smash_database の地域モジュールが定義。docs/geo_json.md)。ここには置かない
   };
