@@ -79,11 +79,13 @@
   color: var(--pc-red); font-weight: 700; font-size: 10px; white-space: nowrap; max-width: 206px;
 }
 .pc-ach-emoji { font-size: 1.3em; color: #000; position: relative; top: .04em; }   /* 絵文字は字面が上に寄って見えるので少しだけ下げる (文字の大きさに比例 = 0.04em、13px で 0.5px) */
-/* 実績の札の数字・英字 (Zalando Sans) は漢字より上に寄って描かれる (スマホで約 1.2px)。0.05em 下げる (0.1em では下端が漢字とそろい、かえって下がって見えた)。
-   ブラウザが描くときは position の top で下げる (スマホの Chrome で確認)。画像にするとき (保存・Samsung Internet などで画面に重ねる画像。
-   html2canvas、.pc-offscreen) は top が文字に効かないので、代わりに vertical-align で並べ方ごと下げる */
-.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; position: relative; top: .05em; }
-.pc-offscreen .pc-ach-text .pc-lat { top: 0; vertical-align: -.05em; }
+/* 実績の札で、漢字・かなに挟まれた数字だけの並び (「初出場から 691 日」の 691、.pc-num) は上に寄って見えるので 0.1em 下げる。
+   英字や # を含む並び (「GRAND WARS#3」「#14 3」) は下げると下がりすぎて見えるので下げない (2026-10-15 ユーザー確認)。
+   ブラウザが描くときは position の top で下げる。画像にするとき (保存・Samsung Internet などで画面に重ねる画像。html2canvas、.pc-offscreen) は
+   top が文字に効かないので、代わりに vertical-align で並べ方ごと下げる */
+.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
+.pc-ach-text .pc-num { position: relative; top: .1em; }
+.pc-offscreen .pc-ach-text .pc-num { top: 0; vertical-align: -.1em; }
 .pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
 
 /* ── 最新の大会結果 (左下) ── */
