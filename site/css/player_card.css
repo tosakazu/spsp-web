@@ -1,6 +1,24 @@
 /* player_card.css — プレイヤーページ最上部の選手カード (js/player_card.js)。
    Figma「submit」(514×333) の座標をそのまま使い、.pc-in を表示幅に合わせて transform: scale で縮める。
    文字の top はデザインの字面 (cap) 上端から font-size × 0.2 ほど上にずらしている (line-height: 1 の箱の上端) */
+/* 二つ名のフォント: コーポレート・ロゴ ver2 Bold (SIL OFL 1.1、site/fonts/OFL.txt)。二つ名の文字だけに絞り、文字の範囲ごとに分けた版
+   (tools/fonts/build_title_font.mjs)。ブラウザは表示する文字を含むファイルだけを読む */
+/* title-font:begin */
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/0-0542ea4919.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+20,U+21,U+26,U+27,U+2C,U+2D,U+2E,U+2F,U+30,U+31,U+32,U+33,U+34,U+35,U+36,U+37,U+38,U+39,U+3F,U+41,U+42,U+43,U+44,U+45,U+46,U+47,U+48,U+49,U+4A,U+4B,U+4C,U+4D,U+4E,U+4F,U+50,U+51,U+52,U+53,U+54,U+55,U+56,U+57,U+58,U+59,U+5A,U+61,U+62,U+63,U+64,U+65,U+66,U+67,U+68,U+69,U+6A,U+6B,U+6C,U+6D,U+6E,U+6F,U+70,U+71,U+72,U+73,U+74,U+75,U+76,U+77,U+78,U+79,U+7A,U+3042,U+3044,U+3046,U+3048,U+304A,U+304B,U+304C,U+304D,U+304E,U+304F,U+3051,U+3052,U+3053,U+3055,U+3057,U+3059,U+305A,U+305B,U+305D,U+305F,U+3060,U+3061,U+3063,U+3064,U+3066,U+3067,U+3068,U+3069,U+306A,U+306B,U+306E,U+306F,U+3070,U+3072,U+3073,U+3075,U+3076,U+307E,U+307F,U+3081,U+3082,U+3089,U+308A,U+308B,U+308C,U+308D,U+308F,U+3092,U+3093,U+30A1,U+30A2,U+30A3,U+30A4,U+30A6,U+30A7,U+30A8,U+30A9,U+30AA,U+30AB,U+30AC,U+30AD,U+30AE,U+30AF,U+30B0,U+30B1,U+30B2,U+30B3,U+30B4,U+30B5,U+30B6,U+30B7,U+30B8,U+30B9,U+30BA,U+30BB,U+30BC,U+30BD,U+30BF,U+30C0,U+30C1,U+30C3,U+30C4,U+30C6,U+30C7,U+30C8,U+30C9,U+30CA,U+30CB,U+30CD,U+30CE,U+30CF,U+30D0,U+30D1,U+30D2,U+30D3,U+30D4,U+30D5,U+30D6,U+30D7,U+30D8,U+30D9,U+30DB,U+30DC,U+30DD,U+30DE,U+30DF,U+30E0,U+30E1,U+30E2,U+30E3,U+30E4,U+30E5,U+30E7,U+30E8,U+30E9,U+30EA,U+30EB,U+30EC,U+30ED,U+30EF,U+30F3,U+30FC,U+4E00,U+4E09,U+4E0A,U+4E0B,U+4E2D,U+4EBA,U+4F7F,U+524D,U+529B,U+52DD,U+53CD,U+56DE,U+5730,U+5927,U+5929,U+5B50,U+5BB6,U+5F37,U+5F8C,U+6226,U+624B,U+6253,U+6295,U+629C,U+62F3,U+6483,U+653B,U+65AC,U+661F,U+6700,U+6C17,U+706B,U+7121,U+738B,U+795E,U+7A7A,U+7A81,U+7ADC,U+8005,U+884C,U+8E74,U+8EE2,U+9023,U+9577,U+98A8,U+98DB,U+9B54; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/1-f58d7b3a86.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+3050,U+3054,U+3058,U+306C,U+306D,U+307B,U+307D,U+3080,U+3083,U+3084,U+3085,U+3087,U+30BE,U+30DA,U+30F4,U+30FB,U+4E0D,U+4E16,U+4E8C,U+4F1A,U+4F1D,U+5143,U+5149,U+5165,U+5168,U+5200,U+5207,U+5263,U+5272,U+52D5,U+52E2,U+53D7,U+53E4,U+53F0,U+5408,U+547D,U+56FD,U+57CE,U+5834,U+58EB,U+591C,U+5973,U+597D,U+5C04,U+5C4B,U+5C71,U+5CF6,U+5D16,U+5E2B,U+5E30,U+5F13,U+5F53,U+5F79,U+5FC3,U+632F,U+65B0,U+65B9,U+65CB,U+65E5,U+660E,U+6642,U+6708,U+6765,U+6A2A,U+6A5F,U+6D41,U+6D77,U+708E,U+7206,U+751F,U+754C,U+756A,U+767E,U+76EE,U+771F,U+77E5,U+7A7F,U+7ACB,U+7D42,U+811A,U+81EA,U+82B1,U+843D,U+88C2,U+88CF,U+898B,U+8D77,U+8DB3,U+8DF3,U+8EAB,U+8ECA,U+8ECD,U+904B,U+9053,U+907F,U+91D1,U+9244,U+95D8,U+9762,U+982D; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/2-455a290631.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+3005,U+3056,U+3071,U+307C,U+3086,U+4E3B,U+4E57,U+4E71,U+4E88,U+4EE3,U+4FC2,U+5012,U+5148,U+5175,U+51FA,U+521D,U+52C7,U+5316,U+53C2,U+540D,U+547C,U+58C1,U+592A,U+5B66,U+5B99,U+5B9F,U+5BFE,U+5C06,U+5C0F,U+5DE6,U+5DEE,U+5DFB,U+5E38,U+5F3E,U+5F85,U+5FA9,U+602A,U+60AA,U+611B,U+624D,U+6255,U+62C5,U+653E,U+66B4,U+6728,U+683C,U+6BB5,U+6BBA,U+6C34,U+6CE2,U+713C,U+7269,U+72D9,U+7406,U+7570,U+75BE,U+767A,U+767D,U+7684,U+76F8,U+7740,U+7815,U+7834,U+798F,U+79D8,U+7B4B,U+7D76,U+7DDA,U+8056,U+8077,U+8155,U+8853,U+885B,U+899A,U+89E3,U+8A71,U+8AAC,U+8AAD,U+8C6A,U+8CA0,U+8D85,U+8F2A,U+8FBC,U+8FFD,U+9006,U+901F,U+9032,U+9060,U+9078,U+914D,U+91CE,U+9583,U+964D,U+967D,U+968A,U+96F7,U+9AD8,U+9B3C,U+FF08,U+FF09; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/3-029502e9cb.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+25,U+3079,U+3088,U+30A5,U+4E21,U+4ED8,U+4EEE,U+4F53,U+4FE1,U+5150,U+516B,U+5206,U+5229,U+5343,U+539F,U+53CC,U+53E9,U+53F3,U+53F7,U+5411,U+5473,U+54C1,U+54E1,U+5668,U+56E3,U+56F3,U+574A,U+589C,U+5909,U+5922,U+5947,U+59BB,U+59EB,U+5B87,U+5B88,U+5B9A,U+5BAE,U+5BC6,U+5E73,U+5E7B,U+5F0F,U+5F15,U+5F71,U+5FC5,U+6025,U+629E,U+62D2,U+6301,U+638C,U+63F4,U+65E9,U+66F8,U+671F,U+672C,U+6751,U+68D2,U+69CD,U+69D8,U+6B62,U+6B63,U+6B66,U+6B7B,U+6B8B,U+6CB3,U+6D3E,U+70B9,U+70C8,U+7136,U+71B1,U+72AC,U+72E9,U+7344,U+7403,U+7528,U+76D7,U+76F4,U+77F3,U+793E,U+7A32,U+7BA1,U+7D9A,U+7F6E,U+7F8E,U+7FFC,U+80FD,U+8133,U+821E,U+8239,U+8272,U+82B8,U+82E6,U+8349,U+8987,U+96A0,U+96C6,U+96EA,U+98DF,U+99C6,U+9ED2,U+FF06; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/4-61ad3cf742.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+3065,U+307A,U+4E07,U+4E38,U+4E8B,U+4E95,U+4ECA,U+4ED5,U+4EE4,U+4F4D,U+5024,U+5074,U+50CF,U+512A,U+516C,U+5317,U+53D6,U+53F8,U+5426,U+5883,U+5948,U+5C0E,U+5C11,U+5CA9,U+5D50,U+5DE8,U+5E1D,U+5E74,U+5F62,U+5FA1,U+60D1,U+6210,U+6280,U+63A2,U+6575,U+6587,U+65AD,U+65C5,U+65D7,U+6607,U+6625,U+672A,U+672B,U+679C,U+6B4C,U+6C37,U+6C7A,U+6DF1,U+706F,U+71C3,U+7247,U+7279,U+72B6,U+72FC,U+732B,U+7363,U+7389,U+74B0,U+753B,U+76DB,U+77E2,U+7832,U+78E8,U+796D,U+7B11,U+7D00,U+7D44,U+7FBD,U+80B2,U+819D,U+826F,U+82E5,U+82F1,U+8352,U+83EF,U+87BA,U+89AA,U+8A00,U+8A08,U+8AD6,U+8B0E,U+8CCA,U+8D70,U+8DE1,U+8FD4,U+8FF7,U+90E8,U+9280,U+9580,U+95C7,U+9650,U+9699,U+96C4,U+96E2,U+96FB,U+9752,U+99AC,U+9A0E,U+9CE5,U+9F8D; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/5-c4f60fac33.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+5177,U+5185,U+5186,U+5192,U+5217,U+5236,U+523A,U+5370,U+53CE,U+53E3,U+5439,U+5546,U+56DB,U+5727,U+5915,U+5916,U+591A,U+5954,U+5996,U+59CB,U+5B85,U+5B98,U+5B9D,U+5C02,U+5CA1,U+5DDD,U+5E2D,U+5E79,U+5E95,U+5E97,U+5F1F,U+5F81,U+5FDC,U+5FEB,U+60C5,U+611F,U+62BC,U+6311,U+6398,U+652F,U+6557,U+6570,U+6574,U+65CF,U+6697,U+671B,U+6771,U+677F,U+6821,U+6839,U+68EE,U+6975,U+697C,U+697D,U+6B69,U+6CC1,U+6CD5,U+6D6A,U+6D88,U+6E21,U+7167,U+7345,U+7523,U+7537,U+753A,U+76FE,U+7802,U+786C,U+78BA,U+793C,U+7A76,U+7CBE,U+7CFB,U+7D05,U+7D33,U+7DCF,U+7DF4,U+7FD4,U+80A9,U+80CC,U+8170,U+83D3,U+8449,U+86C7,U+8857,U+885D,U+8A9E,U+8ABF,U+8B77,U+8CDE,U+8E0F,U+8E35,U+8FC5,U+9038,U+904A,U+90FD,U+9192,U+91CD,U+91DD,U+91E3; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/6-3e1c1f56ba.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+305C,U+3074,U+30CC,U+4E01,U+4E9C,U+4EA1,U+4EAC,U+4F2F,U+4F4E,U+4F55,U+4FEE,U+5075,U+516D,U+51A0,U+51A5,U+51F6,U+523B,U+5247,U+525B,U+52A9,U+52AA,U+52E4,U+534A,U+5354,U+535A,U+5373,U+5409,U+541B,U+5438,U+548C,U+55B6,U+5674,U+5728,U+57F7,U+5802,U+5854,U+590F,U+594F,U+5965,U+596A,U+59D4,U+5B64,U+5B8C,U+5BB5,U+5BBF,U+5C01,U+5C0A,U+5C45,U+5C55,U+5D0E,U+5DE5,U+5E0C,U+5E55,U+5E8A,U+5E9C,U+5EA6,U+5F31,U+5F57,U+5F7C,U+5F80,U+5FD8,U+5FF5,U+6050,U+6075,U+609F,U+60A0,U+610F,U+6211,U+62D3,U+62DB,U+62DD,U+62FE,U+6307,U+639B,U+63A1,U+63A8,U+63E1,U+63FA,U+64CD,U+6539,U+65A7,U+65E6,U+6674,U+6676,U+66AE,U+66DC,U+66F2,U+6750,U+6756,U+675F,U+9283,U+92FC,U+935B,U+9418,U+958B,U+9593,U+967A,U+9759,U+9AA8,U+9EC4; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/7-bdfd622490.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+679A,U+67AF,U+67D3,U+67F1,U+6813,U+690D,U+691C,U+69B4,U+6BBF,U+6C38,U+6C42,U+6CE3,U+6E08,U+6E0B,U+6E29,U+6E80,U+6E96,U+6EC5,U+6F14,U+6F20,U+714C,U+718A,U+721B,U+727D,U+72D7,U+72EC,U+731B,U+731F,U+73C0,U+7422,U+7425,U+7531,U+7686,U+76E4,U+770B,U+7720,U+7763,U+77AC,U+7814,U+78CB,U+7956,U+79CB,U+79D2,U+79F0,U+79FB,U+7A2E,U+7A4D,U+7A74,U+7AE0,U+7AFF,U+7B2C,U+7B49,U+7BC4,U+7BDD,U+7C98,U+7D20,U+7D71,U+7D99,U+7DE0,U+7E26,U+7F36,U+7F85,U+7FD2,U+8089,U+80C6,U+8107,U+8179,U+820C,U+8266,U+8599,U+85AC,U+8679,U+8703,U+8840,U+8972,U+897F,U+8986,U+89B3,U+89E6,U+8A2D,U+8A66,U+8A69,U+8A87,U+8AC7,U+8C79,U+8CC0,U+8D8A,U+8DDD,U+8F1D,U+8FBA,U+9054,U+907A,U+90A3,U+90AA,U+92ED,U+932C,U+93E1,U+9451,U+963B,U+9664; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/8-22ec43ace5.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+305E,U+3078,U+30C5,U+30E6,U+30F2,U+4E03,U+4E26,U+4E5D,U+4EC1,U+4ECF,U+4ED9,U+4EF6,U+4F0F,U+4F10,U+4F11,U+4F38,U+4F4F,U+4F50,U+4F5C,U+4F8D,U+4FA1,U+4FBF,U+500B,U+5049,U+5065,U+5091,U+5099,U+50AC,U+50AD,U+50CD,U+50E7,U+5100,U+5144,U+514B,U+5171,U+517C,U+51AC,U+51B6,U+51B7,U+51C4,U+51DB,U+51E0,U+51E7,U+51F0,U+5203,U+5211,U+5224,U+5225,U+5230,U+524A,U+5264,U+5275,U+52A0,U+52B4,U+52C9,U+52D8,U+52DF,U+52F2,U+5305,U+5320,U+5339,U+5357,U+5360,U+5371,U+5375,U+5384,U+53BB,U+53CB,U+53EB,U+53EC,U+53EF,U+53F2,U+541F,U+5420,U+544A,U+5468,U+5486,U+54B2,U+54F2,U+5510,U+552F,U+554F,U+559A,U+55A7,U+5629,U+5642,U+969B,U+96C0,U+96F2,U+970A,U+983C,U+9854,U+9999,U+99C4,U+9B42,U+9B5A,U+9CF4,U+9E7F,U+9E97,U+9F13; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/9-6426f6f68a.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+56E0,U+56FA,U+5712,U+571F,U+578B,U+57FA,U+57FC,U+5815,U+5841,U+5857,U+585E,U+58CA,U+58F0,U+58F2,U+5931,U+5949,U+596E,U+5A01,U+5A18,U+5A9B,U+5ACC,U+5B22,U+5B54,U+5B57,U+5B58,U+5B89,U+5B97,U+5BA3,U+5BB0,U+5BCC,U+5BD2,U+5BE7,U+5BE9,U+5BF5,U+5C3A,U+5C3D,U+5C3E,U+5C48,U+5C90,U+5CB8,U+5DBA,U+5DE1,U+5DE3,U+5DEB,U+5DF1,U+5DF4,U+5E02,U+5E06,U+5E25,U+5E2F,U+5E33,U+5E3D,U+5E7D,U+5E83,U+5EA7,U+5EAB,U+5EAD,U+5ECA,U+5EFA,U+5EFB,U+5F01,U+5F27,U+5F6B,U+5F8B,U+5F92,U+5F93,U+5F97,U+5FAE,U+5FB3,U+5FE0,U+6012,U+6016,U+601D,U+604B,U+606F,U+60B2,U+60E7,U+6109,U+6148,U+6190,U+61B6,U+61D0,U+6240,U+627F,U+6297,U+6298,U+62CD,U+62D8,U+6355,U+6368,U+637B,U+6383,U+63AC,U+63D0,U+63EE,U+643A,U+64A4,U+64E6,U+6545,U+654F; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/10-faa1c710b3.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+6551,U+6577,U+6599,U+65FA,U+6614,U+663C,U+6644,U+6669,U+6696,U+66F4,U+66F9,U+6709,U+670D,U+6717,U+671D,U+672D,U+6731,U+676F,U+6790,U+67A0,U+67C4,U+67F4,U+67FB,U+6803,U+6804,U+6842,U+6843,U+685C,U+6881,U+689F,U+68A8,U+68CB,U+68DF,U+696D,U+69CB,U+6A21,U+6A39,U+6A4B,U+6B21,U+6B6F,U+6B74,U+6B8A,U+6BB4,U+6BC5,U+6BD2,U+6C11,U+6C8C,U+6C96,U+6CA1,U+6CC9,U+6CCA,U+6CE5,U+6CF0,U+6D17,U+6D1E,U+6D3B,U+6D6E,U+6D99,U+6DAF,U+6DB2,U+6DD1,U+6DF7,U+6DFB,U+6E2F,U+6E56,U+6E90,U+6E9C,U+6EB6,U+6ECB,U+6EDD,U+6F01,U+6F06,U+6F0F,U+6F22,U+6F2B,U+6F5C,U+6F5F,U+6F70,U+6F84,U+6FC0,U+6FE4,U+7070,U+707C,U+707D,U+70B8,U+70CF,U+7126,U+7159,U+719F,U+71D5,U+722A,U+7235,U+723D,U+7259,U+72C2,U+72D0,U+72DB,U+72F8,U+7336,U+7384; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/11-3e3dacd41a.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+73CD,U+73E0,U+73ED,U+7434,U+74A7,U+74E6,U+7530,U+7533,U+7554,U+7559,U+75B2,U+75DB,U+7687,U+76E3,U+773C,U+775B,U+77ED,U+7826,U+78A7,U+7953,U+795D,U+7981,U+79C0,U+79D1,U+7A0B,U+7A3C,U+7A4F,U+7AE5,U+7AEF,U+7AF9,U+7B26,U+7B56,U+7B97,U+7BB1,U+7BC9,U+7C3E,U+7C8B,U+7CD6,U+7D04,U+7D0B,U+7D14,U+7D19,U+7D1A,U+7D30,U+7D3A,U+7D50,U+7D62,U+7DD1,U+7DD2,U+7E01,U+7E04,U+7E2B,U+7E4A,U+7E54,U+7F8A,U+7FA4,U+7FA9,U+8001,U+8003,U+805E,U+8098,U+80F4,U+80F8,U+8150,U+8151,U+817F,U+81C2,U+81D3,U+81E8,U+81F3,U+8208,U+822A,U+822C,U+8328,U+83DC,U+8463,U+8475,U+84B8,U+84BC,U+84CB,U+84EE,U+8535,U+8607,U+864E,U+8650,U+865A,U+866B,U+86D9,U+8776,U+8863,U+8868,U+8888,U+88C5,U+88D4,U+88DC,U+88DF,U+8981,U+898F,U+8996,U+89D2; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/12-5a36f1b2d9.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+8A18,U+8A3C,U+8A55,U+8A70,U+8A73,U+8A98,U+8AA0,U+8AB0,U+8AB2,U+8ACB,U+8AE6,U+8AF8,U+8B00,U+8B19,U+8B58,U+8B5A,U+8B70,U+8C37,U+8C46,U+8C9D,U+8CA9,U+8CB4,U+8CB7,U+8CE2,U+8D64,U+8DEF,U+8E0A,U+8E8D,U+8EFD,U+8F09,U+8F3F,U+8F9B,U+8FCE,U+8FEB,U+9001,U+9003,U+9031,U+904E,U+9065,U+9069,U+9084,U+90A6,U+90F5,U+90F7,U+91CC,U+9248,U+9262,U+9285,U+9298,U+9310,U+934B,U+9375,U+9396,U+93AE,U+95A2,U+961C,U+962A,U+9632,U+9663,U+9670,U+96A3,U+96BC,U+96C5,U+96C7,U+96D1,U+96E8,U+9727,U+975E,U+9760,U+9769,U+97AD,U+97CB,U+97F3,U+9802,U+9810,U+9818,U+984C,U+984E,U+985E,U+98AF,U+98C4,U+98F2,U+98FC,U+98FE,U+9928,U+9996,U+99B3,U+99C5,U+99D0,U+99D2,U+9B45,U+9CE9,U+9CF3,U+9DB4,U+9DF2,U+9E92,U+9E9F,U+9EBA,U+9ECE,U+FF0B; }
+@font-face { font-family: "SPSP Title"; src: url("../fonts/title/13-0af6638d62.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+FF0E,U+FF1D,U+FF5E; }
+/* title-font:end */
 .pcard {
   /* カードはデザインどおりの色で固定 (ブラウザの強制ダークモードでもカードだけは反転させない。ページのほかの部分はブラウザに任せる) */
   color-scheme: only light; forced-color-adjust: none;
@@ -19,27 +37,29 @@
 
 /* ── 上の帯 ── */
 .pc-head { position: absolute; left: 0; top: 0; width: 514px; height: 89px; background: var(--pc-red); color: #fff; }
-.pc-loc { position: absolute; left: 12px; top: 12px; height: 14.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* 二つ名 (Figma ver.1.5: 左上、16px)。地域は右上へ移った */
+.pc-title { position: absolute; left: 13px; top: 11px; height: 17px; display: flex; align-items: flex-end; gap: 4px; white-space: nowrap;
+  font-family: "SPSP Title", "IBM Plex Sans JP", sans-serif; font-weight: 700; font-size: 16px; line-height: 1; color: #fff; }
+.pc-loc { position: absolute; right: 12px; top: 13px; height: 14.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .pc-pin { width: 9.37px; height: 14.5px; fill: var(--pc-light); flex: none; }
-.pc-loc-name { font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 15px; color: var(--pc-light); text-transform: uppercase; }
-.pc-loc-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 13px; color: var(--pc-light); opacity: .81; margin-left: -3px; align-self: flex-end; margin-bottom: 1px; }
-.pc-name { position: absolute; left: 12px; top: 26.5px; width: 377px; height: 62.5px; display: flex; align-items: center; font-size: 43px; }   /* 場所の行の下から帯の下までの真ん中 (上下の余白をそろえる) */
+.pc-loc-name { font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 14px; color: var(--pc-light); text-transform: uppercase; }
+.pc-loc-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 12px; color: var(--pc-light); opacity: .81; margin-left: -3px; align-self: flex-end; margin-bottom: 1px; }
+/* 名前は二つ名の下: 下ぞろえで、文字の下 (ベースライン) を Figma の位置 (帯の上から約 72px) にそろえる。
+   43px・行の高さ 1.2 の箱の上からベースラインまで約 42px → 箱の下を 85.6px に。二つ名が無くても同じ位置 (二つ名の欄は空ける) */
+.pc-name { position: absolute; left: 12px; top: 32px; width: 377px; height: 53.6px; display: flex; align-items: flex-end; font-size: 43px; }
 .pc-name-t { display: block; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 .pc-name.pc-wrap .pc-name-t, .pc-tour.pc-wrap .pc-tour-a {
   white-space: normal; line-height: 1.12; word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.pc-date { position: absolute; right: 12px; top: 13px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
-.pc-date-lbl { font-size: 10px; }
-.pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 11px; }
-.pc-chars { position: absolute; right: 12px; top: 41px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }   /* 列は右に寄せ、行は左ぞろえ */
-.pc-char { display: flex; align-items: center; gap: 3px; height: 13px; font-size: 12px; white-space: nowrap; text-transform: uppercase; }
+.pc-chars { position: absolute; right: 15px; top: 45px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }   /* 右ぞろえ (Figma ver.1.5、字面で行の間 8px) */
+.pc-char { display: flex; align-items: center; gap: 2px; height: 11px; font-size: 14px; white-space: nowrap; text-transform: uppercase; }
 .pc-char-sq { width: 10px; height: 13px; background: #fff; flex: none; }   /* 絵文字の無いキャラだけ (デザインの ■) */
 .pc-char-emoji { font-size: 1em; line-height: 1; flex: none; }   /* キャラの絵文字 (data/char_emoji.json) */
 .pc-char-name { font-weight: 500; }
 .pc-char.main .pc-char-name { font-weight: 700; }
 .pc-char.pc-wrap { height: auto; align-items: flex-start; }
-.pc-char.pc-wrap .pc-char-name { text-align: left; line-height: 1.08; }   /* 改行は js が入れる (幅は長い方の行に合う) */
+.pc-char.pc-wrap .pc-char-name { text-align: right; line-height: 1.08; }   /* 改行は js が入れる (幅は長い方の行に合う) */
 .pc-char-rank { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: .786em; opacity: .9; margin-left: -1px; align-self: flex-end; }
 
 /* ── 主な実績 (左上の箱) ── */
@@ -64,8 +84,8 @@
 
 /* ── 最新の大会結果 (左下) ── */
 .pc-latest { position: absolute; left: 5px; top: 194px; width: 226px; height: 134px; }
-.pc-latest-lbl { left: 10px; top: 14px; }
-.pc-latest-date { position: absolute; right: 9px; top: 14px; font-family: "Zalando Sans Expanded", sans-serif; font-size: 10px; color: var(--pc-gray); white-space: nowrap; }
+.pc-latest-lbl { left: 10px; top: 15px; }
+.pc-latest-date { position: absolute; right: 9px; top: 15px; font-family: "Zalando Sans Expanded", sans-serif; font-size: 10px; color: var(--pc-gray); white-space: nowrap; }
 .pc-tour { position: absolute; left: 10px; top: 29px; width: 207px; height: 34px; display: flex; align-items: center; font-size: 18px; color: var(--pc-red); font-weight: 700; }
 .pc-tour-a { display: block; min-width: 0; white-space: nowrap; line-height: 1.2; }
 .pc-tour .pc-lat { font-weight: 700; font-size: 1.055em; }
@@ -73,9 +93,9 @@
 .pc-place-row { display: inline-block; white-space: nowrap; font-size: 30px; }
 .pc-place-num { font-family: "Zalando Sans", sans-serif; font-weight: 600; }
 .pc-place-unit { font-weight: 700; font-size: .567em; margin-left: 1px; }
-.pc-place-n { position: absolute; left: 0; right: 0; top: 31px; text-align: center; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 16px; color: var(--pc-gray); white-space: nowrap; }
+.pc-place-n { position: absolute; left: 0; right: 2px; top: 33px; text-align: right; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 16px; color: var(--pc-gray); white-space: nowrap; }
 .pc-vbar { position: absolute; left: 95.5px; top: 61px; width: 5px; height: 68px; background: var(--pc-red); }
-.pc-perf-box { position: absolute; left: 112px; top: 61px; width: 106px; height: 68px; }
+.pc-perf-box { position: absolute; left: 112px; top: 63px; width: 106px; height: 68px; }
 .pc-perf-lbl, .pc-upd-lbl { position: absolute; left: 0; font-family: "Zalando Sans Expanded", sans-serif; font-size: 7px; color: var(--pc-gray); text-transform: uppercase; white-space: nowrap; }
 .pc-perf-lbl { top: 3px; }
 .pc-upd-lbl { top: 37px; }
@@ -90,21 +110,26 @@
 
 /* ── 総合評価 (右の赤い箱) ── */
 .pc-overall { position: absolute; left: 231px; top: 94px; width: 280px; height: 236px; background: var(--pc-red); color: #fff; overflow: hidden; }
-/* 順位の後ろの「OVERALL RANK」: 横は総合評価の赤い枠の真ん中、高さは Figma どおり (枠の上から 49px) */
+/* 順位の後ろの「OVERALL RANK」: 横は総合評価の赤い枠の真ん中、高さは Figma ver.1.5 の字面 (カードの上から 160px) にそろえる
+   (デザイナーの指摘で 49px → 56px。画素で突き合わせて 7px 下げた) */
 .pc-bgword {
-  position: absolute; left: 0; right: 0; top: 49px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  position: absolute; left: 0; right: 0; top: 56px; display: flex; flex-direction: column; align-items: center; text-align: center;
   font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 57px; line-height: 61px;
   text-transform: uppercase; color: #c3c3c3; opacity: .45; white-space: nowrap; pointer-events: none;
 }
-.pc-overall-lbl { position: absolute; left: 14px; top: 14px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
-.pc-pills { position: absolute; right: 8px; top: 13px; display: flex; gap: 2px; font-size: 14px; white-space: nowrap; }
+.pc-overall-lbl { position: absolute; left: 14px; top: 15px; font-weight: 600; font-size: 17px; color: #f3f3f3; white-space: nowrap; }
+/* 評価日は総合評価の見出しの下 (Figma ver.1.5) */
+.pc-date { position: absolute; left: 14px; top: 37px; display: flex; align-items: baseline; gap: 5px; color: #c3c3c3; opacity: .9; font-weight: 500; white-space: nowrap; }
+.pc-date-lbl { font-size: 9px; }
+.pc-date-v { font-family: "Zalando Sans", sans-serif; font-size: 10px; }
+.pc-pills { position: absolute; right: 8px; top: 12px; display: flex; gap: 2px; font-size: 14px; white-space: nowrap; }
 .pc-pill {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
   min-width: 3.5em; height: 1.28em; padding: 0 .25em; border: 2px solid #fff; border-radius: 19px;
   font-weight: 600; font-size: 1em;
 }
 .pc-big {
-  position: absolute; left: 139px; top: 111px; transform: translate(-50%, -50%);
+  position: absolute; left: 139px; top: 114px; transform: translate(-50%, -50%);
   display: flex; align-items: baseline; white-space: nowrap; font-family: "Zalando Sans", sans-serif; font-size: 91px; line-height: 1;
 }
 .pc-big-h { font-weight: 900; font-size: .55em; }
@@ -112,8 +137,8 @@
 /* TOTAL: ラベル・線・数字を 1 行に並べる。線と数字はラベル (2 行のときも) の上下の真ん中 */
 .pc-tot { position: absolute; left: 15px; right: 11px; display: flex; align-items: center; gap: 10px; pointer-events: none;
   font-family: "Zalando Sans Expanded", sans-serif; font-weight: 500; color: var(--pc-light); text-transform: uppercase; }
-.pc-tot-t { top: 184px; }
-.pc-tot-m { top: 210px; }
+.pc-tot-t { top: 186px; }
+.pc-tot-m { top: 212px; }
 .pc-tot-lbl { flex: none; width: 104px; font-size: 9px; line-height: 11px; }
 .pc-tot-line { flex: 1; height: 1px; background: var(--pc-light); opacity: .85; }
 .pc-tot-v { flex: none; font-size: 11px; line-height: 11px; white-space: nowrap; }

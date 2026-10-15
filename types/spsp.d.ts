@@ -20,7 +20,7 @@ declare global {
     cleanUrls?: boolean;
     /** 配信元 (canonical.origin) → start.gg OAuth アプリ。API / redirect は canonical から組む (js/post_config.js)。無い配信元は従来値 */
     auth: Record<string, { clientId: string }>;
-    features: { blog: boolean; vote: boolean; seeding: boolean; prefRanking: boolean; sim: boolean };
+    features: { blog: boolean; vote: boolean; seeding: boolean; prefRanking: boolean; sim: boolean; titles?: boolean };
     geo: { unitKey: string };
     calendar: { weekendRealLabel: boolean };
   }

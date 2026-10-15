@@ -8,6 +8,7 @@ import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
 import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
+import SpspTitleNotice from './js/title_notice.js';   // 二つ名を新しく獲得したら人型アイコンに印 (記録のビット列だけ見る。一覧 js/titles.js は読まない)
 
 // ── Google Analytics 4 (gtag.js) ──
 // 全ページに含まれる nav.js から inject することで <head> 編集を省略.
@@ -279,6 +280,9 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
                             max-width:calc(100vw - 24px); }
       /* アカウントメニュー: 項目はほかのメニューのリンクと同じ見た目 (色も同じ灰色)。
          名前は押せないので見出しとして: 濃い字・太字、下に細い線 */
+      .nav-user-trigger { position:relative; }
+      .nav-user-trigger.has-new::after { content:""; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#dc2626; box-shadow:0 0 0 2px #fff; }
+      .nav-user .nav-menu .nav-user-new { color:#dc2626; font-weight:600; }
       .nav-user-name { padding:7px 14px 6px; margin-bottom:4px; font-size:13px; font-weight:600; color:#111827;
                        border-bottom:1px solid #f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
@@ -390,6 +394,20 @@ import SpspLogin from './js/login.js';   // 人型アイコンのアカウント
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
+    // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)
+    trigger.classList.remove('has-new');
+    if (SpspTitleNotice && !(SITE && SITE.features && SITE.features.titles === false)) {   // 二つ名の無い地域 (北米) では見ない
+      const myId = String(sess.user.id);
+      SpspTitleNotice.checkNew(myId).then(n => {
+        const now = SpspLogin && SpspLogin.session();
+        if (!n || !now || String(now.user.id) !== myId) return;
+        trigger.classList.add('has-new');
+        const head = menu.querySelector('.nav-user-name');
+        if (head && !menu.querySelector('.nav-user-new')) {
+          head.insertAdjacentHTML('afterend', `<a class="nav-user-new" href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.new_titles', { n })}</a>`);
+        }
+      }).catch(() => {});
+    }
   }
   if (SpspLogin) {
     SpspLogin.onChange(renderAccount);

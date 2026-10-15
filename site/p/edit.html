@@ -50,14 +50,27 @@
         <h2 data-i18n="card_edit.color">カラー</h2>
         <div class="ce-colors" id="ce-colors"></div>
       </section>
+      <!-- 二つ名: 前半・後半を、持っているものから選ぶ (「なし」も可)。新しく獲得したものに NEW (js/titles.js・js/title_notice.js) -->
+      <section class="ce-sec" id="ce-title-sec">
+        <h2 data-i18n="card_edit.title">二つ名</h2>
+        <!-- 前半・後半それぞれ縦に回すリール (真ん中の帯に止まったものを選ぶ。項目を押すとそこまで回る) -->
+        <div class="ce-reels">
+          <div class="ce-reel-col"><div class="ce-reel-lbl" data-i18n="card_edit.title_pre">前半</div>
+            <div class="ce-reel"><div class="ce-reel-band" aria-hidden="true"></div><div class="ce-reel-scroll" id="ce-title-pre" role="listbox" tabindex="0" data-i18n-attr="aria-label:card_edit.title_pre"></div></div></div>
+          <div class="ce-reel-col"><div class="ce-reel-lbl" data-i18n="card_edit.title_post">後半</div>
+            <div class="ce-reel"><div class="ce-reel-band" aria-hidden="true"></div><div class="ce-reel-scroll" id="ce-title-post" role="listbox" tabindex="0" data-i18n-attr="aria-label:card_edit.title_post"></div></div></div>
+        </div>
+        <div class="ce-title-note" id="ce-title-note"></div>
+      </section>
       <!-- 実績と大会は最初は畳んでおく (見出しの右に今の選択) -->
       <details class="ce-sec ce-fold">
         <summary><h2>
           <span data-i18n="card_edit.achievements">実績</span>
-          <span class="ce-fold-sum" id="ce-ach-sum"></span>
+          <!-- リセットは見出しのすぐ右 (隠れていても場所を取るので、右端の「自動」を大会の行とそろえるため) -->
           <button type="button" class="ce-reset" id="ce-reset" data-i18n-attr="title:card_edit.reset,aria-label:card_edit.reset" title="リセット" aria-label="リセット">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
           </button>
+          <span class="ce-fold-sum" id="ce-ach-sum"></span>
           <svg class="ce-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </h2></summary>
         <div class="ce-achs" id="ce-achs"></div>

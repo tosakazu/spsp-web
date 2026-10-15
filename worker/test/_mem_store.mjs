@@ -9,6 +9,7 @@ export class MemStore {
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
     this.classActions = [];  // { user_id, action, ts_ms, day }
+    this.titleOwned = new Map();   // 'uid|lang' → { bits, updated, n_pre, n_post }
   }
 
   async recentActivity(table, userId, dayKey) {
@@ -127,6 +128,30 @@ export class MemStore {
     const r = this.classes.find((x) => x.id === id);
     if (r && r.status === 'waiting') { r.status = 'deleted'; r.deleted_at = deletedAt; return 'deleted'; }
     return r && r.status === 'done' ? 'done' : 'missing';
+  }
+
+  async getTitleOwned(uid, lang) {
+    const r = this.titleOwned.get(String(Number(uid)) + '|' + lang);
+    return r ? { ...r } : null;
+  }
+
+  async casTitleOwnedMany(lang, rows, date) {
+    const conflicts = [];
+    for (const r of rows) {
+      const k = String(Number(r.uid)) + '|' + lang;
+      const cur = this.titleOwned.get(k);
+      const same = r.prev === null ? !cur
+        : !!cur && cur.bits === r.prev.bits && cur.n_pre === r.prev.n_pre && cur.n_post === r.prev.n_post;
+      if (!same) { conflicts.push(r.uid); continue; }
+      this.titleOwned.set(k, { bits: r.bits, updated: cur && cur.bits === r.bits ? cur.updated : date, n_pre: r.n_pre, n_post: r.n_post });
+    }
+    return conflicts;
+  }
+
+  async listTitleOwned(lang, afterUid, limit) {
+    return [...this.titleOwned.entries()].filter(([k]) => k.endsWith('|' + lang))
+      .map(([k, v]) => ({ uid: Number(k.split('|')[0]), ...v }))
+      .filter((x) => x.uid > afterUid).sort((a, b) => a.uid - b.uid).slice(0, limit);
   }
 
   async recordClassAction(action, g) {

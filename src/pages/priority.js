@@ -69,6 +69,18 @@ function utcOffsetMs(off) {
   /** @param {any} s @returns {string} */
   function esc(s) { return SPSPHtml.escapeHtml(s); }   // ../js/html.js
 
+  /** 同名の判定に使う名前: チーム名 (「ZETA | 名前」の前半) を外し、全角半角・大小文字・空白をそろえる
+   * @param {string} display */
+  function nameKey(display) {
+    var s = String(display || '');
+    var bar = s.lastIndexOf('|');
+    if (bar >= 0) s = s.slice(bar + 1);
+    return s.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  }
+  /** 手動追加・手動除去の札を描き直す (同名の「除外」から使う) */
+  var renderAddChips = function () {};
+  var renderRemoveChips = function () {};
+
   /** id の要素 (フォーム部品は静的 HTML にあるので、型だけ付ける) @param {string} id @returns {HTMLInputElement} */
   function inputEl(id) { return /** @type {HTMLInputElement} */ (document.getElementById(id)); }
 
@@ -187,13 +199,44 @@ function utcOffsetMs(off) {
     if (recentOnly && !recentKValid) warns.push(i18n('priority.warn.recent_nan'));
     if (auto.length < autoN) warns.push(i18n('priority.warn.short', { found: auto.length, want: autoN }));
     if (warns.length) note += ' <span class="warn">⚠ ' + warns.map(esc).join(' / ') + '</span>';
+    // 同じ名前の人 (複数アカウントの同じ人かもしれない。別人のこともあるので警告だけ。同じ人なら行の「除外」で外せる)
+    /** @type {Map<string, number>} */
+    var nameCount = new Map();
+    rows.forEach(function (r) { var k = nameKey(r.display); if (k) nameCount.set(k, (nameCount.get(k) || 0) + 1); });
+    /** @type {Set<string>} */
+    var dupKeys = new Set();
+    nameCount.forEach(function (c, k) { if (c > 1) dupKeys.add(k); });
+    if (dupKeys.size) note += ' <span class="warn">⚠ ' + esc(i18n('priority.warn.dup_names', { n: dupKeys.size })) + '</span>';
+    // 同じ名前の人を名前ごとにまとめた欄 (表の上)。ここで「除外」する
+    var dupBox = document.getElementById('dup-box');
+    if (dupBox) {
+      /** @type {Map<string, Row[]>} */
+      var groups = new Map();
+      rows.forEach(function (r) { var k = nameKey(r.display); if (dupKeys.has(k)) { if (!groups.has(k)) groups.set(k, []); /** @type {Row[]} */ (groups.get(k)).push(r); } });
+      dupBox.hidden = !groups.size;
+      var html = '<div class="dup-head">⚠ ' + esc(i18n('priority.dup_head')) + '</div>';
+      groups.forEach(function (list) {
+        html += '<div class="dup-group"><div class="dup-name">' + esc(list[0].display.slice(list[0].display.lastIndexOf('|') + 1).trim()) + '</div>' +
+          list.map(function (r) {
+            var disc = DISC[String(r.uid)];
+            return '<div class="dup-item"><span class="rk">' + (r.ens ? '#' + r.ens : '—') + '</span>' +
+              // @ts-ignore SPSP.langRoot は string | undefined
+              '<a class="nm" href="' + SPSPLinks.playerHref(SPSP.langRoot, r.uid) + '" target="_blank" rel="noopener" style="color:inherit">' + esc(r.display) + '</a>' +
+              '<span class="ds">' + (disc ? esc(disc) : '—') + '</span>' +
+              (r.origin === 'manual' ? '<span class="manual-badge">' + i18n('priority.badge.manual') + '</span>' : r.origin === 'csv' ? '<span class="csv-badge">CSV</span>' : '') +
+              '<button type="button" class="dup-x" data-uid="' + r.uid + '">' + i18n('priority.dup_remove') + '</button></div>';
+          }).join('') + '</div>';
+      });
+      dupBox.innerHTML = groups.size ? html : '';
+    }
     var previewNote = document.getElementById('preview-note');
     if (previewNote) previewNote.innerHTML = note;
 
     var ptbody = document.getElementById('ptbody');
     if (ptbody) ptbody.innerHTML = rows.map(function (r, idx) {
       var disc = DISC[String(r.uid)];
-      return '<tr>' +
+      var dup = dupKeys.has(nameKey(r.display));
+      return '<tr' + (dup ? ' class="dup-row"' : '') + '>' +
         '<td class="col-no">' + (idx + 1) + '</td>' +
         '<td class="col-rank">' + (r.ens ? '#' + r.ens : '—') + '</td>' +
         // @ts-ignore SPSP.langRoot は string | undefined だが、この呼び出しの字面は tests/meta/priority_page.test.cjs が固定している
@@ -202,7 +245,8 @@ function utcOffsetMs(off) {
           (OVERSEAS.has(r.uid) ? '<span class="ovs-badge">' + i18n('table.overseas') + '</span>' : '') +
           (r.prov ? '<span class="prov-badge">' + i18n('table.provisional') + '</span>' : '') +
           (r.origin === 'manual' ? '<span class="manual-badge">' + i18n('priority.badge.manual') + '</span>'
-            : r.origin === 'csv' ? '<span class="csv-badge">CSV</span>' : '') + '</td>' +
+            : r.origin === 'csv' ? '<span class="csv-badge">CSV</span>' : '') +
+          (dup ? '<span class="dup-badge">' + i18n('priority.badge.dup') + '</span>' : '') + '</td>' +
         '<td class="col-disc' + (disc ? '' : ' nodisc') + '">' + (disc ? esc(disc) : '—') + '</td>' +
         '</tr>';
     }).join('');
@@ -446,6 +490,7 @@ function utcOffsetMs(off) {
       renderChips();
       recompute();
     });
+    return renderChips;
   }
 
   // ---- UI 配線 ----
@@ -501,8 +546,21 @@ function utcOffsetMs(off) {
     });
 
     // 手動追加 / 手動除去 (お互い・CSV 追加済みの人はサジェストに出さない)
-    setupPlayerPicker('padd-input', 'padd-suggest', 'padd-chips', manualUids, removeUids);
-    setupPlayerPicker('prem-input', 'prem-suggest', 'prem-chips', removeUids, manualUids);
+    renderAddChips = setupPlayerPicker('padd-input', 'padd-suggest', 'padd-chips', manualUids, removeUids);
+    renderRemoveChips = setupPlayerPicker('prem-input', 'prem-suggest', 'prem-chips', removeUids, manualUids);
+
+    // 同名の欄の「除外」: 手動・CSV で足した人ならその一覧から外し、自動で選ばれた人は手動除去に入れる (次の順位の人が繰り上がる)
+    var ptb = document.getElementById('dup-box');
+    if (ptb) ptb.addEventListener('click', function (e) {
+      var b = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest('.dup-x') : null);
+      if (!b) return;
+      var uid = parseInt(/** @type {string} */ (b.dataset.uid), 10);
+      var mi = manualUids.indexOf(uid), ci = csvUids.indexOf(uid);
+      if (mi >= 0) { manualUids.splice(mi, 1); renderAddChips(); }
+      else if (ci >= 0) { csvUids.splice(ci, 1); renderCsvNote(CSV_ADD); }
+      else if (removeUids.indexOf(uid) < 0) { removeUids.push(uid); renderRemoveChips(); }
+      recompute();
+    });
 
     // CSV 一括追加 / 一括除去
     /** @type {[string, CsvTarget][]} */

@@ -1,11 +1,13 @@
 // @ts-check
 // player_card_model.js — プレイヤーカード (js/player_card.js) に渡す中身を選手データから作る。プレイヤーページと編集ページで共有 (2026-09-30)。
 //   loadCardData(uid)              カードに要るデータ (選手・meta・都道府県・キャラ・海外勢…) を読む (編集ページ用。プレイヤーページは自分で読んだものを渡す)
-//   buildCardModel(data, settings) カードの model。settings (テンプレート・色・実績の選択) は無ければ既定 (自動)
+//   buildCardModel(data, settings, titleText) カードの model。settings (テンプレート・色・実績の選択) は無ければ既定 (自動)。
+//                                  titleText = 二つ名の文字 (サーバの card_get が返す { pre, post }、編集ページは一覧から引く関数)。二つ名の一覧 (js/titles.js) はここでは読まない
 //   cardAchievements(data)         カードに出せる実績の全部 (既定の並び = 大会の成績を順位評価のポイント順、残りはビルドの優先度順)
 //   perfInfoOf(t) / achievementBadge(a)  プレイヤーページの他の欄でも使う
 //   設定 (docs/login_design.md):
 //     fetchApplied(uid) / putApplied(uid, s)  適用済み = カードに出る設定。API (/api/card・card_put) があればサーバ、無い所 (ConoHa のプレビュー) はこのブラウザ
+//     fetchAppliedCard(uid)  適用済みの設定と、付けている二つ名の文字 (プレイヤーページ用)
 //     loadDraft(uid) / saveDraft(uid, s) / clearDraft(uid)  編集ページの途中の状態 (このブラウザに自動保存)
 import SPSPI18n from './i18n.js';
 import SPSPFormat from './format.js';
@@ -26,10 +28,17 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
  *             charIdx: any, charEmoji: any }} CardData */
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
- * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null }} CardSettings */
+ * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null };
+
+/** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
+export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
+
+/** 二つ名の文字。サーバの card_get の title_text ({ pre, post }) か、(id, 位置) → 文字 の関数 (編集ページ。持っていない・使えない位置なら "")
+ * @typedef {{ pre: string, post: string } | ((id: string, slot: 'pre' | 'post') => string) | null} TitleText */
 
 // ── 実績 ──
 // Legacy mapping (for old string-format achievements)
@@ -139,9 +148,9 @@ function classSuffix(t) {
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
 //   左下の大会 = 順位評価のポイントが一番高い大会 (無ければ最新の集計対象大会)、合計 = 出場大会数と試合数 (勝ち + 負け)
-/** @param {CardData} data @param {CardSettings | null} [settings]
+/** @param {CardData} data @param {CardSettings | null} [settings] @param {TitleText} [titleText]
  * @returns {import('./player_card.js').PCardModel} */
-export function buildCardModel(data, settings) {
+export function buildCardModel(data, settings, titleText) {
   const { uid, player, rec, meta } = data;
   const st = settings || DEFAULT_SETTINGS;
   const SUB = data.subranks && data.subranks[String(uid)];
@@ -202,9 +211,13 @@ export function buildCardModel(data, settings) {
   const byKey = new Map(all.map(a => [a.key, a]));
   const picked = (st.ach || []).map(k => byKey.get(k)).filter(a => a);
   const manual = picked.length > 0;
+  // 二つ名: 文字はサーバ (card_get) か編集ページの一覧から (持っていない・その位置に使えない id は "")
+  const textOf = (/** @type {string | null | undefined} */ id, /** @type {'pre' | 'post'} */ slot) =>
+    !id || !titleText ? '' : typeof titleText === 'function' ? titleText(id, slot) : (titleText[slot] || '');
+  const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)
-    name: SPSPFormat.stripTeamTag(rec.display), loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.stripTeamTag(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
@@ -259,22 +272,38 @@ function normalize(s) {
   if (!s || typeof s !== 'object') return null;
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
-           tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null };
+           tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
+           title: normTitle(s.title) };
+}
+/** @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
+function normTitle(t) {
+  if (!t || typeof t !== 'object') return null;
+  const id = (/** @type {any} */ v) => (typeof v === 'string' && /^[a-z]{2}-\d{4}$/.test(v) ? v : null);
+  const pre = id(t.pre), post = id(t.post);
+  return pre || post ? { pre, post } : null;
 }
 const loadLocalApplied = (/** @type {number} */ uid) => normalize(readMap(APPLIED_KEY)[String(uid)]);
 
 /** 適用済みの設定。サーバ (だれでも読める) から。読めなければ null (= 既定のカード)
  * @param {number} uid @returns {Promise<CardSettings | null>} */
 export async function fetchApplied(uid) {
-  if (!SpspLogin.apiAvailable()) return loadLocalApplied(uid);
+  return (await fetchAppliedCard(uid)).settings;
+}
+/** 適用済みの設定と、付けている二つ名の文字 (card_get の title_text。API の無い所では null = 二つ名は出さない)
+ * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null }>} */
+export async function fetchAppliedCard(uid) {
+  if (!SpspLogin.apiAvailable()) return { settings: loadLocalApplied(uid), titleText: null };
   try {
     // 本人が見るときはブラウザのキャッシュ (60 秒) を使わない: 編集ページで適用した直後に古い設定が出ないように
     const self = SpspLogin.isSelf(uid);
     const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
                           self ? { cache: 'no-store' } : undefined);
     const j = r.ok ? await r.json() : null;
-    return j && j.ok ? normalize(j.settings) : null;
-  } catch (e) { return null; }
+    if (!j || !j.ok) return { settings: null, titleText: null };
+    const tt = j.title_text;
+    return { settings: normalize(j.settings),
+             titleText: tt && typeof tt === 'object' ? { pre: String(tt.pre || ''), post: String(tt.post || '') } : null };
+  } catch (e) { return { settings: null, titleText: null }; }
 }
 /** 適用 (本人のログインが要る)。settings が null なら既定に戻す。{ ok, code? }
  * @param {number} uid @param {CardSettings | null} s @returns {Promise<{ ok: boolean, code?: string }>} */
@@ -289,5 +318,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
-                 fetchApplied, putApplied, loadDraft, saveDraft, clearDraft };
+export default { buildCardModel, titleLang, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+                 fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };

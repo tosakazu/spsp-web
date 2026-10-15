@@ -10,6 +10,7 @@
  *   GET  /api/export/votes?key=&since=   = action export_votes
  *   GET  /api/export/errors?key=&limit=  = action export_errors
  *   GET  /api/card?uid=                  = action card_get (だれでも読める。60 秒キャッシュ可)
+ *   GET  /api/titles?uid=&lang=          = action title_get (持っている二つ名の記録。だれでも読める。60 秒キャッシュ可)
  *   GET  /api/class_waitlist             = action class_waitlist (下位クラスの取得待ち。だれでも読める)
  *   GET  それ以外        doGet と同じ bad_request
  * 応答は常に HTTP 200 の JSON (ビルド側の urllib が非 2xx を例外にするため)。
@@ -17,6 +18,7 @@
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
+import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
 import { handleClientError, logError } from './errlog.ts';
@@ -41,6 +43,9 @@ export interface ApiContext {
 
 /** POST body の上限 (投稿本文 1000 文字 + token 等で十分)。 */
 export const MAX_BODY_BYTES = 64 * 1024;
+/** 毎日の二つ名の記録 (POST /api/title_sync、鍵つき) だけの上限。1 人あたり今と前のビット列 (各 1.2 KB 前後) で、同期の道具は 1 回 1.5 MB までに分けて送る。
+ * パスが title_sync のときだけ使い、body の action も title_sync でなければ断る (ほかの action に大きな body を通さない) */
+export const TITLE_SYNC_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const MSG_BAD_FORMAT = 'リクエストの形式が不正です。';
 
@@ -72,7 +77,13 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         // ページを開くたびに呼ばれる確認。期限切れは普通に起きるので記録しない。
         return (await handleMe(ctx.cfg, r, now)).body;
       case 'card_get':
-        return (await handleCardGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+        return (await handleCardGet(ctx.cfg, ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+      case 'title_get':
+        return (await handleTitleGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+      case 'title_sync':
+        res = await handleTitleSync(ctx.cfg, ctx.store, r, now); break;
+      case 'title_export':
+        res = await handleTitleExport(ctx.cfg, ctx.store, r); break;
       case 'card_put':
         res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
       case 'class_create':
@@ -124,7 +135,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     if (sess) uid = sess.id;
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
-  const NOTE_ACTIONS = ['login', 'post', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
+  const NOTE_ACTIONS = ['login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
@@ -182,6 +193,10 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     if (sub === 'class_waitlist') {
       return jsonResponse(await dispatch(ctx, { action: 'class_waitlist' }));
     }
+    if (sub === 'titles') {
+      const body = await dispatch(ctx, { action: 'title_get', uid: url.searchParams.get('uid') || '', lang: url.searchParams.get('lang') || '' });
+      return jsonResponse(body, body.ok ? 'public, max-age=60' : 'no-store');
+    }
     if (sub === 'card') {
       const body = await dispatch(ctx, { action: 'card_get', uid: url.searchParams.get('uid') || '' });
       return jsonResponse(body, body.ok ? 'public, max-age=60' : 'no-store');
@@ -193,8 +208,9 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     return jsonResponse(getOnlyPostBody());
   }
 
+  const maxBody = sub === 'title_sync' ? TITLE_SYNC_MAX_BODY_BYTES : MAX_BODY_BYTES;
   const len = Number(request.headers.get('content-length') || 0);
-  if (len > MAX_BODY_BYTES) {
+  if (len > maxBody) {
     return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   let text: string;
@@ -204,7 +220,7 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   if (!text) return jsonResponse(await dispatch(ctx, undefined));
-  if (text.length > MAX_BODY_BYTES) return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
+  if (text.length > maxBody) return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
 
   let req: unknown;
   try {
@@ -216,6 +232,10 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
   if (sub && req && typeof req === 'object' && !Array.isArray(req)
       && (req as Record<string, unknown>).action === undefined) {
     (req as Record<string, unknown>).action = sub;
+  }
+  if (sub === 'title_sync' && text.length > MAX_BODY_BYTES
+      && !(req && typeof req === 'object' && (req as Record<string, unknown>).action === 'title_sync')) {
+    return jsonResponse(err('bad_request', MSG_BAD_FORMAT).body);
   }
   return jsonResponse(await dispatch(ctx, req));
 }

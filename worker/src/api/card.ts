@@ -2,7 +2,8 @@
  * プレイヤーカードの設定と、ログイン状態の確認 (docs/login_design.md「バックエンド (Worker) に足すもの」)。
  *
  *   action: "me"        { token }            → { user:{id, slug, gamerTag}, exp } / invalid_session
- *   action: "card_get"  { uid }              → { settings | null, updated_at | null }  (GET /api/card?uid= と同じ)
+ *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
+ *                                            title_text = 二つ名の文字 { pre, post } (付けていなければ null)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
  *
  * card_put で書く uid はトークンの uid だけ (リクエストに uid を持たせない = 他人のカードは書けない)。
@@ -13,6 +14,7 @@ import {
   CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
 } from '../config.ts';
 import type { Store } from '../store.ts';
+import { bitsHas, titleById, usableIn } from './titles.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
@@ -27,7 +29,12 @@ export interface CardSettings {
   color: string;
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
+  title: CardTitle | null;   // 二つ名 (前半・後半の id)。null = 付けない
 }
+
+/** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
+export interface CardTitle { pre: string | null; post: string | null }
+const TITLE_ID = /^[a-z]{2}-\d{4}$/;
 
 /**
  * settings を確かめて正規化したものを返す。形が違えば null。
@@ -39,7 +46,7 @@ export interface CardSettings {
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -58,7 +65,36 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     if (!/^[1-9]\d{0,11}$/.test(t)) return null;
     tour = Number(t);
   }
-  return { template: o.template, color: o.color, ach, tour };
+  let title: CardTitle | null = null;
+  if (o.title !== undefined && o.title !== null) {
+    if (typeof o.title !== 'object' || Array.isArray(o.title)) return null;
+    const tt = o.title as Record<string, unknown>;
+    for (const k of Object.keys(tt)) if (k !== 'pre' && k !== 'post') return null;
+    const one = (x: unknown): string | null | undefined => (x === undefined || x === null ? null
+      : typeof x === 'string' && TITLE_ID.test(x) ? x : undefined);
+    const pre = one(tt.pre);
+    const post = one(tt.post);
+    if (pre === undefined || post === undefined) return null;
+    title = pre === null && post === null ? null : { pre, post };   // 両方 null なら付けない
+  }
+  return { template: o.template, color: o.color, ach, tour, title };
+}
+
+/** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
+export function titleIdsValid(lang: string, t: CardTitle): boolean {
+  if (t.pre !== null) { const x = titleById(lang, t.pre); if (!x || !usableIn(x, 'pre')) return false; }
+  if (t.post !== null) { const x = titleById(lang, t.post); if (!x || !usableIn(x, 'post')) return false; }
+  return true;
+}
+
+/**
+ * その選手がその二つ名を持っているか。記録 (D1 title_owned、毎日の title_sync が 0 → 1 にだけ書く) にあれば持っている。
+ * 記録がまだ無い選手 (初回の記録の前・新しい選手) は、最初から持っている二つ名 (unlock 'initial') だけ持っているとみなす。
+ */
+export function titleOwned(lang: string, row: { bits: string } | null, id: string): boolean {
+  if (row && bitsHas(row.bits, id)) return true;
+  const t = titleById(lang, id);
+  return !!t && t.unlock === 'initial';
 }
 
 /** uid の形 (start.gg のユーザー ID = 数字)。 */
@@ -87,11 +123,23 @@ export async function handleMe(cfg: Config, req: Record<string, unknown>, now: n
   return ok({ user: { id: sess.id, slug: sess.slug, gamerTag: sess.gamerTag }, exp: sess.exp });
 }
 
+/** 付けている二つ名の文字。一覧に無い・その位置に使えないものは "" (持っているかは card_put で確かめてある。持ち物は減らない) */
+export function titleTextOf(lang: string, t: CardTitle | null): { pre: string; post: string } | null {
+  if (!t) return null;
+  const text = (id: string | null, slot: 'pre' | 'post'): string => {
+    const x = id === null ? null : titleById(lang, id);
+    return x && usableIn(x, slot) ? x.text : '';
+  };
+  return { pre: text(t.pre, 'pre'), post: text(t.post, 'post') };
+}
+
 /** action: "card_get" — だれでも読める。 */
-export async function handleCardGet(store: Store, req: Record<string, unknown>): Promise<HandlerResult> {
+export async function handleCardGet(cfg: Config, store: Store, req: Record<string, unknown>): Promise<HandlerResult> {
   const uid = validUid(req.uid);
   if (!uid) return err('bad_request', '選手の指定が不正です。');
-  return ok(rowToBody(await store.getCardSettings(uid)));
+  const body = rowToBody(await store.getCardSettings(uid));
+  const s = body.settings as CardSettings | null;
+  return ok({ ...body, title_text: titleTextOf(cfg.titleLang || 'ja', s ? s.title : null) });
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
@@ -105,6 +153,16 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
   if (req.settings !== null) {
     settings = validateCardSettings(req.settings);
     if (!settings) return err('bad_settings', 'カードの設定の形式が不正です。');
+  }
+
+  // 二つ名: 一覧にある id か (その位置に使えるか) → その選手が持っているか (記録 title_owned。記録が無ければ最初からの二つ名だけ)
+  if (settings && settings.title) {
+    const lang = cfg.titleLang || 'ja';
+    if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
+    const row = await store.getTitleOwned(uid, lang);
+    for (const id of [settings.title.pre, settings.title.post]) {
+      if (id !== null && !titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
+    }
   }
 
   const updatedAt = formatIso(now, cfg.tsOffsetMin);

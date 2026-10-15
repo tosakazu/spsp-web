@@ -31,7 +31,8 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
 /** @typedef {{ name: string, href?: string, date?: string, place?: number | null, placeUnit: string, nent?: number | null, dq?: boolean,
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
- * @typedef {{ name: string, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
+ * title = 二つ名 (前半・後半の文字。どちらか・両方が空でもよい。無くても名前の位置は同じ)
+ * @typedef {{ name: string, title?: { pre: string, post: string } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
  *              totalTournaments: number, totalMatches: number,
@@ -69,7 +70,31 @@ const ARROW_SVG = '<svg class="pc-arrow" viewBox="0 0 12 4.33" aria-hidden="true
 /** @param {PCardAch} a */
 function achPill(a) {
   const { emoji, text } = splitEmoji(a.label);
-  return `<span class="pc-ach-pill">${emoji ? `<span class="pc-ach-emoji">${escapeHtml(emoji)}</span>` : ''}<span class="pc-ach-text">${latinRuns(text, 'pc-lat')}</span></span>`;
+  return `<span class="pc-ach-pill">${emoji ? `<span class="pc-ach-emoji">${escapeHtml(emoji)}</span>` : ''}<span class="pc-ach-text" data-text="${escapeHtml(text)}">${latinRuns(text, 'pc-lat')}</span></span>`;
+}
+
+// 実績の札の後ろの「結果」(準優勝 × 2 / 優勝 ×3 / 4位 / Top 8 以上 …)。長すぎるときもここは残し、前 (大会名など) を「…」で縮める
+const ACH_TAIL = /\s+(\S+\s*[×x]\s*\d+|Top\s*\d+\s*\S*|\S+)$/;
+/** 札を行の幅に収める: まず文字を 8px まで小さくし、それでも入らなければ大会名などの後ろを「…」で切る (結果の部分は残す)。入ったら true
+ * @param {HTMLElement} p @param {number} maxW */
+function fitPill(p, maxW) {
+  // 札には max-width があり、はみ出しが幅に出ないことがあるので、測る間は外す (本来の幅で測る)
+  p.style.maxWidth = 'none';
+  try { return fitPillInner(p, maxW); } finally { p.style.maxWidth = ''; }
+}
+/** @param {HTMLElement} p @param {number} maxW */
+function fitPillInner(p, maxW) {
+  if (fitWidth(p, maxW, 10, 8)) return true;
+  const span = /** @type {HTMLElement | null} */ (p.querySelector('.pc-ach-text'));
+  const text = span ? span.getAttribute('data-text') || '' : '';
+  const m = ACH_TAIL.exec(text);
+  if (!span || !m) return false;
+  const head = text.slice(0, m.index), tail = m[1];
+  for (let n = head.length - 1; n >= 1; n--) {
+    span.innerHTML = latinRuns(head.slice(0, n).replace(/\s+$/, '') + '… ' + tail, 'pc-lat');
+    if (Math.max(p.scrollWidth, p.offsetWidth) <= maxW + 0.5) return true;
+  }
+  return false;
 }
 
 /** @param {PCardModel} m */
@@ -109,12 +134,16 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
+  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
+  // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
+  const title = hasTitle && m.title ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
+    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
-    <div class="pc-head">
+    <div class="pc-head${hasTitle ? ' pc-titled' : ''}">
+      ${title}
       ${loc}
       <div class="pc-name"><span class="pc-name-t">${escapeHtml(m.name)}</span></div>
-      <div class="pc-date"><span class="pc-date-lbl">${escapeHtml(L.evalDate)}</span><span class="pc-date-v">${escapeHtml(m.evalDate || '')}</span></div>
       <div class="pc-chars">${chars}</div>
     </div>
     <div class="pc-ach"><div class="pc-label">${escapeHtml(L.achievements)}</div><div class="pc-ach-list">${ach}</div></div>
@@ -122,6 +151,7 @@ function cardHtml(m) {
     <div class="pc-overall">
       <div class="pc-bgword">Overall<br>Rank</div>
       <div class="pc-overall-lbl">${escapeHtml(L.overall)}</div>
+      <div class="pc-date"><span class="pc-date-lbl">${escapeHtml(L.evalDate)}</span><span class="pc-date-v">${escapeHtml(m.evalDate || '')}</span></div>
       <div class="pc-pills">${pills}</div>
       <div class="pc-big"><span class="pc-big-h">#</span><span class="pc-big-n">${m.rank != null ? m.rank : '—'}</span></div>
       <div class="pc-tot pc-tot-t"><span class="pc-tot-lbl">Total Tournaments</span><span class="pc-tot-line"></span><span class="pc-tot-v">${m.totalTournaments.toLocaleString('en-US')}</span></div>
@@ -178,8 +208,16 @@ function splitTwo(s) {
 /** @param {HTMLElement} root */
 function fitAll(root) {
   const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
+  const title = q('.pc-title');
+  if (title) {
+    // 二つ名は 1 行で、右上の地域の手前 (10px あける) まで。地域が無ければカードの右端の手前まで
+    const loc = q('.pc-loc');
+    const maxW = (loc ? loc.offsetLeft : W - 12) - title.offsetLeft - 10;
+    fitWidth(title, Math.max(120, maxW), 16, 9);
+  }
   const name = q('.pc-name');
-  if (name) fitTwoLines(name, 377, 54, 43, 26, 14);
+  // 名前の箱は二つ名の欄の下から (高さ 53.6、二つ名が無くても同じ位置)。2 行にしても二つ名に重ならない高さまで
+  if (name) fitTwoLines(name, 377, 52, 43, 26, 14);
   const tour = q('.pc-tour');
   if (tour) fitTwoLines(tour, 207, 34, 18, 13, 9);
   const big = q('.pc-big');
@@ -191,9 +229,9 @@ function fitAll(root) {
   const perf = q('.pc-perf');
   if (perf) fitWidth(perf, 106, 15, 8);
   const pills = q('.pc-pills');
-  if (pills) fitWidth(pills, 186, 14, 9);
-  // キャラ名は 12px (デザインの 14px より小さめ) から 10px まで詰めて、それでも入らなければ 2 行にして 12px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
-  // 2 行のキャラがあって帯の下にはみ出すなら、キャラの列を上へずらす (評価日の下まで)
+  if (pills) fitWidth(pills, 186, 18, 9);
+  // キャラ名は 14px (Figma ver.1.5) から 10px まで詰めて、それでも入らなければ 2 行にして 12px から詰め直す (「MR. GAME & WATCH」「ポケモン/トレーナー」)。
+  // 2 行のキャラがあって帯の下にはみ出すなら、キャラの列を上へずらす (右上の地域の下まで)
   // 折り返しは自分で改行を入れる (CSS の折り返しだと名前の箱が最大幅のままになり、■ と文字が離れる)
   //   切れ目の無い名前 (「ドンキーコング」) は 1 行のまま 8px まで詰める。
   //   2 つとも 2 行で帯に入りきらないときは、2 つ目 (サブキャラ) を 1 行に戻す
@@ -202,7 +240,7 @@ function fitAll(root) {
   const wrapped = [];
   for (const c of charEls) {
     const nameEl = /** @type {HTMLElement | null} */ (c.querySelector('.pc-char-name'));
-    if (!nameEl || fitWidth(c, 108, 12, 10)) continue;
+    if (!nameEl || fitWidth(c, 108, 14, 10)) continue;
     const text = nameEl.textContent || '';
     const parts = splitTwo(text);
     if (!parts) { fitWidth(c, 108, 10, 8); continue; }
@@ -213,7 +251,7 @@ function fitAll(root) {
   }
   const chars = q('.pc-chars');
   if (chars) {
-    const MAX_H = 85 - 29;   // 評価日の下 (29) から帯の下 (89) の少し上まで
+    const MAX_H = 85 - 33;   // 地域の下 (33) から帯の下 (89) の少し上まで
     if (chars.offsetHeight > MAX_H && wrapped.length > 1) {
       const last = /** @type {{ el: HTMLElement, nameEl: HTMLElement, text: string }} */ (wrapped[wrapped.length - 1]);
       last.nameEl.textContent = last.text;
@@ -221,10 +259,10 @@ function fitAll(root) {
       fitWidth(last.el, 108, 10, 7);
     }
     // メインとサブで文字の大きさがちぐはぐにならないよう、小さい方に揃える
-    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 12);
+    const sizes = charEls.map(c => parseFloat(c.style.fontSize) || 14);
     const common = Math.min(...sizes);
     charEls.forEach(c => { c.style.fontSize = common + 'px'; });
-    chars.style.top = Math.max(29, Math.min(41, 85 - chars.offsetHeight)) + 'px';
+    chars.style.top = Math.max(33, Math.min(45, 85 - chars.offsetHeight)) + 'px';
   }
   // 実績: 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
   const list = q('.pc-ach-list');
@@ -239,7 +277,7 @@ function placeAuto(list) {
   {
     const ROW_W = 206, GAP = 3;
     const rows = /** @type {HTMLElement[]} */ (Array.from(list.querySelectorAll('.pc-ach-row')));
-    rows.forEach(r => { const p = /** @type {HTMLElement | null} */ (r.firstElementChild); if (p) fitWidth(p, ROW_W, 10, 8); });
+    rows.forEach(r => { const p = /** @type {HTMLElement | null} */ (r.firstElementChild); if (p) fitPill(p, ROW_W); });
     /** @param {HTMLElement} r */
     const rowWidth = r => Array.from(r.children).reduce((w, c, i) => w + /** @type {HTMLElement} */ (c).offsetWidth + (i ? GAP : 0), 0);
     const spare = list.querySelector('.pc-ach-spare');
@@ -269,7 +307,7 @@ function finishAch(list) {
   const top = Math.max(4, Math.round((INNER_H - full) / 2));   // 見出しの位置 (固定)
   const areaTop = top + label.offsetHeight + GAP;
   const areaH = INNER_H - top - areaTop;                        // 見出しの下の残り (上の余白と同じだけ下も空ける)
-  label.style.top = top + 'px';
+  label.style.top = (top + 2) + 'px';   // 見出しの字面を Figma (箱の上から 10px) に合わせる (並びの位置はそのまま)
   list.style.top = (areaTop + Math.max(0, Math.round((areaH - list.offsetHeight) / 2))) + 'px';
 }
 
@@ -297,7 +335,7 @@ function placeManual(list) {
     if (rows >= ACH_ROWS) { p.remove(); ok = false; continue; }
     row = newRow();
     row.appendChild(p);
-    if (!fitWidth(p, ACH_ROW_W, 10, 8)) { p.remove(); ok = false; }
+    if (!fitPill(p, ACH_ROW_W)) { p.remove(); ok = false; }
   }
   spare.remove();
   return ok;
