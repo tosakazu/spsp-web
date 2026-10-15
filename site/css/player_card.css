@@ -79,15 +79,12 @@
   color: var(--pc-red); font-weight: 700; font-size: 10px; white-space: nowrap; max-width: 206px;
 }
 .pc-ach-emoji { font-size: 1.3em; color: #000; position: relative; top: .04em; }   /* 絵文字は字面が上に寄って見えるので少しだけ下げる (文字の大きさに比例 = 0.04em、13px で 0.5px) */
-/* 実績の札の英数字 (Zalando Sans) は漢字・かなより上に寄って見えるので少し下げる。ちょうどよい量は並びで違う (2026-10-15 スマホでユーザー確認):
-   数字だけの並び (「初出場から 691 日」「1 試合以上」、.pc-num) は 0.12em (0.1em では上、0.15em では下)、
-   英字や # を含む並び (「篝火#14 3位」「GRAND WARS#3」) は 0.05em (0 では上、0.1em では下)。
-   ブラウザが描くときは position の top で下げる。画像にするとき (保存・Samsung Internet などで画面に重ねる画像。html2canvas、.pc-offscreen) は
-   top が文字に効かないので、代わりに vertical-align で並べ方ごと下げる。画像では数字だけの並びも 0.05em (0.12em では漢字より約 0.7px 下がった。Samsung Internet で確認) */
-.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; position: relative; top: .05em; }
-.pc-ach-text .pc-num { top: .12em; }
-.pc-offscreen .pc-ach-text .pc-lat { top: 0; vertical-align: -.05em; }
-.pc-offscreen .pc-ach-text .pc-num { vertical-align: -.05em; }
+/* 実績の札の英数字 (Zalando Sans) は、字の上下の真ん中を漢字・かなにそろえる (2026-10-15 スマホのスクリーンショットで測った値)。
+   ブラウザが描くとき: 英字を含む並びは下げない、数字だけの並び (.pc-num、「691」「3」) は 0.1em 下げる (position の top)。
+   画像にするとき (保存・Samsung Internet などで画面に重ねる画像。html2canvas、.pc-offscreen): どちらも下げない */
+.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
+.pc-ach-text .pc-num { position: relative; top: .1em; }
+.pc-offscreen .pc-ach-text .pc-num { top: 0; }
 .pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
 
 /* ── 最新の大会結果 (左下) ── */
