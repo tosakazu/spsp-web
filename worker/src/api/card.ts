@@ -3,7 +3,7 @@
  *
  *   action: "me"        { token }            → { user:{id, slug, gamerTag}, exp } / invalid_session
  *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
- *                                            title_text = 二つ名の文字 { pre, post } (付けていなければ null)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
+ *                                            title_text = 二つ名の文字 { pre, post } (null = 既定、"" = なし。設定が無ければ全体が null = 両方既定)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
  *
  * card_put で書く uid はトークンの uid だけ (リクエストに uid を持たせない = 他人のカードは書けない)。
@@ -29,11 +29,13 @@ export interface CardSettings {
   color: string;
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
-  title: CardTitle | null;   // 二つ名 (前半・後半の id)。null = 付けない
+  title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
 }
 
 /** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
+// 各側: id / null =「なし」(空欄) / 'default' = 地域の既定 (スマブラSP / プレイヤー、フロントの region/config.js titleDefault)
 export interface CardTitle { pre: string | null; post: string | null }
+export const TITLE_DEFAULT = 'default';
 const TITLE_ID = /^[a-z]{2}-\d{4}$/;
 
 /**
@@ -71,19 +73,20 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     const tt = o.title as Record<string, unknown>;
     for (const k of Object.keys(tt)) if (k !== 'pre' && k !== 'post') return null;
     const one = (x: unknown): string | null | undefined => (x === undefined || x === null ? null
-      : typeof x === 'string' && TITLE_ID.test(x) ? x : undefined);
+      : typeof x === 'string' && (TITLE_ID.test(x) || x === TITLE_DEFAULT) ? x : undefined);
     const pre = one(tt.pre);
     const post = one(tt.post);
     if (pre === undefined || post === undefined) return null;
-    title = pre === null && post === null ? null : { pre, post };   // 両方 null なら付けない
+    // 両方とも既定なら設定なし (null)。「なし / なし」(両方 null) は空欄として残す
+    title = pre === TITLE_DEFAULT && post === TITLE_DEFAULT ? null : { pre, post };
   }
   return { template: o.template, color: o.color, ach, tour, title };
 }
 
 /** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
 export function titleIdsValid(lang: string, t: CardTitle): boolean {
-  if (t.pre !== null) { const x = titleById(lang, t.pre); if (!x || !usableIn(x, 'pre')) return false; }
-  if (t.post !== null) { const x = titleById(lang, t.post); if (!x || !usableIn(x, 'post')) return false; }
+  if (t.pre !== null && t.pre !== TITLE_DEFAULT) { const x = titleById(lang, t.pre); if (!x || !usableIn(x, 'pre')) return false; }
+  if (t.post !== null && t.post !== TITLE_DEFAULT) { const x = titleById(lang, t.post); if (!x || !usableIn(x, 'post')) return false; }
   return true;
 }
 
@@ -123,10 +126,12 @@ export async function handleMe(cfg: Config, req: Record<string, unknown>, now: n
   return ok({ user: { id: sess.id, slug: sess.slug, gamerTag: sess.gamerTag }, exp: sess.exp });
 }
 
-/** 付けている二つ名の文字。一覧に無い・その位置に使えないものは "" (持っているかは card_put で確かめてある。持ち物は減らない) */
-export function titleTextOf(lang: string, t: CardTitle | null): { pre: string; post: string } | null {
+/** 付けている二つ名の文字。null = 既定 (フロントが地域の既定を入れる)、"" =「なし」・一覧に無い・その位置に使えないもの
+ * (持っているかは card_put で確かめてある。持ち物は減らない)。設定が無ければ null (両方既定) */
+export function titleTextOf(lang: string, t: CardTitle | null): { pre: string | null; post: string | null } | null {
   if (!t) return null;
-  const text = (id: string | null, slot: 'pre' | 'post'): string => {
+  const text = (id: string | null, slot: 'pre' | 'post'): string | null => {
+    if (id === TITLE_DEFAULT) return null;
     const x = id === null ? null : titleById(lang, id);
     return x && usableIn(x, slot) ? x.text : '';
   };
@@ -159,9 +164,10 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
   if (settings && settings.title) {
     const lang = cfg.titleLang || 'ja';
     if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
-    const row = await store.getTitleOwned(uid, lang);
-    for (const id of [settings.title.pre, settings.title.post]) {
-      if (id !== null && !titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
+    const ids = [settings.title.pre, settings.title.post].filter((id): id is string => id !== null && id !== TITLE_DEFAULT);
+    if (ids.length) {   //「なし」と既定だけなら記録は読まない
+      const row = await store.getTitleOwned(uid, lang);
+      for (const id of ids) if (!titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
     }
   }
 

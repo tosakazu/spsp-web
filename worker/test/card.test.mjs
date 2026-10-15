@@ -3,7 +3,7 @@ import './_titles_fixture.mjs';   // 二つ名の一覧はテスト用の 8 件 
 import test from 'node:test';
 import assert from 'node:assert';
 import { makeEnv, post, http, loginToken, OK_TOKEN, OK_USER } from './_env.mjs';
-import { validateCardSettings } from '../src/api/card.ts';
+import { validateCardSettings, titleTextOf } from '../src/api/card.ts';
 import { issueSessionToken } from '../src/api/session.ts';
 import { CARD_RATE_MIN_INTERVAL_MS, CARD_RATE_MAX_PER_DAY } from '../src/config.ts';
 
@@ -266,8 +266,8 @@ test('card_put: 位置の取り違え・一覧に無い id・形の違いは bad
   }
 });
 
-test('card_put: title が null・両方 null・省略なら付けない (記録は見ない)', async () => {
-  for (const title of [null, { pre: null, post: null }, undefined]) {
+test('card_put: title が null・両方既定 (default)・省略なら設定なし (null)。記録は見ない', async () => {
+  for (const title of [null, { pre: 'default', post: 'default' }, { post: 'default', pre: 'default' }, undefined]) {
     const e = titleEnv(null);
     e.store.getTitleOwned = async () => { throw new Error('must not read'); };
     const token = await loginToken(e);
@@ -285,4 +285,23 @@ test('card_put: 記録が読めない (D1 の失敗) は internal で保存し�
   const r = await putTitle(e, { pre: 'ja-0001', post: null });
   assert.strictEqual(r.error.code, 'internal');
   assert.strictEqual(e.store.cards.size, 0);
+});
+
+test('card_put: 「なし」(null) と既定 (default) は記録を見ずに保存。「なし / なし」は空欄として残す (null にまとめない)', async () => {
+  for (const title of [{ pre: null, post: null }, { pre: null, post: 'default' }, { pre: 'default', post: null }]) {
+    const e = titleEnv(null);
+    e.store.getTitleOwned = async () => { throw new Error('must not read'); };
+    const token = await loginToken(e);
+    const r = await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'red', title } });
+    assert.strictEqual(r.ok, true, JSON.stringify(title));
+    assert.deepStrictEqual(r.settings.title, title);
+  }
+  for (const title of [{ pre: 'Default', post: null }, { pre: 'none', post: null }, { pre: '', post: null }]) {
+    assert.strictEqual(validateCardSettings(withTitle(title)), null, JSON.stringify(title));
+  }
+});
+
+test('titleTextOf: 既定は null、「なし」は ""、設定なしは null', () => {
+  assert.strictEqual(titleTextOf('ja', null), null);
+  assert.deepStrictEqual(titleTextOf('ja', { pre: 'default', post: null }), { pre: null, post: '' });
 });
