@@ -79,7 +79,8 @@
   color: var(--pc-red); font-weight: 700; font-size: 10px; white-space: nowrap; max-width: 206px;
 }
 .pc-ach-emoji { font-size: 1.3em; color: #000; position: relative; top: .04em; }   /* 絵文字は字面が上に寄って見えるので少しだけ下げる (文字の大きさに比例 = 0.04em、13px で 0.5px) */
-.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
+/* 実績の札の数字 (Zalando Sans) は漢字より字面が低く、上下の真ん中にそろうと上に寄って見える: 下端を漢字にそろえる (0.08em 下げる、11px で約 0.9px) */
+.pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; position: relative; top: .08em; }
 .pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
 
 /* ── 最新の大会結果 (左下) ── */
