@@ -313,7 +313,7 @@ function fitAll(root) {
 }
 
 /** 裏面の詰め: 名前は 45px (Figma) から 36px まで 1 行で詰め、入らなければ区切り (「/」・空白・単語の境目) で 2 行にして
- * 39px (Figma の 2 行の例) から詰める。二つ名・順位も枠の内側 (445px) に収める
+ * 39px (Figma の 2 行の例) から詰める (どちらも 10px まで。区切りの無い長い名前は 1 行のまま小さくなる)。二つ名・順位も枠の内側 (445px) に収める
  * @param {HTMLElement} root */
 function fitBack(root) {
   const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
@@ -327,8 +327,8 @@ function fitBack(root) {
     if (parts) {
       nameT.innerHTML = escapeHtml(parts[0]) + '<br>' + escapeHtml(parts[1]);
       name.classList.add('pc-wrap');
-      fitWidth(name, 445, 39, 20);
-    } else fitWidth(name, 445, 36, 16);
+      fitWidth(name, 445, 39, 10);
+    } else fitWidth(name, 445, 36, 10);   // 30 文字の「WWW…」でも枠に収まる (約 12px)
   }
   const rank = q('.pcb-rank');
   if (rank) fitWidth(rank, 445, 29, 14);
