@@ -1,8 +1,8 @@
 // @ts-check
-// src/pages/p_badges.js — site/p/badges.html (カードの裏面に実績バッジを付ける。試作、あとでカード編集に入れる)
-//   持っているバッジ = 出場した大会のうちアイコンのあるもの (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)
+// src/pages/p_badges.js — site/p/badges.html (カードの裏面に実績シールを貼る。試作、あとでカード編集に入れる)
+//   持っているシール = 出場した大会のうちアイコンのあるもの (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)
 //   色は仮: 優勝 = 虹、2・3 位 = 金、ほか = 銀 (js/holo_badge.js の variant)。下位クラスはクラスの文字を重ねる
-//   付けたバッジ: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
+//   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
 //   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: event_id, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度) }
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
@@ -25,8 +25,8 @@ const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
 const HOLO_NAMES = ['虹', '金', '銀'];
 
-// Figma の見本 (back の Frame 43 にバッジを付けた画像、2026-10-16 にユーザーから) の再現。だれのページでも出せるよう、
-// バッジは見本用 (e が負、持っているかに関係なく出す)。位置・大きさ・回転は画像に重ねて合わせた (スマパは同じアイコンを 3 枚ずらして重ねてある)
+// Figma の見本 (back の Frame 43 にシールを貼った画像、2026-10-16 にユーザーから) の再現。だれのページでも出せるよう、
+// シールは見本用 (e が負、持っているかに関係なく出す)。位置・大きさ・回転は画像に重ねて合わせた (スマパは同じアイコンを 3 枚ずらして重ねてある)
 /** @type {Badge[]} */
 const SAMPLE_BADGES = [
   { e: -1, name: '見本: 極冠#15', date: '', place: null, nent: null, file: '0195a75b2a4fbbafc4a819f19b792f2f.png', variant: 2, cls: null },
@@ -76,7 +76,7 @@ const normRot = r => { let v = ((r + 180) % 360 + 360) % 360 - 180; return v ===
 const sizeToSlider = (/** @type {number} */ s) => Math.round(1000 * Math.log(s / S_MIN) / Math.log(S_MAX / S_MIN));
 const sliderToSize = (/** @type {number} */ v) => S_MIN * Math.pow(S_MAX / S_MIN, v / 1000);
 
-/** 出場大会 → 持っているバッジ (アイコンのある大会だけ、新しい順)
+/** 出場大会 → 持っているシール (アイコンのある大会だけ、新しい順)
  * @param {any[]} tours @param {{ f: string[], e: Record<string, number> } | null} icons @returns {Badge[]} */
 function badgesOf(tours, icons) {
   if (!icons) return [];
@@ -128,15 +128,15 @@ async function main() {
   const byE = new Map([...badges, ...SAMPLE_BADGES].map(b => [b.e, b]));
   /** @type {Sticker[]} */
   let stickers = loadStickers(uid).filter(s => byE.has(s.e));
-  /** @type {number | null} 選んでいるバッジ (event_id) */
+  /** @type {number | null} 選んでいるシール (event_id) */
   let sel = null;
   const save = () => saveStickers(uid, stickers);
 
-  // ── 付ける層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
-  //    (層ごと transform で縮めると、ブラウザによってはバッジが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
+  // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
+  //    (層ごと transform で縮めると、ブラウザによってはシールが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
-  const layer = $('bz-layer');   // バッジ (カードからはみ出した所は切る)
-  const over = $('bz-over');     // 選んでいるバッジの枠とつまみ (カードの外にはみ出してよい)
+  const layer = $('bz-layer');   // シール (カードからはみ出した所は切る)
+  const over = $('bz-over');     // 選んでいるシールの枠とつまみ (カードの外にはみ出してよい)
   const frame = $('bz-frame');
   let scale = 0;   // 画面の px / カードの px
   const fitLayer = () => {
@@ -155,7 +155,7 @@ async function main() {
   const cur = () => stickers.find(s => s.e === sel) || null;
   /** @type {Map<number, HTMLElement>} */
   const els = new Map();
-  // 強制ダークモード対策でキャンバスに描いたバッジ (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、
+  // 強制ダークモード対策でキャンバスに描いたシール (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、
   // 大きくしたら手が止まってから今の大きさで描き直す (そのままだと引き伸ばされて粗くなる)
   /** @type {ReturnType<typeof setTimeout> | null} */
   let reflatTimer = null;
@@ -250,11 +250,11 @@ async function main() {
   const remove = (/** @type {number} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
   $('bz-sample').addEventListener('click', () => {
-    if (stickers.length && !confirm('今付けているバッジを外して、Figma の見本の並びにしますか?')) return;
+    if (stickers.length && !confirm('今貼っているシールを剥がして、Figma の見本の並びにしますか?')) return;
     stickers = SAMPLE_LAYOUT.map(s => ({ ...s })); sel = null; changed(); paintTray();
   });
   $('bz-clear').addEventListener('click', () => {
-    if (!stickers.length || !confirm('付けたバッジを全部外しますか?')) return;
+    if (!stickers.length || !confirm('貼ったシールを全部剥がしますか?')) return;
     stickers = []; sel = null; changed(); paintTray();
   });
 
@@ -329,7 +329,7 @@ async function main() {
   stage.addEventListener('pointerup', end);
   stage.addEventListener('pointercancel', end);
 
-  // ── 持っているバッジの一覧 ──
+  // ── 持っているシールの一覧 ──
   let filter = 'all';
   let shown = PAGE;
   const tray = $('bz-tray');
@@ -349,13 +349,13 @@ async function main() {
       : filter === 'top3' ? b.place != null && b.place <= 3 : on.has(b.e));
     tray.innerHTML = '';
     if (!list.length) {
-      tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ付けていません' : 'ありません'}</div>`;
+      tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
     }
     for (const b of list.slice(0, shown)) {
       const it = document.createElement('button');
       it.type = 'button';
       it.className = 'bz-item' + (on.has(b.e) ? ' on' : '');
-      it.innerHTML = `<span class="bz-thumb bz-v${b.variant}"><img loading="lazy" alt=""><span class="bz-chip">${HOLO_NAMES[b.variant]}</span>${on.has(b.e) ? '<span class="bz-on">付けている</span>' : ''}</span>
+      it.innerHTML = `<span class="bz-thumb bz-v${b.variant}"><img loading="lazy" alt=""><span class="bz-chip">${HOLO_NAMES[b.variant]}</span>${on.has(b.e) ? '<span class="bz-on">貼付中</span>' : ''}</span>
         <span class="bz-iname"></span><span class="bz-imeta"></span>`;
       /** @type {HTMLImageElement} */ (it.querySelector('img')).src = IMG_BASE + b.file;
       /** @type {HTMLElement} */ (it.querySelector('.bz-iname')).textContent = b.name;
@@ -365,10 +365,10 @@ async function main() {
     }
     $('bz-more').style.display = list.length > shown ? '' : 'none';
   }
-  /** 一覧から押した: まだなら付ける (真ん中あたり、少しずつずらす)、付けてあれば選ぶ @param {Badge} b */
+  /** 一覧から押した: まだなら貼る (真ん中あたり、少しずつずらす)、貼ってあれば選ぶ @param {Badge} b */
   function addOrSelect(b) {
     if (!stickers.some(s => s.e === b.e)) {
-      if (stickers.length >= MAX_STICKERS) { alert(`付けられるのは ${MAX_STICKERS} 枚までです`); return; }
+      if (stickers.length >= MAX_STICKERS) { alert(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
       const n = stickers.length;
       stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0 });
       save();

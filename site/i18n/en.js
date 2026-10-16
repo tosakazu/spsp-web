@@ -982,7 +982,7 @@ window.SPSP_I18N.en = {
   'page.news.description': 'SPSP highlights (automatic notices) and announcements from the admins.',
   'page.p.title': 'Player — SPSP',
   'page.p_edit.title': 'Edit card | SPSP',
-  'page.p_badges.title': 'Card badges | SPSP',
+  'page.p_badges.title': 'Card stickers | SPSP',
   'page.me.title': 'My page | SPSP',
   'page.class.title': 'Lower class bracket | SPSP',
   'page.class.description': 'Create a lower-class (B, C, …) bracket on Challonge from the start.gg main event results.',

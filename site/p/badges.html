@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-i18n="page.p_badges.title">裏面のバッジ | SPSP</title>
+<title data-i18n="page.p_badges.title">裏面のシール | SPSP</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="../css/player.css">
 <link rel="stylesheet" href="../css/player_card.css">
@@ -21,8 +21,8 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- カードの裏面に実績バッジを付ける (試作。あとでカード編集に入れる)。中身は src/pages/p_badges.js
-     付けたものはこのブラウザにだけ残す (サーバには送らない) -->
+<!-- カードの裏面に実績シールを貼る (試作。あとでカード編集に入れる)。中身は src/pages/p_badges.js
+     貼ったものはこのブラウザにだけ残す (サーバには送らない) -->
 <main class="bz">
   <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
   <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
@@ -32,19 +32,19 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
       <span>マイページに戻る</span>
     </a>
-    <h1 class="bz-title">裏面のバッジ <span class="bz-tag">試作</span></h1>
+    <h1 class="bz-title">裏面のシール <span class="bz-tag">試作</span></h1>
 
-    <!-- 裏面の上に付ける層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
+    <!-- 裏面の上に貼る層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
     <div class="bz-top">
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
         <div class="bz-layer" id="bz-layer"></div>
-        <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ">↻</span><span class="bz-h bz-h-del" title="外す">×</span></div></div>
+        <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ">↻</span><span class="bz-h bz-h-del" title="剥がす">×</span></div></div>
       </div>
 
-      <!-- 選んでいるバッジの操作 (選んでいないときは使い方) -->
+      <!-- 選んでいるシールの操作 (選んでいないときは使い方) -->
       <div class="bz-tools" id="bz-tools">
-        <div class="bz-hint" id="bz-hint">下の一覧から押すとカードに付けられます。付けたバッジは、ドラッグで移動、角の ↻ で回転と大きさ (2 本指でも可)。</div>
+        <div class="bz-hint" id="bz-hint">下の一覧から押すとカードに貼れます。貼ったシールは、ドラッグで移動、角の ↻ で回転と大きさ (2 本指でも可)。</div>
         <div class="bz-sel" id="bz-sel" style="display:none">
           <div class="bz-sel-name" id="bz-sel-name"></div>
           <label class="bz-range"><span>大きさ</span><input type="range" id="bz-size" min="0" max="1000" step="1"><output id="bz-size-v"></output></label>
@@ -55,20 +55,20 @@
             <button type="button" id="bz-front">いちばん上</button>
             <button type="button" id="bz-backmost">いちばん下</button>
             <button type="button" id="bz-reset-tf">回転を戻す</button>
-            <button type="button" class="bz-del" id="bz-del">外す</button>
+            <button type="button" class="bz-del" id="bz-del">剥がす</button>
           </div>
         </div>
       </div>
     </div>
 
     <section class="bz-sec">
-      <h2>持っているバッジ <span class="bz-count" id="bz-count"></span></h2>
+      <h2>持っているシール <span class="bz-count" id="bz-count"></span></h2>
       <div class="bz-note">色は仮のルールです (優勝 = 虹、2・3 位 = 金、ほか = 銀)。アイコンのある大会だけ出ます。</div>
       <div class="bz-filters" id="bz-filters">
         <button type="button" data-f="all" class="on">全部</button>
         <button type="button" data-f="win">優勝</button>
         <button type="button" data-f="top3">3 位以内</button>
-        <button type="button" data-f="placed">付けたもの</button>
+        <button type="button" data-f="placed">貼ったもの</button>
       </div>
       <div class="bz-tray" id="bz-tray"></div>
       <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
@@ -76,7 +76,7 @@
 
     <div class="bz-bar">
       <button type="button" class="bz-sample" id="bz-sample">Figma の見本を再現</button>
-      <button type="button" class="bz-clear" id="bz-clear">全部外す</button>
+      <button type="button" class="bz-clear" id="bz-clear">全部剥がす</button>
       <span class="bz-saved">このブラウザにだけ保存されます</span>
     </div>
   </div>

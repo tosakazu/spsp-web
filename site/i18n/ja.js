@@ -985,7 +985,7 @@ window.SPSP_I18N.ja = {
   'page.news.description': 'SPSP の速報 (エンタメ自動通知) と運営からの通知一覧。',
   'page.p.title': 'プレイヤー詳細 — SPSP',
   'page.p_edit.title': 'カードを編集 | SPSP',
-  'page.p_badges.title': '裏面のバッジ | SPSP',
+  'page.p_badges.title': '裏面のシール | SPSP',
   'page.me.title': 'マイページ | SPSP',
   'page.class.title': '下位クラス作成 | SPSP',
   'page.class.description': 'start.gg の本戦の結果から、下位クラス (Bクラス・Cクラスなど) のトーナメントを Challonge に作ります。',
