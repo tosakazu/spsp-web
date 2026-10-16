@@ -114,7 +114,7 @@ async function main() {
   // ── 付ける層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
   //    (層ごと transform で縮めると、ブラウザによってはバッジが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
-  const layer = $('bz-layer');   // バッジ (カードの外は切る)
+  const layer = $('bz-layer');   // バッジ (カードからはみ出しても切らない)
   const over = $('bz-over');     // 選んでいるバッジの枠とつまみ (カードの外にはみ出してよい)
   const frame = $('bz-frame');
   let scale = 0;   // 画面の px / カードの px
