@@ -672,7 +672,13 @@ function render() {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
     let drawn = false;
     // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
-    const draw = (/** @type {any} */ x) => { drawn = true; SPSPPlayerCard.render(card, buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null)); };
+    const back = document.getElementById('pcard-back');
+    const draw = (/** @type {any} */ x) => {
+      drawn = true;
+      const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
+      SPSPPlayerCard.render(card, model);
+      if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
+    };
     const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
     settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
   }
@@ -1984,7 +1990,7 @@ function downloadBlob(blob, name) {
 function onCardImage(btn, fn) {
   if (!btn) return;
   btn.addEventListener('click', async () => {
-    const card = document.getElementById('pcard');
+    const card = shownCard();
     if (!card || !MAIN_REC) return;
     const label = btn.querySelector('span');
     const orig = label ? label.textContent : '';
@@ -2000,6 +2006,9 @@ function onCardImage(btn, fn) {
     }
   });
 }
+// 保存・共有は今見えている面 (表か裏) を画像にする
+const shownCard = () => document.getElementById(
+  document.getElementById('pcard-wrap')?.classList.contains('flipped') ? 'pcard-back' : 'pcard');
 // 保存はカードをタップして出るボタン
 for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
@@ -2071,14 +2080,20 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   }
 }
 
-// カードをタップすると、カードの上に編集 (本人のページだけ)・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+// カードをタップすると、カードの上に編集 (本人のページだけ)・裏返す・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
 {
   const wrap = document.getElementById('pcard-wrap');
   document.addEventListener('click', e => {
     if (!wrap) return;
     const el = /** @type {Element} */ (e.target);
+    if (el.closest('#pc-ov-flip')) {
+      const flipped = wrap.classList.toggle('flipped');
+      document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
+      document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
+      return;
+    }
     if (el.closest('#pc-overlay')) return;
-    if (el.closest('#pcard') && !el.closest('a')) wrap.classList.toggle('show');
+    if (el.closest('#pcard, #pcard-back') && !el.closest('a')) wrap.classList.toggle('show');
     else wrap.classList.remove('show');
   });
 }

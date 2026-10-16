@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="../css/player_card.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600;700&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap">
 <style>
 
   /* The "shareable card" lives in this main container. html2canvas snapshots #share-card. */
@@ -468,11 +468,16 @@
       </div>
     </div>
 
-    <!-- 選手カード (Figma「submit」を再現。中身は js/player_card.js が作る)。タップするとカードの上に編集 (本人のページだけ)・保存が出る -->
+    <!-- 選手カード (Figma「submit」を再現。中身は js/player_card.js が作る)。タップするとカードの上に編集 (本人のページだけ)・裏返す・保存が出る。
+         裏面 (Figma「back」) は表の裏に重ねてあり、裏返すと回って見える -->
     <div class="pcard-wrap" id="pcard-wrap">
-      <div class="pcard" id="pcard"></div>
+      <div class="pcard-flip">
+        <div class="pcard" id="pcard"></div>
+        <div class="pcard pcard-back" id="pcard-back" aria-hidden="true"></div>
+      </div>
       <div class="pc-overlay" id="pc-overlay">
         <a class="pc-ov-btn" id="pc-edit-btn" href="edit.html" style="display:none" title="編集" aria-label="編集" data-i18n-attr="title:player.card.edit,aria-label:player.card.edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg></a>
+        <button type="button" class="pc-ov-btn" id="pc-ov-flip" title="裏返す" aria-label="裏返す" data-i18n-attr="title:player.card.flip,aria-label:player.card.flip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"></path><path d="M3 21v-5h5"></path></svg></button>
         <button type="button" class="pc-ov-btn" id="pc-ov-save" title="保存" aria-label="保存" data-i18n-attr="title:player.card.save,aria-label:player.card.save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg></button>
       </div>
     </div>

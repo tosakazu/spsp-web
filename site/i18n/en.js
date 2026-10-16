@@ -424,6 +424,7 @@ window.SPSP_I18N.en = {
   'player.card.save': 'Save',
   'player.card.share': 'Share',
   'player.card.edit': 'Edit',
+  'player.card.flip': 'Flip',
   'player.card.capture_failed': 'Could not create the image: ',
   'player.card.no_ach': 'None yet',
   // プレイヤーカードの編集ページ (p/edit.html)

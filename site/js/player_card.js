@@ -3,7 +3,8 @@
 //   render(el, model)  model (下の PCardModel) からカードを組み立てて el に入れる。長い名前・大会名・大きい順位は文字サイズを詰め、
 //                      名前と大会名は必要なら 2 行にする (fit* 関数)。フォント読み込み後にもう一度詰め直す
 //   カードは 514×333 の座標系で描き、表示幅に合わせて transform: scale で縮める (css/player_card.css)
-//   capture(el)          カードだけを PNG にする (保存・共有)
+//   renderBack(el, model) 裏面 (Figma「back」: 二つ名・名前・総合順位。実績のバッジを貼る面)
+//   capture(el)          カードだけを PNG にする (保存・共有。表でも裏でも el に描いた面)
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
@@ -180,6 +181,22 @@ function cardHtml(m) {
   </div>`;
 }
 
+/** 裏面 (Figma「back」: 赤地に角の欠けた枠、中央に二つ名・名前・総合順位)。実績のバッジはこの上に貼る (これから)
+ * @param {PCardModel} m */
+function backHtml(m) {
+  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
+  const title = hasTitle && m.title ? `<div class="pcb-title"><span class="pc-title-sl">//</span>${
+    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
+  return `<div class="pc-in pc-back" style="--pc-red:${colorHex(m.color)}">
+    <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
+    <div class="pcb-col">
+      ${title}
+      <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.name)}</span></div>
+      <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
+    </div>
+  </div>`;
+}
+
 // ── 文字サイズの自動調整 (スケール前の 514×333 座標で測る。transform は scrollWidth に影響しない) ──
 /** 1 行のまま幅に収まるまで font-size を下げる。収まったら true
  * @param {HTMLElement} el @param {number} maxW @param {number} maxPx @param {number} minPx */
@@ -291,6 +308,28 @@ function fitAll(root) {
   if (list) finishAch(list);
 }
 
+/** 裏面の詰め: 名前は 45px (Figma) から 36px まで 1 行で詰め、入らなければ区切り (「/」・空白・単語の境目) で 2 行にして
+ * 39px (Figma の 2 行の例) から詰める。二つ名・順位も枠の内側 (445px) に収める
+ * @param {HTMLElement} root */
+function fitBack(root) {
+  const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
+  const title = q('.pcb-title');
+  if (title) fitWidth(title, 445, 16, 9);
+  const name = q('.pcb-name');
+  const nameT = q('.pcb-name-t');
+  if (name && nameT && !fitWidth(name, 445, 45, 36)) {
+    const text = nameT.textContent || '';
+    const parts = splitTwo(text);
+    if (parts) {
+      nameT.innerHTML = escapeHtml(parts[0]) + '<br>' + escapeHtml(parts[1]);
+      name.classList.add('pc-wrap');
+      fitWidth(name, 445, 39, 20);
+    } else fitWidth(name, 445, 36, 16);
+  }
+  const rank = q('.pcb-rank');
+  if (rank) fitWidth(rank, 445, 29, 14);
+}
+
 /** 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
  * @param {HTMLElement} list */
 function placeAuto(list) {
@@ -394,14 +433,24 @@ const observed = new WeakSet();
  * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
  *   古い画像を外して HTML のカードをすぐ見せ、手が止まってから (1.5 秒) 撮り直す */
 export function render(el, model, opts = {}) {
-  const live = !!opts.live;
+  mount(el, () => cardHtml(model), fitAll, !!opts.live);
+}
+
+/** 裏面を el に描く (表の render と同じく、表示幅に合わせて縮め、強制ダークモードでは画像を重ねる)
+ * @param {HTMLElement} el @param {PCardModel} model @param {{ live?: boolean }} [opts] */
+export function renderBack(el, model, opts = {}) {
+  mount(el, () => backHtml(model), fitBack, !!opts.live);
+}
+
+/** @param {HTMLElement} el @param {() => string} html @param {(root: HTMLElement) => void} fit @param {boolean} live */
+function mount(el, html, fit, live) {
   // 組み立てと詰めは毎回まっさらな HTML から (詰めは実績の並べ替えや改行を入れるので、2 回目は作り直してからやる)
   const build = () => {
     // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)。編集中は古い画像を外す
     const keep = live ? null : el.querySelector('.pc-img');
-    el.innerHTML = cardHtml(model);
+    el.innerHTML = html();
     if (keep) el.appendChild(keep);
-    fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
+    fit(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
   };
   build();
@@ -493,4 +542,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, renderBack, capture, makeAchFitTester, COLORS, TEMPLATES };
