@@ -4,7 +4,8 @@
 //
 // 同じビルド出力 (tests/views/fixtures/build/。作り方は make_fixture.cjs) を、tests/frontend/snapshot_pages.cjs で 2 回描く:
 //   従来: data/views/ への要求を 404 にする (= views がまだ無いデータ。ページは manifest が無いので従来どおり読む)
-//   views: latest_tjpr_full.jsonl と players_current.json への要求を 404 にする (= ページがそれを読まずに描けること)
+//   views: latest_tjpr_full.jsonl と players_current.json、まとめ (data/views/bundle/) に入っている選手の個別の players/<uid>.json と
+//          history/<uid>.json への要求を 404 にする (= ページがそれを読まずに描けること。まとめた選手の個別のファイルは更新されない)
 // 各操作の時点の DOM (.html) が一致すること、views 側でエラー (読んではいけないファイルへの要求を含む) が無いことを見る。
 //
 // 一致しないと分かっている所 (仕様。サイトの見た目の差):
@@ -54,7 +55,10 @@ test('data/views/ 読みと従来の読み方で主なページの描画が同�
     execFileSync(process.execPath, [path.join(ROOT, 'tools/build/build_site.mjs'), '--quiet', '--out', path.join(tmp, 'dist')],
       { cwd: ROOT, env: { ...process.env, GOMAXPROCS: '1' }, stdio: 'ignore', timeout: 280000 });
     const legacy = run('legacy', '^data/views/');
-    const views = run('views', '^(latest_tjpr_full\\.jsonl|players_current\\.json)$');
+    const bdir = path.join(FIX, 'data/views/bundle');
+    const bundled = fs.readdirSync(bdir).flatMap((f) => Object.keys(JSON.parse(fs.readFileSync(path.join(bdir, f), 'utf8')).players));
+    assert.ok(bundled.length >= 5, 'フィクスチャにまとめた選手が居ない');
+    const views = run('views', '^(latest_tjpr_full\\.jsonl|players_current\\.json|(players|history)/(' + bundled.join('|') + ')\\.json)$');
     const names = fs.readdirSync(views).sort();
     assert.deepStrictEqual(names, fs.readdirSync(legacy).sort(), 'シナリオの集合');
     assert.ok(names.length >= 11, 'シナリオが走っていない: ' + names.join(', '));
@@ -85,6 +89,11 @@ test('data/views/ 読みと従来の読み方で主なページの描画が同�
     const idx = fs.readFileSync(path.join(views, 'index', 'fetch.txt'), 'utf8');
     assert.match(idx, /data\/views\/ranking\/ensemble\/0\.json/);
     assert.match(idx, /data\/views\/ranking\/ensemble\/4\.json/, '無限スクロールの 1 段目 (512 行) で続きの分割まで読む');
+    // まとめた選手 (選手ページ 1983750 など) はまとめから、まとめていない選手 (1787719) は個別のファイルから
+    assert.ok(bundled.includes('1983750'), '1983750 はまとめに入っている前提');
+    assert.match(fs.readFileSync(path.join(views, 'p_1983750', 'fetch.txt'), 'utf8'), /data\/views\/bundle\/\d+\.json/);
+    assert.ok(!bundled.includes('1787719'));
+    assert.match(fs.readFileSync(path.join(views, 'p_1787719', 'fetch.txt'), 'utf8'), /^players\/1787719\.json$/m);
   } finally {
     if (!process.env.KEEP_VIEWS_SNAP) fs.rmSync(tmp, { recursive: true, force: true });
     else console.log('snapshots kept in', tmp);

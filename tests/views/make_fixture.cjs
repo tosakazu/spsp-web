@@ -9,7 +9,8 @@
 // 計測中・海外・順位なし)。順位などの値は本物のまま (選んだ人の中では飛び飛び)。選手 JSON と大会 JSON は配列を短く切る
 // (両方の読み方が同じファイルを読むので、中身が本物どおりである必要はない)。
 // views は spsp_scripts の build_split_views.py で作る。分割の挙動を小さい人数でも通すため、1 ファイルの人数 (CHUNK) は 25、
-// current/ の分割数は 8 にする (manifest に書かれるのでページはそれに従う)。
+// current/ の分割数は 8 にする (manifest に書かれるのでページはそれに従う)。参加の少ない選手のまとめ (bundle/、SPSP_BUNDLE_SMALL=1) も作る。
+// まとめる大きさの上限は 20 KB にして、短く切った大きい選手 (~40 KB) は個別のまま・小さい選手はまとめに入るようにする。
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -113,5 +114,6 @@ wj(`tournaments/${TID}.json`, { ...tour, standings: tour.standings.filter((s) =>
   matches: (tour.matches || []).filter((m) => keep(m.w_id) && keep(m.l_id)) });
 
 // ── views ──
-const code = `import sys; sys.path.insert(0, ${JSON.stringify(SCRIPTS)}); import spsp.cli.build_split_views as b; b.CHUNK = 25; b.CURRENT_SHARDS = 8; print(b.build_views(${JSON.stringify(OUT)}))`;
-console.log(execFileSync(PY, ['-c', code], { encoding: 'utf8', env: { ...process.env, OPENBLAS_NUM_THREADS: '1' } }).trim());
+const code = `import sys; sys.path.insert(0, ${JSON.stringify(SCRIPTS)}); import spsp.cli.build_split_views as b; b.CHUNK = 25; b.CURRENT_SHARDS = 8; b.BUNDLE_MAX_BYTES = 20000; print(b.build_views(${JSON.stringify(OUT)}))`;
+console.log(execFileSync(PY, ['-c', code], { encoding: 'utf8', env: { ...process.env, OPENBLAS_NUM_THREADS: '1', SPSP_BUNDLE_SMALL: '1' } }).trim());
+fs.rmSync(path.join(OUT, '_unbundled_players.txt'), { force: true });   // R2 への送り分け用 (ビルドの作業ファイル)。ページは読まない
