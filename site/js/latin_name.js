@@ -93,18 +93,19 @@ export const normName = name => tidy(String(name || '').replace(/[\u3000\uff01-\
 /** 名前から英字の名前を自動で作る (上の説明) @param {string} name @param {Record<string, string> | null} [readings] 読みの表 */
 export function autoLatin(name, readings) {
   const s = normName(name);
-  if (!JA.test(s)) return s;
+  // 表にあればそれを先に使う (値は漢字をひらがなにした名前か、確認ページで直した英字名。英字はローマ字にしてもそのまま)
+  const r = readings && Object.prototype.hasOwnProperty.call(readings, s) ? readings[s] : null;
+  if (!JA.test(s) && !(typeof r === 'string' && r)) return s;
   // 「日本語/英字」: 日本語を含まない側だけ (両側とも日本語なら全体をローマ字に)
   const parts = s.split('/').map(tidy).filter(Boolean);
-  if (parts.length > 1) {
+  if (!r && parts.length > 1) {
     const latin = parts.filter(p => !JA.test(p));
     if (latin.length && latin.length < parts.length) return latin.join('/');
   }
-  // 漢字の読みが表にあれば、漢字をひらがなにした名前からローマ字にする
-  const r = readings && Object.prototype.hasOwnProperty.call(readings, s) ? readings[s] : null;
   const src = typeof r === 'string' && r ? normName(r) : s;
   // ローマ字にできなかった日本語の文字 (漢字など) は飛ばす。何も残らなければ元の名前
-  const out = tidy(kanaToRoman(src).replace(new RegExp(JA.source, 'g'), ' ')).replace(/([([]) /g, '$1').replace(/ ([)\]])/g, '$1');
+  const out = tidy(kanaToRoman(src).replace(new RegExp(JA.source, 'g'), ' ')).replace(/([([]) /g, '$1').replace(/ ([)\]])/g, '$1')
+    .replace(/^[\s/・]+|[\s/・]+$/g, '');   // 漢字を飛ばして端に残った区切り (「ハツカミ/初雷」→「hatsukami/」) も消す
   return out || s;
 }
 
@@ -115,8 +116,8 @@ export function cardLatinName(name, own, readings) {
   return o || autoLatin(name, readings);
 }
 
-/** カード編集で登録できる英字名か (サーバの worker/src/api/card.ts と同じ: 半角の英数字・記号・空白、1〜30 文字) @param {string} s */
-export const latinNameValid = s => /^[\x20-\x7e]{1,30}$/.test(s) && s.trim() === s && !/\s{2,}/.test(s);
+/** カード編集で登録できる英字名か (サーバの worker/src/api/card.ts と同じ: 半角の英字・数字と空白だけ、1〜30 文字。前後・続けての空白なし) @param {string} s */
+export const latinNameValid = s => /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(s) && s.length <= 30;
 export const LATIN_NAME_MAX = 30;
 
 const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX, hasKanji, loadReadings, normName };

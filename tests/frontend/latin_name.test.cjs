@@ -54,8 +54,8 @@ test('登録した英字名があればそれ。英字名の形 (サーバと同
   assert.strictEqual(L.cardLatinName('カヲル', 'Kaworu'), 'Kaworu');
   assert.strictEqual(L.cardLatinName('カヲル', null), 'kaworu');
   assert.strictEqual(L.cardLatinName('カヲル', ''), 'kaworu');
-  for (const ok of ['kaworu', 'Mild na H.O', 'x'.repeat(30)]) assert.ok(L.latinNameValid(ok), ok);
-  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ']) assert.ok(!L.latinNameValid(bad), bad);
+  for (const ok of ['kaworu', 'Mild na HO', 'Sparg0', 'x'.repeat(30)]) assert.ok(L.latinNameValid(ok), ok);
+  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ', 'H.O', 'a/b', 'a!']) assert.ok(!L.latinNameValid(bad), bad);
 });
 
 test('読みの表 (名前 → 漢字をひらがなにした名前) があればそれをローマ字に。表に無い漢字は飛ばす', () => {
@@ -66,4 +66,6 @@ test('読みの表 (名前 → 漢字をひらがなにした名前) があれ�
   assert.strictEqual(L.autoLatin('水無灯里', R), '水無灯里');
   assert.strictEqual(L.cardLatinName('黒船', 'Kurofune', R), 'Kurofune');   // 登録した英字名が先
   assert.ok(L.hasKanji('黒船') && L.hasKanji('〆') && !L.hasKanji('カヲル'));
+  assert.strictEqual(L.autoLatin('ダークサムス様', { 'ダークサムス様': 'dark samus sama' }), 'dark samus sama');   // 確認ページで直した英字名
+  assert.strictEqual(L.autoLatin('ハツカミ/初雷', {}), 'hatsukami');   // 飛ばした漢字の前の区切りは残さない
 });
