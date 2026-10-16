@@ -55,7 +55,6 @@ async function main() {
 
   const name = SPSPFormat.stripTeamTag(data.rec.display);
   document.title = `${name} | SPSP`;
-  $('ce-name').textContent = name;
   /** @type {HTMLAnchorElement} */ ($('ce-back')).href = './' + (DISC ? '?d=' + encodeURIComponent(DISC) : '?uid=' + uid);
   $('loading').style.display = 'none';
   $('ce-root').style.display = '';
@@ -351,6 +350,11 @@ async function main() {
     latinNote.classList.toggle('bad', !ok);
     latinNote.textContent = ok ? i18n('card_edit.latin_note') : i18n('card_edit.latin_bad');
     if (ok && (v || null) !== (st.latin || null)) update({ latin: v || null });
+  });
+  const helpBtn = $('ce-latin-help');
+  helpBtn.addEventListener('click', () => {
+    const open = latinNote.classList.toggle('open');
+    helpBtn.setAttribute('aria-expanded', String(open));
   });
   latinEl.addEventListener('focus', () => preview.classList.add('flipped'));
   latinEl.addEventListener('blur', () => preview.classList.remove('flipped'));
