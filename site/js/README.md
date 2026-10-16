@@ -9,7 +9,8 @@ bundler は使わない。各モジュールは `(function (global) { … })(win
 |---|---|---|---|
 | `js/html.js` | `SPSPHtml` | `escapeHtml` | — |
 | `js/data.js` | `SPSPData` | JSONL のパース、`fetchJson*` | — |
-| `js/player_data.js` | `SPSPPlayerData` | 分割された選手 JSON (players/ + players_current.json + history/) の組み立て | — |
+| `js/views.js` | `SPSPViews` | ページ用の小さな一覧ファイル (`data/views/`: manifest・players_index・current/ の分割・ranking/ の 1000 人ずつ・char/・pref/・pref_summary・sim_pop) の読み込み。`manifest()` が null (views が無い) ならページは従来どおり大きいファイルを読む | — |
+| `js/player_data.js` | `SPSPPlayerData` | 分割された選手 JSON (players/ + 揮発部分 + history/) の組み立て。揮発部分は `data/views/current/<uid % N>.json`、無ければ players_current.json | `views.js` |
 | `js/format.js` | `SPSPFormat` | Lv 接尾辞 (👑/メダル/+)、`lvLabel`、`fmtRank` | — |
 | `js/tags.js` | `SPSPTags` | 大会タグ (休日 / 実質平日 / プレ大会 / 制限 / 再開待ち …) の判定と文言。クラス名はページが渡す | — |
 | `js/pager.js` | `SPSPPager` | 5 件ずつのページ送り (`setupPaginated`) | — |
@@ -23,16 +24,16 @@ bundler は使わない。各モジュールは `(function (global) { … })(win
 | `../region/i18n.js` (= `regions/<REGION>/i18n.js`) | `SPSP_I18N_REGION.<REGION>` | 地域で言い方が変わるキーの上書き (言語ごと、言語辞書にあるキーだけ) | `i18n/<lang>.js` |
 | `js/i18n.js` | `SPSPI18n` (`SPSP.i18n`) | 辞書引き `t(key, params)`、`data-i18n` の適用、言語の決定 (?lang > localStorage > navigator) | `region/config.js`, `i18n/ja.js`, `region/i18n.js` |
 | `../ranking-table.js` | `SPSPRankingTable` | ランキング表コンポーネント (列・並べ替え・絞り込み・無限スクロール) | `html.js`, `format.js`, `links.js` |
-| `../player-detail.js` | `SPSPDetail` | 展開行 (大会別 / 直接対決) の描画と選手 JSON の取得 | `html.js`, `format.js`, `tags.js`, `player_data.js` |
-| `js/ranking_page.js` | `SPSPRankingPage` | ランキング表ページ 4 本の骨格 (表の生成・配線・行の展開・master 読み込み・ローカル順位) | `data.js`, `ranking-table.js`, `player-detail.js` |
+| `../player-detail.js` | `SPSPDetail` | 展開行 (大会別 / 直接対決) の描画と選手 JSON の取得。相手の名前・順位はページの行 → getMasterMap → (views があれば) players_index | `html.js`, `format.js`, `tags.js`, `views.js`, `player_data.js` |
+| `js/ranking_page.js` | `SPSPRankingPage` | ランキング表ページ 4 本の骨格 (表の生成・配線・行の展開・master 読み込み (views があればページが要る分だけ)・ローカル順位) | `data.js`, `views.js`, `ranking-table.js`, `player-detail.js` |
 | `../share.js` | `SPSPShare` | 共有ボタン、画像で保存 (html2canvas) | — |
 | `../logo.js` | `SPSPLogo` | ロゴとローディング演出 | — |
 | `../nav.js` | (`SPSPTrackPage`) | ナビゲーションの挿入、GA、お知らせ。`logo.js` があれば使う。文言は辞書、GA ID とブログの有無は `region/config.js` | `region/config.js`, `i18n/ja.js`, `region/i18n.js`, `i18n.js` |
-| `js/post_config.js` `js/oauth_state.js` `js/auth.js` `js/post.js` `js/vote.js` `js/callback.js` | `SpspAuth` `SpspOAuthState` … | 投稿・キャラ投票・OAuth | `vote.js` は `player_data.js`, `fighter_number.js` |
+| `js/post_config.js` `js/oauth_state.js` `js/auth.js` `js/post.js` `js/vote.js` `js/callback.js` | `SpspAuth` `SpspOAuthState` … | 投稿・キャラ投票・OAuth | `vote.js` は `views.js`, `player_data.js`, `fighter_number.js` |
 
 ## 名前空間
 
-各モジュールは `window.SPSP.<Name>` にも載る (`SPSP.Html` / `SPSP.Data` / `SPSP.PlayerData` / `SPSP.Format` / `SPSP.Tags` / `SPSP.Pager` /
+各モジュールは `window.SPSP.<Name>` にも載る (`SPSP.Html` / `SPSP.Data` / `SPSP.Views` / `SPSP.PlayerData` / `SPSP.Format` / `SPSP.Tags` / `SPSP.Pager` /
 `SPSP.Match` / `SPSP.Suggest` / `SPSP.ListPage` / `SPSP.RankingPage` / `SPSP.Links` / `SPSP.RankingTable` / `SPSP.Detail` / `SPSP.Share` /
 `SPSP.Logo` / `SPSP.Calc` / `SPSP.SeedData` / `SPSP.SeedShare` / `SPSP.SeedOptimizer` / `SPSP.SmashSeed` / `SPSP.BracketCore` /
 `SPSP.Auth` / `SPSP.OAuthState` / `SPSP.site` / `SPSP.i18n`)。旧来のグローバル名 (`SPSPHtml` など) は alias として残している。

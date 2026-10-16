@@ -52,6 +52,7 @@ test('依存スクリプトの読み込み順が正しい', () => {
     '../js/html.js',
     '../js/i18n.js',
     '../js/data.js',
+    '../js/views.js',
     '../js/player_data.js',
     '../seeding/seed_optimizer.js',
     '../seeding/seed_data.js',
