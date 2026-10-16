@@ -54,8 +54,8 @@ test('登録した英字名があればそれ。英字名の形 (サーバと同
   assert.strictEqual(L.cardLatinName('カヲル', 'Kaworu'), 'Kaworu');
   assert.strictEqual(L.cardLatinName('カヲル', null), 'kaworu');
   assert.strictEqual(L.cardLatinName('カヲル', ''), 'kaworu');
-  for (const ok of ['kaworu', 'Mild na H.O', 'Sparg0', 'Fly High!', "K.O-kun's_2+&?", 'x'.repeat(30)]) assert.ok(L.latinNameValid(ok), ok);
-  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ', 'a/b', 'a(b)', 'a#', '!!']) assert.ok(!L.latinNameValid(bad), bad);
+  for (const ok of ['kaworu', 'Mild na H.O', 'Sparg0', 'Fly High!', "K.O-kun's_2+&?", 'x'.repeat(45)]) assert.ok(L.latinNameValid(ok), ok);
+  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(46), 'カヲル', 'ａｂ', 'a/b', 'a(b)', 'a#', '!!']) assert.ok(!L.latinNameValid(bad), bad);
 });
 
 test('読みの表 (名前 → 漢字をひらがなにした名前) があればそれをローマ字に。表に無い漢字は飛ばす', () => {
