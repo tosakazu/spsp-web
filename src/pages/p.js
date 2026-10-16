@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPager from '../../site/js/pager.js';
@@ -217,8 +218,8 @@ async function buildRivalsSection() {
   const docs = (await Promise.allSettled(tours.map(t =>
     fetch(SPSP.data + `tournaments/${t.event_id}.json`).then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); })
   ))).filter(r => r.status === 'fulfilled').map(r => r.value);
-  // 現在の全国順位は大会 JSON には無い (players_current.json から引く。読み込み済みなので即時)
-  const CUR = await SPSPPlayerData.loadCurrent(SPSP.data).catch(() => null);
+  // 現在の全国順位は大会 JSON には無い (全選手の現在順位から引く。data/views/ があれば players_index.json、無ければ players_current.json)
+  const CUR = await SPSPPlayerData.loadRanks(SPSP.data).catch(() => null);
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const info = new Map();   // uid -> {display, rank} (新しい大会優先)
   /** @type {Map<number, number>} */
@@ -287,11 +288,18 @@ async function buildRivalsSection() {
       href: mySub && mySub.pref ? SPSPLinks.prefRankingHref(SPSP.langRoot, mySub.pref.name) : null,
       items: take(pickBySubrank('pref', used)) },
   ];
-  // subrank 系の 名前 + 全国順位 は players/<uid>.json から取得 (最大8件)
-  const needFetch = cats[2].items.concat(cats[3].items).map(c => c.uid);
-  const fetched = await Promise.allSettled(needFetch.map(uid => SPSPPlayerData.load(SPSP.data, uid, { history: false })));
+  // subrank 系の 名前 + 全国順位: data/views/ があれば players_index.json、無ければ players/<uid>.json から取得 (最大8件)
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const fmap = new Map();
+  const vIndex = await SPSPViews.index().catch(() => null);
+  if (vIndex) {
+    for (const c of cats[2].items.concat(cats[3].items)) {
+      const r = vIndex.get(c.uid);
+      if (r) fmap.set(c.uid, { display: r.name, rank: r.ens });
+    }
+  }
+  const needFetch = cats[2].items.concat(cats[3].items).map(c => c.uid).filter(uid => !fmap.has(uid));
+  const fetched = await Promise.allSettled(needFetch.map(uid => SPSPPlayerData.load(SPSP.data, uid, { history: false })));
   fetched.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value) fmap.set(needFetch[i], { display: r.value.display, rank: (r.value.ranks || {}).ensemble });
   });
@@ -485,10 +493,14 @@ async function loadData() {
     if (PLAYER.display && PLAYER.ranks) {
       MAIN_REC = /** @type {MainRec} */ (PLAYER);
     } else {
-      // 後方互換: JSONL から探す
-      const jsonlRes = await fetch(SPSP.data + 'latest_tjpr_full.jsonl');
-      for (const r of SPSPData.parseJsonl(await jsonlRes.text())) {   // ../js/data.js
-        if (r.user_id === UID) { MAIN_REC = r; break; }
+      // 後方互換: JSONL から探す (data/views/ があればその人の行だけ取る)
+      if (await SPSPViews.manifest()) {
+        MAIN_REC = (await SPSPViews.rowsByUids([UID], { plain: true }))[0] || null;
+      } else {
+        const jsonlRes = await fetch(SPSP.data + 'latest_tjpr_full.jsonl');
+        for (const r of SPSPData.parseJsonl(await jsonlRes.text())) {   // ../js/data.js
+          if (r.user_id === UID) { MAIN_REC = r; break; }
+        }
       }
       if (!MAIN_REC) {
         showNotFound(i18n('player.not_in_db', { uid: UID }));

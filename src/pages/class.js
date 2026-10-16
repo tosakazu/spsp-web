@@ -13,6 +13,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
 import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
@@ -365,17 +366,20 @@ async function load() {
   status(i18n('class.step.ready'), 'ok');
 }
 
-/** 本戦に出ていない人の候補 (SPSP の選手。latest_tjpr_full.jsonl の名前と discriminators.json)。最初に追加欄を使うときに 1 回だけ読む
+/** 本戦に出ていない人の候補 (SPSP の選手。名前は data/views/players_index.json、無ければ latest_tjpr_full.jsonl。discriminator は discriminators.json)。
+ * 最初に追加欄を使うときに 1 回だけ読む
  * @type {Promise<{ uid: number, tag: string, disc: string, rank: number | null }[]> | null} */
 let allPlayersP = null;
 function allPlayers() {
   if (!allPlayersP) {
     allPlayersP = Promise.all([
-      fetch(SPSP.data + 'latest_tjpr_full.jsonl').then(r => (r.ok ? r.text() : '')),
+      SPSPViews.index().catch(() => null).then(I => I
+        ? I.list().map((/** @type {any} */ r) => ({ user_id: r.uid, display: r.name, ranks: { ensemble: r.ens } }))   // 総合順位順 (jsonl の行と同じ形の要る分だけ)
+        : fetch(SPSP.data + 'latest_tjpr_full.jsonl').then(r => (r.ok ? r.text() : '')).then(text => text.split('\n').filter(Boolean))),
       fetch(SPSP.data + 'data/discriminators.json').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
-    ]).then(([text, disc]) => text.split('\n').filter(Boolean).map(line => {
+    ]).then(([lines, disc]) => lines.map((/** @type {any} */ line) => {
       try {
-        const j = JSON.parse(line);
+        const j = typeof line === 'string' ? JSON.parse(line) : line;
         const d = String(j.display || '');
         const tag = d.slice(d.lastIndexOf('|') + 1).trim();   // チーム名を外す (start.gg の名前)
         return { uid: Number(j.user_id), tag, disc: String(disc[String(j.user_id)] || ''), rank: (j.ranks && j.ranks.ensemble) || null };
@@ -446,7 +450,7 @@ function renderList() {
   if (n > MAX_PARTICIPANTS) createStatus(i18n('class.err.too_many', { n, max: MAX_PARTICIPANTS }), 'error');
 }
 
-/** SPSP の総合順位 (players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
+/** SPSP の総合順位 (data/views/players_index.json の ens、無ければ players_current.json の ranks.ensemble)。選手 ID = start.gg のユーザー ID */
 /** @type {Promise<(uid: number) => number | null> | null} */
 let spspRanksP = null;
 function spspRanks() {
@@ -455,6 +459,8 @@ function spspRanks() {
 }
 async function loadSpspRanks() {
   try {
+    const I = await SPSPViews.index().catch(() => null);
+    if (I) return (/** @type {number} */ uid) => { const r = I.get(uid); return r ? r.ens : null; };
     const j = await fetch(SPSP.data + 'players_current.json').then(r => r.json());
     const col = (j.columns || []).indexOf('ranks.ensemble');
     const rows = j.players || {};

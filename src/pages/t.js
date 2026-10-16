@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
 import '../../site/js/data.js';
+import '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPager from '../../site/js/pager.js';
@@ -46,7 +47,7 @@ let META = null;
 /** @type {Tourney | null} */
 let TOURNEY = null;
 /** @type {any} */
-let CURRENT = null;            // players_current.json (全選手の現在順位。SPSPPlayerData.currentRank で引く)
+let CURRENT = null;            // 全選手の現在順位 (SPSPPlayerData.loadRanks。SPSPPlayerData.currentRank で引く)
 /** @type {string | null} */
 let TOURNEY_PREF = null;       // この大会の開催地 都道府県 (tournament_prefectures.json[TID])
 /** @type {Record<string, string> | null} */
@@ -70,8 +71,9 @@ async function load() {
       SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 開催地の表示名 (英語ページでは Chiba)
       fetch(SPSP.data + 'data/character_index.json').catch(() => null),
       fetch(SPSPCharEmoji.url()).catch(() => null),
-      // 参加者の現在の全国順位 (大会 JSON には当時の値だけがある。../js/player_data.js)
-      SPSPPlayerData.loadCurrent(SPSP.data).catch(() => null),
+      // 参加者の現在の全国順位 (大会 JSON には当時の値だけがある。../js/player_data.js。
+      // data/views/ があれば players_index.json、無ければ players_current.json)
+      SPSPPlayerData.loadRanks(SPSP.data).catch(() => null),
     ]);
     if (!tRes.ok) { showNotFound(); return; }
     META = await metaRes.json();

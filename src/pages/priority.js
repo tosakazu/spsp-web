@@ -5,6 +5,7 @@ import SPSPHtml from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPSuggest from '../../site/js/suggest.js';
 import '../../site/nav.js';
 /** 地域の暦日の時差 (region/config.js utcOffset、例 '+09:00') */
@@ -112,16 +113,46 @@ function utcOffsetMs(off) {
     });
   }
 
-  Promise.all([
-    loadJsonl(DATA_BASE + 'latest_tjpr_full.jsonl'),
-    fetch(DATA_BASE + 'data/overseas.json').then(function (r) { return r.json(); }),
-    fetch(DATA_BASE + 'data/player_prefectures.json').then(function (r) { return r.json(); }),
-    fetch(DISC_URL).then(function (r) { return r.json(); }),
-    fetch(DATA_BASE + 'data/last_activity.json').then(function (r) { return r.json(); }),
-    fetch(DATA_BASE + 'data/geo.json').then(function (r) { if (!r.ok) throw new Error('geo.json HTTP ' + r.status); return r.json(); }),
-  ]).then(function (res) {
+  // data/views/players_index.json (js/views.js) があれば、名前・総合順位・計測中・海外・都道府県・最終参加日はそこから。
+  // 無ければ latest_tjpr_full.jsonl + overseas.json + player_prefectures.json + last_activity.json (従来どおり)
+  /** @param {any} I 復号済みの players_index (js/views.js) @param {SpspGeoCatalog} geo */
+  function loadIndex(I, geo) {
+    /** @type {Record<string, string>} */
+    var prefOf = {};
+    (geo.units || []).forEach(function (/** @type {SpspGeoUnit} */ u) { prefOf[String(u.order)] = u.id; });
+    var pref = /** @type {Record<string, string>} */ ({}), last = /** @type {Record<string, string>} */ ({});
+    I.list().forEach(function (/** @type {any} */ r) {
+      var ens = r.ens || null;
+      var prov = !!r.prov;
+      MASTER.set(r.uid, { display: r.name, ens: ens, prov: prov });
+      RANKED.push({ uid: r.uid, display: r.name, ens: ens, prov: prov });
+      if (r.ovs) OVERSEAS.add(r.uid);
+      if (r.pref != null && prefOf[String(r.pref)]) pref[String(r.uid)] = prefOf[String(r.pref)];
+      var d = SPSPViews.dayToDate(r.last);
+      if (d) last[String(r.uid)] = d;
+    });
+    RANKED.sort(function (a, b) {
+      return (a.ens || Infinity) - (b.ens || Infinity) || a.uid - b.uid;
+    });
+    return { pref: pref, last: last };
+  }
+
+  SPSPViews.index().catch(function () { return null; }).then(function (I) {
+    var geoP = fetch(DATA_BASE + 'data/geo.json').then(function (r) { if (!r.ok) throw new Error('geo.json HTTP ' + r.status); return r.json(); });
+    return Promise.all([
+      I ? null : loadJsonl(DATA_BASE + 'latest_tjpr_full.jsonl'),
+      I ? null : fetch(DATA_BASE + 'data/overseas.json').then(function (r) { return r.json(); }),
+      I ? null : fetch(DATA_BASE + 'data/player_prefectures.json').then(function (r) { return r.json(); }),
+      fetch(DISC_URL).then(function (r) { return r.json(); }),
+      I ? null : fetch(DATA_BASE + 'data/last_activity.json').then(function (r) { return r.json(); }),
+      geoP,
+    ]).then(function (res) {
+      if (I) { var v = loadIndex(I, res[5]); res[2] = v.pref; res[4] = v.last; }
+      return res;
+    });
+  }).then(function (res) {
     PREF_ORDER = (res[5].units || []).map(function (/** @type {SpspGeoUnit} */ u) { return u.id; });
-    (res[1].uids || []).forEach(function (/** @type {number} */ u) { OVERSEAS.add(u); });
+    ((res[1] && res[1].uids) || []).forEach(function (/** @type {number} */ u) { OVERSEAS.add(u); });
     PREF = res[2] || {};
     DISC = res[3] || {};
     Object.keys(DISC).forEach(function (k) { DISC2UID[DISC[k].toLowerCase()] = parseInt(k, 10); });
