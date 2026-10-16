@@ -116,8 +116,9 @@ export function cardLatinName(name, own, readings) {
   return o || autoLatin(name, readings);
 }
 
-/** カード編集で登録できる英字名か (サーバの worker/src/api/card.ts と同じ: 半角の英字・数字と空白だけ、1〜30 文字。前後・続けての空白なし) @param {string} s */
-export const latinNameValid = s => /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(s) && s.length <= 30;
+/** カード編集で登録できる英字名か (サーバの worker/src/api/card.ts と同じ): 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜30 文字。
+ * 前後・続けての空白なし、英字か数字が 1 文字は要る @param {string} s */
+export const latinNameValid = s => /^[A-Za-z0-9!?.\-_'&+]+(?: [A-Za-z0-9!?.\-_'&+]+)*$/.test(s) && /[A-Za-z0-9]/.test(s) && s.length <= 30;
 export const LATIN_NAME_MAX = 30;
 
 const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX, hasKanji, loadReadings, normName };

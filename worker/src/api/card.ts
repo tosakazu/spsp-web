@@ -33,8 +33,8 @@ export interface CardSettings {
   latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)
 }
 
-/** 英字名: 半角の英字・数字と空白だけ (記号は不可)、1〜30 文字、前後の空白・続けての空白なし (フロントの latinNameValid と同じ) */
-export const LATIN_NAME = /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/;
+/** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜30 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */
+export const LATIN_NAME = /^[A-Za-z0-9!?.\-_'&+]+(?: [A-Za-z0-9!?.\-_'&+]+)*$/;
 
 /** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
 // 各側: id / null =「なし」(空欄) / 'default' = 地域の既定 (スマブラSP / プレイヤー、フロントの region/config.js titleDefault)
@@ -87,7 +87,7 @@ export function validateCardSettings(v: unknown): CardSettings | null {
   }
   let latin: string | null = null;
   if (o.latin !== undefined && o.latin !== null) {
-    if (typeof o.latin !== 'string' || !LATIN_NAME.test(o.latin) || o.latin.length > 30) return null;
+    if (typeof o.latin !== 'string' || !LATIN_NAME.test(o.latin) || !/[A-Za-z0-9]/.test(o.latin) || o.latin.length > 30) return null;
     latin = o.latin;
   }
   return { template: o.template, color: o.color, ach, tour, title, latin };

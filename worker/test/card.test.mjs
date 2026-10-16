@@ -147,14 +147,15 @@ test('card_get: 保存済みの行が壊れていれば無いものとして返�
   assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '6' }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
-test('validateCardSettings: latin は英字名 (半角の英字・数字と空白 1〜30 文字、記号・前後・連続の空白なし) か null', () => {
+test('validateCardSettings: latin は英字名 (半角の英字・数字・一部の記号と空白 1〜30 文字、前後・連続の空白なし) か null', () => {
   const base = { template: 'standard', color: 'red' };
   assert.strictEqual(validateCardSettings({ ...base, latin: 'kaworu' }).latin, 'kaworu');
-  assert.strictEqual(validateCardSettings({ ...base, latin: 'Mild na HO 2' }).latin, 'Mild na HO 2');
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'Mild na H.O' }).latin, 'Mild na H.O');
+  assert.strictEqual(validateCardSettings({ ...base, latin: "Fly High! K.O-kun's_2+&?" }).latin, "Fly High! K.O-kun's_2+&?");
   assert.strictEqual(validateCardSettings({ ...base, latin: 'x'.repeat(30) }).latin, 'x'.repeat(30));
   assert.strictEqual(validateCardSettings({ ...base, latin: null }).latin, null);
   assert.strictEqual(validateCardSettings(base).latin, null);
-  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ', 'a\tb', 'a\nb', 'H.O', 'a/b', 'a!', 1, true, ['a']])
+  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ', 'a\tb', 'a\nb', 'a/b', 'a(b)', 'a#', '!!', 1, true, ['a']])
     assert.strictEqual(validateCardSettings({ ...base, latin: bad }), null, JSON.stringify(bad));
 });
 
