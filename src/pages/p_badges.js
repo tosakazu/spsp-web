@@ -25,6 +25,27 @@ const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
 const HOLO_NAMES = ['虹', '金', '銀'];
 
+// Figma の見本 (back の Frame 43 にバッジを付けた画像、2026-10-16 にユーザーから) の再現。だれのページでも出せるよう、
+// バッジは見本用 (e が負、持っているかに関係なく出す)。位置・大きさ・回転は画像に重ねて合わせた (スマパは同じアイコンを 3 枚ずらして重ねてある)
+/** @type {Badge[]} */
+const SAMPLE_BADGES = [
+  { e: -1, name: '見本: 極冠#15', date: '', place: null, nent: null, file: '0195a75b2a4fbbafc4a819f19b792f2f.png', variant: 2, cls: null },
+  { e: -2, name: '見本: 渋谷大乱 第一陣', date: '', place: null, nent: null, file: '065e7fbef3c1df6b0581b65ff0962525.jpg', variant: 2, cls: null },
+  { e: -3, name: '見本: 篝火#10', date: '', place: null, nent: null, file: 'c30cb17425f4aa0b8668c1e4afb28866.png', variant: 0, cls: null },
+  { e: -4, name: '見本: スマパ (3 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+  { e: -5, name: '見本: スマパ (2 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+  { e: -6, name: '見本: スマパ', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+];
+/** 下から順 @type {Sticker[]} */
+const SAMPLE_LAYOUT = [
+  { e: -1, x: 425, y: 220, s: 346, r: 0 },
+  { e: -2, x: 103, y: 288, s: 168, r: 6 },
+  { e: -3, x: 40, y: 162, s: 167, r: -24 },
+  { e: -4, x: 183, y: 50, s: 345, r: -8 },
+  { e: -5, x: 168, y: 38, s: 345, r: -8 },
+  { e: -6, x: 153, y: 26, s: 345, r: -8 },
+];
+
 /** @typedef {{ e: number, x: number, y: number, s: number, r: number }} Sticker */
 /** @typedef {{ e: number, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null }} Badge */
 
@@ -104,7 +125,7 @@ async function main() {
   SPSPPlayerCard.renderBack($('bz-card'), buildCardModel(data, card ? card.settings : null, card ? card.titleText : null));
 
   const badges = badgesOf((data.player && data.player.tournaments) || [], icons);
-  const byE = new Map(badges.map(b => [b.e, b]));
+  const byE = new Map([...badges, ...SAMPLE_BADGES].map(b => [b.e, b]));
   /** @type {Sticker[]} */
   let stickers = loadStickers(uid).filter(s => byE.has(s.e));
   /** @type {number | null} 選んでいるバッジ (event_id) */
@@ -228,6 +249,10 @@ async function main() {
   $('bz-reset-tf').addEventListener('click', () => { const s = cur(); if (s) { s.r = 0; changed(); } });
   const remove = (/** @type {number} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
+  $('bz-sample').addEventListener('click', () => {
+    if (stickers.length && !confirm('今付けているバッジを外して、Figma の見本の並びにしますか?')) return;
+    stickers = SAMPLE_LAYOUT.map(s => ({ ...s })); sel = null; changed(); paintTray();
+  });
   $('bz-clear').addEventListener('click', () => {
     if (!stickers.length || !confirm('付けたバッジを全部外しますか?')) return;
     stickers = []; sel = null; changed(); paintTray();
@@ -320,7 +345,7 @@ async function main() {
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
   function paintTray() {
     const on = new Set(stickers.map(s => s.e));
-    const list = badges.filter(b => filter === 'all' ? true : filter === 'win' ? b.place === 1
+    const list = (filter === 'placed' ? [...badges, ...SAMPLE_BADGES] : badges).filter(b => filter === 'all' ? true : filter === 'win' ? b.place === 1
       : filter === 'top3' ? b.place != null && b.place <= 3 : on.has(b.e));
     tray.innerHTML = '';
     if (!list.length) {
