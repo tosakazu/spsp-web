@@ -93,7 +93,8 @@ test('data/views/ 読みと従来の読み方で主なページの描画が同�
     assert.ok(bundled.includes('1983750'), '1983750 はまとめに入っている前提');
     assert.match(fs.readFileSync(path.join(views, 'p_1983750', 'fetch.txt'), 'utf8'), /data\/views\/bundle\/\d+\.json/);
     assert.ok(!bundled.includes('1787719'));
-    assert.match(fs.readFileSync(path.join(views, 'p_1787719', 'fetch.txt'), 'utf8'), /^players\/1787719\.json$/m);
+    const f1787719 = fs.readFileSync(path.join(views, 'p_1787719', 'fetch.txt'), 'utf8');
+    assert.match(f1787719, /^players\/1787719\.json$/m);
   } finally {
     if (!process.env.KEEP_VIEWS_SNAP) fs.rmSync(tmp, { recursive: true, force: true });
     else console.log('snapshots kept in', tmp);
