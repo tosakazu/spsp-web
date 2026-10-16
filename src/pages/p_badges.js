@@ -19,7 +19,7 @@ const DISC = (params.get('d') || '').trim().toLowerCase();
 const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 const W = 514, H = 333;
 /** 大きさ (一辺、カードの px) の幅。小さめ〜大きめ。スライダーは対数で (小さい所も細かく選べるように) */
-const S_MIN = 22, S_MAX = 260, S_DEF = 84;
+const S_MIN = 22, S_MAX = 520, S_DEF = 84;   // 最大はカードの幅くらい
 const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
@@ -114,7 +114,7 @@ async function main() {
   // ── 付ける層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
   //    (層ごと transform で縮めると、ブラウザによってはバッジが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
-  const layer = $('bz-layer');   // バッジ (カードからはみ出しても切らない)
+  const layer = $('bz-layer');   // バッジ (カードからはみ出した所は切る)
   const over = $('bz-over');     // 選んでいるバッジの枠とつまみ (カードの外にはみ出してよい)
   const frame = $('bz-frame');
   let scale = 0;   // 画面の px / カードの px
