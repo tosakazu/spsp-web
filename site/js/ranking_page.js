@@ -15,8 +15,10 @@
 //       行クリックで展開行 (大会別 / 直接対決) を出し入れする。開くのは 1 行だけ。詳細 JSON は SPSPDetail が取る
 //   SPSPRankingPage.bindDetailClicks(tbody, getCfg)
 //       展開行の中のクリック (タブ切替 / 直接対決の「もっと見る」/ 並べ替え / 「さらに表示」) を tbody で委譲処理
-//   SPSPRankingPage.loadMaster(prefix, {overseas, charIdx})
-//       → { meta, recs, overseasUids, charIdx }。meta.json と latest_tjpr_full.jsonl が無ければ throw
+//   SPSPRankingPage.loadMaster(prefix, {overseas, charIdx, views})
+//       → { meta, recs, overseasUids, charIdx, views }。meta.json と latest_tjpr_full.jsonl が無ければ throw
+//       views = async (V, manifest) => recs を渡すと、data/views/ があるとき (js/views.js) は jsonl を読まずに
+//       その関数の返す行 (ページが要る分だけ) を recs にする。このとき戻り値の views に manifest が入る (無ければ null)
 //   SPSPRankingPage.cloneWithGlobalRanks(rec)   全国順位を ranks.global_* に写した深いコピー
 //   SPSPRankingPage.rerankByGlobalEnsemble(recs) 全国の総合順位の昇順に並べ、ensemble を 1..N に付け直す
 //
@@ -26,6 +28,7 @@ import SPSPI18n from './i18n.js';
 import SPSPCharEmoji from './char_emoji.js';
 import SPSPDetail from '../player-detail.js';
 import SPSPRankingTable from '../ranking-table.js';
+import SPSPViews from './views.js';
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
   var i18n = function (k, params) { return SPSPI18n.t(k, params); };   // 文言 (i18n/ja.js)
 
@@ -220,16 +223,25 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   // meta.json と latest_tjpr_full.jsonl (必須) + overseas.json / character_index.json (任意)
   async function loadMaster(prefix, want) {
     want = want || {};
+    /** @type {any} */
+    var manifest = null;
+    /** @type {Promise<any[]> | null} */
+    var viewRecsP = null;
+    if (want.views && SPSPViews) {
+      var V = SPSPViews.at(prefix);
+      manifest = await V.manifest();
+      if (manifest) viewRecsP = Promise.resolve(want.views(V, manifest));
+    }
     var res = await Promise.all([
       fetch(prefix + 'meta.json'),
-      fetch(prefix + 'latest_tjpr_full.jsonl'),
+      viewRecsP || fetch(prefix + 'latest_tjpr_full.jsonl'),
       want.overseas ? fetch(prefix + 'data/overseas.json').catch(function () { return null; }) : null,
       want.charIdx ? fetch(prefix + 'data/character_index.json').catch(function () { return null; }) : null,
       SPSPCharEmoji ? SPSPCharEmoji.load() : null,   // キャラ絵文字の表 (サイトと一緒に配信。js/char_emoji.js)。行の絵文字を表で引くため描画前に
     ]);
-    var metaRes = res[0], jsonlRes = res[1], overseasRes = res[2], charIdxRes = res[3];
+    var metaRes = res[0], jsonlRes = /** @type {any} */ (res[1]), overseasRes = res[2], charIdxRes = res[3];
     if (!metaRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'meta.json' }));
-    if (!jsonlRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'latest_tjpr_full.jsonl' }));
+    if (!viewRecsP && !jsonlRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'latest_tjpr_full.jsonl' }));
     /** @type {Set<number> | null} */
     var overseasUids = null;
     if (overseasRes && overseasRes.ok) {
@@ -241,8 +253,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       try { charIdx = await charIdxRes.json(); } catch (e) { /* 無いのと同じ */ }
     }
     var meta = await metaRes.json();
-    var recs = SPSPData.parseJsonl(await jsonlRes.text());   // js/data.js
-    return { meta: meta, recs: recs, overseasUids: overseasUids, charIdx: charIdx };
+    var recs = viewRecsP ? /** @type {any[]} */ (jsonlRes) : SPSPData.parseJsonl(await jsonlRes.text());   // js/data.js
+    return { meta: meta, recs: recs, overseasUids: overseasUids, charIdx: charIdx, views: viewRecsP ? manifest : null };
   }
 
   function cloneWithGlobalRanks(src) {

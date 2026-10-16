@@ -26,6 +26,10 @@ import { charName } from './js/chars.js';
  *     showTopTours: true,
  *     showDisplayBadges: true,        // mobile display-lv-mobile + display-gate-mobile
  *     btWeekdayStyle: 'pill' | 'yn',  // 常連/レア pill vs ✓/− icon
+ *     sortable: true,                 // false で見出しの並べ替えを出さない (全国ランキング。並びは常に順位順)
+ *     moreRows: null,                 // 行を全部は持たない表 (全国ランキングの data/views/ 読み): { total(): 全体の行数,
+ *                                     //   need(cap): cap 行目までを取ってきて replaceRows する }。無限スクロールが持っている行の先に
+ *                                     //   届いたら need を呼ぶ。「さらに N 件」の N は total() から数える
  *   });
  *   t.setRows(...); t.setMethod(...); t.setFilterText(...); t.setSort(key,dir);
  *   t.refresh();
@@ -354,6 +358,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.showGlobalRank = !!opts.showGlobalRank;
       this.showLocalExtras = !!opts.showLocalExtras;
       this.btWeekdayStyle = opts.btWeekdayStyle || 'pill';
+      this.sortable = opts.sortable !== false;
+      this.moreRows = opts.moreRows || null;
 
       this.columns = (opts.columns || [
         'rank','display','avg_rank','score','tjpr_lv',
@@ -373,6 +379,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
       // thead click → sort
       this.table.addEventListener('click', (e) => {
+        if (!this.sortable) return;
         const th = e.target.closest('th.sortable');
         if (th) {
           const key = th.dataset.sort;
@@ -400,7 +407,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       // Infinite scroll
       if (this.infiniteScroll) {
         this._scrollHandler = () => {
-          if (this._lastFiltered.length <= this.currentCap) return;
+          if (this._totalRows() <= this.currentCap) return;
           const doc = document.documentElement;
           if (doc.scrollHeight - window.scrollY - window.innerHeight < 600) {
             this.currentCap += this.pageSize;
@@ -416,6 +423,14 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.rows = rows || [];
       this.currentCap = this.pageSize;
       this.refresh();
+    }
+    // 行を差し替える (表示中の件数 currentCap はそのまま。moreRows が続きを取ってきたとき)
+    replaceRows(rows) {
+      this.rows = rows || [];
+      this.refresh();
+    }
+    setMoreRows(more) {
+      this.moreRows = more || null;
     }
     setMethod(method) {
       this.method = method;
@@ -483,8 +498,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         return t;
       })();
       thead.innerHTML = '<tr>' + this.columns.map(col => {
-        const cls = (col.sortable ? 'sortable ' : '') + col.css;
-        const dataSort = col.sortable ? ` data-sort="${col.sortKey || col.id}"` : '';
+        const sortable = this.sortable && col.sortable;
+        const cls = (sortable ? 'sortable ' : '') + col.css;
+        const dataSort = sortable ? ` data-sort="${col.sortKey || col.id}"` : '';
         return `<th class="${cls}"${dataSort}>${col.label}</th>`;
       }).join('') + '</tr>';
 
@@ -557,14 +573,24 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         });
         html.push('</tr>');
       });
-      if (filtered.length > cap) {
-        html.push(`<tr id="load-more-row"><td colspan="${colspan}" class="empty-msg">${i18n('table.load_more', { n: filtered.length - cap })}</td></tr>`);
+      const total = this._totalRows();
+      if (total > cap) {
+        html.push(`<tr id="load-more-row"><td colspan="${colspan}" class="empty-msg">${i18n('table.load_more', { n: total - cap })}</td></tr>`);
       } else if (filtered.length === 0) {
         html.push(`<tr><td colspan="${colspan}" class="empty-msg">${i18n('table.none')}</td></tr>`);
       }
       tbody.innerHTML = html.join('');
 
       this.emit('rendered', { shown, filtered });
+      // 持っている行より先まで表示したい (無限スクロール・ジャンプ) → 続きを取ってきてもらう
+      if (this.moreRows && cap > filtered.length && total > filtered.length) this.moreRows.need(cap);
+    }
+
+    // 全体の行数 (moreRows があればまだ取ってきていない行も数える)
+    _totalRows() {
+      const n = this._lastFiltered.length;
+      if (!this.moreRows) return n;
+      return Math.max(n, this.moreRows.total());
     }
 
     _updateHeaderSortIndicators() {

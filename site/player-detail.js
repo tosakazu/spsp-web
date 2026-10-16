@@ -32,6 +32,7 @@ import SPSPHtml, { escapeHtml } from './js/html.js';
 import SPSPI18n from './js/i18n.js';
 import SPSPPlayerData from './js/player_data.js';
 import SPSPTags from './js/tags.js';
+import SPSPViews from './js/views.js';
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
   // (二重読み込みの guard は不要: ES module は 1 回しか評価されない)
 
@@ -84,13 +85,17 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       if (r && r.user_id != null) dataByUid.set(Number(r.user_id), r);
     }
     const masterMap = (cfg && cfg.getMasterMap) ? (cfg.getMasterMap() || null) : null;
+    // data/views/ があるときはページが全選手を持たないので、players_index.json (fetchPlayerDetail が読んでおく) で名前と総合順位を引く
+    const viewsIndex = SPSPViews ? SPSPViews.at(dataPrefixOf(cfg)).peekIndex() : null;
     function getMasterRec(uid) {
-      if (!masterMap) return null;
       const key = Number(uid);
       // Map<number, rec>
-      if (typeof masterMap.get === 'function') {
-        return masterMap.get(key) || masterMap.get(uid) || null;
+      if (masterMap && typeof masterMap.get === 'function') {
+        const r = masterMap.get(key) || masterMap.get(uid) || null;
+        if (r) return r;
       }
+      const ir = viewsIndex && viewsIndex.get(key);
+      if (ir) return { user_id: ir.uid, display: ir.name, ranks: { ensemble: ir.ens, tjpr: ir.tjpr, bt_gated: ir.bt } };
       return null;
     }
     function ensembleRankOf(uid) {
@@ -353,6 +358,10 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     `;
   }
 
+  function dataPrefixOf(cfg) {
+    return (cfg && cfg.dataPrefix != null) ? cfg.dataPrefix : ((cfg && cfg.pathPrefix != null) ? cfg.pathPrefix : '');
+  }
+
   // ─── Per-player detail cache + fetch ───
   const DETAIL_CACHE = new Map();
   async function fetchPlayerDetail(uid, cfg) {
@@ -360,8 +369,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     if (DETAIL_CACHE.has(uid)) return DETAIL_CACHE.get(uid);
     // 選手 JSON は分割されている (安定部分 + players_current.json + 履歴)。組み立ては js/player_data.js
     // (このファイルより前に読み込まれていること)。index.html のグラフが history を使うので履歴も取る。
-    const pre = (cfg && cfg.dataPrefix != null) ? cfg.dataPrefix : ((cfg && cfg.pathPrefix != null) ? cfg.pathPrefix : '');
+    const pre = dataPrefixOf(cfg);
+    // data/views/ があれば、相手の名前・順位を引く players_index.json も (1 回だけ) 読んでおく (buildLookup が同期で使う)
+    const idxP = SPSPViews ? SPSPViews.at(pre).index().catch(() => null) : null;
     const data = await SPSPPlayerData.load(pre, uid);
+    if (idxP) await idxP;
     if (!data) throw new Error('HTTP 404');
     DETAIL_CACHE.set(uid, data);
     return data;

@@ -158,7 +158,7 @@ export async function showForSelf(el, recOf, opts) {
   const sess = SpspLogin.session();
   if (!sess) return;
   const uid = String(sess.user.id);
-  const rec = recOf(Number(uid));
+  const rec = await recOf(Number(uid));   // 同期でも Promise でもよい (トップは表に無い本人の行を取りに行く)
   if (rec === undefined) return;
   observeRec(uid, rec);   // 一覧に居ない (圏外) なら null: 基準も null にして、次に載ったときは出さない
   const n = await titlesNew(uid);
