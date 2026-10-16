@@ -32,11 +32,13 @@ test('かな・カナはローマ字 (ヘボン式・小文字、促音は重ね
   assert.strictEqual(L.autoLatin('ラリックス　　'), 'rarikkusu');
 });
 
-test('英字とかなが混ざるときはかなだけローマ字。漢字は残す', () => {
+test('英字とかなが混ざるときはかなだけローマ字。漢字は飛ばす (漢字だけの名前は元のまま)', () => {
   assert.strictEqual(L.autoLatin('あcola'), 'acola');
   assert.strictEqual(L.autoLatin('TG(トリグリ)'), 'TG(toriguri)');
-  assert.strictEqual(L.autoLatin('ふららら麺'), 'furarara麺');
+  assert.strictEqual(L.autoLatin('ふららら麺'), 'furarara');
+  assert.strictEqual(L.autoLatin('こーう遅延して'), 'kou shite');
   assert.strictEqual(L.autoLatin('黒船'), '黒船');
+  assert.strictEqual(L.autoLatin('リノハ [休日はポゴ]'), 'rinoha [hapogo]');
 });
 
 test('「日本語/英字」は英字の側だけ (順番はどちらでも)。両側とも日本語なら全体をローマ字に', () => {

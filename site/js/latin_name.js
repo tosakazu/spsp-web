@@ -1,7 +1,8 @@
 // @ts-check
 // latin_name.js — カードの裏面に出す英字の名前 (Figma「back」は「kaworu」のように英字で組む)。
 //   autoLatin(name)          名前から自動で作る:
-//                              英数字だけ → そのまま / かな・カナ → ローマ字 (ヘボン式、小文字) / 漢字 → 漢字はそのまま、まわりのかなだけローマ字
+//                              英数字だけ → そのまま / かな・カナ → ローマ字 (ヘボン式、小文字) / 漢字 → 漢字は飛ばして、まわりのかなだけローマ字
+//                              (「ふららら麺」→「furarara」)。漢字だけの名前 (「黒船」) は空になるので、元の名前のまま
 //                              「日本語/英字」(「たいけい/Taikei」「マイルドなH.O/Mild na H.O」) → 英字の側だけ
 //   cardLatinName(name, own) 本人がカード編集で登録した英字名 (own) があればそれ、無ければ autoLatin
 // 伸ばす音「ー」は書かない (「スノー」→「suno」、パスポートと同じ)。読みの分からない漢字や、本人の綴りと違うときは、カード編集で英字名を登録してもらう
@@ -77,7 +78,9 @@ export function autoLatin(name) {
     const latin = parts.filter(p => !JA.test(p));
     if (latin.length && latin.length < parts.length) return latin.join('/');
   }
-  return tidy(kanaToRoman(s));
+  // ローマ字にできなかった日本語の文字 (漢字など) は飛ばす。何も残らなければ元の名前
+  const out = tidy(kanaToRoman(s).replace(new RegExp(JA.source, 'g'), ' ')).replace(/([([]) /g, '$1').replace(/ ([)\]])/g, '$1');
+  return out || s;
 }
 
 /** 本人が登録した英字名があればそれ、無ければ自動 @param {string} name @param {string | null | undefined} [own] */
