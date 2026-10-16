@@ -89,16 +89,22 @@ const MSG_PLAYER_FETCH = '選手データの取得に失敗しました。時間
 
 /**
  * 参加の少ない選手の players/<uid>.json はビルドが data/views/bundle/<uid % bundle_shards>.json にまとめ、個別のファイルは
- * 更新しない (古いか無い。site/js/views.js bundledPlayer と同じ)。まとめてあればその中身 (players/ と同じ形) を、
- * まとめていない・views が無い・読めないときは null (呼び出し側が個別のファイルを読む)。
+ * 更新しない (古いか無い。site/js/views.js bundledPlayer と同じ)。まとめてあるかは data/views/current/<uid % N>.json の
+ * bundled (その分割でまとめた uid の一覧。無ければ誰もまとめていない) で決め、まとめてある人だけ bundle/ を読む。
+ * まとめてあればその中身 (players/ と同じ形) を、まとめていない・views が無い・読めないときは null (呼び出し側が個別のファイルを読む)。
  */
 export async function bundledPlayer(dataFetch: DataFetch, uid: string): Promise<{ characters?: unknown } | null> {
   try {
     const mr = await dataFetch('/data/views/manifest.json');
     if (mr.status !== 200) return null;
-    const m = await mr.json() as { format?: unknown; bundle_shards?: unknown } | null;
+    const m = await mr.json() as { format?: unknown; bundle_shards?: unknown; current_shards?: unknown } | null;
     const n = Number(m && m.bundle_shards);
-    if (!m || m.format !== 1 || !(n > 0) || !/^\d+$/.test(uid)) return null;
+    const cs = Number(m && m.current_shards);
+    if (!m || m.format !== 1 || !(n > 0) || !(cs > 0) || !/^\d+$/.test(uid)) return null;
+    const cr = await dataFetch('/data/views/current/' + (Number(uid) % cs) + '.json');
+    if (cr.status !== 200) return null;
+    const cur = await cr.json() as { bundled?: unknown } | null;
+    if (!(cur && Array.isArray(cur.bundled) && cur.bundled.indexOf(Number(uid)) >= 0)) return null;
     const br = await dataFetch('/data/views/bundle/' + (Number(uid) % n) + '.json');
     if (br.status !== 200) return null;
     const b = await br.json() as { players?: Record<string, { p?: { characters?: unknown } | null }> } | null;

@@ -25,8 +25,10 @@
 //   .bundledPlayer(uid)         → Promise<{p, h} | null>   参加の少ない選手は players/<uid>.json と history/<uid>.json の中身が
 //                                  bundle/<uid % manifest.bundle_shards>.json にまとめてあり、個別のファイルは更新されない (古いか無い)。
 //                                  まとめてある選手なら {p: players/ の中身, h: history/ の中身 | null}、そうでなければ null (個別のファイルを読む)。
-//                                  bundle_shards が 0 / 無い (まとめていないビルド) なら常に null。players_index.json を読み込み済みなら
-//                                  列 b (1 = まとめてある) で分割を取るかを決め、未読み込みなら分割を取って中に居るかで決める
+//                                  bundle_shards が 0 / 無い (まとめていないビルド) なら常に null。まとめてあるかは players_index.json を
+//                                  読み込み済みなら列 b (1 = まとめてある)、未読み込みなら current/<uid % N>.json の bundled (その分割でまとめた uid。
+//                                  揮発部分を読むついでに同じファイル) で決める。bundled が無い分割は「誰もまとめていない」。
+//                                  まとめていない人の分は bundle/ を取りに行かない
 //   SPSPViews.dayToDate(days)   → 'YYYY-MM-DD' (players_index の last = 1970-01-01 からの日数)
 //
 // Index: { n, columns, rows, col: {uid: 0, …}, get(uid) → IndexRow | null, pos(uid) → 位置 | -1, at(i) → IndexRow, list() → IndexRow[] }
@@ -223,13 +225,15 @@ function makeInst(prefix) {
       return manifest().then(function (m) {
         var n = m && m.bundle_shards;
         if (!(n > 0)) return null;
-        if (indexVal && 'b' in indexVal.col) {
-          var r = indexVal.get(uid);
-          if (!r || !r.b) return null;   // まとめていない (または SPSP に居ない) 人は個別のファイル
-        }
-        return getJson('bundle/' + (Number(uid) % n) + '.json', null).then(function (f) {
-          var e = f && f.players && f.players[String(uid)];
-          return e ? { p: e.p, h: e.h == null ? null : e.h } : null;
+        var decided = (indexVal && 'b' in indexVal.col)
+          ? Promise.resolve(!!(indexVal.get(uid) || {}).b)   // まとめていない (または SPSP に居ない) 人は個別のファイル
+          : currentFile(uid).then(function (f) { return !!(f && Array.isArray(f.bundled) && f.bundled.indexOf(Number(uid)) >= 0); });
+        return decided.then(function (isBundled) {
+          if (!isBundled) return null;
+          return getJson('bundle/' + (Number(uid) % n) + '.json', null).then(function (f) {
+            var e = f && f.players && f.players[String(uid)];
+            return e ? { p: e.p, h: e.h == null ? null : e.h } : null;
+          });
         });
       });
     },
