@@ -31,7 +31,8 @@
       <span id="ce-name"></span>
     </a>
 
-    <div class="ce-preview"><div class="pcard" id="ce-card"></div></div>
+    <!-- プレビュー: 表と裏 (英字名を入力している間・プレビューを押したときは裏面を見せる) -->
+    <div class="ce-preview" id="ce-preview"><div class="pcard-flip"><div class="pcard" id="ce-card"></div><div class="pcard pcard-back" id="ce-card-back" aria-hidden="true"></div></div></div>
 
     <!-- ログインして本人と確認できたら編集できる (いまは spsp.games でだけ確認する。確認用のプレビューでは素通し) -->
     <div class="ce-gate" id="ce-gate" style="display:none">
@@ -61,6 +62,12 @@
             <div class="ce-reel"><div class="ce-reel-band" aria-hidden="true"></div><div class="ce-reel-scroll" id="ce-title-post" role="listbox" tabindex="0" data-i18n-attr="aria-label:card_edit.title_post"></div></div></div>
         </div>
         <div class="ce-title-note" id="ce-title-note"></div>
+      </section>
+      <!-- 英字名: カードの裏面に出す名前。空なら名前から自動で作る (js/latin_name.js)。入力の見本 (placeholder) は自動で作った名前 -->
+      <section class="ce-sec" id="ce-latin-sec">
+        <h2 data-i18n="card_edit.latin">英字名 (カードの裏面)</h2>
+        <input type="text" class="ce-latin" id="ce-latin" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin">
+        <div class="ce-latin-note" id="ce-latin-note" data-i18n="card_edit.latin_note">空欄なら名前から自動で作ります (かなはローマ字に、「たいけい/Taikei」のような名前は英字の側)。半角の英数字・記号で 30 文字まで</div>
       </section>
       <!-- 実績と大会は最初は畳んでおく (見出しの右に今の選択) -->
       <details class="ce-sec ce-fold">

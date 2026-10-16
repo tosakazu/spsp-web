@@ -163,7 +163,7 @@
 .pcard-flip { position: relative; transition: transform .5s ease; transform-style: preserve-3d; }
 .pcard-flip .pcard { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .pcard-flip .pcard-back { position: absolute; left: 0; top: 0; width: 100%; transform: rotateY(180deg); }
-.pcard-wrap.flipped .pcard-flip { transform: rotateY(180deg); }
+.flipped > .pcard-flip { transform: rotateY(180deg); }   /* プレイヤーページ (.pcard-wrap) と編集ページのプレビュー (.ce-preview) */
 @media (prefers-reduced-motion: reduce) { .pcard-flip { transition: none; } }
 .pc-overlay { position: absolute; top: 8px; right: 8px; display: none; gap: 6px; z-index: 2; }
 .pcard-wrap.show .pc-overlay { display: flex; }

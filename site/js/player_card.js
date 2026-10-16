@@ -33,7 +33,8 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
  * title = 二つ名 (前半・後半の文字。'' = なし (空欄)、null と title 自体が無いときは地域の既定。無くても名前の位置は同じ)
- * @typedef {{ name: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
+ * nameLatin = 裏面に出す英字の名前 (js/latin_name.js。無ければ name)
+ * @typedef {{ name: string, nameLatin?: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
  *              totalTournaments: number, totalMatches: number,
@@ -186,7 +187,7 @@ function cardHtml(m) {
   </div>`;
 }
 
-/** 裏面 (Figma「back」: 赤地に角の欠けた枠、中央に二つ名・名前・総合順位)。実績のバッジはこの上に貼る (これから)
+/** 裏面 (Figma「back」: 赤地に角の欠けた枠、中央に二つ名・英字の名前・総合順位)。実績のバッジはこの上に貼る (これから)
  * @param {PCardModel} m */
 function backHtml(m) {
   const title = titleHtml(m, 'pcb-title');
@@ -194,7 +195,7 @@ function backHtml(m) {
     <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
     <div class="pcb-col">
       ${title}
-      <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.name)}</span></div>
+      <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
       <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
     </div>
   </div>`;

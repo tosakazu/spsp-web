@@ -19,6 +19,7 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
+import { cardLatinName, latinNameValid } from './latin_name.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -29,10 +30,11 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
  * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
- * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null }} CardSettings */
+ * latin = カードの裏面に出す英字の名前 (本人が登録。null = 自動、js/latin_name.js)
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null, latin?: string | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null };
 
 /** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
@@ -238,7 +240,7 @@ export function buildCardModel(data, settings, titleText) {
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)
-    name: SPSPFormat.stripTeamTag(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.stripTeamTag(rec.display), nameLatin: cardLatinName(SPSPFormat.stripTeamTag(rec.display), st.latin), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
@@ -294,7 +296,7 @@ function normalize(s) {
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
            tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
-           title: normTitle(s.title) };
+           title: normTitle(s.title), latin: typeof s.latin === 'string' && latinNameValid(s.latin) ? s.latin : null };
 }
 /** 二つ名の値はサーバ (worker/src/api/card.ts の設定の検査) と同じ: id / null =「なし」/ 'default' = 既定。両方既定は null (設定無しと同じ)、「なし / なし」は残す
  * @param {any} t @returns {{ pre: string | null, post: string | null } | null} */

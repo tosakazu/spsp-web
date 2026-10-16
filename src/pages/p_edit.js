@@ -13,6 +13,7 @@ import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
+import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -82,7 +83,12 @@ async function main() {
   const owned = new Set(bitsTitles(lang, ownedBits).map(t => t.id));
   /** 持っていて、その位置に使えるものの文字 @param {string} id @param {'pre' | 'post'} slot */
   const titleText = (id, slot) => { const t = owned.has(id) ? titleById(lang, id) : null; return t && usableIn(t, slot) ? t.text : ''; };
-  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st, titleText), { live: true });
+  const backEl = $('ce-card-back');
+  const draw = () => {
+    const model = buildCardModel(data, st, titleText);
+    SPSPPlayerCard.render(cardEl, model, { live: true });
+    SPSPPlayerCard.renderBack(backEl, model, { live: true });
+  };
   draw();
 
   const owner = ownerState(uid);
@@ -330,8 +336,27 @@ async function main() {
   });
   // リセットは見出しの行 (summary) の中にあるので、押しても欄が開閉しないようにする
   $('ce-reset').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); update({ ach: null }); });
-  // デフォルトに戻す: テンプレート・色・実績・大会を全部既定に (保存は「適用」で)
-  $('ce-default').addEventListener('click', () => update({ ...DEFAULT_SETTINGS }));
+  // 英字名: 正しい形なら (空 = 自動) カードに反映。正しくない間は前の値のまま、欄を赤くして理由を出す。
+  // 入力している間は上のプレビューを裏面にする (プレビューを押しても表と裏が入れ替わる)
+  const latinEl = /** @type {HTMLInputElement} */ ($('ce-latin'));
+  const latinNote = $('ce-latin-note');
+  const preview = $('ce-preview');
+  latinEl.placeholder = autoLatin(name);
+  const showLatin = () => { latinEl.value = st.latin || ''; latinEl.classList.remove('bad'); latinNote.classList.remove('bad'); latinNote.textContent = i18n('card_edit.latin_note'); };
+  showLatin();
+  latinEl.addEventListener('input', () => {
+    const v = latinEl.value;
+    const ok = v === '' || latinNameValid(v);
+    latinEl.classList.toggle('bad', !ok);
+    latinNote.classList.toggle('bad', !ok);
+    latinNote.textContent = ok ? i18n('card_edit.latin_note') : i18n('card_edit.latin_bad');
+    if (ok && (v || null) !== (st.latin || null)) update({ latin: v || null });
+  });
+  latinEl.addEventListener('focus', () => preview.classList.add('flipped'));
+  latinEl.addEventListener('blur', () => preview.classList.remove('flipped'));
+  preview.addEventListener('click', e => { if (!(/** @type {Element} */ (e.target)).closest('a')) preview.classList.toggle('flipped'); });
+  // デフォルトに戻す: テンプレート・色・実績・大会・英字名を全部既定に (保存は「適用」で)
+  $('ce-default').addEventListener('click', () => { update({ ...DEFAULT_SETTINGS }); showLatin(); });
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;

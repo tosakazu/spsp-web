@@ -30,7 +30,11 @@ export interface CardSettings {
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
   title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
+  latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)
 }
+
+/** 英字名: 半角の英数字・記号・空白だけ、1〜30 文字、前後の空白・続けての空白なし (フロントの latinNameValid と同じ) */
+export const LATIN_NAME = /^[\x20-\x7e]{1,30}$/;
 
 /** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
 // 各側: id / null =「なし」(空欄) / 'default' = 地域の既定 (スマブラSP / プレイヤー、フロントの region/config.js titleDefault)
@@ -43,12 +47,13 @@ const TITLE_ID = /^[a-z]{2}-\d{4}$/;
  *   template: CARD_TEMPLATES のどれか / color: CARD_COLORS のどれか
  *   ach: null (省略も null) か、文字列の配列 (0〜CARD_ACH_MAX 個、各 1〜CARD_ACH_KEY_MAX 文字、重複なし)
  *   tour: null (省略も null) か、大会の event_id (正の整数 1〜12 桁。数字の文字列も受けて整数にする)
+ *   latin: null (省略も null) か、英字名 (LATIN_NAME)
  * 知らない欄があれば弾く (黙って捨てると、フロントが増やした欄が保存されないことに気づけないため)。
  */
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title' && k !== 'latin') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -80,7 +85,12 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     // 両方とも既定なら設定なし (null)。「なし / なし」(両方 null) は空欄として残す
     title = pre === TITLE_DEFAULT && post === TITLE_DEFAULT ? null : { pre, post };
   }
-  return { template: o.template, color: o.color, ach, tour, title };
+  let latin: string | null = null;
+  if (o.latin !== undefined && o.latin !== null) {
+    if (typeof o.latin !== 'string' || !LATIN_NAME.test(o.latin) || o.latin.trim() !== o.latin || /\s{2,}/.test(o.latin)) return null;
+    latin = o.latin;
+  }
+  return { template: o.template, color: o.color, ach, tour, title, latin };
 }
 
 /** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */

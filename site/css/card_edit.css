@@ -7,6 +7,14 @@ main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
 /* プレビュー: スクロールしても見えるように上に固定 */
 .ce-preview { position: sticky; top: 0; z-index: 5; background: #fff; padding: 6px 0 10px; }
 .ce-preview .pcard { margin: 0; }
+.ce-preview .pcard-flip { cursor: pointer; }
+
+/* 英字名 */
+.ce-latin { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px; font: inherit; font-size: 15px; }
+.ce-latin:focus { outline: none; border-color: #111827; }
+.ce-latin.bad { border-color: #dc2626; }
+.ce-latin-note { margin-top: 6px; font-size: 12px; color: #6b7280; line-height: 1.5; }
+.ce-latin-note.bad { color: #dc2626; }
 
 .ce-sec { margin-top: 18px; }
 .ce-sec h2 { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #6b7280; margin: 0 0 8px; }

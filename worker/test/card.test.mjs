@@ -8,7 +8,7 @@ import { issueSessionToken } from '../src/api/session.ts';
 import { CARD_RATE_MIN_INTERVAL_MS, CARD_RATE_MAX_PER_DAY } from '../src/config.ts';
 
 const env = (o) => makeEnv(Object.assign({ token: OK_TOKEN, user: OK_USER }, o || {}));
-const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718, title: null };
+const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718, title: null, latin: null };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限切れは invalid_session で記録しない', async () => {
@@ -32,8 +32,8 @@ test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限
 
 test('validateCardSettings: 許す形と弾く形', () => {
   assert.deepStrictEqual(plain(validateCardSettings(GOOD)), GOOD);
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null, title: null });
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null, title: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null, title: null, latin: null });
   for (const c of ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray']) assert.ok(validateCardSettings({ template: 'standard', color: c, ach: null }));
   const bads = [
     null, 'x', [], {},
@@ -147,6 +147,17 @@ test('card_get: 保存済みの行が壊れていれば無いものとして返�
   assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '6' }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
+test('validateCardSettings: latin は英字名 (半角の英数字・記号・空白 1〜30 文字、前後・連続の空白なし) か null', () => {
+  const base = { template: 'standard', color: 'red' };
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'kaworu' }).latin, 'kaworu');
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'Mild na H.O' }).latin, 'Mild na H.O');
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'x'.repeat(30) }).latin, 'x'.repeat(30));
+  assert.strictEqual(validateCardSettings({ ...base, latin: null }).latin, null);
+  assert.strictEqual(validateCardSettings(base).latin, null);
+  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ', 'a\tb', 'a\nb', 1, true, ['a']])
+    assert.strictEqual(validateCardSettings({ ...base, latin: bad }), null, JSON.stringify(bad));
+});
+
 test('validateCardSettings: tour は event_id (正の整数 1〜12 桁) か null。数字の文字列は整数にする', () => {
   const base = { template: 'standard', color: 'red', ach: null };
   assert.strictEqual(validateCardSettings({ ...base, tour: 1648718 }).tour, 1648718);
@@ -163,7 +174,7 @@ test('card_put: tour を文字列で送っても整数で保存・返す', async
   const e = env();
   const token = await loginToken(e);
   const put = await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'red', tour: '1702406' } });
-  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406, title: null });
+  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406, title: null, latin: null });
   assert.strictEqual(JSON.parse(e.store.cards.get('4242').settings).tour, 1702406);
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings, put.settings);
 });
