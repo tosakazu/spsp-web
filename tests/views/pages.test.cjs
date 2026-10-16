@@ -11,6 +11,8 @@
 //   - sim の選手検索 (#psearch) の候補の並び: 従来は jsonl の行の順、views は総合順位順 (players_index.json の並び)
 //   - pref/ の一覧で人数が同じ都道府県どうしの並び: 従来は jsonl で最初に出てきた順、views は geo.json の順
 // これらは比べる操作から外す (KNOWN_DIFF)。
+//   - c/ranking の使用率の列: views の char/<id>.json の行にはビルドが使用実績 (characters) を入れるので「NN%」、
+//     従来の jsonl の行には無いので「–」。この列だけは比べる前に伏せ、views 側に「%」が出ることを別に見る (PCT_COL)
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -25,6 +27,8 @@ const SCENARIOS = '^(index|c_index|c_ranking_1323|local_ranking_higoburaSP|pref_
 // 外部フォント (Google Fonts) の読み込み失敗は描画の比較に関係しない (jsdom は外へ出ない。tests/frontend/snapshot_pages.cjs の既存の扱い)
 const NOISE = /fonts\.googleapis\.com/;
 const errLines = (p) => fs.readFileSync(p, 'utf8').split('\n').filter((l) => l && !NOISE.test(l));
+// 使用率の列 = c/ranking の行の最後のセル (snapshot は '><' ごとに改行する)
+const PCT_COL = /<td class="col-other-rank">\n?(?:[0-9]+%|–|<span[^>]*>[^<]*<\/span>)\n?<\/td>\n<\/tr>/g;
 const KNOWN_DIFF = {
   pref_index: /_sort_th1(_again)?\.html$/,                           // 人数で並べたときの同数の並び
 };
@@ -63,8 +67,13 @@ test('data/views/ 読みと従来の読み方で主なページの描画が同�
       assert.deepStrictEqual(files, fs.readdirSync(legacy + '/' + sc).filter((f) => f.endsWith('.html')).sort(), `${sc}: 操作の数`);
       for (const f of files) {
         if (KNOWN_DIFF[sc] && KNOWN_DIFF[sc].test(f)) continue;
-        const a = fs.readFileSync(path.join(legacy, sc, f), 'utf8');
-        const b = fs.readFileSync(path.join(views, sc, f), 'utf8');
+        let a = fs.readFileSync(path.join(legacy, sc, f), 'utf8');
+        let b = fs.readFileSync(path.join(views, sc, f), 'utf8');
+        if (sc === 'c_ranking_1323') {
+          if (f === '00_load.html') assert.match(b, /<td class="col-other-rank">\n?[0-9]+%\n?<\/td>\n<\/tr>/, 'views 側の使用率の列に % が出る');
+          a = a.replace(PCT_COL, '<td class="col-other-rank">(pct)</td>\n</tr>');
+          b = b.replace(PCT_COL, '<td class="col-other-rank">(pct)</td>\n</tr>');
+        }
         if (a !== b) {
           const la = a.split('\n'), lb = b.split('\n');
           let i = 0; while (i < la.length && la[i] === lb[i]) i++;

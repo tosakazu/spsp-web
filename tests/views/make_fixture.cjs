@@ -101,6 +101,8 @@ for (const me of [1787719, 1983750]) {
   }
 }
 const tiny = (p) => ({ user_id: p.user_id, display: p.display, scores: p.scores, metadata: p.metadata, characters: p.characters });
+// キャラ 1323 の使い手は players/<uid>.json の characters から views の char/ の行に使用実績が入る (使用率の列)
+for (const uid of (charIdx.main_by_char['1323'] || []).filter(keep)) neighbors.push(uid);
 for (const uid of new Set(neighbors)) if (![1787719, 1983750, ...top2].includes(uid)) wj(`players/${uid}.json`, tiny(rj(`players/${uid}.json`)));
 for (const uid of new Set([1787719, 1983750, ...top2])) {
   wj(`players/${uid}.json`, short(rj(`players/${uid}.json`)));

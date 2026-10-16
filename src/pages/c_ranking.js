@@ -60,8 +60,8 @@ function buildData() {
 
 // キャラ投票 (本人申告) で決まったメインは pct を持たない (= 使用実績が無い).
 // docs/post_feature_design.md §12 / v3/v4/char_vote.py.
-// TODO(build): ランキング表の行 (latest_tjpr_full.jsonl / data/views/char/<id>.json) には characters が入っていないので、
-//   この列は今は常に「–」。使用率を出すにはビルドが行に characters[0].pct (メインキャラの使用率) を足す必要がある。
+// 使用率は行の characters[0] (このキャラの使用実績)。data/views/char/<id>.json の行にはビルドが入れる (投票由来のメインには無い)。
+// 従来の読み方 (latest_tjpr_full.jsonl) の行には characters が無いので、views が無いデータではこの列は「–」のまま。
 /** @param {SpspRankRecord & { characters?: SpspCharacterUse[] }} rec @returns {number | null} */
 const _mainPct = (rec) => {
   const c = (rec.characters || [])[0];
@@ -150,7 +150,7 @@ async function init() {
     const t0 = performance.now();
     const [idxRes, master, emojiRes] = await Promise.all([
       fetch(SPSP.data + 'data/character_index.json'),
-      // data/views/ があれば このキャラの使い手の行 (char/<id>.json) だけ。無ければ全選手 (latest_tjpr_full.jsonl)
+      // data/views/ があれば このキャラの使い手の行 (char/<id>.json。使用率の characters 入り) だけ。無ければ全選手 (latest_tjpr_full.jsonl)
       RP.loadMaster(SPSP.data, { overseas: true, views: (V) => V.charRows(STATE.charId) }),
       fetch(SPSPCharEmoji.url()).catch(() => null),
     ]);
