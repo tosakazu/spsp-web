@@ -21,8 +21,8 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- カードの裏面に実績バッジを貼る (試作。あとでカード編集に入れる)。中身は src/pages/p_badges.js
-     貼ったものはこのブラウザにだけ残す (サーバには送らない) -->
+<!-- カードの裏面に実績バッジを付ける (試作。あとでカード編集に入れる)。中身は src/pages/p_badges.js
+     付けたものはこのブラウザにだけ残す (サーバには送らない) -->
 <main class="bz">
   <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
   <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
@@ -34,7 +34,7 @@
     </a>
     <h1 class="bz-title">裏面のバッジ <span class="bz-tag">試作</span></h1>
 
-    <!-- 裏面の上に貼る層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
+    <!-- 裏面の上に付ける層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
     <div class="bz-top">
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
@@ -44,7 +44,7 @@
 
       <!-- 選んでいるバッジの操作 (選んでいないときは使い方) -->
       <div class="bz-tools" id="bz-tools">
-        <div class="bz-hint" id="bz-hint">下の一覧から押すとカードに貼れます。貼ったバッジは、ドラッグで移動、角の ↻ で回転と大きさ (2 本指でも可)。</div>
+        <div class="bz-hint" id="bz-hint">下の一覧から押すとカードに付けられます。付けたバッジは、ドラッグで移動、角の ↻ で回転と大きさ (2 本指でも可)。</div>
         <div class="bz-sel" id="bz-sel" style="display:none">
           <div class="bz-sel-name" id="bz-sel-name"></div>
           <label class="bz-range"><span>大きさ</span><input type="range" id="bz-size" min="0" max="1000" step="1"><output id="bz-size-v"></output></label>
@@ -68,7 +68,7 @@
         <button type="button" data-f="all" class="on">全部</button>
         <button type="button" data-f="win">優勝</button>
         <button type="button" data-f="top3">3 位以内</button>
-        <button type="button" data-f="placed">貼ったもの</button>
+        <button type="button" data-f="placed">付けたもの</button>
       </div>
       <div class="bz-tray" id="bz-tray"></div>
       <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>

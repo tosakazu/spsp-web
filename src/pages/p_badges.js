@@ -1,8 +1,8 @@
 // @ts-check
-// src/pages/p_badges.js — site/p/badges.html (カードの裏面に実績バッジを貼る。試作、あとでカード編集に入れる)
+// src/pages/p_badges.js — site/p/badges.html (カードの裏面に実績バッジを付ける。試作、あとでカード編集に入れる)
 //   持っているバッジ = 出場した大会のうちアイコンのあるもの (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)
 //   色は仮: 優勝 = 虹、2・3 位 = 金、ほか = 銀 (js/holo_badge.js の variant)。下位クラスはクラスの文字を重ねる
-//   貼ったバッジ: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
+//   付けたバッジ: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
 //   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: event_id, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度) }
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
@@ -111,7 +111,7 @@ async function main() {
   let sel = null;
   const save = () => saveStickers(uid, stickers);
 
-  // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
+  // ── 付ける層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
   //    (層ごと transform で縮めると、ブラウザによってはバッジが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
   const layer = $('bz-layer');   // バッジ (カードの外は切る)
@@ -229,7 +229,7 @@ async function main() {
   const remove = (/** @type {number} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
   $('bz-clear').addEventListener('click', () => {
-    if (!stickers.length || !confirm('貼ったバッジを全部外しますか?')) return;
+    if (!stickers.length || !confirm('付けたバッジを全部外しますか?')) return;
     stickers = []; sel = null; changed(); paintTray();
   });
 
@@ -324,13 +324,13 @@ async function main() {
       : filter === 'top3' ? b.place != null && b.place <= 3 : on.has(b.e));
     tray.innerHTML = '';
     if (!list.length) {
-      tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
+      tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ付けていません' : 'ありません'}</div>`;
     }
     for (const b of list.slice(0, shown)) {
       const it = document.createElement('button');
       it.type = 'button';
       it.className = 'bz-item' + (on.has(b.e) ? ' on' : '');
-      it.innerHTML = `<span class="bz-thumb bz-v${b.variant}"><img loading="lazy" alt=""><span class="bz-chip">${HOLO_NAMES[b.variant]}</span>${on.has(b.e) ? '<span class="bz-on">貼付中</span>' : ''}</span>
+      it.innerHTML = `<span class="bz-thumb bz-v${b.variant}"><img loading="lazy" alt=""><span class="bz-chip">${HOLO_NAMES[b.variant]}</span>${on.has(b.e) ? '<span class="bz-on">付けている</span>' : ''}</span>
         <span class="bz-iname"></span><span class="bz-imeta"></span>`;
       /** @type {HTMLImageElement} */ (it.querySelector('img')).src = IMG_BASE + b.file;
       /** @type {HTMLElement} */ (it.querySelector('.bz-iname')).textContent = b.name;
@@ -340,10 +340,10 @@ async function main() {
     }
     $('bz-more').style.display = list.length > shown ? '' : 'none';
   }
-  /** 一覧から押した: まだなら貼る (真ん中あたり、少しずつずらす)、貼ってあれば選ぶ @param {Badge} b */
+  /** 一覧から押した: まだなら付ける (真ん中あたり、少しずつずらす)、付けてあれば選ぶ @param {Badge} b */
   function addOrSelect(b) {
     if (!stickers.some(s => s.e === b.e)) {
-      if (stickers.length >= MAX_STICKERS) { alert(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+      if (stickers.length >= MAX_STICKERS) { alert(`付けられるのは ${MAX_STICKERS} 枚までです`); return; }
       const n = stickers.length;
       stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0 });
       save();
