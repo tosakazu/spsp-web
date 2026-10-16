@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPUrlKey from '../../site/js/url_key.js';
 import '../../site/js/data.js';
+import '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import SPSPTags from '../../site/js/tags.js';
@@ -261,17 +262,28 @@ async function init() {
   }
   try {
     const t0 = performance.now();
-    const [seriesRes, master] = await Promise.all([
-      fetch(SPSP.data + 'data/series.json'),
-      RP.loadMaster(SPSP.data, { overseas: true, charIdx: true }),
+    const seriesP = fetch(SPSP.data + 'data/series.json').then(r => {
+      if (!r.ok) throw new Error(i18n('common.fetch_failed', { file: 'series.json' }));
+      return r.json();
+    });
+    /** @param {any} seriesJson @returns {SpspSeriesSummary | null} */
+    const findSeries = (seriesJson) => {
+      const seriesList = /** @type {SpspSeriesSummary[]} */ (seriesJson.series || []);
+      return seriesList.find(s => SPSPLinks.seriesKey(s.name) === seriesKey) || seriesList.find(s => s.name === seriesKey) || null;
+    };
+    const [seriesJson, master] = await Promise.all([
+      seriesP,
+      // data/views/ があれば このシリーズの参加者の行だけ (players_index.json の位置 → ranking/ensemble/ の要る分。js/views.js)。
+      // 無ければ全選手 (latest_tjpr_full.jsonl)
+      RP.loadMaster(SPSP.data, { overseas: true, charIdx: true, views: async (V) => {
+        const s = findSeries(await seriesP);
+        return s ? V.rowsByUids(/** @type {Participant[]} */ (s.participants || []).map(p => p.uid), { plain: true }) : [];
+      } }),
     ]);
-    if (!seriesRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'series.json' }));
     STATE.overseasUids = master.overseasUids;
     STATE.charIdx = master.charIdx;
-    const seriesJson = await seriesRes.json();
     STATE.masterMeta = /** @type {SpspRankMeta} */ (master.meta);
-    const seriesList = /** @type {SpspSeriesSummary[]} */ (seriesJson.series || []);
-    STATE.series = seriesList.find(s => SPSPLinks.seriesKey(s.name) === seriesKey) || seriesList.find(s => s.name === seriesKey) || null;
+    STATE.series = findSeries(seriesJson);
     if (STATE.series) {
       seriesName = STATE.series.name;
       SPSPUrlKey.canonicalizeParam('series', SPSPLinks.seriesKey(seriesName));

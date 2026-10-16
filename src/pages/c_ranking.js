@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import '../../site/js/links.js';
 import '../../site/js/data.js';
+import '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import '../../site/js/tags.js';
@@ -59,6 +60,8 @@ function buildData() {
 
 // キャラ投票 (本人申告) で決まったメインは pct を持たない (= 使用実績が無い).
 // docs/post_feature_design.md §12 / v3/v4/char_vote.py.
+// TODO(build): ランキング表の行 (latest_tjpr_full.jsonl / data/views/char/<id>.json) には characters が入っていないので、
+//   この列は今は常に「–」。使用率を出すにはビルドが行に characters[0].pct (メインキャラの使用率) を足す必要がある。
 /** @param {SpspRankRecord & { characters?: SpspCharacterUse[] }} rec @returns {number | null} */
 const _mainPct = (rec) => {
   const c = (rec.characters || [])[0];
@@ -147,7 +150,8 @@ async function init() {
     const t0 = performance.now();
     const [idxRes, master, emojiRes] = await Promise.all([
       fetch(SPSP.data + 'data/character_index.json'),
-      RP.loadMaster(SPSP.data, { overseas: true }),
+      // data/views/ があれば このキャラの使い手の行 (char/<id>.json) だけ。無ければ全選手 (latest_tjpr_full.jsonl)
+      RP.loadMaster(SPSP.data, { overseas: true, views: (V) => V.charRows(STATE.charId) }),
       fetch(SPSPCharEmoji.url()).catch(() => null),
     ]);
     if (!idxRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'character_index.json' }));
