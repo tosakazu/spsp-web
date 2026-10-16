@@ -185,8 +185,10 @@ function drawLetter(ctx, W, letter, shape) {
 /** 重ねた見た目をキャンバスに 1 枚に描いて、上に置く (下の重ねた要素は隠す)
  * @param {HTMLElement} el @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string }} o */
 async function flattenBadge(el, o) {
-  const css = el.getBoundingClientRect().width || 160;
-  const W = Math.max(64, Math.min(740, Math.round(css * (window.devicePixelRatio || 1))));
+  // 幅は回転・傾きを含まない大きさ (offsetWidth)。祖先を transform で縮めている所では getBoundingClientRect の方が実際の大きさ
+  const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width) || 160;
+  const W = flatWidth(css);
+  flatSize.set(el, W);
   const [icon, ...imgs] = await Promise.all([loadImage(o.src, true).catch(() => loadImage(o.src)), ...o.layers.map(([n]) => layerImage(n, o.impl))]);
   if (o.letter && document.fonts) {
     try { await document.fonts.load(`italic 800 ${W / 3}px "Zalando Sans Expanded"`, o.letter); } catch (e) { /* 別の字体で描く */ }
@@ -219,6 +221,22 @@ async function flattenBadge(el, o) {
   const inner = el.querySelector('.hb-in');
   if (inner) inner.after(cv); else el.prepend(cv);
   el.classList.add('hb-flattened');
+}
+
+/** キャンバスの一辺 (画面の大きさ × 画素の密度、64〜740) @param {number} css */
+const flatWidth = css => Math.max(64, Math.min(740, Math.round(css * (window.devicePixelRatio || 1))));
+/** 描いた (描いている) キャンバスの一辺 */
+/** @type {WeakMap<HTMLElement, number>} */
+const flatSize = new WeakMap();
+/** キャンバスに差し替えたバッジを、今の表示の大きさで描き直す (大きくしたときに粗くならないように。小さくしたときと、
+ * キャンバスにしていないバッジは何もしない)。描き直したら true @param {HTMLElement} el */
+export function reflatten(el) {
+  const o = flatOpts.get(el);
+  if (!o || !el.isConnected) return false;
+  const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width);
+  if (!css || flatWidth(css) <= (flatSize.get(el) || 0) * 1.1) return false;
+  flattenBadge(el, o).catch(() => { /* 前の絵のまま */ });
+  return true;
 }
 
 /** キャンバスに差し替えたときの描き方 (描き直す用) */
@@ -268,7 +286,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

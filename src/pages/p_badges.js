@@ -10,7 +10,7 @@ import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { loadCardData, buildCardModel, fetchAppliedCard } from '../../site/js/player_card_model.js';
-import { isTransparent, renderBadge } from '../../site/js/holo_badge.js';
+import { isTransparent, renderBadge, reflatten } from '../../site/js/holo_badge.js';
 
 SPSPI18n.apply(document);
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -111,19 +111,19 @@ async function main() {
   let sel = null;
   const save = () => saveStickers(uid, stickers);
 
-  // ── 貼る層: カードの座標 (514×333) のまま、表示幅に合わせて縮める ──
+  // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
+  //    (層ごと transform で縮めると、ブラウザによってはバッジが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
   const layer = $('bz-layer');   // バッジ (カードの外は切る)
   const over = $('bz-over');     // 選んでいるバッジの枠とつまみ (カードの外にはみ出してよい)
   const frame = $('bz-frame');
-  let scale = 1;
+  let scale = 0;   // 画面の px / カードの px
   const fitLayer = () => {
-    scale = stage.clientWidth / W || 1;
-    for (const x of [layer, over]) x.style.transform = `scale(${scale})`;
-    over.style.setProperty('--bz-k', String(1 / scale));   // つまみ・枠を画面上で同じ大きさに
+    const k = stage.clientWidth / W || 1;
+    if (k === scale) return;
+    scale = k;
+    place();
   };
-  fitLayer();
-  if (typeof ResizeObserver === 'function') new ResizeObserver(fitLayer).observe(stage);
 
   /** 画面の座標 → カードの座標 @param {number} cx @param {number} cy */
   const toCard = (cx, cy) => {
@@ -134,6 +134,19 @@ async function main() {
   const cur = () => stickers.find(s => s.e === sel) || null;
   /** @type {Map<number, HTMLElement>} */
   const els = new Map();
+  // 強制ダークモード対策でキャンバスに描いたバッジ (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、
+  // 大きくしたら手が止まってから今の大きさで描き直す (そのままだと引き伸ばされて粗くなる)
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let reflatTimer = null;
+  const scheduleReflatten = () => {
+    if (reflatTimer) clearTimeout(reflatTimer);
+    reflatTimer = setTimeout(() => {
+      for (const el of els.values()) {
+        const hb = /** @type {HTMLElement | null} */ (el.querySelector('.hb'));
+        if (hb) reflatten(hb);
+      }
+    }, 250);
+  };
   /** 1 枚の要素を作る (中身のホロは透過かどうか分かってから) @param {Sticker} s */
   function makeEl(s) {
     const b = /** @type {Badge} */ (byE.get(s.e));
@@ -156,9 +169,9 @@ async function main() {
     stickers.forEach((s, i) => {
       let el = els.get(s.e);
       if (!el) { el = makeEl(s); els.set(s.e, el); }
-      el.style.left = s.x + 'px';
-      el.style.top = s.y + 'px';
-      el.style.width = el.style.height = s.s + 'px';
+      el.style.left = s.x * scale + 'px';
+      el.style.top = s.y * scale + 'px';
+      el.style.width = el.style.height = s.s * scale + 'px';
       el.style.transform = `translate(-50%, -50%) rotate(${s.r}deg)`;
       el.style.zIndex = String(i + 1);
       el.classList.toggle('on', s.e === sel);
@@ -168,13 +181,14 @@ async function main() {
     const s = cur();
     frame.style.display = s ? '' : 'none';
     if (s) {
-      frame.style.left = s.x + 'px';
-      frame.style.top = s.y + 'px';
-      frame.style.width = frame.style.height = s.s + 'px';
+      frame.style.left = s.x * scale + 'px';
+      frame.style.top = s.y * scale + 'px';
+      frame.style.width = frame.style.height = s.s * scale + 'px';
       frame.style.transform = `translate(-50%, -50%) rotate(${s.r}deg)`;
     }
     stage.classList.toggle('bz-has-sel', !!s);
     paintTools();
+    scheduleReflatten();
   }
 
   // ── 操作の欄 ──
@@ -215,7 +229,7 @@ async function main() {
   const remove = (/** @type {number} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
   $('bz-clear').addEventListener('click', () => {
-    if (!stickers.length || !confirm('貼ったバッジを全部はがしますか?')) return;
+    if (!stickers.length || !confirm('貼ったバッジを全部外しますか?')) return;
     stickers = []; sel = null; changed(); paintTray();
   });
 
@@ -340,6 +354,8 @@ async function main() {
     if (stage.scrollIntoView) stage.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
+  fitLayer();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fitLayer).observe(stage);
   place();
   paintTray();
 }
