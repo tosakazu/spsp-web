@@ -88,9 +88,33 @@ export type Eligibility =
 const MSG_PLAYER_FETCH = '選手データの取得に失敗しました。時間をおいてやり直してください。';
 
 /**
+ * 参加の少ない選手の players/<uid>.json はビルドが data/views/bundle/<uid % bundle_shards>.json にまとめ、個別のファイルは
+ * 更新しない (古いか無い。site/js/views.js bundledPlayer と同じ)。まとめてあればその中身 (players/ と同じ形) を、
+ * まとめていない・views が無い・読めないときは null (呼び出し側が個別のファイルを読む)。
+ */
+export async function bundledPlayer(dataFetch: DataFetch, uid: string): Promise<{ characters?: unknown } | null> {
+  try {
+    const mr = await dataFetch('/data/views/manifest.json');
+    if (mr.status !== 200) return null;
+    const m = await mr.json() as { format?: unknown; bundle_shards?: unknown } | null;
+    const n = Number(m && m.bundle_shards);
+    if (!m || m.format !== 1 || !(n > 0) || !/^\d+$/.test(uid)) return null;
+    const br = await dataFetch('/data/views/bundle/' + (Number(uid) % n) + '.json');
+    if (br.status !== 200) return null;
+    const b = await br.json() as { players?: Record<string, { p?: { characters?: unknown } | null }> } | null;
+    const e = b && b.players && b.players[uid];
+    return (e && e.p) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
  * 投票資格を判定する。candidates が配列なら「ダブルメイン圏」= その中からのみ投票できる。
  */
 export async function checkVoteEligibility(dataFetch: DataFetch, uid: string): Promise<Eligibility> {
+  const bundled = await bundledPlayer(dataFetch, uid);
+  if (bundled) return eligibilityOf(bundled);
   let res: Response;
   try {
     res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
@@ -112,6 +136,10 @@ export async function checkVoteEligibility(dataFetch: DataFetch, uid: string): P
   } catch (_) {
     return { ok: false, code: 'internal', message: MSG_PLAYER_FETCH };
   }
+  return eligibilityOf(rec);
+}
+
+function eligibilityOf(rec: { characters?: unknown } | null): Eligibility {
   const candidates = voteCandidates(rec && rec.characters);
   if (candidates && candidates.length === 0) {
     return { ok: false, code: 'char_exists',

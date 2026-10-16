@@ -22,10 +22,16 @@
 //                                  (既定は js/links.js の SPSPLinks.discOf。表は links.js が読む)
 //   .charRows(id) / .prefRows(order) → Promise<rec[]>       char/<id>.json / pref/<order>.json (無ければ [])
 //   .prefSummary() / .simPop()  → Promise<json | null>
+//   .bundledPlayer(uid)         → Promise<{p, h} | null>   参加の少ない選手は players/<uid>.json と history/<uid>.json の中身が
+//                                  bundle/<uid % manifest.bundle_shards>.json にまとめてあり、個別のファイルは更新されない (古いか無い)。
+//                                  まとめてある選手なら {p: players/ の中身, h: history/ の中身 | null}、そうでなければ null (個別のファイルを読む)。
+//                                  bundle_shards が 0 / 無い (まとめていないビルド) なら常に null。players_index.json を読み込み済みなら
+//                                  列 b (1 = まとめてある) で分割を取るかを決め、未読み込みなら分割を取って中に居るかで決める
 //   SPSPViews.dayToDate(days)   → 'YYYY-MM-DD' (players_index の last = 1970-01-01 からの日数)
 //
 // Index: { n, columns, rows, col: {uid: 0, …}, get(uid) → IndexRow | null, pos(uid) → 位置 | -1, at(i) → IndexRow, list() → IndexRow[] }
-//   IndexRow = { uid, name, ens, tjpr, bt, lv, prov, ovs, char, pref, last } (prov / ovs は 0/1、pref = geo.json の単位の order)
+//   IndexRow = { uid, name, ens, tjpr, bt, lv, prov, ovs, char, pref, last, b } (prov / ovs / b は 0/1、pref = geo.json の単位の order。
+//              b はまとめ (bundle/) が入ったビルドから)
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
 
 var FORMAT = 1;
@@ -213,6 +219,20 @@ function makeInst(prefix) {
     prefRows: function (order) { return manifest().then(function (m) { return (m && order != null) ? getJson('pref/' + order + '.json', []) : []; }); },
     prefSummary: function () { return manifest().then(function (m) { return m ? getJson('pref_summary.json', null) : null; }); },
     simPop: function () { return manifest().then(function (m) { return m ? getJson('sim_pop.json', null) : null; }); },
+    bundledPlayer: function (uid) {
+      return manifest().then(function (m) {
+        var n = m && m.bundle_shards;
+        if (!(n > 0)) return null;
+        if (indexVal && 'b' in indexVal.col) {
+          var r = indexVal.get(uid);
+          if (!r || !r.b) return null;   // まとめていない (または SPSP に居ない) 人は個別のファイル
+        }
+        return getJson('bundle/' + (Number(uid) % n) + '.json', null).then(function (f) {
+          var e = f && f.players && f.players[String(uid)];
+          return e ? { p: e.p, h: e.h == null ? null : e.h } : null;
+        });
+      });
+    },
   };
 }
 
@@ -231,6 +251,7 @@ var api = {
   prefRows: function (order) { return at().prefRows(order); },
   prefSummary: function () { return at().prefSummary(); },
   simPop: function () { return at().simPop(); },
+  bundledPlayer: function (uid) { return at().bundledPlayer(uid); },
 };
 global.SPSPViews = api;
 (global.SPSP = global.SPSP || {}).Views = api;   // window.SPSP.Views (名前空間。旧名 SPSPViews も置く)

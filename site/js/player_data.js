@@ -266,13 +266,23 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // 404 = DB 未登録 (null で返す)。それ以外の失敗 (5xx / 通信) は throw (呼び出し側が再試行できるように区別する)
     // players/ と history/ は 1 日キャッシュで配信している (出場したときしか変わらない前提)。ビルドの中身を変えたときに
     // 古い版がブラウザに最大 1 日残らないよう、毎回サーバに「変わったか」だけ確かめる (変わっていなければ 304 で中身は来ない)
-    var stableP = fetch(prefix + 'players/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) {
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error('players/' + uid + '.json HTTP ' + r.status);
-      return r.json();
+    // 参加の少ない選手は data/views/bundle/ にまとめてあり、個別の players/ と history/ は更新されない (js/views.js bundledPlayer)。
+    // まとめてあればそちらを、無ければ (views が無い・まとめていない選手) 個別のファイルを読む
+    var V = SPSPViews && SPSPViews.at(prefix);
+    var bundleP = V ? V.bundledPlayer(uid).catch(function () { return null; }) : Promise.resolve(null);
+    var stableP = bundleP.then(function (b) {
+      if (b) return b.p || null;
+      return fetch(prefix + 'players/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) {
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error('players/' + uid + '.json HTTP ' + r.status);
+        return r.json();
+      });
     });
     var histP = opts.history === false ? Promise.resolve([])
-      : fetch(prefix + 'history/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+      : bundleP.then(function (b) {
+        if (b) return b.h || [];
+        return fetch(prefix + 'history/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+      });
     var curP = opts.current === false ? Promise.resolve(EMPTY_CURRENT) : loadCurrentFor(prefix, uid);
     return Promise.all([stableP, histP, curP]).then(function (res) {
       var stable = res[0], hist = res[1], cur = res[2];
