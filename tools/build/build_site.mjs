@@ -160,7 +160,7 @@ for (const f of fs.readdirSync(path.join(SITE, 'regions', REGION))) {
   if (writeIfChanged(path.join(OUT, 'region', f), body)) nStatic++;
 }
 // data/ の手で管理する入力 (git 追跡分) だけ写す。生成物は触らない
-for (const f of ['char_emoji.json', 'overseas_manual.json']) {
+for (const f of ['char_emoji.json', 'overseas_manual.json', 'name_readings.json']) {
   const src = path.join(SITE, 'data', f);
   if (fs.existsSync(src) && writeIfChanged(path.join(OUT, 'data', f), fs.readFileSync(src))) nStatic++;
 }

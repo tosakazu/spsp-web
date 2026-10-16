@@ -57,3 +57,13 @@ test('登録した英字名があればそれ。英字名の形 (サーバと同
   for (const ok of ['kaworu', 'Mild na H.O', 'x'.repeat(30)]) assert.ok(L.latinNameValid(ok), ok);
   for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(31), 'カヲル', 'ａｂ']) assert.ok(!L.latinNameValid(bad), bad);
 });
+
+test('読みの表 (名前 → 漢字をひらがなにした名前) があればそれをローマ字に。表に無い漢字は飛ばす', () => {
+  const R = { 黒船: 'くろふね', 'ドラ右': 'ドラみぎ', 'ふららら麺': 'ふらららめん' };
+  assert.strictEqual(L.autoLatin('黒船', R), 'kurofune');
+  assert.strictEqual(L.autoLatin('ドラ右', R), 'doramigi');
+  assert.strictEqual(L.autoLatin('ふららら麺', R), 'furararamen');
+  assert.strictEqual(L.autoLatin('水無灯里', R), '水無灯里');
+  assert.strictEqual(L.cardLatinName('黒船', 'Kurofune', R), 'Kurofune');   // 登録した英字名が先
+  assert.ok(L.hasKanji('黒船') && L.hasKanji('〆') && !L.hasKanji('カヲル'));
+});

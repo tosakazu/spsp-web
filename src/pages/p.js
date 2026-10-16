@@ -18,6 +18,7 @@ import { charName } from '../../site/js/chars.js';
 import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
+import SpspLatinName from '../../site/js/latin_name.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
@@ -401,6 +402,8 @@ let CHAR_IDX = null;       // character_index.json (loadData で fetch)
 /** カードの設定 (本人が編集ページで適用したもの)。選手データと並行して読み始め、カードはこれを待ってから 1 回だけ描く
  * (既定のカードを先に出すと、設定のあるカードに描き直すときに一瞬ちらつくため) @type {Promise<any> | null} */
 let CARD_SETTINGS = null;
+/** @type {Record<string, string> | null} */
+let NAME_READINGS = null;   // 漢字の名前の読み (data/name_readings.json、カード裏面の英字名。漢字の名前のときだけ読む)
 /** @type {Record<string, CharEmoji> | null} */
 let CHAR_EMOJI = null;     // data/char_emoji.json { char_id: {name, emoji} } (loadData で fetch)
 /** @type {Record<string, string> | null} */
@@ -617,7 +620,7 @@ function setupSubrankDetail() {
 /** @returns {import('../../site/js/player_card_model.js').CardData} */
 function cardData() {
   return { uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
-           overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI };
+           overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI, readings: NAME_READINGS };
 }
 
 function render() {
@@ -673,14 +676,21 @@ function render() {
     let drawn = false;
     // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
     const back = document.getElementById('pcard-back');
+    /** @type {any} */
+    let last = null;
     const draw = (/** @type {any} */ x) => {
       drawn = true;
+      last = x;
       const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
       SPSPPlayerCard.render(card, model);
       if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
     };
     const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
     settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
+    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す
+    if (SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display))) {
+      SpspLatinName.loadReadings().then(r => { NAME_READINGS = r; if (r && drawn) draw(last); });
+    }
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));

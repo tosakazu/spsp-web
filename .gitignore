@@ -15,6 +15,7 @@ site/sitemap.xml
 site/data/*
 !site/data/char_emoji.json
 !site/data/overseas_manual.json
+!site/data/name_readings.json
 site/seed_map.json
 site/demo/
 

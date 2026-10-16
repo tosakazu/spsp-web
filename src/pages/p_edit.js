@@ -341,7 +341,7 @@ async function main() {
   const latinEl = /** @type {HTMLInputElement} */ ($('ce-latin'));
   const latinNote = $('ce-latin-note');
   const preview = $('ce-preview');
-  latinEl.placeholder = autoLatin(name);
+  latinEl.placeholder = autoLatin(name, data.readings);
   const showLatin = () => { latinEl.value = st.latin || ''; latinEl.classList.remove('bad'); latinNote.classList.remove('bad'); latinNote.textContent = i18n('card_edit.latin_note'); };
   showLatin();
   latinEl.addEventListener('input', () => {

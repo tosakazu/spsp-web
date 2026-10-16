@@ -4,7 +4,9 @@
 //                              英数字だけ → そのまま / かな・カナ → ローマ字 (ヘボン式、小文字) / 漢字 → 漢字は飛ばして、まわりのかなだけローマ字
 //                              (「ふららら麺」→「furarara」)。漢字だけの名前 (「黒船」) は空になるので、元の名前のまま
 //                              「日本語/英字」(「たいけい/Taikei」「マイルドなH.O/Mild na H.O」) → 英字の側だけ
-//   cardLatinName(name, own) 本人がカード編集で登録した英字名 (own) があればそれ、無ければ autoLatin
+//                            漢字の読みが明らかな名前は読みの表 (data/name_readings.json: 名前 → 漢字をひらがなにした名前) を使う (readings に渡す)
+//   cardLatinName(name, own, readings) 本人がカード編集で登録した英字名 (own) があればそれ、無ければ autoLatin
+//   hasKanji(name) / loadReadings()  読みの表が要るか / 読みの表を読む (1 回だけ。読めなければ null)
 // 伸ばす音「ー」は書かない (「スノー」→「suno」、パスポートと同じ)。読みの分からない漢字や、本人の綴りと違うときは、カード編集で英字名を登録してもらう
 
 /** 2 文字の組 (拗音・外来語の音) */
@@ -67,10 +69,30 @@ function kanaToRoman(s) {
 /** @param {string} s */
 const tidy = s => s.replace(/\s+/g, ' ').trim();
 
-/** 名前から英字の名前を自動で作る (上の説明) @param {string} name */
-export function autoLatin(name) {
-  // 全角の英数字・記号・空白と半角カナだけ普通の幅にする (ほかの記号「º」などは NFKC で変わってしまうので触らない)
-  const s = tidy(String(name || '').replace(/[\u3000\uff01-\uff9f]+/g, c => c.normalize('NFKC')));
+/** 漢字 (「々」「〆」も) */
+const KANJI = /[\u3400-\u9fff\uf900-\ufaff々〆]/;
+/** 漢字を含むか (読みの表が要るか) @param {string} name */
+export const hasKanji = name => KANJI.test(String(name || ''));
+
+/** @type {Promise<Record<string, string> | null> | null} */
+let READINGS = null;
+/** 読みの表 (data/name_readings.json) を読む。1 回だけ。読めなければ null */
+export function loadReadings() {
+  if (!READINGS) {
+    const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
+    READINGS = typeof fetch !== 'function' ? Promise.resolve(null)
+      : fetch((S.root || '') + 'data/name_readings.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+  }
+  return READINGS;
+}
+
+/** 全角の英数字・記号・空白と半角カナだけ普通の幅にする (ほかの記号「º」などは NFKC で変わってしまうので触らない)。読みの表のキーもこの形
+ * @param {string} name */
+export const normName = name => tidy(String(name || '').replace(/[\u3000\uff01-\uff9f]+/g, c => c.normalize('NFKC')));
+
+/** 名前から英字の名前を自動で作る (上の説明) @param {string} name @param {Record<string, string> | null} [readings] 読みの表 */
+export function autoLatin(name, readings) {
+  const s = normName(name);
   if (!JA.test(s)) return s;
   // 「日本語/英字」: 日本語を含まない側だけ (両側とも日本語なら全体をローマ字に)
   const parts = s.split('/').map(tidy).filter(Boolean);
@@ -78,21 +100,25 @@ export function autoLatin(name) {
     const latin = parts.filter(p => !JA.test(p));
     if (latin.length && latin.length < parts.length) return latin.join('/');
   }
+  // 漢字の読みが表にあれば、漢字をひらがなにした名前からローマ字にする
+  const r = readings && Object.prototype.hasOwnProperty.call(readings, s) ? readings[s] : null;
+  const src = typeof r === 'string' && r ? normName(r) : s;
   // ローマ字にできなかった日本語の文字 (漢字など) は飛ばす。何も残らなければ元の名前
-  const out = tidy(kanaToRoman(s).replace(new RegExp(JA.source, 'g'), ' ')).replace(/([([]) /g, '$1').replace(/ ([)\]])/g, '$1');
+  const out = tidy(kanaToRoman(src).replace(new RegExp(JA.source, 'g'), ' ')).replace(/([([]) /g, '$1').replace(/ ([)\]])/g, '$1');
   return out || s;
 }
 
-/** 本人が登録した英字名があればそれ、無ければ自動 @param {string} name @param {string | null | undefined} [own] */
-export function cardLatinName(name, own) {
+/** 本人が登録した英字名があればそれ、無ければ自動
+ * @param {string} name @param {string | null | undefined} [own] @param {Record<string, string> | null} [readings] */
+export function cardLatinName(name, own, readings) {
   const o = tidy(String(own || ''));
-  return o || autoLatin(name);
+  return o || autoLatin(name, readings);
 }
 
 /** カード編集で登録できる英字名か (サーバの worker/src/api/card.ts と同じ: 半角の英数字・記号・空白、1〜30 文字) @param {string} s */
 export const latinNameValid = s => /^[\x20-\x7e]{1,30}$/.test(s) && s.trim() === s && !/\s{2,}/.test(s);
 export const LATIN_NAME_MAX = 30;
 
-const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX };
+const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX, hasKanji, loadReadings, normName };
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLatinName = API;
 export default API;

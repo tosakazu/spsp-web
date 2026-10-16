@@ -19,14 +19,14 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
-import { cardLatinName, latinNameValid } from './latin_name.js';
+import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
 
 /** カードに要るデータ一式
  * @typedef {{ uid: number, player: any, rec: any, meta: any, subranks: any, prefs: any, overseas: Set<number> | null,
- *             charIdx: any, charEmoji: any }} CardData */
+ *             charIdx: any, charEmoji: any, readings?: Record<string, string> | null }} CardData */
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
  * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
@@ -240,7 +240,7 @@ export function buildCardModel(data, settings, titleText) {
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ無し (ランキング一覧と同じ)
-    name: SPSPFormat.stripTeamTag(rec.display), nameLatin: cardLatinName(SPSPFormat.stripTeamTag(rec.display), st.latin), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.stripTeamTag(rec.display), nameLatin: cardLatinName(SPSPFormat.stripTeamTag(rec.display), st.latin, data.readings), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
@@ -272,7 +272,9 @@ export async function loadCardData(uid) {
   const [meta, overseas, charIdx, charEmoji, prefs, subranks] = await Promise.all(
     [metaRes, overseasRes, charIdxRes, charEmojiRes, prefRes, subrankRes].map(json));
   const p = /** @type {any} */ (player);
-  return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji };
+  // 漢字の名前だけ、裏面の英字名に使う読みの表を読む (js/latin_name.js)
+  const readings = hasKanji(SPSPFormat.stripTeamTag(p.display || '')) ? await loadReadings() : null;
+  return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji, readings };
 }
 
 // ── 設定の保存 (ブラウザの localStorage。選手ごと) ──
