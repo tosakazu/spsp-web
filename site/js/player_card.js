@@ -111,6 +111,19 @@ function fitPillInner(p, maxW) {
   return false;
 }
 
+/** 二つ名「// 前半 後半」(Figma ver.1.5) の HTML。無ければ ''。表記は一覧のまま (表示の言語では変えない)。表と裏で同じ
+ * 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
+ * @param {PCardModel} m @param {string} cls */
+function titleHtml(m, cls) {
+  const def = defaultTitle() || { pre: '', post: '' };
+  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
+  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
+  const post = m.title && m.title.post != null ? m.title.post : def.post;
+  if (!pre && !post) return '';
+  return `<div class="${cls}"><span class="pc-title-sl">//</span>${
+    pre ? `<span class="pc-title-pre">${escapeHtml(pre)}</span>` : ''}${post ? `<span class="pc-title-post">${escapeHtml(post)}</span>` : ''}</div>`;
+}
+
 /** @param {PCardModel} m */
 function cardHtml(m) {
   const L = m.labels;
@@ -148,16 +161,8 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
-  const def = defaultTitle() || { pre: '', post: '' };
-  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
-  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
-  const post = m.title && m.title.post != null ? m.title.post : def.post;
-  const tt = pre || post ? { pre, post } : null;
-  const hasTitle = !!tt;
-  // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
-  const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
-    tt.pre ? `<span class="pc-title-pre">${escapeHtml(tt.pre)}</span>` : ''}${tt.post ? `<span class="pc-title-post">${escapeHtml(tt.post)}</span>` : ''}</div>` : '';
+  const title = titleHtml(m, 'pc-title');
+  const hasTitle = !!title;
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
     <div class="pc-head${hasTitle ? ' pc-titled' : ''}">
@@ -184,9 +189,7 @@ function cardHtml(m) {
 /** 裏面 (Figma「back」: 赤地に角の欠けた枠、中央に二つ名・名前・総合順位)。実績のバッジはこの上に貼る (これから)
  * @param {PCardModel} m */
 function backHtml(m) {
-  const hasTitle = !!(m.title && (m.title.pre || m.title.post));
-  const title = hasTitle && m.title ? `<div class="pcb-title"><span class="pc-title-sl">//</span>${
-    m.title.pre ? `<span class="pc-title-pre">${escapeHtml(m.title.pre)}</span>` : ''}${m.title.post ? `<span class="pc-title-post">${escapeHtml(m.title.post)}</span>` : ''}</div>` : '';
+  const title = titleHtml(m, 'pcb-title');
   return `<div class="pc-in pc-back" style="--pc-red:${colorHex(m.color)}">
     <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
     <div class="pcb-col">
