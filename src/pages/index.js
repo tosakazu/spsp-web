@@ -134,7 +134,9 @@ async function loadData() {
     const SITE_VERSION_FULL = '__SITE_VERSION__';
     const versionShort = SITE_VERSION_FULL.split(' · ')[0] || SITE_VERSION_FULL;
     const navMeta = document.getElementById('meta-info');
-    if (navMeta) navMeta.textContent = t('nav.meta.updated_version', { time: genTime, version: versionShort });
+    // 版が入っていない (ローカルのビルド) ときは nav.js と同じく版を出さない (どちらが後に書いても同じ表示になるように)
+    const isStamped = !versionShort.includes('SITE_VERSION');
+    if (navMeta) navMeta.textContent = isStamped ? t('nav.meta.updated_version', { time: genTime, version: versionShort }) : t('nav.meta.updated', { time: genTime });
     const footer = document.getElementById('footer-info');
     if (footer) footer.innerHTML =
       t('ranking.footer.summary', { date: meta.eval_date, n: meta.n_players, days: meta.lookback_days }) + ' · ' +
