@@ -72,6 +72,8 @@ Please run `npm test` (and `npm run typecheck` if you touched JS) before opening
 - Changes go to `main` through pull requests. `main` is protected and needs the owner's approval.
 - Merging to `main` deploys to spsp.games automatically (GitHub Actions → Cloudflare).
   The deploy keys live only in the `production` environment and can't be used from other branches or pull requests.
+- Database changes (new files in `worker/migrations/`) are **not** applied by the deploy. The owner applies them by hand
+  when merging, so call them out in the pull request description.
 - Never commit keys, tokens or personal information (secret scanning and push protection are on).
 - Site news (the bell in the header) is `site/news.json`.
 

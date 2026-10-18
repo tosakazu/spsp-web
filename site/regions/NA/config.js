@@ -5,7 +5,7 @@
   'use strict';
   var site = {
     region: 'NA',
-    langs: ['en', 'ja'],           // 用意している UI 言語 (site/i18n/<lang>.js)。en.js はまだ無い
+    langs: ['en', 'ja'],           // 用意している UI 言語 (site/i18n/<lang>.js)
     defaultLang: 'en',
     timeZone: 'America/New_York',  // 表示用の既定。データの暦日は大会の place.timezone で決まる (smash_database scripts/North_America/classify.py)
     utcOffset: '-05:00',           // TODO: 表示用の既定オフセット。夏時間 (-04:00) の扱いは timeZone + Intl に寄せて廃止予定

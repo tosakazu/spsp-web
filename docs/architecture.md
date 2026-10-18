@@ -66,6 +66,8 @@ Nothing personal is stored in this repository.
 
 - Merging to `main` deploys spsp.games through GitHub Actions. `main` is protected and needs the owner's approval.
 - A preview deployment exists for checking changes before they go live. The owner deploys to it.
+- Database changes (`worker/migrations/*.sql`) are not applied by the deploy. The owner applies them by hand when merging
+  a pull request that adds one, so mention it in the description.
 - Data updates don't need a site deploy: the build publishes new JSON on its own schedule.
 
 ## Older design notes

@@ -33,7 +33,7 @@ The clock is fixed (2026-09-13 21:30 JST), `Math.random` and `performance.now` a
 You need:
 
 - jsdom (`npm install`, or a separate install pointed to by `JSDOM_DIR`),
-- a local directory with published build output (the JSON files the site reads, such as `players/`, `history/`, `tournaments/`, `data/`, `meta.json`), passed with `--data`. The script's default path is a maintainer's local checkout, so contributors should always pass `--data`. The first files read are copied into `frozen/`, so both sides see the same input even if the data changes mid-run.
+- a local directory with published build output (the JSON files the site reads, such as `players/`, `history/`, `tournaments/`, `data/`, `meta.json`), passed with `--data` (or set the `SPSP_DATA_DIR` environment variable; `tests/meta/contracts.test.cjs` and `tests/seeding/realdata.test.cjs` also read it and are skipped without it). The first files read are copied into `frozen/`, so both sides see the same input even if the data changes mid-run.
 
 ```sh
 npm run build
