@@ -235,7 +235,10 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
             const chars = rec._zenichi[rank];
             if (chars && chars.length) {
               const names = chars.join(i18n('common.list_sep'));   // 表示言語のキャラ名 (attachZenichi が charName で入れる)
-              const label = i18n('table.zenichi.' + rank, { chars: names });
+              // 北米の札は「1st ☁️」(キャラ絵文字。表が未読込・無いキャラは名前)
+              const ids = (rec._zenichiIds && rec._zenichiIds[rank]) || [];
+              const emoji = chars.map((/** @type {string} */ nm, /** @type {number} */ i) => (SPSPCharEmoji && SPSPCharEmoji.emojiOf(ids[i])) || nm).join(' ');
+              const label = i18n('table.zenichi.' + rank, { chars: names, emoji });
               zenichiBadge += `<span class="zenichi-badge zenichi-${rank}" title="${escapeHtml(i18n('table.zenichi.title.' + rank, { chars: names }))}">${escapeHtml(label)}</span>`;
             }
           }
@@ -711,11 +714,13 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       : new Set();
     // uidToRanks: uid -> {1: [chars], 2: [chars], 3: [chars]}
     const uidToRanks = new Map();
-    const addEntry = (uid, rank, charName) => {
-      let m = uidToRanks.get(uid);
-      if (!m) { m = {}; uidToRanks.set(uid, m); }
-      if (!m[rank]) m[rank] = [];
+    const uidToIds = new Map();   // 同じ並びのキャラ ID (札の絵文字用)
+    const addEntry = (uid, rank, charName, charId) => {
+      let m = uidToRanks.get(uid), mi = uidToIds.get(uid);
+      if (!m) { m = {}; uidToRanks.set(uid, m); mi = {}; uidToIds.set(uid, mi); }
+      if (!m[rank]) { m[rank] = []; mi[rank] = []; }
       m[rank].push(charName);
+      mi[rank].push(charId);
     };
     for (const c of charIndex.characters) {
       const uids = (charIndex.main_by_char && charIndex.main_by_char[String(c.id)]) || [];
@@ -724,13 +729,13 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       for (const u of uids) {
         if (setUids.has(u)) continue;
         rank += 1;
-        addEntry(u, rank, charName(c.id, c.name));
+        addEntry(u, rank, charName(c.id, c.name), c.id);
         if (rank >= 3) break;
       }
     }
     for (const r of rows) {
       const m = uidToRanks.get(r.user_id);
-      if (m) r._zenichi = m;
+      if (m) { r._zenichi = m; r._zenichiIds = uidToIds.get(r.user_id); }
     }
   }
 

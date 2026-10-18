@@ -10,9 +10,6 @@ window.SPSP_I18N_REGION.NA = {
     'ranking.share.title': 'SPSP — Smash Ultimate player ranking / North America',
     'ranking.share.text': 'SPSP Smash Ultimate player ranking for North America',
     'table.global_rank_badge': 'NA #{rank}',
-    'table.zenichi.1': '1st {emoji}',   // カードの札。日本版の「全一」に合わせて順位 + キャラ絵文字 (名前は title に出る)
-    'table.zenichi.2': '2nd {emoji}',
-    'table.zenichi.3': '3rd {emoji}',
     'table.zenichi.title.1': 'Best {chars} player in North America',
     'table.zenichi.title.2': '2nd best {chars} player in North America',
     'table.zenichi.title.3': '3rd best {chars} player in North America',

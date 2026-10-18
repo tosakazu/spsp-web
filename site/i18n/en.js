@@ -190,9 +190,9 @@ window.SPSP_I18N.en = {
   'table.main_char_title': 'Main character',
   'table.global_rank_badge': 'National #{rank}',
   'table.overseas': 'Overseas',
-  'table.zenichi.1': '#1 {chars}',
-  'table.zenichi.2': '#2 {chars}',
-  'table.zenichi.3': '#3 {chars}',
+  'table.zenichi.1': '1st {emoji}',   // 順位 + キャラ絵文字 (表が未読込・無いキャラは名前)。名前は title に出る
+  'table.zenichi.2': '2nd {emoji}',
+  'table.zenichi.3': '3rd {emoji}',
   'table.zenichi.title.1': 'Best {chars} player in Japan',
   'table.zenichi.title.2': '2nd best {chars} player in Japan',
   'table.zenichi.title.3': '3rd best {chars} player in Japan',
