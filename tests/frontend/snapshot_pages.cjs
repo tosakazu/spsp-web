@@ -523,6 +523,7 @@ async function runScenario(sc) {
 const click = (sel, i = 0) => async (w) => { const els = w.document.querySelectorAll(sel); if (!els[i]) throw new Error('無い: ' + sel + '[' + i + ']'); els[i].click(); };
 const clickIf = (sel, i = 0) => async (w) => { const els = w.document.querySelectorAll(sel); if (els[i]) els[i].click(); };
 const type = (sel, text) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.value = text; el.dispatchEvent(new w.Event('input', { bubbles: true })); el.dispatchEvent(new w.Event('change', { bubbles: true })); el.dispatchEvent(new w.KeyboardEvent('keyup', { bubbles: true })); };
+const toggle = (sel) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.checked = !el.checked; el.dispatchEvent(new w.Event('change', { bubbles: true })); };
 const select = (sel, value) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.value = value; el.dispatchEvent(new w.Event('change', { bubbles: true })); };
 const seq = (...fns) => async (w) => { for (const f of fns) await f(w); };
 
@@ -579,9 +580,13 @@ function tournamentSteps() {
 }
 
 const SCENARIOS = [
-  { name: 'index', page: 'index.html', steps: rankingSteps() },
+  // 海外・計測中を表示 (既定は隠す)。views 読みでは隠した分だけ先の分割を取りに行く
+  { name: 'index', page: 'index.html', steps: [...rankingSteps(),
+    { name: 'show_overseas', run: toggle('#show-overseas') }, { name: 'show_provisional', run: toggle('#show-provisional') },
+    { name: 'hide_overseas', run: toggle('#show-overseas') }, { name: 'hide_provisional', run: toggle('#show-provisional') }] },
   { name: 'c_index', page: 'c/index.html', steps: listSteps('th.sortable') },
-  { name: 'c_ranking_1323', page: 'c/ranking.html', query: '?char=1323', steps: rankingSteps() },
+  { name: 'c_ranking_1323', page: 'c/ranking.html', query: '?char=1323', steps: [...rankingSteps(),
+    { name: 'show_sub', run: toggle('#show-sub') }, { name: 'hide_sub', run: toggle('#show-sub') }] },
   { name: 'local_index', page: 'local/index.html', steps: [...listSteps('th.sortable'), { name: 'chip_big', run: click('#filter-chips .chip[data-filter="big"]') }, { name: 'chip_uchi', run: click('#filter-chips .chip[data-filter="uchi"]') }, { name: 'chip_all', run: click('#filter-chips .chip[data-filter="all"]') }] },
   { name: 'local_ranking_higoburaSP', page: 'local/ranking.html', query: '?series=' + encodeURIComponent('肥後ブラSP'), steps: [...rankingSteps(), { name: 'period', run: select('#period-sel', '1y') }, { name: 'min_n', run: type('#min-n', '3') }] },
   { name: 'pref_index', page: 'pref/index.html', steps: listSteps('th.sortable') },

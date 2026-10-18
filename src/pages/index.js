@@ -31,6 +31,14 @@ const DATA = [];
 let META = null;
 let currentMethod = 'ensemble';
 let filterText = '';
+// 海外・計測中の選手を表に出すか (表の上のチェックボックス。既定は出さない)。検索中は隠さない (名前で探した人は必ず出す)
+let showOverseas = false;
+let showProvisional = false;
+/** @param {SpspRankRecord} r */
+const isHidden = (r) => (!showOverseas && !!r._is_overseas) || (!showProvisional && SPSPRankingTable.isProvisional(r));
+const hiding = () => !filterText && (!showOverseas || !showProvisional);
+/** 表の rowFilter (隠さないときは null) */
+const rowFilter = () => (hiding() ? (/** @type {SpspRankRecord} */ r) => !isHidden(r) : null);
 // page-level state. sort / cap / filtered rows は TABLE (= SPSPRankingTable) 内部で保持.
 // tourSortMode は SPSPDetail 内部で管理. PAGE_INCREMENT は infinite scroll の 1 段分.
 const PAGE_INCREMENT = 512;
@@ -64,9 +72,13 @@ function methodSource(method) {
   if (!METHOD_SOURCES[method]) METHOD_SOURCES[method] = { kind: 'method', method, rows: [], next: 0, total: VIEWS.n_players, busy: null };
   return METHOD_SOURCES[method];
 }
-/** src の行を n 行目まで (全体がそれより少なければ全部) 取ってくる @param {RowSource} src @param {number} n @returns {Promise<void>} */
+/** 表に出る行の数 (順位評価の表では隠す人を数えない) @param {RowSource} src */
+function shownCount(src) {
+  return src.kind === 'method' && hiding() ? src.rows.reduce((n, r) => (isHidden(r) ? n : n + 1), 0) : src.rows.length;
+}
+/** 表に出る行を n 行目まで (全体がそれより少なければ全部) 取ってくる @param {RowSource} src @param {number} n @returns {Promise<void>} */
 function ensureRows(src, n) {
-  if (src.rows.length >= Math.min(n, src.total)) return Promise.resolve();
+  if (src.rows.length >= src.total || shownCount(src) >= n) return Promise.resolve();
   if (!src.busy) {
     src.busy = (async () => {
       if (src.kind === 'method') {
@@ -222,9 +234,17 @@ function ensureTable() {
     playerHrefPrefix: '',             // ルート直下
     columns: _columnsForMeta(META),
     sortable: false,                  // 全国ランキングは並べ替えなし (並びは常に いまのタブの順位順)
+    rowFilter: rowFilter(),
     // views 読み: 持っている行の先まで届いたら続きを取る (タブ・検索の出どころごと)
+    // 海外・計測中を隠しているときは、まだ取っていない行のうち何人出るか分からない。取り終わるまでは「出した数 + 1」(続きがある印) にする
     moreRows: VIEWS ? {
-      total: () => (SOURCE ? SOURCE.total : 0),
+      total: () => {
+        if (!SOURCE) return 0;
+        if (SOURCE.kind !== 'method' || !hiding()) return SOURCE.total;
+        const n = shownCount(SOURCE);
+        return SOURCE.rows.length >= SOURCE.total ? n : n + 1;
+      },
+      exact: () => !(SOURCE && SOURCE.kind === 'method' && hiding() && SOURCE.rows.length < SOURCE.total),
       need: (/** @type {number} */ cap) => {
         const src = SOURCE;
         if (!src) return;
@@ -270,6 +290,7 @@ function getDetailCfg() {
 
 SPSPRankingPage.bindSearch(text => {
   filterText = text;
+  if (TABLE) TABLE.rowFilter = rowFilter();   // 検索中は隠さない (次の描画から)
   if (VIEWS) { if (TABLE) refreshViewsSource().catch(() => {}); return; }
   if (TABLE) TABLE.setFilterText(filterText);
 });
@@ -282,6 +303,20 @@ SPSPRankingPage.bindMethodTabs(method => {
     TABLE.setMethod(currentMethod);
   }
 });
+
+// 海外・計測中を表示 (チェックボックス)
+/** @param {string} id @param {(on: boolean) => void} set */
+function bindShowToggle(id, set) {
+  const cb = /** @type {HTMLInputElement | null} */ (document.getElementById(id));
+  if (!cb) return;
+  cb.checked = false;   // 戻るで来たときにブラウザが前の状態を残すことがある。表は既定 (隠す) で描くので合わせる
+  cb.addEventListener('change', () => {
+    set(cb.checked);
+    if (TABLE) TABLE.setRowFilter(rowFilter());   // views 読みで足りなければ表が続きを取らせる (moreRows.need)
+  });
+}
+bindShowToggle('show-overseas', (on) => { showOverseas = on; });
+bindShowToggle('show-provisional', (on) => { showProvisional = on; });
 
 // Top N ジャンプボタン
 document.querySelectorAll('.jump').forEach(btn0 => {

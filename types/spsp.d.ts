@@ -152,6 +152,8 @@ declare global {
     characters: SpspCharacterIndexChar[];
     /** キャラ id (文字列) → メインにしている選手の uid (全国順位の昇順) */
     main_by_char: Record<string, number[]>;
+    /** キャラ id (文字列) → サブで使う選手の uid (使用 top-3 の 2・3 番目で使用率 10% 以上。並びは main_by_char と同じ)。古いビルドには無い */
+    sub_by_char?: Record<string, number[]>;
     [k: string]: unknown;
   }
 
