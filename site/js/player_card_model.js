@@ -141,6 +141,8 @@ export function perfInfoOf(t) {
 function zenichiOf(data) {
   /** @type {Record<number, string[]>} */
   const zen = {};
+  /** @type {Record<number, string[]>} */
+  const emo = {};   // 同じ順のキャラ絵文字 (北米の札「1st ☁️」。表に無ければキャラ名)
   const idx = data.charIdx;
   if (idx && idx.characters && idx.main_by_char) {
     for (const c of idx.characters) {
@@ -149,12 +151,18 @@ function zenichiOf(data) {
       for (const u of uids) {
         if (data.overseas && data.overseas.has(u)) continue;
         rank += 1;
-        if (u === data.uid) { (zen[rank] = zen[rank] || []).push(charName(c.id, c.name)); break; }   // 表示言語のキャラ名
+        if (u === data.uid) {
+          const nm = charName(c.id, c.name);   // 表示言語のキャラ名
+          const ce = data.charEmoji && data.charEmoji[String(c.id)];
+          (zen[rank] = zen[rank] || []).push(nm);
+          (emo[rank] = emo[rank] || []).push((ce && ce.emoji) || nm);
+          break;
+        }
         if (rank >= 3) break;
       }
     }
   }
-  return [1, 2, 3].filter(r => zen[r] && zen[r].length).map(r => ({ rank: r, chars: zen[r].join(i18n('common.list_sep')) }));
+  return [1, 2, 3].filter(r => zen[r] && zen[r].length).map(r => ({ rank: r, chars: zen[r].join(i18n('common.list_sep')), emoji: emo[r].join(' ') }));
 }
 
 /** 下位クラスの大会の印 (「 (Cクラス)」)。本戦なら '' @param {any} t */
@@ -205,7 +213,7 @@ export function buildCardModel(data, settings, titleText) {
   const pills = [];
   if (data.overseas && data.overseas.has(uid)) pills.push({ text: i18n('table.overseas') });
   if (rec.metadata && rec.metadata.provisional) pills.push({ text: i18n('table.provisional') });   // 2 年で集計対象大会 3 未満
-  for (const z of zenichiOf(data)) pills.push({ text: i18n('table.zenichi.' + z.rank, { chars: z.chars }), title: i18n('table.zenichi.title.' + z.rank, { chars: z.chars }) });
+  for (const z of zenichiOf(data)) pills.push({ text: i18n('table.zenichi.' + z.rank, { chars: z.chars, emoji: z.emoji }), title: i18n('table.zenichi.title.' + z.rank, { chars: z.chars }) });
   pills.push({ text: lvNow ? `Lv${lvNow}${SPSPFormat.lvSuffix(lvNow, rankNow)}` : i18n('player.lv_none') });
 
   const tours = /** @type {any[]} */ (player.tournaments || []);
