@@ -21,6 +21,7 @@
 //                                  ranking-table.js の絞り込みと同じ規則。並びは index の並び (総合順位順)。opts.discOf(uid) で discriminator を引く
 //                                  (既定は js/links.js の SPSPLinks.discOf。表は links.js が読む)
 //   .charRows(id) / .prefRows(order) → Promise<rec[]>       char/<id>.json / pref/<order>.json (無ければ [])
+//   .charSubRows(id)            → Promise<rec[]>            char_sub/<id>.json (そのキャラをサブで使う人。無い・古いビルドなら [])
 //   .prefSummary() / .simPop()  → Promise<json | null>
 //   .bundledPlayer(uid)         → Promise<{p, h} | null>   参加の少ない選手は players/<uid>.json と history/<uid>.json の中身が
 //                                  bundle/<uid % manifest.bundle_shards>.json にまとめてあり、個別のファイルは更新されない (古いか無い)。
@@ -218,6 +219,7 @@ function makeInst(prefix) {
     searchIndex: searchIndex,
     matcher: matcher,
     charRows: function (id) { return manifest().then(function (m) { return m ? getJson('char/' + id + '.json', []) : []; }); },
+    charSubRows: function (id) { return manifest().then(function (m) { return m ? getJson('char_sub/' + id + '.json', []) : []; }); },
     prefRows: function (order) { return manifest().then(function (m) { return (m && order != null) ? getJson('pref/' + order + '.json', []) : []; }); },
     prefSummary: function () { return manifest().then(function (m) { return m ? getJson('pref_summary.json', null) : null; }); },
     simPop: function () { return manifest().then(function (m) { return m ? getJson('sim_pop.json', null) : null; }); },
@@ -252,6 +254,7 @@ var api = {
   rowsByUids: function (uids, opts) { return at().rowsByUids(uids, opts); },
   searchIndex: function (query, opts) { return at().searchIndex(query, opts); },
   charRows: function (id) { return at().charRows(id); },
+  charSubRows: function (id) { return at().charSubRows(id); },
   prefRows: function (order) { return at().prefRows(order); },
   prefSummary: function () { return at().prefSummary(); },
   simPop: function () { return at().simPop(); },

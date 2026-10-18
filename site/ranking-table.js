@@ -29,9 +29,11 @@ import { charName } from './js/chars.js';
  *     sortable: true,                 // false で見出しの並べ替えを出さない (全国ランキング。並びは常に順位順)
  *     moreRows: null,                 // 行を全部は持たない表 (全国ランキングの data/views/ 読み): { total(): 全体の行数,
  *                                     //   need(cap): cap 行目までを取ってきて replaceRows する }。無限スクロールが持っている行の先に
- *                                     //   届いたら need を呼ぶ。「さらに N 件」の N は total() から数える
+ *                                     //   届いたら need を呼ぶ。「さらに N 件」の N は total() から数える。exact() が false なら
+ *                                     //   total() は目安 (絞り込みで全体の件数が分からない) で、N を出さない
+ *     rowFilter: null,                // (rec) => 表に出すか。検索の絞り込みの後にかける (全国ランキングの海外・計測中を隠す)
  *   });
- *   t.setRows(...); t.setMethod(...); t.setFilterText(...); t.setSort(key,dir);
+ *   t.setRows(...); t.setMethod(...); t.setFilterText(...); t.setRowFilter(fn); t.setSort(key,dir);
  *   t.refresh();
  *
  *   イベント:
@@ -363,6 +365,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.btWeekdayStyle = opts.btWeekdayStyle || 'pill';
       this.sortable = opts.sortable !== false;
       this.moreRows = opts.moreRows || null;
+      this.rowFilter = opts.rowFilter || null;
 
       this.columns = (opts.columns || [
         'rank','display','avg_rank','score','tjpr_lv',
@@ -441,6 +444,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     }
     setFilterText(text) {
       this.filterText = text || '';
+      this.currentCap = this.pageSize;
+      this.refresh();
+    }
+    setRowFilter(fn) {
+      this.rowFilter = fn || null;
       this.currentCap = this.pageSize;
       this.refresh();
     }
@@ -534,6 +542,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
           (byDisc && (links.discOf(r.user_id) || '').toLowerCase().startsWith(ft))
         );
       }
+      if (this.rowFilter) filtered = filtered.filter(this.rowFilter);
 
       // Sort
       const { key, dir } = this.sort;
@@ -578,7 +587,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       });
       const total = this._totalRows();
       if (total > cap) {
-        html.push(`<tr id="load-more-row"><td colspan="${colspan}" class="empty-msg">${i18n('table.load_more', { n: total - cap })}</td></tr>`);
+        const exact = !this.moreRows || !this.moreRows.exact || this.moreRows.exact();
+        const msg = exact ? i18n('table.load_more', { n: total - cap }) : i18n('table.load_more_unknown');
+        html.push(`<tr id="load-more-row"><td colspan="${colspan}" class="empty-msg">${msg}</td></tr>`);
       } else if (filtered.length === 0) {
         html.push(`<tr><td colspan="${colspan}" class="empty-msg">${i18n('table.none')}</td></tr>`);
       }

@@ -162,6 +162,8 @@ window.SPSP_I18N.en = {
   'ranking.tab.bt': 'Head-to-head',
   'ranking.tab.bt_desc': 'Ranking based on head-to-head results',
   'ranking.search_placeholder': 'Search by player name / UID / discriminator…',
+  'ranking.show_overseas': 'Show overseas players',
+  'ranking.show_provisional': 'Show provisional players',
   'ranking.loading_data': 'Loading data…',
   'ranking.scroll_top_aria': 'Back to top',
   'ranking.scroll_top_title': 'Top',
@@ -200,6 +202,7 @@ window.SPSP_I18N.en = {
   'table.local.n': '{n} entries',
   'table.local.last': 'Last {date}',
   'table.load_more': 'Scroll down for more ({n} remaining)',
+  'table.load_more_unknown': 'Scroll down for more',
   'table.none': 'No players',
 
   // ── Expanded row (player-detail.js) ──
@@ -273,6 +276,9 @@ window.SPSP_I18N.en = {
   // ── Character ranking (c/ranking.html) ──
   'char_ranking.col.pct': 'Usage',
   'char_ranking.self_declared': 'self-declared',
+  'char_ranking.show_sub': 'Include secondaries',
+  'char_ranking.sub_tag': 'secondary',
+  'char_ranking.status.people': '{n} players',
   'char_ranking.self_declared_title': 'No tournament usage data; registered by the player',
   'char_ranking.no_char': 'No character specified',
   'char_ranking.back_to_list': 'Back to the character list',

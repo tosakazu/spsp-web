@@ -29,7 +29,8 @@ const SCENARIOS = '^(index|c_index|c_ranking_1323|local_ranking_higoburaSP|pref_
 const NOISE = /fonts\.googleapis\.com/;
 const errLines = (p) => fs.readFileSync(p, 'utf8').split('\n').filter((l) => l && !NOISE.test(l));
 // 使用率の列 = c/ranking の行の最後のセル (snapshot は '><' ごとに改行する)
-const PCT_COL = /<td class="col-other-rank">\n?(?:[0-9]+%|–|<span[^>]*>[^<]*<\/span>)\n?<\/td>\n<\/tr>/g;
+// (「サブ使用も表示」の行は後ろに「サブ」の印が付く。従来側は使用率が無いので印だけ)
+const PCT_COL = /<td class="col-other-rank">\n?(?:[0-9]+%|–|<span[^>]*>[^<]*<\/span>)\n?(?: ?<span class="sub-tag">\n?[^<]*<\/span>\n?)?<\/td>\n<\/tr>/g;
 const KNOWN_DIFF = {
   pref_index: /_sort_th1(_again)?\.html$/,                           // 人数で並べたときの同数の並び
 };
