@@ -1,8 +1,8 @@
 # 投稿機能テスト
 
 `site/post.html` / `site/callback.html` / `site/js/*` と `gas/*.gs` のテスト。
-設計は [docs/post_feature_design.md](../../docs/post_feature_design.md)、
-デプロイは [docs/DEPLOY.md](../../docs/DEPLOY.md)。
+設計は [docs/archive/post_feature_design.md](../../docs/archive/post_feature_design.md)、
+デプロイは [docs/archive/DEPLOY.md](../../docs/archive/DEPLOY.md)。
 
 ## 実行
 

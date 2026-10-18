@@ -3,7 +3,7 @@
 実行: OPENBLAS_NUM_THREADS=1 .venv/bin/python3 tests/post/test_char_vote.py
 (リポジトリルートから。unittest 等は使わず plain assert)
 
-採用規則は docs/post_feature_design.md §12。
+採用規則は docs/archive/post_feature_design.md §12。
 """
 import json
 import os

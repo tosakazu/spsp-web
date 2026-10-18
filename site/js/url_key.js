@@ -1,5 +1,5 @@
 // @ts-check
-// url_key.js — URL クエリに載せる ASCII のキー (2026-09-24、日本語 URL をやめる: docs/frontend_i18n_review.md §6-4)。
+// url_key.js — URL クエリに載せる ASCII のキー (2026-09-24、日本語 URL をやめる: docs/archive/frontend_i18n_review.md §6-4)。
 //   asciiSlug(s)       NFKC → 小文字 → 英数字以外の連続を '-' → 両端の '-' を除去。結果が [a-z0-9-] だけなら返す、そうでなければ ''
 //   hashKey(s)         '_' + FNV-1a 32bit の base36 (例 '_1x9k2p')。slug は '_' を含まないので衝突しない
 //   nameKey(s)         asciiSlug(s) があればそれ、無ければ hashKey(s)。大会シリーズの ?series= に使う

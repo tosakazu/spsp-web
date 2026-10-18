@@ -7,6 +7,7 @@ The rankings themselves (data collection, rating calculation) are built elsewher
 `https://data.spsp.games/<region>/`. This repository only reads that JSON.
 Tournament data and per-region rules (tournament labels, series names, geography) live in
 [smash_database](https://github.com/tosakazu/smash_database).
+How the pieces fit together: [docs/architecture.md](docs/architecture.md).
 
 ## Layout
 
@@ -22,7 +23,7 @@ worker/               Cloudflare Worker: static serving + /api (worker/README.md
 types/                global types (window.SPSP …)
 tests/                node --test (meta / post / seeding), jsdom snapshot checks (frontend/), sim, split, views
 tools/                build script and helpers
-docs/                 design notes (mostly in Japanese)
+docs/                 architecture.md (start here), seeding tool notes; docs/archive/ = older notes in Japanese
 gas/                  the old Google Apps Script backend (kept for reference; the Worker replaced it)
 ```
 

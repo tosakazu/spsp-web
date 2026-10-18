@@ -6,7 +6,7 @@
 対象: 行頭が // でない行にある、完全な '…' / "…" リテラルで、日本語を含み、
       テンプレートリテラル (` を含む行と、複数行テンプレートの中)、HTML (< >)、${、バックスラッシュを含まないもの。console.* の行は除く。
 やること: リテラルを i18n('<ns>.s<N>') に置き換え、値をそのまま (1 文字も変えずに) 辞書の末尾に足す。同じ値は同じキー。
-残るもの (テンプレートリテラルや HTML 入り) は手で「文全体を 1 キー + {param}」にする (docs/frontend_i18n_review.md §4.3)。
+残るもの (テンプレートリテラルや HTML 入り) は手で「文全体を 1 キー + {param}」にする (docs/archive/frontend_i18n_review.md §4.3)。
 i18n() の定義はファイルごとに用意しておくこと (即時関数なら var i18n = function (k, p) { return window.SPSPI18n.t(k, p); };)。
 """
 import argparse, pathlib, re, sys

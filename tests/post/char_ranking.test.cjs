@@ -1,7 +1,7 @@
 'use strict';
 // 使い手ランキング (site/c/ranking.html) の使用率列が、投票由来のメインキャラ
 // (= pct を持たない) で壊れないことのテスト。
-// ビルド側の採用規則は spsp/char_vote.py、設計は docs/post_feature_design.md §12。
+// ビルド側の採用規則は spsp/char_vote.py、設計は docs/archive/post_feature_design.md §12。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');

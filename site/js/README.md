@@ -1,56 +1,72 @@
-# site/js — サイト共通の JS モジュール
+# site/js — shared frontend modules
 
-bundler は使わない。各モジュールは `(function (global) { … })(window)` の即時関数で、`window.SPSPXxx` に API を置き、
-`module.exports` もあるので node のテストからは `require()` できる。ページは `<script src>` を並べて読むだけなので、
-**並び順が依存関係の契約**になる。下の表の「先に読むもの」がページ内でそのモジュールより前にあることを
-`tests/meta/script_order.test.cjs` が確かめる。
+Shared code used by the pages of the site. Each page's own code lives in `src/pages/<id>.js`.
 
-| モジュール | グローバル | 中身 | 先に読むもの |
-|---|---|---|---|
-| `js/html.js` | `SPSPHtml` | `escapeHtml` | — |
-| `js/data.js` | `SPSPData` | JSONL のパース、`fetchJson*` | — |
-| `js/views.js` | `SPSPViews` | ページ用の小さな一覧ファイル (`data/views/`: manifest・players_index・current/ の分割・ranking/ の 1000 人ずつ・char/・pref/・pref_summary・sim_pop) の読み込み。`manifest()` が null (views が無い) ならページは従来どおり大きいファイルを読む | — |
-| `js/player_data.js` | `SPSPPlayerData` | 分割された選手 JSON (players/ + 揮発部分 + history/) の組み立て。揮発部分は `data/views/current/<uid % N>.json`、無ければ players_current.json | `views.js` |
-| `js/format.js` | `SPSPFormat` | Lv 接尾辞 (👑/メダル/+)、`lvLabel`、`fmtRank` | — |
-| `js/tags.js` | `SPSPTags` | 大会タグ (休日 / 実質平日 / プレ大会 / 制限 / 再開待ち …) の判定と文言。クラス名はページが渡す | — |
-| `js/pager.js` | `SPSPPager` | 5 件ずつのページ送り (`setupPaginated`) | — |
-| `js/match.js` | `SPSPMatch` | ブラケット表記の短縮、試合の表示順、DE の W2W 換算 | — |
-| `js/suggest.js` | `SPSPSuggest` | 検索欄の候補リストのキー操作・外側クリックで閉じる | — |
-| `js/list_page.js` | `SPSPListPage` | 一覧ページの並べ替え見出し・検索の配線 | — |
-| `js/fighter_number.js` | `FIGHTER_NUMBER` | 公式ファイター番号 (並び順) | — |
-| `js/links.js` (選手ページは `p/?d=<discriminator>` が既定、表を読む前や表に無い選手は `p/?uid=`。表 `data/discriminators.json` は初回の playerHref で非同期に読み、document 内の `?uid=` を書き換える) | `SPSPLinks` | サイト内リンクの URL と `<a>` の組み立て (p/?uid= / t/?id= / 各ランキング) | — |
-| `../region/config.js` (= `regions/<REGION>/config.js`) | `SPSP.site` (`SPSPSite`) | サイト設定 (地域・言語・配信先・GA・機能の有無)。地域ごとに `site/regions/<REGION>/` (契約は `site/regions/README.md`) | — |
-| `../i18n/ja.js` | `SPSP_I18N.ja` | UI 文言の辞書 (キー → 日本語)。言語ごとに 1 ファイル、キー集合は全言語で同じ | — |
-| `../region/i18n.js` (= `regions/<REGION>/i18n.js`) | `SPSP_I18N_REGION.<REGION>` | 地域で言い方が変わるキーの上書き (言語ごと、言語辞書にあるキーだけ) | `i18n/<lang>.js` |
-| `js/i18n.js` | `SPSPI18n` (`SPSP.i18n`) | 辞書引き `t(key, params)`、`data-i18n` の適用、言語の決定 (?lang > localStorage > navigator) | `region/config.js`, `i18n/ja.js`, `region/i18n.js` |
-| `../ranking-table.js` | `SPSPRankingTable` | ランキング表コンポーネント (列・並べ替え・絞り込み・無限スクロール) | `html.js`, `format.js`, `links.js` |
-| `../player-detail.js` | `SPSPDetail` | 展開行 (大会別 / 直接対決) の描画と選手 JSON の取得。相手の名前・順位はページの行 → getMasterMap → (views があれば) players_index | `html.js`, `format.js`, `tags.js`, `views.js`, `player_data.js` |
-| `js/ranking_page.js` | `SPSPRankingPage` | ランキング表ページ 4 本の骨格 (表の生成・配線・行の展開・master 読み込み (views があればページが要る分だけ)・ローカル順位) | `data.js`, `views.js`, `ranking-table.js`, `player-detail.js` |
-| `../share.js` | `SPSPShare` | 共有ボタン、画像で保存 (html2canvas) | — |
-| `../logo.js` | `SPSPLogo` | ロゴとローディング演出 | — |
-| `../nav.js` | (`SPSPTrackPage`) | ナビゲーションの挿入、GA、お知らせ。`logo.js` があれば使う。文言は辞書、GA ID とブログの有無は `region/config.js` | `region/config.js`, `i18n/ja.js`, `region/i18n.js`, `i18n.js` |
-| `js/post_config.js` `js/oauth_state.js` `js/auth.js` `js/post.js` `js/vote.js` `js/callback.js` | `SpspAuth` `SpspOAuthState` … | 投稿・キャラ投票・OAuth | `vote.js` は `views.js`, `player_data.js`, `fighter_number.js` |
+## How page scripts are built
 
-## 名前空間
+- `src/pages/<id>.js` starts with `import` lines for the shared modules it needs, followed by the page's own code.
+  Default import = the module's API object. A bare `import '…'` only runs the module for its side effects (setting globals, injecting the nav).
+- `npm run build` (`tools/build/build_site.mjs`) uses esbuild to bundle each entry into one classic IIFE script, `dist/assets/<id>.js`.
+  TypeScript (`.ts`) entries and modules work as-is. `npm run build:na` builds the North America site into `dist-na/`.
+- The only `<script src>` tags left in the HTML are `region/config.js` → `i18n/<default lang>.js` → `js/lang_boot.js` (added by the build) → `region/i18n.js` → `assets/<id>.js`.
+- Shared modules are ES modules (`export default api` plus named exports). Modules use each other through `import`, not through globals.
+  For backward compatibility each one also sets `window.SPSPXxx` and/or `window.SPSP.<Name>` (for the console and external use only).
+  New code should import the module instead of reading those globals.
+- Tests that run a module's source in `vm` / jsdom use `built()` from `tests/helpers/built.cjs`.
+- `tests/meta/script_order.test.cjs` checks that the import order in each page matches the dependencies between modules.
 
-各モジュールは `window.SPSP.<Name>` にも載る (`SPSP.Html` / `SPSP.Data` / `SPSP.Views` / `SPSP.PlayerData` / `SPSP.Format` / `SPSP.Tags` / `SPSP.Pager` /
-`SPSP.Match` / `SPSP.Suggest` / `SPSP.ListPage` / `SPSP.RankingPage` / `SPSP.Links` / `SPSP.RankingTable` / `SPSP.Detail` / `SPSP.Share` /
-`SPSP.Logo` / `SPSP.Calc` / `SPSP.SeedData` / `SPSP.SeedShare` / `SPSP.SeedOptimizer` / `SPSP.SmashSeed` / `SPSP.BracketCore` /
-`SPSP.Auth` / `SPSP.OAuthState` / `SPSP.site` / `SPSP.i18n`)。旧来のグローバル名 (`SPSPHtml` など) は alias として残している。
-新しいコードは `SPSP.<Name>` を使い、旧名は移行が終わったら消す。
+## Shared modules
 
-## 決まりごと
+Paths are relative to `site/`. Modules outside `site/js/` are older shared components that live at the top level.
 
-- 新しい共通処理は `site/js/` に置き、同じ型 (即時関数 + `window.SPSPXxx` + `module.exports`) で書く。
-- 依存を増やしたら上の表と `tests/meta/script_order.test.cjs` の表を直す。
-- 見た目を変えないリファクタは `tests/frontend/compare_with_ref.sh <ref>` で前後の DOM を比べる。CSS の構成を変えるときは `--computed` も (`tests/frontend/README.md`)。
-- ページ固有のコードは `src/pages/<id>.js` (先頭の `import '…'` が読み込み順 = `tests/meta/script_order.test.cjs` が表と照合。`npm run build` が順に結合して `dist/assets/<id>.js` にする)。HTML に残る `<script src>` は `region/config.js` → `i18n/<lang>.js` → `region/i18n.js` → `assets/<id>.js` だけ。
-- 共通モジュールは ES module (`export default api` + 名前付き export)。他モジュールは **import で使う** (グローバルを参照しない)。`window.SPSPXxx` / `window.SPSP.Xxx` は公開面 (console・外部) として置いているだけ。テストでソースを vm に流すときは `tests/helpers/built.cjs` の `built()` (import をグローバルからの受け取りに変えた古典 script の形)。
-- 型: `npm run typecheck` (tsc)。`// @ts-check` を付けたファイルが検査される (グローバルの型は `types/spsp.d.ts`)。新しく書くものは `.ts` で (ビルドが esbuild で変換する)。
-- UI 文言は `site/i18n/ja.js` に置き `i18n('key', {param})` (= `SPSPI18n.t`) か `data-i18n` で引く。整合は `tests/meta/i18n.test.cjs`。
-- 言語が決まると `<html lang>` に入る。言語で変わる CSS は共通 CSS に `html[lang="en"] .x { … }`、地域で変わる CSS は `region/site.css` (`site/regions/README.md`)。
-- 引く順は 地域の上書き (`region/i18n.js`、その言語) → 言語辞書 → 既定言語。地域の上書きは言語辞書にあるキーだけ (テストで確認)。機能の有無は辞書でなく `config.js` の `features` で切る。
-  文法上つながる文は文全体を 1 キーに。CSV の列名など機械可読なものは辞書に出さない。進み具合は docs/refactor/05_frontend_common.md ②。
-- ページごとの CSS のクラス名 (例: 大会タグの `chip wk` / `tag tag-wk` / `badge wk` / `tag-wk`) はまだ統一していない。
-  共通モジュールはクラス名を引数で受ける。全ページで同一だった CSS ルールは `site/css/{site,detail,player,docs}.css` に移してある
-  (`tools/frontend/css_extract.cjs`)。ページ固有の上書きは各ページの `<style>` に残る。
+| Group | Module | Purpose |
+|---|---|---|
+| Config | `region/config.js` (= `regions/<REGION>/config.js`) | `SPSP.site`: region, languages, time zone, data root, feature flags. Rules are in `site/regions/README.md` |
+| Core | `js/html.js` | `escapeHtml`; sets `SPSP.root`, `SPSP.langRoot`, `SPSP.data` (where the JSON lives) and `pageHref` |
+| | `js/links.js` | URLs and `<a>` tags for player / tournament / ranking pages (`p/?d=<discriminator>`, falls back to `p/?uid=`) |
+| | `js/url_key.js` | ASCII keys for URL query values (`asciiSlug`, `nameKey`) |
+| i18n | `i18n/<lang>.js`, `region/i18n.js` | UI string dictionaries per language; the region file overrides some keys |
+| | `js/i18n.js` | `t(key, params)`, applies `data-i18n` to the DOM, picks the language |
+| | `js/lang_boot.js` | `?lang=` switching (loads the other language's dictionary before the page script runs) |
+| | `js/chars.js`, `js/char_emoji.js`, `js/fighter_number.js` | Character names in the display language, character emoji table, official fighter order |
+| | `js/geo.js` | Loads `data/geo.json`; turns geo unit ids (prefecture / state) into display names and URL keys |
+| Format | `js/format.js` | Level suffixes and labels, rank formatting |
+| | `js/tags.js` | Tournament tags (weekend / weekday / restricted / awaiting resume ...); CSS class names come from the caller |
+| | `js/match.js` | Short bracket labels, match display order |
+| | `js/achievements.js` | Achievement text built from build output `kind` / `params` |
+| Data | `js/data.js` | `fetchJson`, `fetchJsonl`, `fetchJsonOptional`, JSONL parsing |
+| | `js/views.js` | Small per-page list files in `data/views/`. If `manifest()` returns null, pages fall back to the large files |
+| | `js/player_data.js` | Rebuilds a player record from the split JSON (`players/`, `history/`, the volatile current part) |
+| Ranking UI | `ranking-table.js` | Ranking table component (columns, sort, filters, infinite scroll) |
+| | `player-detail.js` | Expanded row: per-tournament results and head-to-head |
+| | `js/ranking_page.js` | Shared skeleton of the four ranking-table pages |
+| | `js/list_page.js`, `js/pager.js`, `js/suggest.js` | Sort headers / search on list pages, 5-per-page pager, search suggestion keyboard handling |
+| Page chrome | `nav.js`, `logo.js`, `share.js` | Header nav + analytics + notices, logo and loading animation, share / save-as-image |
+| Player card | `js/player_card.js`, `js/player_card_model.js` | Renders the player card; builds its data model from player data |
+| | `js/titles.js`, `js/titles_ja.js`, `js/title_bits.js`, `js/title_notice.js` | Card titles: lists, draws, owned-title bitsets, "new title" notices. `titles_ja.js` is generated, do not edit by hand |
+| | `js/my_notice.js` | Notices for the logged-in player (rank / level up, new titles) |
+| Login / posting | `js/login.js`, `js/auth.js`, `js/oauth_state.js` | start.gg login, stored session, OAuth state encode/verify |
+| | `js/post_config.js`, `js/post.js`, `js/callback.js`, `js/vote.js` | Posting and character vote pages, OAuth callback |
+| Seeding | `seeding/*.js`, `seeding/app/*`, `seed-upload/`, `bracket/` | Seeding tool, seed upload, bracket preview (see `docs/seed_*.md`) |
+| Other tools | `js/class_bracket.js`, `sim/calc.js` | Lower-class bracket logic, score simulation |
+
+## Rules
+
+- Put new shared code in `site/js/` as an ES module. If you add a dependency between modules, update `tests/meta/script_order.test.cjs`.
+- **UI strings go in the dictionaries**, never inline. Use `t('key', { param })` or `data-i18n` / `data-i18n-attr` in HTML.
+  - Keys are namespaced by page (`nav.*`, `ranking.*`, `player.*`, `common.*` ...). Every language file must have the same key set.
+  - A sentence is one key, with `{name}` placeholders (plus a minimal `{n, plural, ...}` / `selectordinal`). Do not glue sentence pieces together in code; word order differs between languages.
+  - Lookup order: region override (`region/i18n.js`, that language) → language dictionary → default language. A region may only override keys that exist in the language dictionary.
+  - Machine-readable text (e.g. CSV column names) is not translated.
+  - `tests/meta/i18n.test.cjs` checks that used keys exist, unused keys are removed and key sets match.
+- **No hard-coded region names or lists.** Read the region and feature flags from `SPSP.site` (`features` turns features on or off, not the dictionary), and geo units (prefectures, states) from `data/geo.json` through `js/geo.js`.
+- Language-specific CSS: `html[lang="en"] .x { … }` in the shared CSS. Region-specific CSS goes in `region/site.css`.
+- Page CSS class names are not unified yet, so shared modules take class names as arguments.
+- Refactors that should not change the output: compare the DOM before and after with `tests/frontend/compare_with_ref.sh <ref>` (`tests/frontend/README.md`).
+
+## Types
+
+- `npm run typecheck` runs `tsc`. Only files with `// @ts-check` at the top are checked (most of `site/js/`). Global types are in `types/spsp.d.ts`, data contracts in `types/contracts.d.ts`.
+- New files may be written in `.ts`; esbuild compiles them during the build.
+
+Background (Japanese, historical): `docs/archive/frontend_stack_review.md`, `docs/archive/frontend_i18n_review.md`.

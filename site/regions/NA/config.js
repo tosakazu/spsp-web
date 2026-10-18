@@ -1,5 +1,5 @@
 // regions/NA/config.js — 北米版のサイト設定。キーの集合は regions/JP/config.js と同じでなければならない (tests/meta/regions.test.cjs)。
-// TODO の値は北米版のホスティング・GA・OAuth が決まってから (docs/frontend_i18n_review.md §6)。
+// TODO の値は北米版のホスティング・GA・OAuth が決まってから (docs/archive/frontend_i18n_review.md §6)。
 //   window.SPSP.site (= window.SPSPSite)
 (function (global) {
   'use strict';

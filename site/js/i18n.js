@@ -1,5 +1,5 @@
 // @ts-check
-// i18n.js — UI 文言の辞書引き (docs/frontend_i18n_review.md §4.3)。
+// i18n.js — UI 文言の辞書引き (docs/archive/frontend_i18n_review.md §4.3)。
 //   辞書は site/i18n/<lang>.js が window.SPSP_I18N[lang] = { 'nav.ranking': 'ランキング', … } を置く (fetch しない:
 //   描画前に同期で引けるように script で読む)。キーはページの名前空間 ('nav.*', 'ranking.*', 'player.*', 'common.*' …)。
 //   地域で言い方が変わるキー (全国 / 都道府県 / 海外 …) は site/regions/<REGION>/i18n.js (ページからは region/i18n.js) が
