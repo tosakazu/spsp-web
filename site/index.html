@@ -363,6 +363,10 @@
     </button>
   </div>
   <p class="subtitle" data-i18n="ranking.subtitle">日本大会を対象にしたスマブラSPプレイヤーランキング</p>
+  <div class="view-opts">
+    <label class="view-opt"><input type="checkbox" id="show-overseas"> <span data-i18n="ranking.show_overseas">海外プレイヤーを表示</span></label>
+    <label class="view-opt"><input type="checkbox" id="show-provisional"> <span data-i18n="ranking.show_provisional">計測中プレイヤーを表示</span></label>
+  </div>
 
   <div class="news-stack" id="news-stack">
     <!-- ログイン中の本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js、見た目は nav.js) -->
@@ -393,8 +397,6 @@
 
   <div class="controls">
     <input type="search" id="search" placeholder="プレイヤー名 / UID で検索…" autocomplete="off" data-i18n-attr="placeholder:ranking.search_placeholder">
-    <label class="view-opt"><input type="checkbox" id="show-overseas"> <span data-i18n="ranking.show_overseas">海外プレイヤーを表示</span></label>
-    <label class="view-opt"><input type="checkbox" id="show-provisional"> <span data-i18n="ranking.show_provisional">計測中プレイヤーを表示</span></label>
     <button class="jump" data-jump="256">Top 256</button>
     <button class="jump" data-jump="512">Top 512</button>
     <button class="jump" data-jump="1024">Top 1024</button>
