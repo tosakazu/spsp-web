@@ -1,5 +1,5 @@
 'use strict';
-// 各ページのスクリプト (src/pages/<id>.js の import の並び = ビルドの結合順) が site/js/README.md の依存関係の表と矛盾しないか。
+// 各ページのスクリプト (src/pages/<id>.js の import の並び = ビルドの結合順) が 下の DEPS の依存関係の表 (以前は site/js/README.md にあった) と矛盾しないか。
 // bundler が無いので、共通モジュールは依存先より後に読まれていないと (評価時か呼び出し時に) 壊れる。
 // また、参照しているファイルが存在するか。
 const test = require('node:test');

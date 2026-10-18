@@ -35,7 +35,7 @@ test('schema の kind の集合 = js/achievements.js が組める kind', () => {
   assert.deepStrictEqual([...inCode].sort(), [...schema.$defs.kind.enum].sort());
 });
 
-const PLAYERS = path.join(process.env.HOME || '', 'spsp-state/tosakazu.github.io/spsp/players');
+const PLAYERS = path.join(process.env.SPSP_DATA_DIR || '/nonexistent', 'players');   // ビルド出力のディレクトリ (SPSP_DATA_DIR)。無ければ skip
 test('配信中の players/<uid>.json が player の契約を満たす (300 件)', { skip: !fs.existsSync(PLAYERS) ? PLAYERS + ' が無い' : false }, () => {
   const files = fs.readdirSync(PLAYERS).filter((f) => f.endsWith('.json')).sort().slice(0, 300);
   assert.ok(files.length > 0);

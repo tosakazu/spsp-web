@@ -7,6 +7,7 @@ The rankings themselves (data collection, rating calculation) are built elsewher
 `https://data.spsp.games/<region>/`. This repository only reads that JSON.
 Tournament data and per-region rules (tournament labels, series names, geography) live in
 [smash_database](https://github.com/tosakazu/smash_database).
+How the pieces fit together: [docs/architecture.md](docs/architecture.md).
 
 ## Layout
 
@@ -22,7 +23,7 @@ worker/               Cloudflare Worker: static serving + /api (worker/README.md
 types/                global types (window.SPSP …)
 tests/                node --test (meta / post / seeding), jsdom snapshot checks (frontend/), sim, split, views
 tools/                build script and helpers
-docs/                 design notes (mostly in Japanese)
+docs/                 architecture.md (start here), seeding tool notes; docs/archive/ = older notes in Japanese
 gas/                  the old Google Apps Script backend (kept for reference; the Worker replaced it)
 ```
 
@@ -71,6 +72,8 @@ Please run `npm test` (and `npm run typecheck` if you touched JS) before opening
 - Changes go to `main` through pull requests. `main` is protected and needs the owner's approval.
 - Merging to `main` deploys to spsp.games automatically (GitHub Actions → Cloudflare).
   The deploy keys live only in the `production` environment and can't be used from other branches or pull requests.
+- Database changes (new files in `worker/migrations/`) are **not** applied by the deploy. The owner applies them by hand
+  when merging, so call them out in the pull request description.
 - Never commit keys, tokens or personal information (secret scanning and push protection are on).
 - Site news (the bell in the header) is `site/news.json`.
 

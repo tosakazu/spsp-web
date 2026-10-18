@@ -7,7 +7,7 @@
  *   3. 旧 URL          → 301 で /jp/ 配下へ (小さな表)
  *   4. それ以外        → ASSETS (セキュリティヘッダを付ける。callback.html には CSP)
  *
- * 設計: docs/refactor/07_cloudflare_plan.md。
+ * 設計: docs/archive/refactor/07_cloudflare_plan.md。
  */
 import type { ApiContext } from './api/router.ts';
 import { handleApiRequest } from './api/router.ts';

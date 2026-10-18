@@ -21,7 +21,7 @@ NODE_PATH=/tmp/jsdom_inst/node_modules node --test tests/seeding/*.cjs
 | `optimizer.test.cjs` | 純粋コア: snake/最早回戦/評価関数/delta==full/可動制約/ゲーティング/フォールバック禁止/決定性/中断 | なし |
 | `data.test.cjs` | 取得・集計層: 二重計上回避/減衰/missing&errors分離/optimizer連携 | なし |
 | `worker.test.cjs` | Workerグルー（self/importScriptsをシム）: 多点/非対応/stop | なし |
-| `realdata.test.cjs` | 実 `players/*.json` + `player_prefectures.json` でbuildSeedData→optimize（実データ未配置なら skip） | `$SPSP_STATE_ROOT/tosakazu.github.io/spsp/players` (既定 `~/spsp-state/...`)、`site/latest_tjpr_full.jsonl` |
+| `realdata.test.cjs` | 実 `players/*.json` + `player_prefectures.json` でbuildSeedData→optimize（実データ未配置なら skip） | `$SPSP_DATA_DIR/players` (ビルド出力のディレクトリ。未設定なら skip)、`site/latest_tjpr_full.jsonl` |
 | `page.test.cjs` | シードページ静的整合: JS↔HTML id, orderedRecs使用, 関数定義, Workerパス | なし |
 | `page_dom.test.cjs` | jsdom 実行時: 適用→orderedRecs/downloadCsvが最適化後順を反映（実関数ソースを抽出して実行） | jsdom（無ければ skip） |
 | `series_rematch.test.cjs` | 同シリーズ再マッチ罰則: シリーズ判定(event_id/大会名推定/判定不能)・同シリーズ分の別枠集計・倍率/加算の罰則・fail-loud・レポート件数 | なし |

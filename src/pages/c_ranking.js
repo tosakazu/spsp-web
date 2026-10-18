@@ -59,7 +59,7 @@ function buildData() {
 }
 
 // キャラ投票 (本人申告) で決まったメインは pct を持たない (= 使用実績が無い).
-// docs/post_feature_design.md §12 / v3/v4/char_vote.py.
+// docs/archive/post_feature_design.md §12 / v3/v4/char_vote.py.
 // 使用率は行の characters[0] (このキャラの使用実績)。data/views/char/<id>.json の行にはビルドが入れる (投票由来のメインには無い)。
 // 従来の読み方 (latest_tjpr_full.jsonl) の行には characters が無いので、views が無いデータではこの列は「–」のまま。
 /** @param {SpspRankRecord & { characters?: SpspCharacterUse[] }} rec @returns {number | null} */
