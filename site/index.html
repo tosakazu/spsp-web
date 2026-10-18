@@ -395,11 +395,13 @@
     <input type="search" id="search" placeholder="プレイヤー名 / UID で検索…" autocomplete="off" data-i18n-attr="placeholder:ranking.search_placeholder">
     <label class="view-opt"><input type="checkbox" id="show-overseas"> <span data-i18n="ranking.show_overseas">海外プレイヤーを表示</span></label>
     <label class="view-opt"><input type="checkbox" id="show-provisional"> <span data-i18n="ranking.show_provisional">計測中プレイヤーを表示</span></label>
-    <button class="jump" data-jump="256">Top 256</button>
-    <button class="jump" data-jump="512">Top 512</button>
-    <button class="jump" data-jump="1024">Top 1024</button>
-    <button class="jump" data-jump="2048">Top 2048</button>
-    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+    <div class="jump-row">
+      <button class="jump" data-jump="256">Top 256</button>
+      <button class="jump" data-jump="512">Top 512</button>
+      <button class="jump" data-jump="1024">Top 1024</button>
+      <button class="jump" data-jump="2048">Top 2048</button>
+      <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+    </div>
   </div>
 </div>
 

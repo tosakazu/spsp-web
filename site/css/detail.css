@@ -24,6 +24,8 @@ input[type="search"] { min-width: 280px; }
 }
 .view-opt input { margin: 0; width: 12px; height: 12px; accent-color: #9ca3af; }
 .view-opt:hover { color: #6b7280; }
+/* 全国ランキングの Top N ボタン (と読み込み状況) は検索・表示の切り替えの次の行に */
+.jump-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex-basis: 100%; }
 .sub-tag {
   display: inline-block; font-size: 10px; line-height: 1; padding: 2px 5px; border-radius: 8px;
   background: #f3f4f6; color: #6b7280; vertical-align: 1px;
@@ -111,7 +113,7 @@ input[type="search"] { min-width: 280px; }
 @media (max-width:720px) {
   .method-tab { padding: 6px 8px; font-size: 11px; }
   .method-tab .tab-desc { display: none; }
-  .controls { gap: 6px; }
+  .controls, .jump-row { gap: 6px; }
   input[type="search"] { min-width: 0; flex: 1 1 100%; font-size: 14px; padding: 8px 10px; }
   .status { width: 100%; font-size: 10px; }
 }
