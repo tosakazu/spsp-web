@@ -190,13 +190,15 @@ export function buildCardModel(data, settings, titleText) {
   if (pref) {
     const unit = cat && (cat.units || []).find((/** @type {any} */ x) => x.id === pref);
     const prefEn = (unit && unit.name && unit.name.en) || SPSPGeo.unitName(pref);
-    // 前は国 (北米は州の属する group = United States / Canada)。group の無い地域 (日本) は地域名
-    const group = unit && unit.group && ((cat && cat.groups) || []).find((/** @type {any} */ g) => g.id === unit.group);
+    // 前は国。北米は州の属する group (United States / Canada)。日本の group は地方 (関東など) で国ではないので「Japan」
+    const group = homeRegion !== 'Japan' && unit && unit.group && ((cat && cat.groups) || []).find((/** @type {any} */ g) => g.id === unit.group);
     const head = (group && group.name && group.name.en) || homeRegion.replace(/_/g, ' ');
     loc = { text: `${head}, ${prefEn}`, href: SPSPLinks.prefRankingHref(S.langRoot, pref),
             rank: SUB && SUB.pref ? SUB.pref.rank : null };
   } else if (player.country && player.country !== 'Japan' && data.overseas && data.overseas.has(uid)) {
     loc = { text: player.country };   // 日本勢扱い (jp_uids / 住んでそう勢) は国登録があっても出さない
+  } else if (player.country && homeRegion === 'Japan') {
+    loc = { text: 'Japan' };   // 日本勢扱い (国登録が日本、または jp_uids / 住んでそう勢) で県の分からない人
   } else if (player.country && homeRegion !== 'Japan') {
     loc = { text: player.country };   // 北米は州の取れない人が多い (2026-10-17 で 8 割) ので国だけでも出す
   }
