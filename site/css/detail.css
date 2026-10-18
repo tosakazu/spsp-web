@@ -18,7 +18,6 @@
 }
 input[type="search"] { min-width: 280px; }
 /* 表示の切り替え (海外・計測中・サブ)。目立たせない */
-.view-opts { display: flex; gap: 12px; flex-wrap: wrap; margin: -6px 0 12px; }
 .view-opt {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #9ca3af;
   cursor: pointer; user-select: none; white-space: nowrap;
