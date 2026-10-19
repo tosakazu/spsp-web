@@ -1076,7 +1076,7 @@ function render() {
     else if (classFilter === 'main') ms = ms.filter(m => m.is_class !== true);
     if (!ms.length) return `<div style="padding:8px 12px;color:#9ca3af;font-size:11px">${i18n('common.no_match_data')}</div>`;
     const sorted = sortMatches(ms);
-    const pName = (typeof t === 'object' && t !== null) ? SPSPFormat.stripTeamTag(/** @type {MainRec} */ (MAIN_REC).display || '') : '';
+    const pName = (typeof t === 'object' && t !== null) ? SPSPFormat.shortName(/** @type {MainRec} */ (MAIN_REC).display || '') : '';
     const pSeed = (typeof t === 'object' && t !== null) ? t.seed : null;
     // ランダムシード大会 (シードが強さ順でない) は UF を出さない (ビルドも集計から外している)
     const noUf = typeof t === 'object' && t !== null && !!t.is_random_seed;
@@ -1108,8 +1108,8 @@ function render() {
     const pSeedHtml = pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : '';
     const oSeedHtml = m.opp_seed != null ? `<div class="m-seed">#${m.opp_seed}</div>` : '';
     const oppEmoji = charEmojiOf(m.opp_uid);  // 対戦相手のメイン使用キャラ絵文字 (名前の前に付与)
-    // 直対の行はチームタグ (「FENNEL | 」など) を落として名前だけにする
-    const oppName = escapeHtml(SPSPFormat.stripTeamTag(m.opp_display || ''));
+    // 直対の行はチームタグ (「FENNEL | 」など) と区切り (「れの/Reno」の「/Reno」など) の後ろを落とす
+    const oppName = escapeHtml(SPSPFormat.shortName(m.opp_display || ''));
     const oppLink = m.opp_uid ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, oppName) : oppName;
     // UF: ページ表示中のプレイヤーが自分より高シードを倒した場合のみ表記.
     let ufHtml = '';

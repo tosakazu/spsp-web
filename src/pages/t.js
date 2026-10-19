@@ -405,8 +405,8 @@ function renderPlayerMatches(uid) {
   if (!mine.length) return `<div style="padding:8px 12px;color:#9ca3af;font-size:11px">${i18n('common.no_match_data')}</div>`;
   const sorted = sortMatches(mine);
   const ELO_PER_UNIT = (M.params && M.params.ELO_PER_UNIT) || 29.48;
-  // 直対の行はチームタグ (「FENNEL | 」など) を落として名前だけにする
-  const nameOf = (/** @type {number} */ u) => SPSPFormat.stripTeamTag(_displayByUid(u));
+  // 直対の行はチームタグ (「FENNEL | 」など) と区切り (「れの/Reno」の「/Reno」など) の後ろを落とす
+  const nameOf = (/** @type {number} */ u) => SPSPFormat.shortName(_displayByUid(u));
   // モバイル時は各 match-row で本人名を省略するので、展開冒頭に「name + seed」を一回表示.
   const myName = nameOf(uid);
   const mySeed = _seedByUid(uid);
