@@ -325,11 +325,11 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .my-notice .my-notice-item { color:#065f46; }
       .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
-      /* × は速報・通知の帯 (index.html .news-ticker .ticker-close) と同じ位置・形 (右端 44px の真ん中、丸い背景) */
+      /* × は速報・通知の帯 (index.html .news-ticker .ticker-close) と同じ位置・形 (右端 44px の真ん中、× を中心にした丸い背景) */
       .my-notice .ticker-close { flex:none; align-self:stretch; position:relative; z-index:1; width:44px; min-height:26px; margin:-4px 0;
                                  border:none; background:transparent; color:#059669; padding:0; cursor:pointer;
                                  font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; }
-      .my-notice .ticker-close::before { content:''; position:absolute; right:6px; top:50%; transform:translateY(-50%);
+      .my-notice .ticker-close::before { content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
                                          width:26px; height:26px; border-radius:13px; background:rgba(255,255,255,0.6); z-index:-1; }
       .my-notice .ticker-close:hover::before { background:#fff; }
       .my-notice .ticker-close:hover { color:#047857; }
