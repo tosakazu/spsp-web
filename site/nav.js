@@ -315,7 +315,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       a.news-section-me .news-section-title { color:#047857; }
       a.news-section-me:hover { background:#ecfdf5; }
       /* 本人へのお知らせの帯 (トップ・自分のプレイヤーページ。トップの速報・通知の帯と同じ形、js/my_notice.js) */
-      .my-notice { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border-radius:6px;
+      .my-notice { display:flex; align-items:center; gap:8px; padding:4px 0 4px 10px; border-radius:6px;
                    background:#ecfdf5; border:1px solid #d1fae5; color:#065f46; font-size:12px; line-height:1.4; }
       .my-notice .label { flex:none; padding:2px 8px; border-radius:4px; background:#d1fae5; color:#047857;
                           font-weight:600; font-size:11px; white-space:nowrap; }
@@ -325,9 +325,14 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .my-notice .my-notice-item { color:#065f46; }
       .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
-      .my-notice .ticker-close { flex:none; width:22px; height:22px; border:none; background:none; color:#059669;
-                                 cursor:pointer; font-size:16px; line-height:1; border-radius:4px; }
-      .my-notice .ticker-close:hover { background:#d1fae5; }
+      /* × は速報・通知の帯 (index.html .news-ticker .ticker-close) と同じ位置・形 (右端 44px の真ん中、丸い背景) */
+      .my-notice .ticker-close { flex:none; align-self:stretch; position:relative; z-index:1; width:44px; min-height:26px; margin:-4px 0;
+                                 border:none; background:transparent; color:#059669; padding:0; cursor:pointer;
+                                 font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; }
+      .my-notice .ticker-close::before { content:''; position:absolute; right:6px; top:50%; transform:translateY(-50%);
+                                         width:26px; height:26px; border-radius:13px; background:rgba(255,255,255,0.6); z-index:-1; }
+      .my-notice .ticker-close:hover::before { background:#fff; }
+      .my-notice .ticker-close:hover { color:#047857; }
       a.news-section-foot { display:block; padding:8px 14px; border-top:1px solid #f3f4f6;
                             text-align:right; text-decoration:none; color:#dc2626;
                             font-size:11px; transition:background-color .12s; }
