@@ -76,8 +76,8 @@
     transition: background .12s, color .12s;
   }
   .news-ticker .ticker-close::before {
-    content: ''; position: absolute;
-    right: 6px; top: 50%; transform: translateY(-50%);
+    content: ''; position: absolute;   /* 丸は × と同じ中心に */
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 26px; height: 26px; border-radius: 13px;
     background: rgba(255,255,255,0.6); transition: background .12s;
     z-index: -1;
