@@ -59,8 +59,7 @@ body {
 .tour-matches { display: none; padding: 4px 0 8px; background: #fafafa; }
 .tour-group.expanded .tour-matches { display: block; }
 .match-row .m-player, .match-row .m-opp {
-  flex: 1 1 0; min-width: 0; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+  flex: 1 1 0; min-width: 0; overflow-wrap: anywhere;
 }
 .tour-item:last-child { border-bottom: none; }
 .tour-item .place {
