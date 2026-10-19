@@ -29,6 +29,8 @@ test('JSON の fetch は SPSP.data 経由 (SPSP.root は assets など配信フ�
       if (/^SPSP\.root\s*\+\s*['`]data\/char_emoji\.json/.test(src.slice(m.index, m.index + 60))) continue;
       // 大会 → アイコンの表 (バッジ貼り付けの試作、tools/badges/build_event_icons.mjs) もフロントが持つ (2026-10-16)
       if (/^SPSP\.root\s*\+\s*['`]data\/event_icons\.json/.test(src.slice(m.index, m.index + 60))) continue;
+      // 大会シールの判定のプレビュー用ファイル (data/stickers_preview/、ビルドに入るまでフロントが配る) も同じ (2026-10-20)
+      if (/^SPSP\.root\s*\+\s*`data\/stickers_preview\//.test(src.slice(m.index, m.index + 60))) continue;
       bad.push(path.relative(ROOT, f) + ': ' + m[0]);
     }
     for (const m of src.matchAll(/(loadMaster|loadCurrent|loadDiscriminators|loadGeo|defaultFetchers|cachedFetchers)\(SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);

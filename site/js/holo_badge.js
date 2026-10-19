@@ -1,11 +1,12 @@
 // @ts-check
 // holo_badge.js — 実績バッジ: 大会のアイコン画像をホログラム (Figma「submit」の sticker) にして出す。
 //   isTransparent(src)        アイコンが透過 (形の外が透明) か。画像を小さく描いて端と全体の透明な画素の割合で決める (JPEG は常に不透明)
-//   renderBadge(el, opts)     el にバッジを組み立てる。opts = { src, variant: 0 | 1 | 2, transparent }
+//   renderBadge(el, opts)     el にバッジを組み立てる。opts = { src, variant: 0 | 1 | 2 | 3, transparent }
 //   attachTilt(el)            ポインタを乗せている間 (タッチは触っている間) の傾き・虹色の筋・光だまりをポインタの位置で動かす
 //   (renderBadge の flatten)  強制ダークモード対策: 裏でキャンバスに 1 枚に描いて差し替える
 // 透過ありと透過なしでホロが違う (デザインどおり): レイヤーの画像も重ね方も別。透過ありは形の外を出さない
 // variant (ホロの種類 3 つ、色に意味がある): 0 = 虹、1 = 金、2 = 銀 (Figma の sticker の左から。透過あり・なしで見た目は違う)
+//   3 = 通常 (ホロなし。絵とクラスの文字だけ、ポインタの光は残す)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
@@ -13,7 +14,7 @@
 import { HOLO_FILES } from './holo_assets.js';
 
 /** ホロの種類 (variant の番号)。色に意味があるので、名前で使う */
-export const HOLO = { rainbow: 0, gold: 1, silver: 2 };
+export const HOLO = { rainbow: 0, gold: 1, silver: 2, normal: 3 };
 /** impl: 'img' (既定、画像版: 740px の AVIF、ラメは前の画像版のまま) | 'css' (画像を使わない) | 'old' (前の画像版、740px)
  * cls: 下位クラスの文字 ('B' など。無ければ出さない)
  * flatten: キャンバスに 1 枚に描いて差し替えるか。'auto' (既定) = Samsung Internet かダークモードのときだけ、'always'、'never'
@@ -78,7 +79,7 @@ const LAYERS = {
 
 /** @param {HTMLElement} el @param {BadgeOpts} opts */
 export function renderBadge(el, opts) {
-  const v = Math.max(0, Math.min(2, Number(opts.variant) || 0));
+  const v = Math.max(0, Math.min(3, Number(opts.variant) || 0));
   const url = `url("${String(opts.src).replace(/"/g, '%22')}")`;
   el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v}`;
   el.style.setProperty('--hb-img', url);

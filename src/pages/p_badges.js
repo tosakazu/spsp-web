@@ -1,9 +1,12 @@
 // @ts-check
 // src/pages/p_badges.js — site/p/badges.html (カードの裏面に実績シールを貼る。試作、あとでカード編集に入れる)
-//   持っているシール = 出場した大会のうちアイコンのあるもの (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)
-//   色は仮: 優勝 = 虹、2・3 位 = 金、ほか = 銀 (js/holo_badge.js の variant)。下位クラスはクラスの文字を重ねる
+//   持っているシール = 大会シールの判定 (spsp_scripts feat/stickers の spsp/stickers.py) で配られた色のうち、アイコンのある大会のもの
+//   (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)。下位クラスはクラスの文字を重ね、アイコンは親の大会のもの
+//   判定の結果はビルドに入るまでプレビュー専用の data/stickers_preview/<uid % 64>.json ({uid: {大会キー: r|g|s|n}}) から読む
+//   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・通常 の 4 枚)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
-//   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: event_id, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度) }
+//   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度) }
+//   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字>")
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPFormat from '../../site/js/format.js';
@@ -23,31 +26,34 @@ const S_MIN = 22, S_MAX = 520, S_DEF = 84;   // 最大はカードの幅くら�
 const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
-const HOLO_NAMES = ['虹', '金', '銀'];
+const HOLO_NAMES = ['虹', '金', '銀', '通常'];
+/** 色の記号 (判定のデータ) → js/holo_badge.js の variant。上の色から順 */
+const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
+const STICKER_SHARDS = 64;
 
 // Figma の見本 (back の Frame 43 にシールを貼った画像、2026-10-16 にユーザーから) の再現。だれのページでも出せるよう、
 // シールは見本用 (e が負、持っているかに関係なく出す)。位置・大きさ・回転は画像に重ねて合わせた (スマパは同じアイコンを 3 枚ずらして重ねてある)
 /** @type {Badge[]} */
 const SAMPLE_BADGES = [
-  { e: -1, name: '見本: 極冠#15', date: '', place: null, nent: null, file: '0195a75b2a4fbbafc4a819f19b792f2f.png', variant: 2, cls: null },
-  { e: -2, name: '見本: 渋谷大乱 第一陣', date: '', place: null, nent: null, file: '065e7fbef3c1df6b0581b65ff0962525.jpg', variant: 2, cls: null },
-  { e: -3, name: '見本: 篝火#10', date: '', place: null, nent: null, file: 'c30cb17425f4aa0b8668c1e4afb28866.png', variant: 0, cls: null },
-  { e: -4, name: '見本: スマパ (3 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
-  { e: -5, name: '見本: スマパ (2 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
-  { e: -6, name: '見本: スマパ', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+  { e: 'sample1', name: '見本: 極冠#15', date: '', place: null, nent: null, file: '0195a75b2a4fbbafc4a819f19b792f2f.png', variant: 2, cls: null },
+  { e: 'sample2', name: '見本: 渋谷大乱 第一陣', date: '', place: null, nent: null, file: '065e7fbef3c1df6b0581b65ff0962525.jpg', variant: 2, cls: null },
+  { e: 'sample3', name: '見本: 篝火#10', date: '', place: null, nent: null, file: 'c30cb17425f4aa0b8668c1e4afb28866.png', variant: 0, cls: null },
+  { e: 'sample4', name: '見本: スマパ (3 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+  { e: 'sample5', name: '見本: スマパ (2 枚目)', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
+  { e: 'sample6', name: '見本: スマパ', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
 ];
 /** 下から順 @type {Sticker[]} */
 const SAMPLE_LAYOUT = [
-  { e: -1, x: 425, y: 220, s: 346, r: 0 },
-  { e: -2, x: 103, y: 288, s: 168, r: 6 },
-  { e: -3, x: 40, y: 162, s: 167, r: -24 },
-  { e: -4, x: 183, y: 50, s: 345, r: -8 },
-  { e: -5, x: 168, y: 38, s: 345, r: -8 },
-  { e: -6, x: 153, y: 26, s: 345, r: -8 },
+  { e: 'sample1', x: 425, y: 220, s: 346, r: 0 },
+  { e: 'sample2', x: 103, y: 288, s: 168, r: 6 },
+  { e: 'sample3', x: 40, y: 162, s: 167, r: -24 },
+  { e: 'sample4', x: 183, y: 50, s: 345, r: -8 },
+  { e: 'sample5', x: 168, y: 38, s: 345, r: -8 },
+  { e: 'sample6', x: 153, y: 26, s: 345, r: -8 },
 ];
 
-/** @typedef {{ e: number, x: number, y: number, s: number, r: number }} Sticker */
-/** @typedef {{ e: number, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null }} Badge */
+/** @typedef {{ e: string, x: number, y: number, s: number, r: number }} Sticker */
+/** @typedef {{ e: string, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null }} Badge */
 
 // ── 保存 (このブラウザ) ──
 /** @param {number} uid @returns {Sticker[]} */
@@ -55,7 +61,7 @@ function loadStickers(uid) {
   try {
     const m = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
     const a = m && Array.isArray(m[String(uid)]) ? m[String(uid)] : [];
-    return a.filter((/** @type {any} */ s) => s && Number.isFinite(s.e) && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.s) && Number.isFinite(s.r))
+    return a.filter((/** @type {any} */ s) => s && typeof s.e === 'string' && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.s) && Number.isFinite(s.r))
       .map((/** @type {any} */ s) => ({ e: s.e, x: s.x, y: s.y, s: clampSize(s.s), r: s.r }));
   } catch (e) { return []; }
 }
@@ -76,25 +82,31 @@ const normRot = r => { let v = ((r + 180) % 360 + 360) % 360 - 180; return v ===
 const sizeToSlider = (/** @type {number} */ s) => Math.round(1000 * Math.log(s / S_MIN) / Math.log(S_MAX / S_MIN));
 const sliderToSize = (/** @type {number} */ v) => S_MIN * Math.pow(S_MAX / S_MIN, v / 1000);
 
-/** 出場大会 → 持っているシール (アイコンのある大会だけ、新しい順)
- * @param {any[]} tours @param {{ f: string[], e: Record<string, number> } | null} icons @returns {Badge[]} */
-function badgesOf(tours, icons) {
-  if (!icons) return [];
+/** 大会記録 → 大会キー (下位クラスの仮想大会は event_id が無いので親の event_id + クラスの文字) @param {any} t */
+const tourKey = t => (t.event_id ? String(t.event_id) : t.parent_event_id && t.class_letter ? `${t.parent_event_id}${t.class_letter}` : '');
+
+/** 出場大会 → 持っているシール (アイコンのある大会だけ。新しい大会から、同じ大会は上の色から)
+ * @param {any[]} tours @param {{ f: string[], e: Record<string, number> } | null} icons
+ * @param {Record<string, string> | null} got 判定の結果 {大会キー: 一番上の色 r|g|s|n} @returns {Badge[]} */
+function badgesOf(tours, icons, got) {
+  if (!icons || !got) return [];
   /** @type {Badge[]} */
   const out = [];
   const seen = new Set();
   for (const t of tours || []) {
-    const id = Number(t.event_id);
-    if (!id || seen.has(id)) continue;
-    const k = icons.e[String(id)] ?? (t.parent_event_id ? icons.e[String(t.parent_event_id)] : undefined);
+    const key = tourKey(t);
+    const top = key ? got[key] : undefined;
+    if (!top || seen.has(key)) continue;
+    const k = (t.event_id ? icons.e[String(t.event_id)] : undefined) ?? (t.parent_event_id ? icons.e[String(t.parent_event_id)] : undefined);
     if (k == null || !icons.f[k]) continue;
-    seen.add(id);
+    seen.add(key);
     const place = Number.isFinite(t.place) ? Number(t.place) : null;
-    out.push({ e: id, name: String(t.name || ''), date: String(t.date || ''), place, nent: t.nent ?? null, file: icons.f[k],
-               variant: place === 1 ? 0 : place != null && place <= 3 ? 1 : 2,
-               cls: t.class_letter ? String(t.class_letter) : null });
+    for (let v = TIERS.indexOf(/** @type {any} */ (top)); v >= 0 && v < TIERS.length; v++) {
+      out.push({ e: `${key}:${TIERS[v]}`, name: String(t.name || ''), date: String(t.date || ''), place, nent: t.nent ?? null, file: icons.f[k],
+                 variant: v, cls: t.class_letter ? String(t.class_letter) : null });
+    }
   }
-  out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));   // 安定ソート: 同じ大会は上の色から
   return out;
 }
 
@@ -110,10 +122,11 @@ async function main() {
   }
   const notFound = () => { $('loading').style.display = 'none'; $('not-found').style.display = ''; };
   if (!uid) { notFound(); return; }
-  const [data, card, icons] = await Promise.all([
+  const [data, card, icons, stickerShard] = await Promise.all([
     loadCardData(uid).catch(() => null),
     fetchAppliedCard(uid).catch(() => null),
     fetch(SPSP.root + 'data/event_icons.json').then(r => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(SPSP.root + `data/stickers_preview/${uid % STICKER_SHARDS}.json`).then(r => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   if (!data || !data.meta) { notFound(); return; }
   document.title = `${SPSPFormat.stripTeamTag(data.rec.display)} | SPSP`;
@@ -124,11 +137,11 @@ async function main() {
   // 裏面 (適用済みの設定・二つ名で)
   SPSPPlayerCard.renderBack($('bz-card'), buildCardModel(data, card ? card.settings : null, card ? card.titleText : null));
 
-  const badges = badgesOf((data.player && data.player.tournaments) || [], icons);
+  const badges = badgesOf((data.player && data.player.tournaments) || [], icons, stickerShard ? stickerShard[String(uid)] || {} : null);
   const byE = new Map([...badges, ...SAMPLE_BADGES].map(b => [b.e, b]));
   /** @type {Sticker[]} */
   let stickers = loadStickers(uid).filter(s => byE.has(s.e));
-  /** @type {number | null} 選んでいるシール (event_id) */
+  /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
   const save = () => saveStickers(uid, stickers);
 
@@ -153,7 +166,7 @@ async function main() {
   };
 
   const cur = () => stickers.find(s => s.e === sel) || null;
-  /** @type {Map<number, HTMLElement>} */
+  /** @type {Map<string, HTMLElement>} */
   const els = new Map();
   // 強制ダークモード対策でキャンバスに描いたシール (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、
   // 大きくしたら手が止まってから今の大きさで描き直す (そのままだと引き伸ばされて粗くなる)
@@ -247,7 +260,7 @@ async function main() {
   $('bz-front').addEventListener('click', () => move(Infinity));
   $('bz-backmost').addEventListener('click', () => move(-Infinity));
   $('bz-reset-tf').addEventListener('click', () => { const s = cur(); if (s) { s.r = 0; changed(); } });
-  const remove = (/** @type {number} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
+  const remove = (/** @type {string} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
   $('bz-sample').addEventListener('click', () => {
     if (stickers.length && !confirm('今貼っているシールを剥がして、Figma の見本の並びにしますか?')) return;
@@ -284,7 +297,7 @@ async function main() {
     try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
     if (ptrs.size === 2) { startPinch(); return; }
     if (ptrs.size > 2) return;
-    const s = onRot ? cur() : stEl ? stickers.find(x => x.e === Number(stEl.dataset.e)) : null;
+    const s = onRot ? cur() : stEl ? stickers.find(x => x.e === stEl.dataset.e) : null;
     if (!s) { sel = null; drag = null; place(); return; }
     e.preventDefault();
     sel = s.e;
@@ -333,7 +346,7 @@ async function main() {
   let filter = 'all';
   let shown = PAGE;
   const tray = $('bz-tray');
-  $('bz-count').textContent = `${badges.length} 枚`;
+  $('bz-count').textContent = `${badges.length} 枚` + (badges.length ? `（${TIERS.map((_, v) => `${HOLO_NAMES[v]} ${badges.filter(b => b.variant === v).length}`).join('・')}）` : '');
   for (const btn of $('bz-filters').querySelectorAll('button')) {
     btn.addEventListener('click', () => {
       filter = String(/** @type {HTMLElement} */ (btn).dataset.f);
@@ -345,8 +358,8 @@ async function main() {
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
   function paintTray() {
     const on = new Set(stickers.map(s => s.e));
-    const list = (filter === 'placed' ? [...badges, ...SAMPLE_BADGES] : badges).filter(b => filter === 'all' ? true : filter === 'win' ? b.place === 1
-      : filter === 'top3' ? b.place != null && b.place <= 3 : on.has(b.e));
+    const list = (filter === 'placed' ? [...badges, ...SAMPLE_BADGES] : badges).filter(b => filter === 'all' ? true
+      : filter === 'placed' ? on.has(b.e) : b.variant === TIERS.indexOf(/** @type {any} */ (filter)));
     tray.innerHTML = '';
     if (!list.length) {
       tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;

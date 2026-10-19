@@ -164,6 +164,13 @@ for (const f of ['char_emoji.json', 'overseas_manual.json', 'name_readings.json'
   const src = path.join(SITE, 'data', f);
   if (fs.existsSync(src) && writeIfChanged(path.join(OUT, 'data', f), fs.readFileSync(src))) nStatic++;
 }
+// 大会シールの判定 (プレビュー専用、git に入れない)。置いてあるときだけ写す (src/pages/p_badges.js が読む)
+const STK = path.join(SITE, 'data', 'stickers_preview');
+if (fs.existsSync(STK)) {
+  for (const f of fs.readdirSync(STK)) {
+    if (f.endsWith('.json') && writeIfChanged(path.join(OUT, 'data', 'stickers_preview', f), fs.readFileSync(path.join(STK, f)))) nStatic++;
+  }
+}
 
 // ── 2. HTML ──
 function setText(el, text) {
