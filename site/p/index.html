@@ -417,21 +417,22 @@
      bracket は固定幅 (= 大会内で score 列の x 座標が揃うように). */
   .match-row { gap: 6px; padding: 5px 8px; }
   .match-row .m-bracket {
-    flex: 0 0 65px; font-size: 10px; color: #9ca3af;
+    flex: 0 0 56px; font-size: 10px; color: #9ca3af;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .match-row .m-content {
     flex: 1 1 auto; display: flex; align-items: center;
-    justify-content: flex-start; gap: 8px; min-width: 0;
+    justify-content: flex-start; gap: 6px; min-width: 0;
   }
   .match-row .m-player { display: none; }
+  /* スコアの列は詰めて、その分を相手の名前に回す */
   .match-row .m-score {
-    flex: 0 0 auto; text-align: left; min-width: 36px;
+    flex: 0 0 auto; text-align: left; min-width: 30px;
     font-size: 13px; font-weight: 700;
   }
   .match-row .m-opp {
     flex: 1 1 0; text-align: left; min-width: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    overflow-wrap: anywhere; line-height: 1.3;   /* 長い名前は省略せず折り返す */
   }
   .match-row .m-delta { flex: 0 0 auto; min-width: 50px; }
 

@@ -405,8 +405,10 @@ function renderPlayerMatches(uid) {
   if (!mine.length) return `<div style="padding:8px 12px;color:#9ca3af;font-size:11px">${i18n('common.no_match_data')}</div>`;
   const sorted = sortMatches(mine);
   const ELO_PER_UNIT = (M.params && M.params.ELO_PER_UNIT) || 29.48;
+  // 直対の行はチームタグ (「FENNEL | 」など) と区切り (「れの/Reno」の「/Reno」など) の後ろを落とす
+  const nameOf = (/** @type {number} */ u) => SPSPFormat.shortName(_displayByUid(u));
   // モバイル時は各 match-row で本人名を省略するので、展開冒頭に「name + seed」を一回表示.
-  const myName = _displayByUid(uid);
+  const myName = nameOf(uid);
   const mySeed = _seedByUid(uid);
   const header = (myName || mySeed != null)
     ? `<div class="match-header">${escapeHtml(myName || '')}${mySeed != null ? `<span class="seed">#${mySeed}</span>` : ''}</div>`
@@ -419,7 +421,7 @@ function renderPlayerMatches(uid) {
     const score = (pScore != null && oScore != null) ? `${pScore}-${oScore}` : '—';
     const scoreColor = won ? '#16a34a' : '#2563eb';
     const bracket = compactBracketLabel(m.global_bracket_label, m.round_text, m.bracket_type);
-    const oppName = escapeHtml(_displayByUid(oppUid));
+    const oppName = escapeHtml(nameOf(oppUid));
     const oppEmoji = charEmojiOf(oppUid);
     const oppLink = (oppEmoji ? oppEmoji + ' ' : '') + SPSPLinks.playerLink(SPSP.langRoot, oppUid, oppName);
     const oSeed = _seedByUid(oppUid);
@@ -446,7 +448,7 @@ function renderPlayerMatches(uid) {
     return `<div class="match-row t-match">
       <span class="m-bracket">${bracket}</span>
       <span class="m-content">
-        <span class="m-player"><div>${escapeHtml(_displayByUid(uid))}</div>${pSeedHtml}</span>
+        <span class="m-player"><div>${escapeHtml(myName)}</div>${pSeedHtml}</span>
         <span class="m-score" style="color:${scoreColor};display:inline-block;text-align:center">
           <div>${score}</div>
           ${ufHtml}

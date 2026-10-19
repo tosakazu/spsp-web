@@ -37,9 +37,19 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     return cut || trim(raw) || raw;
   }
 
-  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, stripTeamTag: stripTeamTag, PLUS_CUTOFF: PLUS_CUTOFF };
+  // 狭い場所 (直対の行) 用の短い名前: チームタグを落とし、さらに区切り (/ [ と全角) の前までにする。
+  // 「れの/Reno」→「れの」、「リノハ [休日は…]」→「リノハ」。区切りが先頭 (「[RE]キの」) なら切らない。
+  // # と ( は名前の一部のことが多いので切らない (「TG(トリグリ)」「sy#OKPG」はそのまま)
+  function shortName(name) {
+    var s = stripTeamTag(name);
+    var m = s.match(/^(.*?)[\/／\[［【]/);
+    var head = m ? m[1].replace(/[\s\u3000]+$/, '') : '';
+    return head || s;
+  }
+
+  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, stripTeamTag: stripTeamTag, shortName: shortName, PLUS_CUTOFF: PLUS_CUTOFF };
   global.SPSPFormat = api;
   (global.SPSP = global.SPSP || {}).Format = api;   // window.SPSP.Format (名前空間。旧名 SPSPFormat も残す)
 
 export default api;
-export { lvSuffix, lvLabel, fmtRank, stripTeamTag, PLUS_CUTOFF };
+export { lvSuffix, lvLabel, fmtRank, stripTeamTag, shortName, PLUS_CUTOFF };
