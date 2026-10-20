@@ -485,12 +485,12 @@ export function renderBack(el, model, opts = {}) {
     trackReady(el, again);
     return;
   }
-  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる
-  trackReady(el, want ? Promise.all((model.back?.stickers || []).map(s => {
+  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる (届かない画像で止まらないよう 6 秒まで)
+  trackReady(el, want ? Promise.race([Promise.all((model.back?.stickers || []).map(s => {
     const p = parseKey(s.e);
     const src = p ? iconUrl(p.eid) : null;
     return src && p ? preloadBadge(src, p.variant) : null;
-  })) : Promise.resolve());
+  })), new Promise(r => setTimeout(r, 6000))]) : Promise.resolve());
 }
 
 /** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、
