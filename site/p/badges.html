@@ -49,6 +49,17 @@
           <div class="bz-sel-name" id="bz-sel-name"></div>
           <label class="bz-range"><span>大きさ</span><input type="range" id="bz-size" min="0" max="1000" step="1"><output id="bz-size-v"></output></label>
           <label class="bz-range"><span>回転</span><input type="range" id="bz-rot" min="-180" max="180" step="1"><output id="bz-rot-v"></output></label>
+          <div class="bz-range" id="bz-shape-row"><span>形</span>
+            <div class="bz-shapes" id="bz-shapes">
+              <button type="button" data-k="square" title="四角"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14"/></svg></button>
+              <button type="button" data-k="round" title="角丸"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="3.5"/></svg></button>
+              <button type="button" data-k="circle" title="丸"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></button>
+              <button type="button" data-k="hex" title="六角形"><svg viewBox="0 0 20 20"><polygon points="10,2.5 16.5,6.25 16.5,13.75 10,17.5 3.5,13.75 3.5,6.25"/></svg></button>
+              <button type="button" data-k="diamond" title="ひし形"><svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg></button>
+            </div>
+          </div>
+          <label class="bz-range" id="bz-crop-row"><span>切り取り</span><input type="range" id="bz-crop" min="35" max="100" step="1"><output id="bz-crop-v"></output></label>
+          <div class="bz-hint" id="bz-shape-note" style="display:none">透過のアイコンは形のまま貼ります。</div>
           <div class="bz-btns">
             <button type="button" id="bz-up" title="1 つ上へ">上へ</button>
             <button type="button" id="bz-down" title="1 つ下へ">下へ</button>
@@ -63,7 +74,7 @@
 
     <section class="bz-sec">
       <h2>持っているシール <span class="bz-count" id="bz-count"></span></h2>
-      <div class="bz-note">色は仮のルールです (優勝 = 虹、2・3 位 = 金、ほか = 銀)。アイコンのある大会だけ出ます。</div>
+      <div class="bz-note">大会の成績で もらえる色が決まります (虹 = 優勝、金・銀 = 上位、通常 = 参加)。上の色をもらった大会は下の色も全部持っています。アイコンのある大会だけ出ます。</div>
       <div class="bz-filters" id="bz-filters">
         <button type="button" data-f="all" class="on">全部</button>
         <button type="button" data-f="r">虹</button>

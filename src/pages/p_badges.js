@@ -5,7 +5,10 @@
 //   判定の結果はビルドに入るまでプレビュー専用の data/stickers_preview/<uid % 64>.json ({uid: {大会キー: r|g|s|n}}) から読む
 //   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・通常 の 4 枚)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
-//   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度) }
+//   透過なしのシールは形 (四角・角丸・丸・六角形・ひし形) と切り取り (絵の何割を見せるか) を選べる。切り取りは絵の縮尺を保ったまま
+//   シールを小さくする (はさみで外側を切る)。ホロは見えている形いっぱいに縮む (js/holo_badge.js の shape / crop)
+//   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度),
+//   k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字>")
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
@@ -13,7 +16,7 @@ import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { loadCardData, buildCardModel, fetchAppliedCard } from '../../site/js/player_card_model.js';
-import { isTransparent, renderBadge, reflatten } from '../../site/js/holo_badge.js';
+import { isTransparent, renderBadge, reflatten, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 
 SPSPI18n.apply(document);
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -43,16 +46,16 @@ const SAMPLE_BADGES = [
   { e: 'sample6', name: '見本: スマパ', date: '', place: null, nent: null, file: 'ed7fedc76cf5a6047242fc827f4f7548.png', variant: 2, cls: null },
 ];
 /** 下から順 @type {Sticker[]} */
-const SAMPLE_LAYOUT = [
+const SAMPLE_LAYOUT = /** @type {Sticker[]} */ ([
   { e: 'sample1', x: 425, y: 220, s: 346, r: 0 },
   { e: 'sample2', x: 103, y: 288, s: 168, r: 6 },
   { e: 'sample3', x: 40, y: 162, s: 167, r: -24 },
   { e: 'sample4', x: 183, y: 50, s: 345, r: -8 },
   { e: 'sample5', x: 168, y: 38, s: 345, r: -8 },
   { e: 'sample6', x: 153, y: 26, s: 345, r: -8 },
-];
+].map(s => ({ ...s, k: 'square', c: 1 })));
 
-/** @typedef {{ e: string, x: number, y: number, s: number, r: number }} Sticker */
+/** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
 /** @typedef {{ e: string, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null }} Badge */
 
 // ── 保存 (このブラウザ) ──
@@ -62,20 +65,21 @@ function loadStickers(uid) {
     const m = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
     const a = m && Array.isArray(m[String(uid)]) ? m[String(uid)] : [];
     return a.filter((/** @type {any} */ s) => s && typeof s.e === 'string' && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.s) && Number.isFinite(s.r))
-      .map((/** @type {any} */ s) => ({ e: s.e, x: s.x, y: s.y, s: clampSize(s.s), r: s.r }));
+      .map((/** @type {any} */ s) => ({ e: s.e, x: s.x, y: s.y, s: clampSize(s.s), r: s.r, k: SHAPES[s.k] ? String(s.k) : 'square', c: clampCrop(s.c ?? 1) }));
   } catch (e) { return []; }
 }
 /** @param {number} uid @param {Sticker[]} list */
 function saveStickers(uid, list) {
   try {
     const m = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {};
-    if (list.length) m[String(uid)] = list.map(s => ({ e: s.e, x: round1(s.x), y: round1(s.y), s: round1(s.s), r: round1(s.r) }));
+    if (list.length) m[String(uid)] = list.map(s => ({ e: s.e, x: round1(s.x), y: round1(s.y), s: round1(s.s), r: round1(s.r), k: s.k, c: Math.round(s.c * 100) / 100 }));
     else delete m[String(uid)];
     localStorage.setItem(STORE_KEY, JSON.stringify(m));
   } catch (e) { /* 保存できない環境では何もしない */ }
 }
 const round1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
 const clampSize = (/** @type {number} */ s) => Math.max(S_MIN, Math.min(S_MAX, s));
+const clampCrop = (/** @type {number} */ c) => Math.max(CROP_MIN, Math.min(1, Number(c) || 1));
 /** 回転を -180〜180 に @param {number} r */
 const normRot = r => { let v = ((r + 180) % 360 + 360) % 360 - 180; return v === -180 ? 180 : v; };
 // スライダー (0〜1000) ⇔ 大きさ (対数)
@@ -168,6 +172,10 @@ async function main() {
   const cur = () => stickers.find(s => s.e === sel) || null;
   /** @type {Map<string, HTMLElement>} */
   const els = new Map();
+  /** シールを描き直す関数 (形・切り取りを変えたとき) @type {Map<string, () => void>} */
+  const paints = new Map();
+  /** 透過ありのアイコンのシール (形・切り取りは選べない) @type {Set<string>} */
+  const trans = new Set();
   // 強制ダークモード対策でキャンバスに描いたシール (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、
   // 大きくしたら手が止まってから今の大きさで描き直す (そのままだと引き伸ばされて粗くなる)
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -190,12 +198,16 @@ async function main() {
     el.innerHTML = '<div class="bz-badge"></div>';
     const src = IMG_BASE + b.file;
     const holder = /** @type {HTMLElement} */ (el.querySelector('.bz-badge'));
-    const paintBadge = (/** @type {boolean} */ tr) => {
+    const paintBadge = () => {
+      const now = stickers.find(x => x.e === s.e) || s;
+      const tr = trans.has(s.e);
       el.classList.toggle('bz-shape', tr);
-      renderBadge(holder, { src, variant: b.variant, transparent: tr, cls: b.cls });
+      el.dataset.kc = `${now.k}|${now.c}`;
+      renderBadge(holder, { src, variant: b.variant, transparent: tr, cls: b.cls, shape: now.k, crop: now.c });
     };
-    paintBadge(false);
-    isTransparent(src).then(tr => { if (tr) paintBadge(true); });
+    paints.set(s.e, paintBadge);
+    paintBadge();
+    isTransparent(src).then(tr => { if (tr) { trans.add(s.e); paintBadge(); paintTools(); } });
     return el;
   }
   /** 位置・大きさ・回転・重なり順を要素に写す */
@@ -203,6 +215,7 @@ async function main() {
     stickers.forEach((s, i) => {
       let el = els.get(s.e);
       if (!el) { el = makeEl(s); els.set(s.e, el); }
+      else if (el.dataset.kc !== `${s.k}|${s.c}`) paints.get(s.e)?.();
       el.style.left = s.x * scale + 'px';
       el.style.top = s.y * scale + 'px';
       el.style.width = el.style.height = s.s * scale + 'px';
@@ -211,7 +224,7 @@ async function main() {
       el.classList.toggle('on', s.e === sel);
       if (layer.children[i] !== el) layer.insertBefore(el, layer.children[i] || null);
     });
-    for (const [e, el] of els) if (!stickers.some(s => s.e === e)) { el.remove(); els.delete(e); }
+    for (const [e, el] of els) if (!stickers.some(s => s.e === e)) { el.remove(); els.delete(e); paints.delete(e); }
     const s = cur();
     frame.style.display = s ? '' : 'none';
     if (s) {
@@ -228,6 +241,7 @@ async function main() {
   // ── 操作の欄 ──
   const sizeIn = /** @type {HTMLInputElement} */ ($('bz-size'));
   const rotIn = /** @type {HTMLInputElement} */ ($('bz-rot'));
+  const cropIn = /** @type {HTMLInputElement} */ ($('bz-crop'));
   function paintTools() {
     const s = cur();
     $('bz-hint').style.display = s ? 'none' : '';
@@ -239,6 +253,14 @@ async function main() {
     if (document.activeElement !== rotIn) rotIn.value = String(Math.round(s.r));
     $('bz-size-v').textContent = Math.round(s.s / S_DEF * 100) + '%';
     $('bz-rot-v').textContent = Math.round(s.r) + '°';
+    // 形・切り取り (透過ありのアイコンは形のまま)
+    const tr = trans.has(s.e);
+    $('bz-shape-row').style.display = tr ? 'none' : '';
+    $('bz-crop-row').style.display = tr ? 'none' : '';
+    $('bz-shape-note').style.display = tr ? '' : 'none';
+    for (const x of $('bz-shapes').querySelectorAll('button')) x.classList.toggle('on', /** @type {HTMLElement} */ (x).dataset.k === s.k);
+    if (document.activeElement !== cropIn) cropIn.value = String(Math.round(s.c * 100));
+    $('bz-crop-v').textContent = Math.round(s.c * 100) + '%';
     const i = stickers.indexOf(s);
     /** @type {HTMLButtonElement} */ ($('bz-up')).disabled = /** @type {HTMLButtonElement} */ ($('bz-front')).disabled = i === stickers.length - 1;
     /** @type {HTMLButtonElement} */ ($('bz-down')).disabled = /** @type {HTMLButtonElement} */ ($('bz-backmost')).disabled = i === 0;
@@ -246,6 +268,18 @@ async function main() {
   const changed = () => { place(); save(); };
   sizeIn.addEventListener('input', () => { const s = cur(); if (s) { s.s = clampSize(sliderToSize(Number(sizeIn.value))); changed(); } });
   rotIn.addEventListener('input', () => { const s = cur(); if (s) { s.r = normRot(Number(rotIn.value)); changed(); } });
+  // 切り取り: 絵の縮尺はそのまま、外側を切った分だけシールが小さくなる (大きくする・小さくするは大きさの欄で)
+  cropIn.min = String(Math.round(CROP_MIN * 100));
+  cropIn.addEventListener('input', () => {
+    const s = cur(); if (!s) return;
+    const c = clampCrop(Number(cropIn.value) / 100);
+    s.s = clampSize(s.s * c / s.c);
+    s.c = c;
+    changed();
+  });
+  for (const btn of $('bz-shapes').querySelectorAll('button')) {
+    btn.addEventListener('click', () => { const s = cur(); if (s) { s.k = String(/** @type {HTMLElement} */ (btn).dataset.k); changed(); } });
+  }
   /** 重なり順を動かす @param {number} to 動かす先 (-Infinity = いちばん下、Infinity = いちばん上、±1 = 1 つ) */
   const move = to => {
     const s = cur(); if (!s) return;
@@ -264,7 +298,7 @@ async function main() {
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
   $('bz-sample').addEventListener('click', () => {
     if (stickers.length && !confirm('今貼っているシールを剥がして、Figma の見本の並びにしますか?')) return;
-    stickers = SAMPLE_LAYOUT.map(s => ({ ...s })); sel = null; changed(); paintTray();
+    stickers = SAMPLE_LAYOUT.map(s => ({ ...s, k: 'square', c: 1 })); sel = null; changed(); paintTray();
   });
   $('bz-clear').addEventListener('click', () => {
     if (!stickers.length || !confirm('貼ったシールを全部剥がしますか?')) return;
@@ -383,7 +417,7 @@ async function main() {
     if (!stickers.some(s => s.e === b.e)) {
       if (stickers.length >= MAX_STICKERS) { alert(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
       const n = stickers.length;
-      stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0 });
+      stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0, k: 'square', c: 1 });
       save();
       paintTray();
     }

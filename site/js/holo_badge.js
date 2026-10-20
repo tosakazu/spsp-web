@@ -7,6 +7,9 @@
 // 透過ありと透過なしでホロが違う (デザインどおり): レイヤーの画像も重ね方も別。透過ありは形の外を出さない
 // variant (ホロの種類 3 つ、色に意味がある): 0 = 虹、1 = 金、2 = 銀 (Figma の sticker の左から。透過あり・なしで見た目は違う)
 //   3 = 通常 (ホロなし。絵とクラスの文字だけ、ポインタの光は残す)
+// 形と切り取り (透過なしだけ、2026-10-20): shape = square / round (角丸) / circle / hex (六角形) / diamond (ひし形) で外形を切る。
+//   crop = 絵のうち見せる幅の割合 (0.35〜1)。絵だけ 1 / crop 倍に拡大し、ホロは見えている形いっぱいのまま (狭めるとホロも一緒に縮む)。
+//   クラスの文字は形の内側に入るよう、形ごとに右下からずらして小さくする (SHAPES)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
@@ -15,10 +18,20 @@ import { HOLO_FILES } from './holo_assets.js';
 
 /** ホロの種類 (variant の番号)。色に意味があるので、名前で使う */
 export const HOLO = { rainbow: 0, gold: 1, silver: 2, normal: 3 };
+/** 形ごとのクラスの文字の置き方: 右下の角から dx・dy (一辺に対する割合) 内側へ、大きさ k 倍。
+ * 文字の箱 (一辺の約 1/3 四方) の右下の角が形の内側に入る値 (丸: 中心からの距離、六角形: 右下の辺、ひし形: |x|+|y|) に少し余裕を足した */
+export const SHAPES = /** @type {Record<string, { dx: number, dy: number, k: number }>} */ ({
+  square: { dx: 0, dy: 0, k: 1 },
+  round: { dx: 0.05, dy: 0.05, k: 0.95 },
+  circle: { dx: 0.17, dy: 0.17, k: 0.8 },
+  hex: { dx: 0.12, dy: 0.25, k: 0.75 },
+  diamond: { dx: 0.3, dy: 0.3, k: 0.6 },
+});
+export const CROP_MIN = 0.35;
 /** impl: 'img' (既定、画像版: 740px の AVIF、ラメは前の画像版のまま) | 'css' (画像を使わない) | 'old' (前の画像版、740px)
  * cls: 下位クラスの文字 ('B' など。無ければ出さない)
  * flatten: キャンバスに 1 枚に描いて差し替えるか。'auto' (既定) = Samsung Internet かダークモードのときだけ、'always'、'never'
- * @typedef {{ src: string, variant?: number, transparent?: boolean, impl?: 'img' | 'css' | 'old', cls?: string | null, flatten?: 'auto' | 'always' | 'never' }} BadgeOpts */
+ * @typedef {{ src: string, variant?: number, transparent?: boolean, impl?: 'img' | 'css' | 'old', cls?: string | null, flatten?: 'auto' | 'always' | 'never', shape?: string, crop?: number }} BadgeOpts */
 
 /** @type {Map<string, Promise<boolean>>} */
 const cache = new Map();
@@ -81,8 +94,16 @@ const LAYERS = {
 export function renderBadge(el, opts) {
   const v = Math.max(0, Math.min(3, Number(opts.variant) || 0));
   const url = `url("${String(opts.src).replace(/"/g, '%22')}")`;
-  el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v}`;
+  // 形と切り取りは透過なしだけ (透過ありはアイコンの形がそのまま外形)
+  const shape = !opts.transparent && opts.shape && SHAPES[opts.shape] ? opts.shape : 'square';
+  const crop = opts.transparent ? 1 : Math.max(CROP_MIN, Math.min(1, Number(opts.crop) || 1));
+  const pl = SHAPES[shape];
+  el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v} hb-k-${shape}`;
   el.style.setProperty('--hb-img', url);
+  el.style.setProperty('--hb-zoom', String(1 / crop));
+  el.style.setProperty('--hb-cls-dx', String(pl.dx));
+  el.style.setProperty('--hb-cls-dy', String(pl.dy));
+  el.style.setProperty('--hb-cls-k', String(pl.k));
   // 層: 絵 / (透過なしならクラスの文字) / ホロのレイヤー (下から) / ポインタを乗せたときの光 / (透過ありならクラスの文字)
   const layers = LAYERS[`${opts.transparent ? 'sh' : 'sq'}${v}`] || [];
   const impl = opts.impl || 'img';
@@ -97,7 +118,7 @@ export function renderBadge(el, opts) {
   for (const d of el.querySelectorAll('.hb-l, .hb-c, .hb-o')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
   const fl = opts.flatten || 'auto';
   if (impl !== 'css' && (fl === 'always' || (fl === 'auto' && forcedDarkLikely()))) {
-    const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl, letter };
+    const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl, letter, crop, pl };
     flatOpts.set(el, fo);
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
@@ -155,9 +176,10 @@ async function layerImage(name, impl) {
 }
 
 /** 文字を CSS と同じ位置・見た目で描く (holo_badge.css の .hb-square / .hb-shape .hb-cls の数値と同じ)
- * @param {CanvasRenderingContext2D} ctx @param {number} W @param {string} letter @param {boolean} shape */
-function drawLetter(ctx, W, letter, shape) {
-  const size = W * (shape ? 220 : 350) / 740;
+ * @param {CanvasRenderingContext2D} ctx @param {number} W @param {string} letter @param {boolean} shape
+ * @param {{ dx: number, dy: number, k: number }} [pl] 透過なしの形ごとの置き方 (SHAPES) */
+function drawLetter(ctx, W, letter, shape, pl = SHAPES.square) {
+  const size = W * (shape ? 220 : 350) / 740 * (shape ? 1 : pl.k);
   ctx.save();
   ctx.font = `italic 800 ${size}px "Zalando Sans Expanded", sans-serif`;
   ctx.textAlign = 'right';
@@ -167,7 +189,7 @@ function drawLetter(ctx, W, letter, shape) {
   // 字の基準線 = 箱の上 + (字の高さ - (上 + 下)) / 2 + 上
   const asc = m.fontBoundingBoxAscent || size * 0.8, desc = m.fontBoundingBoxDescent || size * 0.2;
   const tx = (shape ? -0.0955 : -0.0371) * size, ty = (shape ? -0.5227 : 0.0514) * size;
-  ctx.translate(W + tx, W + ty);
+  ctx.translate(W * (1 - (shape ? 0 : pl.dx)) + tx, W * (1 - (shape ? 0 : pl.dy)) + ty);
   if (!shape) ctx.scale(1.016, 1.02);
   const x = 0, y = -size + (size - (asc + desc)) / 2 + asc;
   if (shape) {
@@ -184,7 +206,7 @@ function drawLetter(ctx, W, letter, shape) {
 }
 
 /** 重ねた見た目をキャンバスに 1 枚に描いて、上に置く (下の重ねた要素は隠す)
- * @param {HTMLElement} el @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string }} o */
+ * @param {HTMLElement} el @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }} o */
 async function flattenBadge(el, o) {
   // 幅は回転・傾きを含まない大きさ (offsetWidth)。祖先を transform で縮めている所では getBoundingClientRect の方が実際の大きさ
   const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width) || 160;
@@ -199,10 +221,10 @@ async function flattenBadge(el, o) {
   const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
   // 絵: 透過なしは cover、透過ありは contain (CSS と同じ)
   const iw = icon.naturalWidth || W, ih = icon.naturalHeight || W;
-  const s = o.transparent ? Math.min(W / iw, W / ih) : Math.max(W / iw, W / ih);
+  const s = o.transparent ? Math.min(W / iw, W / ih) : Math.max(W / iw, W / ih) / o.crop;   // 切り取り = 絵だけ拡大 (CSS の --hb-zoom)
   const dw = iw * s, dh = ih * s, dx = (W - dw) / 2, dy = (W - dh) / 2;
   ctx.drawImage(icon, dx, dy, dw, dh);
-  if (o.letter && !o.transparent) drawLetter(ctx, W, o.letter, false);
+  if (o.letter && !o.transparent) drawLetter(ctx, W, o.letter, false, o.pl);
   o.layers.forEach(([, mode], i) => {
     ctx.globalCompositeOperation = CANVAS_OP[mode] || 'source-over';
     ctx.drawImage(imgs[i], 0, 0, W, W);
@@ -241,7 +263,7 @@ export function reflatten(el) {
 }
 
 /** キャンバスに差し替えたときの描き方 (描き直す用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }>} */
 const flatOpts = new WeakMap();
 /** 中身を捨てられたバッジ (表に戻ったら描き直す) */
 /** @type {Set<HTMLElement>} */

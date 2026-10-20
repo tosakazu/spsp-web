@@ -58,6 +58,14 @@
 }
 .hb-shape .hb-art { background-size: contain; }
 
+/* 透過なしの形と切り取り (js/holo_badge.js の renderBadge の shape / crop)。外形で .hb ごと切る (キャンバスに描いた絵・光・文字も)。
+   切り取りは絵だけ拡大し、ホロは形いっぱいのまま */
+.hb-square .hb-art { transform: scale(var(--hb-zoom, 1)); }
+.hb-square.hb-k-round { clip-path: inset(0 round 15%); }
+.hb-square.hb-k-circle { clip-path: circle(50%); }
+.hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
+.hb-square.hb-k-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+
 /* クラスの文字 (B・C・D・E)。Figma の sticker (117:209 / 115:203) に合わせた位置と大きさ (740px のバッジで測って、em に直した)
    フォント = Zalando Sans Expanded ExtraBold Italic (Figma と同じ。外形は Figma の書き出しと 1px 以内で一致)
    透過なし: ホロの下に置く (ホロが文字にもかかる)。塗りなし・灰色 (#bab9b9) の線だけ。Figma は線を字の外側に 5px 引くが、
@@ -68,7 +76,9 @@
   font-family: "Zalando Sans Expanded", sans-serif; font-weight: 800; font-style: italic;
 }
 .hb-square .hb-cls {
-  font-size: calc(var(--hb-size, 160px) * 350 / 740);
+  /* 形ごとに右下からずらして小さく (js/holo_badge.js の SHAPES) */
+  inset: auto calc(var(--hb-cls-dx, 0) * 100%) calc(var(--hb-cls-dy, 0) * 100%) auto;
+  font-size: calc(var(--hb-size, 160px) * 350 / 740 * var(--hb-cls-k, 1));
   color: transparent; -webkit-text-stroke: .01429em #bab9b9;
   transform: translate(-.0371em, .0514em) scale(1.016, 1.02);
   /* 影 (Figma の指定は 黒 50%、2px ずらし、ぼかし 2px。見た目が Figma より薄かったので 75% に)。
