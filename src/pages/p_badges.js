@@ -661,15 +661,26 @@ async function main() {
     });
   }
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
-  // 一覧の箱の高さ = 画面の下までの残り (ページはなるべくスクロールさせず、一覧だけ動かす)。狭い画面でも 200px は取る
+  // 一覧の箱の高さ = 画面からカードと操作 (上に貼り付く .bz-top) と検索・絞り込みの段を引いた残り。
+  // サイトのナビと題の行は、一覧を動かし始めたらページごとスクロールして画面の外へ送る (その分一覧が広い)
   const scroller = $('bz-scroll');
+  const bzTop = $('bz-top');
   const fitScroll = () => {
-    const top = scroller.getBoundingClientRect().top + window.scrollY;
-    scroller.style.height = Math.max(200, Math.floor(window.innerHeight - top)) + 'px';
+    const gap = scroller.getBoundingClientRect().top - bzTop.getBoundingClientRect().bottom;   // 検索・絞り込みの段
+    scroller.style.height = Math.max(240, Math.floor(window.innerHeight - bzTop.offsetHeight - gap)) + 'px';
   };
+  /** カードが画面の上に貼り付く位置 (ページのスクロール量) */
+  const pinY = () => Math.round($('bz-root').querySelector('.bz-head')?.getBoundingClientRect().bottom ?? 0) + window.scrollY;
+  scroller.addEventListener('scroll', () => {
+    if (scroller.scrollTop > 0 && window.scrollY < pinY() - 1) window.scrollTo({ top: pinY(), behavior: 'smooth' });
+  }, { passive: true });
   fitScroll();
   window.addEventListener('resize', fitScroll);
-  if (typeof ResizeObserver === 'function') new ResizeObserver(fitScroll).observe($('bz-top'));
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(fitScroll);
+    ro.observe(bzTop);
+    ro.observe(/** @type {HTMLElement} */ ($('bz-root').querySelector('.bz-find')));
+  }
   // 一覧の下まで来たら続きを出す (「もっと見る」を押さなくても)
   if (typeof IntersectionObserver === 'function') {
     new IntersectionObserver(es => {
