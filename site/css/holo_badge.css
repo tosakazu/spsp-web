@@ -61,8 +61,10 @@
 /* 透過なしの形と切り取り (js/holo_badge.js の renderBadge の shape / crop)。外形で .hb ごと切る (キャンバスに描いた絵・光・文字も)。
    切り取りは絵だけ拡大し、ホロは形いっぱいのまま */
 .hb-square .hb-art { transform: scale(var(--hb-zoom, 1)); }
-.hb-square.hb-k-round { clip-path: inset(0 round 15%); }
-.hb-square.hb-k-circle { clip-path: circle(50%); }
+/* 角丸と丸は clip-path でなく border-radius (+ .hb の overflow: hidden) で切る: Windows の Chrome (描画の高速化あり) で
+   clip-path: circle() とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-20) */
+.hb-square.hb-k-round { border-radius: 15%; }
+.hb-square.hb-k-circle { border-radius: 50%; }
 .hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
 .hb-square.hb-k-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 
