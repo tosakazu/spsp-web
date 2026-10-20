@@ -588,16 +588,26 @@ function needsImage() {
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
 const imageTimers = new WeakMap();
-/** 重ねる画像を撮り終えたら resolve (撮れなくても) @type {WeakMap<HTMLElement, Promise<void>>} */
+/** 重ねる画像を撮り終えたら resolve (撮れなくても)。撮る前に描き直されて撮り直しになっても、同じ待ちのまま
+ * (前の予約を取り消したときに、その待ちが終わらないまま残っていた。裏返しの紹介が止まった) @type {WeakMap<HTMLElement, Promise<void>>} */
 const imageDone = new WeakMap();
+/** まだ撮り終えていない待ちを終わらせる関数 @type {WeakMap<HTMLElement, () => void>} */
+const imagePending = new WeakMap();
 /** @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) */
 function scheduleImage(el, delay) {
   if (!needsImage()) return;
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
-  /** @type {() => void} */
-  let done = () => {};
-  imageDone.set(el, new Promise(r => { done = r; }));
+  // 撮り終えていない待ちがあればそれを使い続ける (取り消した予約の待ちを残さない)
+  let done = imagePending.get(el);
+  if (!done) {
+    /** @type {() => void} */
+    let r0 = () => {};
+    imageDone.set(el, new Promise(r => { r0 = r; }));
+    done = () => { imagePending.delete(el); r0(); };
+    imagePending.set(el, done);
+  }
+  const finish = done;
   imageTimers.set(el, setTimeout(() => {
     // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
     captureCanvas(el).then(node => {
@@ -611,7 +621,7 @@ function scheduleImage(el, delay) {
       if (prev) prev.remove();
       const glow = el.querySelector('.pcb-glow');
       if (glow) el.appendChild(glow);   // シールの光は画像の上に
-    }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).finally(() => done());   // 重ねてから「撮り終えた」に
+    }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).finally(() => finish());   // 重ねてから「撮り終えた」に
   }, delay));
 }
 
