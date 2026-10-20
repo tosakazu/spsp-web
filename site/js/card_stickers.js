@@ -74,7 +74,4 @@ export function iconUrl(eid, tbl = icons) {
   return k != null && tbl && tbl.f[k] ? IMG_BASE + tbl.f[k] : null;
 }
 
-// シールの影を消して見比べる (?shadow=0、プレイヤーページ・カード編集とも。見た目の確認用で保存しない)
-try { if (new URLSearchParams(location.search).get('shadow') === '0') document.documentElement.classList.add('no-sticker-shadow'); } catch (e) { /* 無視 */ }
-
 export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, iconsNow, loadIcons, iconUrl };

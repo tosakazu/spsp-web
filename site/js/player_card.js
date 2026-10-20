@@ -457,6 +457,9 @@ export function renderBack(el, model, opts = {}) {
   if (want && !iconsNow()) loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
 }
 
+/** シールの影 (player_card.css .pcb-sk の drop-shadow と同じ値。カードを画像にするときに絵に入れる) */
+const STICKER_SHADOW = { dy: 1, blur: 2, color: 'rgba(0, 0, 0, .35)' };
+
 /** 裏面のシールの絵 (js/holo_badge.js)。アイコンの無い大会のシールは出さない
  * @param {HTMLElement} root .pc-in @param {PCardModel} m */
 function paintBackStickers(root, m) {
@@ -573,9 +576,22 @@ async function captureCanvas(el) {
       const hb = /** @type {HTMLElement | null} */ (sk.querySelector('.hb'));
       const cv = hb ? await badgeToCanvas(hb, (parseFloat(ck.style.width) || 100) * 3) : null;
       if (!cv) throw new Error('no badge');
+      // 影 (画面の drop-shadow と同じ: 下へ 1px・ぼかし 2px・黒 35%。html2canvas は filter を描かないので絵に入れる)。
+      // 影がはみ出す分だけ周りに余白を足し、img をその分外へ広げて置く。シールの回転は外側の要素なので影も一緒に回る (画面と同じ)
+      const k = cv.width / (parseFloat(ck.style.width) || 100);   // カードの px → 絵の px
+      const pad = Math.ceil(STICKER_SHADOW.blur * 2 * k + STICKER_SHADOW.dy * k);
+      const out = document.createElement('canvas');
+      out.width = out.height = cv.width + pad * 2;
+      const octx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
+      octx.shadowColor = STICKER_SHADOW.color;
+      octx.shadowOffsetY = STICKER_SHADOW.dy * k;
+      octx.shadowBlur = STICKER_SHADOW.blur * k;
+      octx.drawImage(cv, pad, pad);
       const img = document.createElement('img');
-      img.src = cv.toDataURL('image/png');   // アイコンが CORS で読めずキャンバスが汚れていると、ここで例外
-      img.style.cssText = 'display:block;width:100%;height:100%';
+      img.src = out.toDataURL('image/png');   // アイコンが CORS で読めずキャンバスが汚れていると、ここで例外
+      const p = pad / k;
+      img.style.cssText = `display:block;position:absolute;left:${-p}px;top:${-p}px;width:calc(100% + ${2 * p}px);height:calc(100% + ${2 * p}px);max-width:none`;
+      ck.style.filter = 'none';
       await img.decode().catch(() => {});
       ck.appendChild(img);
     } catch (e) { ck.remove(); }

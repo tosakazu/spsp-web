@@ -203,7 +203,7 @@
 .pcb-rank-n { font-weight: 700; line-height: .724; }
 /* 裏面のシール (js/player_card.js paintBackStickers、設定 back)。カードからはみ出した所は切る。形・ホロは holo_badge.css */
 .pcb-st { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.pcb-sk { position: absolute; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
+.pcb-sk { position: absolute; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }   /* 影は画像にしたときも同じ (player_card.js STICKER_SHADOW) */
 .pcb-sk > .hb { container-type: size; --hb-size: 100cqw; width: 100%; height: 100%; }
 .pcb-sk > .hb, .pcb-sk > .hb:hover { transform: none; transition: none; }
 .pcb-sk .hb-sheen, .pcb-sk .hb-glare { display: none; }
@@ -216,6 +216,3 @@
     calc(.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc);
 }
 .pcb-outline .pcb-title { --ol: .09em; }
-
-/* シールの影なし (見比べる用、<html>.no-sticker-shadow。js/card_stickers.js ?shadow=0 / カード編集の裏のメニュー) */
-.no-sticker-shadow .pcb-sk, .no-sticker-shadow .bz-st, .no-sticker-shadow .bz-tb { filter: none; }

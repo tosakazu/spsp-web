@@ -186,6 +186,3 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
   .bz-title { font-size: 15px; }
   .bz-head-btns { gap: 2px; }
 }
-
-/* シールの影なし (見比べる用、<html>.no-sticker-shadow。js/card_stickers.js ?shadow=0 / カード編集の裏のメニュー) */
-.no-sticker-shadow .pcb-sk, .no-sticker-shadow .bz-st, .no-sticker-shadow .bz-tb { filter: none; }

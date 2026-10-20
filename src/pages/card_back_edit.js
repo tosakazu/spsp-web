@@ -431,19 +431,6 @@ export async function mountBackEditor(o) {
     toast('全部剥がしました', '元に戻す', undo);
   });
 
-  // シールの影のあり・なし (見比べる用、保存しない。<html> の .no-sticker-shadow、player_card.css / badge_edit.css)。?shadow=0 でもなしから
-  const shadowBtn = $('bz-shadow');
-  const paintShadow = () => {
-    const on = !document.documentElement.classList.contains('no-sticker-shadow');
-    shadowBtn.textContent = `シールの影: ${on ? 'あり' : 'なし'}`;
-    shadowBtn.setAttribute('aria-pressed', String(on));
-  };
-  paintShadow();
-  shadowBtn.addEventListener('click', () => {
-    document.documentElement.classList.toggle('no-sticker-shadow');
-    paintShadow();
-  });
-
   // ── 一時的なお知らせ (取り消しのボタン付き) ──
   /** @type {HTMLElement | null} */
   let toastEl = null;
