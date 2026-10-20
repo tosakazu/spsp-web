@@ -368,7 +368,7 @@ async function main() {
     const name = $('bz-sel-name');
     name.classList.toggle('bz-hint', !s);
     if (!s) {
-      name.textContent = stickers.length ? 'シールを押すと選べます。ドラッグで移動、↻ で回転と大きさ (2 本指でも)' : '下の一覧から押すとカードに貼れます';
+      name.textContent = stickers.length ? '' : '下の一覧から押すとカードに貼れます';   // 貼ってあれば何も出さない (高さは保つ)
       return;
     }
     const b = /** @type {Badge} */ (byE.get(s.e));
