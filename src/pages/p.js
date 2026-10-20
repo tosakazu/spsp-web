@@ -692,15 +692,43 @@ function render() {
     revealed = true;
     wrapEl.classList.remove('pc-loading');
   };
+  // 紹介の段階: wait (裏返す前) → toBack (裏へ回っている 0.5 秒) → back (裏を見せている 1.2 秒) → toFront (表へ回っている 0.5 秒) → 終わり
+  /** @type {'' | 'wait' | 'toBack' | 'back' | 'toFront'} */
+  let introPhase = '';
+  /** @type {ReturnType<typeof setTimeout>[]} */
+  let introTimers = [];
+  const FLIP_MS = 500, SHOW_MS = 1200;
   const intro = () => {
     if (introDone || !wrapEl) return;
     introDone = true;
     if (wrapEl.classList.contains('flipped')) return;   // もう自分で裏返している
-    setTimeout(() => {
-      setFlipped(true);
-      if (!CARD_KEEP_BACK) setTimeout(() => { if (wrapEl.classList.contains('flipped')) setFlipped(false); }, 500 + 1200);   // 裏返し 0.5 秒 + 見せる 1.2 秒
-    }, 300);
+    introPhase = 'wait';
+    const at = (/** @type {number} */ ms, /** @type {() => void} */ fn) => introTimers.push(setTimeout(fn, ms));
+    at(300, () => { introPhase = 'toBack'; setFlipped(true); });
+    at(300 + FLIP_MS, () => { introPhase = 'back'; });
+    if (CARD_KEEP_BACK) { at(300 + FLIP_MS + 1, () => { introPhase = ''; }); return; }
+    at(300 + FLIP_MS + SHOW_MS, () => { introPhase = 'toFront'; setFlipped(false); });
+    at(300 + FLIP_MS * 2 + SHOW_MS, () => { introPhase = ''; });
   };
+  // 紹介の前・途中にカードを触ったら止める: 裏返す前・裏を見せている間はその面のまま、回っている途中なら回る前の面に戻す。
+  // まだ紹介が始まっていなければ、もうしない。止めるためのタップは、ボタンを出すタップにはしない
+  if (wrapEl) {
+    wrapEl.addEventListener('pointerdown', () => {
+      if (introDone && !introPhase) return;
+      introDone = true;
+      introTimers.forEach(clearTimeout);
+      introTimers = [];
+      const was = introPhase;
+      introPhase = '';
+      if (was === 'toBack') setFlipped(false);
+      else if (was === 'toFront') setFlipped(true);
+      if (was) {
+        const stop = (/** @type {Event} */ e) => { e.stopPropagation(); e.preventDefault(); };
+        wrapEl.addEventListener('click', stop, { capture: true, once: true });
+        setTimeout(() => wrapEl.removeEventListener('click', stop, { capture: true }), 600);
+      }
+    }, { capture: true });
+  }
   setTimeout(reveal, 10000);
   if (!card) reveal();
   // 読み込み中の表示: SPSP のロゴのアニメーション (logo.js、ほかのページの読み込み中と同じ) と、その下に総合評価の順位
@@ -747,6 +775,11 @@ function render() {
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
   if (editBtn) {
     editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
+    // カードが裏を向いているときは、編集ページも裏のタブから
+    const editBase = editBtn.href;
+    editBtn.addEventListener('click', () => {
+      editBtn.href = editBase + (document.getElementById('pcard-wrap')?.classList.contains('flipped') ? '&tab=back' : '');
+    });
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
     // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
     const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
