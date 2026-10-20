@@ -27,7 +27,7 @@ const DISC = (params.get('d') || '').trim().toLowerCase();
 const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 const W = 514, H = 333;
 /** 大きさ (一辺、カードの px) の幅。小さめ〜大きめ。スライダーは対数で (小さい所も細かく選べるように) */
-const S_MIN = 22, S_MAX = 520, S_DEF = 84;   // 最大はカードの幅くらい
+const S_MIN = 22, S_MAX = 520, S_DEF = 120;   // 最大はカードの幅くらい。既定はカードの高さの 3 分の 1 強
 const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
