@@ -735,10 +735,16 @@ function render() {
     const readingsP = kanji
       ? Promise.race([SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } }), new Promise(r => setTimeout(r, 3000))])
       : Promise.resolve();
-    // 設定 (本人が適用したもの) が届いたら描き直す。待つのは 4 秒まで (遅れて届いても描き直す)
-    const settledP = Promise.race([settingsP.then(x => { if (x && x.settings) draw(x); }), new Promise(r => setTimeout(r, 4000))]);
-    // そろったら裏返しの紹介 (その時点の描画の準備を待つ)
-    Promise.all([readingsP, settledP]).then(() => Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null])).then(intro);
+    // 設定 (本人が適用したもの) が届いたら描き直す。紹介が待つのは 2.5 秒まで (遅れて届いても描き直す)
+    const sleep = (/** @type {number} */ ms) => new Promise(r => setTimeout(r, ms));
+    const settledP = Promise.race([settingsP.then(x => { if (x && x.settings) draw(x); }).catch(() => {}), sleep(2500)]);
+    // そろったら裏返しの紹介 (その時点の描画の準備を待つ)。表を出してから 5 秒たったら、そろっていなくても始める
+    // (初めて開いたときはシールの素材の読み込みで遅れ、日によって紹介が出たり出なかったりに見えた)。失敗しても始める
+    Promise.race([
+      Promise.all([readingsP.catch(() => {}), settledP])
+        .then(() => Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null])),
+      sleep(5000),
+    ]).catch(() => {}).then(intro);
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
