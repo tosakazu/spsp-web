@@ -434,7 +434,6 @@ window.SPSP_I18N.en = {
   'card_edit.reset': 'Reset',
   'card_edit.apply': 'Apply',
   'card_edit.back_mypage': 'Back to my page',
-  'card_edit.latin_note': 'Leave empty to make it from your name automatically. Letters A-Z, digits, spaces and ! ? . - _ \' & +, up to 45 characters. A long name wraps onto two lines at a space',
   'card_edit.latin_bad': 'Use letters A-Z, digits, single spaces and only these symbols: ! ? . - _ \' & + (up to 45 characters)',
   'card_edit.applied': 'Applied',
   'card_edit.apply_failed': 'Could not save',

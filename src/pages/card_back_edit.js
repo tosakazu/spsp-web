@@ -130,33 +130,29 @@ export async function mountBackEditor(o) {
   });
   paintTextTop(); paintOutline(); renderBase();
 
-  // ── 裏面の名前 (英字名、カードの設定 latin)。空なら名前から自動 (js/latin_name.js)。正しい形のときだけカードと設定に ──
+  // ── 裏面の名前 (英字名、カードの設定 latin)。欄には最初から今の名前 (未設定なら名前から自動で作ったもの、js/latin_name.js)。
+  //    自動と同じ・空なら設定なし (= 自動)。正しい形のときだけカードと設定に、使えない文字のときは理由を出す ──
   const latinEl = /** @type {HTMLInputElement} */ ($('bz-latin'));
   const latinNote = $('bz-latin-note');
-  const latinHelp = $('bz-latin-help');
-  const NOTE = SPSPI18n.t('card_edit.latin_note');
-  latinEl.placeholder = autoLatin(SPSPFormat.stripTeamTag(data.rec.display), data.readings);
-  latinEl.value = latin || '';
-  const setNote = (/** @type {string} */ text, /** @type {'' | 'bad' | 'open'} */ kind) => {
-    latinNote.textContent = text;
-    latinNote.className = 'bz-name-note' + (kind ? ' ' + kind : '');
-  };
+  const auto = autoLatin(SPSPFormat.stripTeamTag(data.rec.display), data.readings);
+  latinEl.value = latin || auto;
+  latinEl.placeholder = auto;
   latinEl.addEventListener('input', () => {
     const v = latinEl.value.trim();
     const ok = v === '' || latinNameValid(v);
     latinEl.classList.toggle('bad', !ok);
-    if (!ok) { setNote(SPSPI18n.t('card_edit.latin_bad'), 'bad'); return; }
-    if (latinNote.classList.contains('bad')) setNote('', '');
-    if ((v || null) === latin) return;
-    latin = v || null;
+    latinNote.textContent = ok ? '' : SPSPI18n.t('card_edit.latin_bad');
+    latinNote.classList.toggle('bad', !ok);
+    if (!ok) return;
+    const next = v === '' || v === auto ? null : v;
+    if (next === latin) return;
+    latin = next;
     renderBase();
     o.onChange({ latin });
   });
-  latinHelp.addEventListener('click', () => {
-    const open = !latinNote.classList.contains('open');
-    setNote(open ? NOTE : '', open ? 'open' : '');
-    latinHelp.setAttribute('aria-expanded', String(open));
-  });
+  // 空のまま離れたら自動の名前を入れて見せる
+  latinEl.addEventListener('blur', () => { if (!latinEl.value.trim()) { latinEl.value = auto; latinEl.classList.remove('bad'); latinNote.classList.remove('bad'); } });
+  latinEl.addEventListener('keydown', e => { if (e.key === 'Enter') latinEl.blur(); });
 
   // ── 持っているシール ──
   const badges = badgesOf((data.player && data.player.tournaments) || [], icons, stickerShard ? stickerShard[String(uid)] || {} : null);

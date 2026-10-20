@@ -437,7 +437,6 @@ window.SPSP_I18N.ja = {
   'card_edit.reset': 'リセット',
   'card_edit.apply': '適用',
   'card_edit.back_mypage': 'マイページに戻る',
-  'card_edit.latin_note': '空欄なら名前から自動で作ります (かなはローマ字に、「たいけい/Taikei」のような名前は英字の側)。半角の英字・数字と空白、記号は ! ? . - _ \' & + だけで 45 文字まで。長い名前は、空白を入れたところで 2 行に分かれます',
   'card_edit.latin_bad': '半角の英字・数字と空白、記号は ! ? . - _ \' & + だけ、45 文字までにしてください (前後・続けての空白は使えません)',
   'card_edit.applied': '適用済み',
   'card_edit.apply_failed': '保存できませんでした',

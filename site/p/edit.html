@@ -102,8 +102,10 @@
       </div>
       <!-- 裏: 裏面の名前とシール (src/pages/card_back_edit.js、裏のタブを初めて開いたときに組み立てる) -->
       <div class="ce-pane-back" id="ce-pane-back" style="display:none">
-        <!-- 道具の行: 元に戻す・やり直す・文字を前に・縁取り・その他 -->
+        <!-- 道具の行: 裏面の名前 (英字名、カードの設定 latin。最初から今の名前 = 未設定なら名前から自動で作ったものが入っている) と、
+             元に戻す・やり直す・文字を前に・縁取り・その他 -->
         <div class="bz-head">
+          <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done" aria-label="裏面の名前" title="裏面の名前">
           <div class="bz-head-btns">
         <button type="button" class="bz-ib" id="bz-undo" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
         <button type="button" class="bz-ib" id="bz-redo" title="やり直す (Ctrl+Shift+Z)" aria-label="やり直す" disabled><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
@@ -123,13 +125,8 @@
             </details>
           </div>
         </div>
-        <!-- 裏面の名前 (英字名、カードの設定 latin)。空なら名前から自動 -->
-        <div class="bz-name" id="bz-name">
-          <label class="bz-name-l" for="bz-latin">裏面の名前</label>
-          <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done">
-          <button type="button" class="bz-ib bz-help" id="bz-latin-help" aria-expanded="false" aria-controls="bz-latin-note" title="説明" aria-label="説明">?</button>
-          <div class="bz-name-note" id="bz-latin-note"></div>
-        </div>
+        <!-- 名前に使えない文字があるときだけ理由 -->
+        <div class="bz-name-note" id="bz-latin-note"></div>
     <!-- カードと操作。操作の欄は選んでいてもいなくても同じ高さ (一覧がずれないように) -->
     <div class="bz-top" id="bz-top">
       <div class="bz-stage" id="bz-stage">

@@ -347,17 +347,42 @@ async function main() {
   // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
   $('ce-tabs').style.display = '';
   let backMounted = false;
+  /** @type {'front' | 'back' | null} */
+  let curTab = null;
+  /** 切り替えをプレイヤーページの裏返し (player_card.css .pcard-flip: rotateY 180°、0.5 秒 ease) と同じ見え方で:
+   * 今のカードを 90° まで回して隠し、入れ替えて、次のカードを反対側の 90° から戻す (表と裏でカードの場所が少し違うので 2 枚に分けて)
+   * @param {HTMLElement} from @param {() => HTMLElement} to 入れ替えたあとに回すもの @param {number} dir 1 = 表→裏、-1 = 裏→表 @param {() => void} swap */
+  const flip = async (from, to, dir, swap) => {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof from.animate !== 'function') { swap(); return; }
+    try {
+      await from.animate([{ transform: 'rotateY(0deg)' }, { transform: `rotateY(${90 * dir}deg)` }], { duration: 250, easing: 'ease-in' }).finished;
+    } catch (e) { /* 途中で止まっても入れ替える */ }
+    swap();
+    to().animate([{ transform: `rotateY(${-90 * dir}deg)` }, { transform: 'rotateY(0deg)' }], { duration: 250, easing: 'ease-out' });
+  };
   /** @param {'front' | 'back'} tab */
   const setTab = tab => {
+    if (tab === curTab) return;
+    const first = curTab === null;
+    curTab = tab;
+    preview.classList.remove('flipped');   // プレビューを押して裏を見ていたら表に戻してから回す
     for (const b of $('ce-tabs').querySelectorAll('button')) {
       const on = /** @type {HTMLElement} */ (b).dataset.tab === tab;
       b.classList.toggle('on', on);
       b.setAttribute('aria-selected', String(on));
     }
-    $('ce-pane-front').style.display = tab === 'front' ? '' : 'none';
-    $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
-    preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
-    $('ce-default').style.display = tab === 'front' ? '' : 'none';
+    const swap = () => {
+      $('ce-pane-front').style.display = tab === 'front' ? '' : 'none';
+      $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
+      preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
+      $('ce-default').style.display = tab === 'front' ? '' : 'none';
+    };
+    const frontCard = () => /** @type {HTMLElement} */ (preview.querySelector('.pcard-flip'));
+    const backCard = () => $('bz-stage');
+    if (first) swap();
+    else if (tab === 'back') flip(frontCard(), backCard, 1, swap);
+    else flip(backCard(), frontCard, -1, swap);
     try {
       const u = new URL(location.href);
       if (tab === 'back') u.searchParams.set('tab', 'back'); else u.searchParams.delete('tab');
