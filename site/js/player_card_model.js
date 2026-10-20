@@ -20,7 +20,7 @@ import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
-import { normBack } from './card_stickers.js';
+import { normBack, ownedStickers, isOwned } from './card_stickers.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -173,6 +173,14 @@ function classSuffix(t) {
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
 //   左下の大会 = 順位評価のポイントが一番高い大会 (無ければ最新の集計対象大会)、合計 = 出場大会数と試合数 (勝ち + 負け)
+/** 裏面の設定から、持っていないシールを外す (選手の大会記録の sticker と突き合わせる)
+ * @param {import('./card_stickers.js').CardBack | null} back @param {any[]} tours */
+function ownBack(back, tours) {
+  if (!back || !back.stickers.length) return back;
+  const owned = ownedStickers(tours);
+  return { ...back, stickers: back.stickers.filter(s => isOwned(owned, s.e)) };
+}
+
 /** @param {CardData} data @param {CardSettings | null} [settings] @param {TitleText} [titleText]
  * @returns {import('./player_card.js').PCardModel} */
 export function buildCardModel(data, settings, titleText) {
@@ -248,7 +256,7 @@ export function buildCardModel(data, settings, titleText) {
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
     totalTournaments: tours.length,
-    back: st.back || null,   // 裏面のシール (js/card_stickers.js)
+    back: ownBack(st.back || null, tours),   // 裏面のシール (js/card_stickers.js)。持っていないもの (判定が変わった等) は出さない
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: pickedTour ? i18n('player.card.picked') : bestMode ? i18n('player.card.best') : i18n('player.card.latest'),

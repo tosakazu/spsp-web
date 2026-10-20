@@ -85,7 +85,7 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'title_export':
         res = await handleTitleExport(ctx.cfg, ctx.store, r); break;
       case 'card_put':
-        res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
+        res = await handleCardPut(ctx.cfg, ctx.store, r, now, ctx.dataFetch); break;
       case 'class_create':
         res = await handleClassCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_mine':

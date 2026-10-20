@@ -61,8 +61,13 @@ onChange(fn)         ログイン状態が変わったとき (別タブのログ
 
 - ログアウト中: カードのプレビューと [start.gg でログイン]。
 - 本人以外でログイン中: 「本人のアカウントでログインしてください」。
-- 本人: 編集できる。途中の状態はブラウザに自動保存 (下書き)。**「適用」でサーバに保存** (`card_put`)。
+- 本人: 編集できる。途中の状態はブラウザに自動保存 (下書き。表も裏も。間違えて閉じても続きから)。**「適用」でサーバに保存** (`card_put`、表と裏をまとめて)。
 - 開いたとき: サーバの設定 (`card_get`) → 下書きがあれば下書きを上に重ねる。
+- 表と裏はタブで切り替える (`?tab=back` で裏から。プレイヤーページの編集ボタンはカードが裏を向いていれば裏から)。
+  裏 = 英字名 (`latin`) と大会シール (`back`、src/pages/card_back_edit.js)。裏は日本版だけ (region config `features.cardBack`、北米は false: タブも裏返しも出さない)。
+- preview の Worker (`spsp-web-preview.*.workers.dev`) だけは、ログインなしで誰のカードでも編集・適用できる (見た目の確認用)。
+  フロントは js/login.js `openEdit()` (ホスト名で判定)、サーバは `[env.preview.vars] CARD_OPEN_EDIT = "1"` のときだけ `card_put` に `uid` を受ける。
+  **本番の vars (トップレベル・`[env.na.vars]`) には置かない** (worker/test/card.test.mjs が「cardOpenEdit が無ければ uid 指定は invalid_session」を確かめる)。
 
 ### プレイヤーページ (p/)
 
@@ -86,7 +91,9 @@ POST /api  {action:'me', token}
 保存するもの (フロントの `CardSettings`、js/player_card_model.js):
 
 ```json
-{ "template": "standard", "color": "red", "ach": ["tour:{\"name\":\"篝火#15\",...}", "..."] }
+{ "template": "standard", "color": "red", "ach": ["tour:{\"name\":\"篝火#15\",...}", "..."], "tour": null,
+  "title": {"pre": "default", "post": "ja-0001"}, "latin": null,
+  "back": { "stickers": [{"e": "1724470B:g", "x": 100, "y": 50, "s": 120, "r": -10, "k": "circle", "c": 0.6}], "text_top": false, "outline": true } }
 ```
 
 | 欄 | 検証 |
@@ -94,6 +101,10 @@ POST /api  {action:'me', token}
 | template | `standard` のみ (増えたらサーバの表も増やす) |
 | color | `red` `blue` `green` `purple` `orange` `teal` `yellow` `gray` のどれか (2026-10-01 に 3 色追加) |
 | ach | null、または文字列の配列 (0〜12 個、各 300 文字以内、重複なし)。中身 (実績の key) はサーバでは解釈しない |
+| tour | null (自動)、または大会の event_id |
+| title | null (既定)、または `{pre, post}` (二つ名の id / null =「なし」/ `default`)。一覧にあり、その位置に使え、持っているものだけ |
+| latin | null (自動)、または裏面の英字名 (半角英数と ! ? . - _ ' & + と空白、45 文字まで) |
+| back | 無し (貼っていない)、または裏面の大会シール: `stickers` (30 枚まで)・`text_top` (名前・二つ名・順位をシールの上に)・`outline` (その文字に縁取り)。シール 1 枚 = `e` キー (`<event_id>[クラスの文字]:<r\|g\|s\|n>`、虹・金・銀・素)、`x` `y` 中心 (カードの座標 514×333 の中)、`s` 一辺 (22〜520)、`r` 回転 (-180〜180)、`k` 形 (square / round / circle / hex / diamond)、`c` 切り取り (0.35〜1)。数は小数 1 桁 (c は 2 桁) に丸める。**持っているシールだけ**: 選手のデータ (`players/<uid>.json` の大会記録の `sticker` = もらった一番上の色、spsp_scripts spsp/stickers.py) と突き合わせ、一番上の色以下なら持っている。読めないときは保存しない。シールも文字の設定も無ければ欄ごと無し |
 
 **読む (だれでも)**
 
@@ -108,7 +119,7 @@ Cache-Control: public, max-age=60
 ```
 POST /api  {action:'card_put', token, settings}
 → 200 {ok:true, settings, updated_at}
-→ 200 {ok:false, error:{code:'invalid_session' | 'bad_settings' | 'rate_limited'}}
+→ 200 {ok:false, error:{code:'invalid_session' | 'bad_settings' | 'rate_limited' | 'title_not_owned' | 'sticker_not_owned' | 'internal'}}
 ```
 - 書き込む uid は **token の uid** (リクエストに uid を持たせない = 他人のカードは書けない)。
 - 既定に戻す: `settings: null` を送ると行を消す。

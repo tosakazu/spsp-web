@@ -435,6 +435,7 @@ window.SPSP_I18N.en = {
   'card_edit.apply': 'Apply',
   'card_edit.back_mypage': 'Back to my page',
   'card_edit.latin_bad': 'Use letters A-Z, digits, single spaces and only these symbols: ! ? . - _ \' & + (up to 45 characters)',
+  'card_edit.sticker_not_owned': 'A sticker you do not own is on the card. Remove it and apply again.',
   'card_edit.applied': 'Applied',
   'card_edit.apply_failed': 'Could not save',
   'card_edit.apply_too_soon': 'Please wait a moment and apply again',

@@ -438,6 +438,7 @@ window.SPSP_I18N.ja = {
   'card_edit.apply': '適用',
   'card_edit.back_mypage': 'マイページに戻る',
   'card_edit.latin_bad': '半角の英字・数字と空白、記号は ! ? . - _ \' & + だけ、45 文字までにしてください (前後・続けての空白は使えません)',
+  'card_edit.sticker_not_owned': '持っていないシールが貼られています。剥がしてからもう一度適用してください。',
   'card_edit.applied': '適用済み',
   'card_edit.apply_failed': '保存できませんでした',
   'card_edit.apply_too_soon': '少し待ってからもう一度適用してください',

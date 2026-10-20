@@ -91,6 +91,8 @@ function playerTourTag(t, kind) {
 const params = new URLSearchParams(location.search);
 /** #back で来た (カード編集の裏で適用した): 裏を見せたら裏のまま止める。ふだんは裏を見せてから表に戻す */
 const CARD_KEEP_BACK = location.hash === '#back';
+/** カードの裏面 (英字名・大会シール) を使う地域か (北米はまだ無い: 裏返さない・裏を描かない。region config features.cardBack) */
+const CARD_BACK_ON = !(SPSP.site && SPSP.site.features && SPSP.site.features.cardBack === false);
 // 選手の指定: ?d=<start.gg discriminator> が既定 (2026-09-14)。?uid=<uid> と #<uid> も引き続き通る。
 // ?d= は data/discriminators.json (js/links.js が読む) で uid に解決してから読み込む。
 const DISC_PARAM = (params.get('d') || '').trim().toLowerCase();
@@ -699,7 +701,7 @@ function render() {
   let introTimers = [];
   const FLIP_MS = 500, SHOW_MS = 1200;
   const intro = () => {
-    if (introDone || !wrapEl) return;
+    if (introDone || !wrapEl || !CARD_BACK_ON) return;
     introDone = true;
     if (wrapEl.classList.contains('flipped')) return;   // もう自分で裏返している
     introPhase = 'wait';
@@ -748,7 +750,7 @@ function render() {
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
     // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
-    const back = document.getElementById('pcard-back');
+    const back = CARD_BACK_ON ? document.getElementById('pcard-back') : null;
     /** @type {any} */
     let last = null;
     const draw = (/** @type {any} */ x) => {
@@ -2178,12 +2180,15 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 // #back で来たら (カード編集の裏で適用したとき) 裏返して出す
 {
   const wrap = document.getElementById('pcard-wrap');
+  // 裏面の無い地域では裏返すボタンを出さない
+  if (!CARD_BACK_ON) document.getElementById('pc-ov-flip')?.remove();
   if (wrap && CARD_KEEP_BACK) {
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 残っても困らない */ }
   }
   document.addEventListener('click', e => {
     if (!wrap) return;
     const el = /** @type {Element} */ (e.target);
+    if (el.closest('#pc-ov-flip') && !CARD_BACK_ON) return;
     if (el.closest('#pc-ov-flip')) {
       const flipped = wrap.classList.toggle('flipped');
       document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
@@ -2222,6 +2227,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       setTimeout(() => { if (!g) wrap.style.transition = ''; }, 400);
     };
     const flip = () => {
+      if (!CARD_BACK_ON) return;
       const flipped = wrap.classList.toggle('flipped');
       document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
       document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));

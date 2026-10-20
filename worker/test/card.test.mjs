@@ -318,8 +318,13 @@ test('titleTextOf: 既定は null、「なし」は ""、設定なしは null', 
   assert.deepStrictEqual(titleTextOf('ja', { pre: 'default', post: null }), { pre: null, post: '' });
 });
 
+/** シールを持っている選手のデータ (ビルドの大会記録の sticker) */
+const STICKER_PLAYER = { status: 200, body: { user_id: 4242, characters: [], tournaments: [
+  { event_id: 1700000, sticker: 'rainbow' }, { event_id: null, parent_event_id: 1724470, class_letter: 'B', sticker: 'gold' },
+  { event_id: 1800000, sticker: 'silver' }, { event_id: 1900000 } ] } };
+
 test('card_put: 裏面のシール (back) を確かめて保存。形が違えば bad_settings、何も無ければ欄なし', async () => {
-  const e = env();
+  const e = env({ player: STICKER_PLAYER });
   const token = await loginToken(e);
   let now = Date.parse('2026-10-20T00:00:00Z');
   e.nowMs = now;
@@ -349,4 +354,25 @@ test('card_put: preview (cardOpenEdit) だけ、ログインなしで uid を指
   const put = await post(e, { action: 'card_put', uid: '777', settings: GOOD });
   assert.strictEqual(put.ok, true, JSON.stringify(put));
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '777' })).settings, GOOD);
+});
+
+test('card_put: シールは持っているものだけ (選手のデータの sticker = 一番上の色、下の色は全部持っている)', async () => {
+  const e = env({ player: STICKER_PLAYER });
+  const token = await loginToken(e);
+  let now = Date.parse('2026-10-21T00:00:00Z');
+  const put = async (/** @type {string[]} */ keys) => {
+    e.nowMs = now += 60_000;
+    return post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: keys.map((k, i) => ({ e: k, x: 10 + i, y: 10, s: 50, r: 0 })) } } });
+  };
+  assert.strictEqual((await put(['1700000:r', '1700000:n', '1724470B:g', '1724470B:s', '1800000:s'])).ok, true);
+  for (const k of ['1724470B:r', '1800000:g', '1900000:n', '1724470:g', '1234567:n']) {
+    const r = await put([k]);
+    assert.strictEqual(r.error && r.error.code, 'sticker_not_owned', k);
+  }
+  // 選手のデータが読めないときは保存しない (シールが無ければ読まない)
+  const e2 = env({ player: { status: 500, body: {} } });
+  const t2 = await loginToken(e2);
+  e2.nowMs = now;
+  assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [{ e: '1700000:r', x: 1, y: 1, s: 30, r: 0 }] } } })).error.code, 'internal');
+  assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [], text_top: true } } })).ok, true);
 });

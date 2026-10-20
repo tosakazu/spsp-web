@@ -549,6 +549,16 @@
             "$ref": "#/$defs/tag"
           },
           "description": "無ければ is_* フラグを見る (js/tags.js flag())"
+        },
+        "sticker": {
+          "type": "string",
+          "enum": [
+            "rainbow",
+            "gold",
+            "silver",
+            "normal"
+          ],
+          "description": "大会シール (カードの裏面に貼る) のもらった一番上の色。下の色は全部持っている。配らない大会・人は欄なし (spsp_scripts spsp/stickers.py、2026-10-20〜)。フロントは js/card_stickers.js ownedStickers、サーバは worker/src/api/card.ts checkStickersOwned"
         }
       },
       "additionalProperties": true

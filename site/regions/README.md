@@ -38,7 +38,7 @@ site/
 
 地理単位の名前表とグループ (`geo.json`: 都道府県 / 州)、キャラ名表 (`chars/<lang>.json`)、直対の敗者側テーブル (bracket の LB 表)、
 解説ページの地域版 (`overview` / `details` / `math` / `eval` は翻訳でなく地域の事例で書く)、`news.json`、認証の設定 (`config.auth`)。
-ブログは日本版だけ (`features.blog`)。
+ブログは日本版だけ (`features.blog`)。カードの裏面 (英字名・大会シール。裏返し・カード編集の裏タブ) も日本版だけ (`features.cardBack`)。
 
 ## 配信
 

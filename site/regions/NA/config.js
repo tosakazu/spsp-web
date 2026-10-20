@@ -17,7 +17,7 @@
     auth: { 'https://spsp.games': { clientId: '619' }, 'https://spsp-web-preview.tosakazu.workers.dev': { clientId: '620' } },   // 日本版と同じアプリ (コールバックは <origin>/callback.html で共通)
     vote: { testerUids: ['1941489'] },   // 投票の資格判定を免除するテスト用 uid (とさかず)。Worker の VOTE_TESTER_UIDS と揃える。免除分は集計しない
     support: { contact: '' },      // TODO: 北米版の問い合わせ先 (空なら案内を出さない)
-    features: { blog: false, vote: false, seeding: true, prefRanking: true, sim: true, titles: false },   // vote は北米用 OAuth/GAS ができてから。titles (二つ名) は英語の一覧ができてから
+    features: { blog: false, vote: false, seeding: true, prefRanking: true, sim: true, titles: false, cardBack: false },   // vote は北米用 OAuth/GAS ができてから。titles (二つ名) は英語の一覧ができてから。cardBack (カードの裏面: 英字名・大会シール) は北米の大会シールのデータができてから
     geo: { unitKey: 'state' },
     titleLang: 'en',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
     titleDefault: { pre: '', post: '' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない

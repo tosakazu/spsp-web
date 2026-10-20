@@ -23,7 +23,7 @@
     vote: { testerUids: ['1941489'] },   // 投票の資格判定を免除するテスト用 uid (とさかず)。Worker の VOTE_TESTER_UIDS と揃える。免除分は集計しない
     support: { contact: 'X (@smash_tskz) の DM' },   // 問い合わせ先 (キャラ投票の本人確認が合わないときの案内など)
     // ブログは spsp.games (site/ 直配信) にだけある (gh-pages には rsync しない: deploy/deploy_v4.sh)
-    features: { blog: /spsp\.games$/.test(host), vote: true, seeding: true, prefRanking: true, sim: true, titles: true },
+    features: { blog: /spsp\.games$/.test(host), vote: true, seeding: true, prefRanking: true, sim: true, titles: true, cardBack: true },
     geo: { unitKey: 'prefecture' },
     titleLang: 'ja',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
     titleDefault: { pre: 'スマブラSP', post: 'プレイヤー' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない

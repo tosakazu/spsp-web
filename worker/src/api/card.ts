@@ -17,6 +17,7 @@ import {
 import type { Store } from '../store.ts';
 import { bitsHas, titleById, usableIn } from './titles.ts';
 import type { HandlerResult } from './respond.ts';
+import type { DataFetch } from './vote.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
 import { dayKey, formatIso } from './time.ts';
@@ -39,7 +40,7 @@ export interface CardSettings {
 export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean }
 /** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
 export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
-/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかはサーバでは確かめない */
+/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
 export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
 const STICKER_SHAPES = ['square', 'round', 'circle', 'hex', 'diamond'];
 
@@ -137,6 +138,44 @@ export function validateCardSettings(v: unknown): CardSettings | null {
   return back ? { template: o.template, color: o.color, ach, tour, title, latin, back } : { template: o.template, color: o.color, ach, tour, title, latin };
 }
 
+const TIER_ORDER = ['rainbow', 'gold', 'silver', 'normal'];
+const TIER_CODE: Record<string, number> = { r: 0, g: 1, s: 2, n: 3 };
+
+/**
+ * 貼ったシールをその選手が持っているか。選手のデータ (players/<uid>.json、ビルドが大会記録に sticker = もらった一番上の色を書く。
+ * spsp_scripts spsp/stickers.py) を読み、大会キー (event_id、下位クラスは親の event_id + クラスの文字) ごとに一番上の色を出し、
+ * 貼った色がそれ以下 (下の色は全部持っている) か確かめる。返り値: null = 全部持っている / 'not_owned' / 'unavailable' (データが読めない)
+ */
+export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back: CardBack): Promise<null | 'not_owned' | 'unavailable'> {
+  if (!back.stickers.length) return null;
+  let rec: { tournaments?: unknown } | null;
+  try {
+    const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
+    if (res.status === 404) return 'not_owned';
+    if (res.status !== 200) return 'unavailable';
+    rec = await res.json();
+  } catch (_) {
+    return 'unavailable';
+  }
+  const top = new Map<string, number>();
+  for (const t of Array.isArray(rec && rec.tournaments) ? (rec as { tournaments: unknown[] }).tournaments : []) {
+    if (!t || typeof t !== 'object') continue;
+    const o = t as Record<string, unknown>;
+    const tier = TIER_ORDER.indexOf(String(o.sticker));
+    if (tier < 0) continue;
+    const key = o.event_id ? String(o.event_id) : o.parent_event_id && o.class_letter ? `${o.parent_event_id}${o.class_letter}` : '';
+    if (!key) continue;
+    const prev = top.get(key);
+    if (prev === undefined || tier < prev) top.set(key, tier);
+  }
+  for (const s of back.stickers) {
+    const i = s.e.lastIndexOf(':');
+    const have = top.get(s.e.slice(0, i));
+    if (have === undefined || TIER_CODE[s.e.slice(i + 1)] < have) return 'not_owned';
+  }
+  return null;
+}
+
 /** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
 export function titleIdsValid(lang: string, t: CardTitle): boolean {
   if (t.pre !== null && t.pre !== TITLE_DEFAULT) { const x = titleById(lang, t.pre); if (!x || !usableIn(x, 'pre')) return false; }
@@ -202,7 +241,7 @@ export async function handleCardGet(cfg: Config, store: Store, req: Record<strin
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
-export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number, dataFetch?: DataFetch): Promise<HandlerResult> {
   const sess = await verifySessionToken(cfg, req.token, now);
   // preview (CARD_OPEN_EDIT=1) だけ: ログインなしなら、リクエストの uid に書く (誰でも編集できる確認用)
   const openUid = !sess && cfg.cardOpenEdit ? validUid(req.uid) : null;
@@ -225,6 +264,13 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
       const row = await store.getTitleOwned(uid, lang);
       for (const id of ids) if (!titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
     }
+  }
+
+  // 裏面のシール: 持っているものだけ (選手のデータと突き合わせる。読めないときは保存しない)
+  if (settings && settings.back && settings.back.stickers.length) {
+    const r = dataFetch ? await checkStickersOwned(dataFetch, uid, settings.back) : 'unavailable';
+    if (r === 'not_owned') return err('sticker_not_owned', 'まだ持っていないシールがあります。', 'sticker_not_owned');
+    if (r === 'unavailable') return err('internal', '選手のデータを読めませんでした。少し待ってからやり直してください。', 'sticker_check');
   }
 
   const updatedAt = formatIso(now, cfg.tsOffsetMin);

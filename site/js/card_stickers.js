@@ -4,7 +4,9 @@
 //   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に縁取りを付けるか } | null
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
-//   絵は大会のアイコン (data/event_icons.json = { f: ファイル名の一覧, e: { event_id: f の番号 } }、tools/badges/build_event_icons.mjs)
+//   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
+//   絵は大会のアイコン (データの data/event_icons.json = { f: ファイル名の一覧, e: { event_id: f の番号 } }。
+//   ビルドの deploy/build_event_icons.py が毎回作る)
 import { SHAPES, CROP_MIN } from './holo_badge.js';
 
 export const CARD_W = 514, CARD_H = 333;
@@ -63,15 +65,38 @@ export const iconsNow = () => icons;
 /** 大会 → アイコンの表を読む (1 回だけ)。サイトの配信ファイル (SPSP.root) @returns {Promise<{ f: string[], e: Record<string, number> } | null>} */
 export function loadIcons() {
   if (!iconsP) {
-    iconsP = fetch(/** @type {any} */ (globalThis).SPSP.root + 'data/event_icons.json')
+    iconsP = fetch(/** @type {any} */ (globalThis).SPSP.data + 'data/event_icons.json')
       .then(r => (r.ok ? r.json() : null)).then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null);
   }
   return iconsP;
 }
+/** 大会記録の色の名前 (ビルドの sticker) → 色の記号 */
+const TIER_OF_NAME = /** @type {Record<string, string>} */ ({ rainbow: 'r', gold: 'g', silver: 's', normal: 'n' });
+/** 大会記録 → 大会キー (下位クラスの仮想大会は event_id が無いので親の event_id + クラスの文字) @param {any} t */
+export const tourKey = t => (t && t.event_id ? String(t.event_id) : t && t.parent_event_id && t.class_letter ? `${t.parent_event_id}${t.class_letter}` : '');
+/** 選手の大会記録 → 持っているシール { 大会キー: 一番上の色の記号 r|g|s|n } @param {any[]} tours @returns {Record<string, string>} */
+export function ownedStickers(tours) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const t of tours || []) {
+    const c = t && TIER_OF_NAME[t.sticker];
+    const k = c ? tourKey(t) : '';
+    if (!k) continue;
+    if (!out[k] || TIERS.indexOf(/** @type {any} */ (c)) < TIERS.indexOf(/** @type {any} */ (out[k]))) out[k] = c;
+  }
+  return out;
+}
+/** 持っているシールか (一番上の色以下なら持っている) @param {Record<string, string>} owned @param {string} e シールのキー */
+export function isOwned(owned, e) {
+  const i = e.lastIndexOf(':');
+  const top = owned[e.slice(0, i)];
+  return !!top && TIERS.indexOf(/** @type {any} */ (e.slice(i + 1))) >= TIERS.indexOf(/** @type {any} */ (top));
+}
+
 /** 大会の event_id → アイコンの URL (無ければ null) @param {number} eid @param {{ f: string[], e: Record<string, number> } | null} [tbl] */
 export function iconUrl(eid, tbl = icons) {
   const k = tbl ? tbl.e[String(eid)] : undefined;
   return k != null && tbl && tbl.f[k] ? IMG_BASE + tbl.f[k] : null;
 }
 
-export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, iconsNow, loadIcons, iconUrl };
+export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, tourKey, ownedStickers, isOwned, iconsNow, loadIcons, iconUrl };

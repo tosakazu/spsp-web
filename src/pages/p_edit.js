@@ -340,12 +340,14 @@ async function main() {
   $('ce-reset').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); update({ ach: null }); });
   // プレビューを押すと表と裏が入れ替わる
   const preview = $('ce-preview');
-  preview.addEventListener('click', e => { if (!(/** @type {Element} */ (e.target)).closest('a')) preview.classList.toggle('flipped'); });
+  // カードの裏面の無い地域 (北米、region config features.cardBack) は裏返さず、裏のタブも出さない
+  const backOn = !(SPSP.site && SPSP.site.features && SPSP.site.features.cardBack === false);
+  preview.addEventListener('click', e => { if (backOn && !(/** @type {Element} */ (e.target)).closest('a')) preview.classList.toggle('flipped'); });
   // デフォルトに戻す: 表 (テンプレート・色・実績・大会・二つ名) を既定に (保存は「適用」で)。裏 (名前・シール) はそのまま
   $('ce-default').addEventListener('click', () => { update({ ...DEFAULT_SETTINGS, latin: st.latin ?? null, back: st.back ?? null }); });
 
   // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
-  $('ce-tabs').style.display = '';
+  if (backOn) $('ce-tabs').style.display = '';
   let backMounted = false;
   /** @type {'front' | 'back' | null} */
   let curTab = null;
@@ -400,7 +402,7 @@ async function main() {
   for (const b of $('ce-tabs').querySelectorAll('button')) {
     b.addEventListener('click', () => setTab(/** @type {'front' | 'back'} */ (/** @type {HTMLElement} */ (b).dataset.tab)));
   }
-  setTab(params.get('tab') === 'back' ? 'back' : 'front');
+  setTab(backOn && params.get('tab') === 'back' ? 'back' : 'front');
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;
@@ -413,7 +415,8 @@ async function main() {
       return;
     }
     // 間隔が短すぎて断られたときは待てばよいことを伝える (それ以外は保存できなかった旨だけ)
-    alert(r.code === 'rate_limited' ? i18n('card_edit.apply_too_soon') : i18n('card_edit.apply_failed'));
+    alert(r.code === 'rate_limited' ? i18n('card_edit.apply_too_soon')
+      : r.code === 'sticker_not_owned' ? i18n('card_edit.sticker_not_owned') : i18n('card_edit.apply_failed'));
     paint();
   });
 
