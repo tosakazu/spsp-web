@@ -93,7 +93,7 @@ export async function mountBackEditor(o) {
   const [icons, owned] = await Promise.all([loadIcons(), loadOwnedStickers(uid, tours)]);
   const root = $('ce-pane-back');
 
-  // ── 裏面の土台 (シールなし。名前・縁取りは今の値で) ──
+  // ── 裏面の土台 (シールなし。名前・文字の影は今の値で) ──
   let latin = o.latin;
   let textTop = !!(o.back && o.back.text_top);
   let outline = !!(o.back && o.back.outline);
@@ -116,13 +116,13 @@ export async function mountBackEditor(o) {
     toast(textTop ? '名前・二つ名・順位をシールの上に出しました' : '名前・二つ名・順位をシールの下にしました');
   });
 
-  // ── 名前・二つ名・順位の文字の縁取り ──
+  // ── 名前・二つ名・順位の文字の影 (設定の名前は outline のまま) ──
   const outlineBtn = $('bz-outline');
   const paintOutline = () => outlineBtn.setAttribute('aria-pressed', String(outline));
   outlineBtn.addEventListener('click', () => {
     outline = !outline;
     paintOutline(); renderBase(); emit();
-    toast(outline ? '名前・二つ名・順位に縁取りを付けました' : '縁取りを外しました');
+    toast(outline ? '名前・二つ名・順位に影を付けました' : '文字の影を外しました');
   });
   paintTextTop(); paintOutline(); renderBase();
 
@@ -173,7 +173,7 @@ export async function mountBackEditor(o) {
   let stickers = (o.back ? o.back.stickers.map(s => ({ ...s })) : []).filter(s => byE.has(s.e));
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
-  /** 今の裏面 (シール・文字を前に・縁取り) をカードの設定に返す */
+  /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
   function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, outline }) }); }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──

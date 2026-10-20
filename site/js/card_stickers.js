@@ -1,7 +1,7 @@
 // @ts-check
 // site/js/card_stickers.js — カードの裏面に貼る大会シールの設定 (カードの設定 back、2026-10-20〜)。表示 (js/player_card.js renderBack) と
 // 編集 (src/pages/card_back_edit.js) で使う。サーバの検査 (worker/src/api/card.ts validateCardBack) と同じ規則
-//   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に縁取りを付けるか } | null
+//   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま) } | null
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers

@@ -537,7 +537,7 @@ function paintGlow(el, m) {
 }
 
 /** シールの影 (player_card.css .pcb-sk の drop-shadow と同じ値。カードを画像にするときに絵に入れる) */
-const STICKER_SHADOW = { dy: 1, blur: 2, color: 'rgba(0, 0, 0, .35)' };
+const STICKER_SHADOW = { dx: 1, dy: 1, blur: 1, color: 'rgba(0, 0, 0, .45)' };
 
 /** 裏面のシールの絵 (js/holo_badge.js)。アイコンの無い大会のシールは出さない
  * @param {HTMLElement} root .pc-in @param {PCardModel} m */
@@ -673,14 +673,15 @@ async function captureCanvas(el) {
       const hb = /** @type {HTMLElement | null} */ (sk.querySelector('.hb'));
       const cv = hb ? await badgeToCanvas(hb, (parseFloat(ck.style.width) || 100) * 3) : null;
       if (!cv) throw new Error('no badge');
-      // 影 (画面の drop-shadow と同じ: 下へ 1px・ぼかし 2px・黒 35%。html2canvas は filter を描かないので絵に入れる)。
+      // 影 (画面の drop-shadow と同じ: 右下へ 1px・ぼかし 1px・黒 45%。html2canvas は filter を描かないので絵に入れる)。
       // 影がはみ出す分だけ周りに余白を足す。絵ごと回すので影も一緒に回る (画面と同じ)
       const k = cv.width / (parseFloat(ck.style.width) || 100);   // カードの px → 絵の px
-      const pad = Math.ceil(STICKER_SHADOW.blur * 2 * k + STICKER_SHADOW.dy * k);
+      const pad = Math.ceil(STICKER_SHADOW.blur * 2 * k + Math.max(STICKER_SHADOW.dx, STICKER_SHADOW.dy) * k);
       const out = document.createElement('canvas');
       out.width = out.height = cv.width + pad * 2;
       const octx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
       octx.shadowColor = STICKER_SHADOW.color;
+      octx.shadowOffsetX = STICKER_SHADOW.dx * k;
       octx.shadowOffsetY = STICKER_SHADOW.dy * k;
       octx.shadowBlur = STICKER_SHADOW.blur * k;
       octx.drawImage(cv, pad, pad);

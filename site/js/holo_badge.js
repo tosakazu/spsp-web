@@ -9,7 +9,8 @@
 //   3 = 通常 (ホロなし。絵とクラスの文字だけ、ポインタの光は残す)
 // 形と切り取り (透過なしだけ、2026-10-20): shape = square / round (角丸) / circle / hex (六角形) / diamond (ひし形) で外形を切る。
 //   crop = 絵のうち見せる幅の割合 (0.35〜1)。絵だけ 1 / crop 倍に拡大し、ホロは見えている形いっぱいのまま (狭めるとホロも一緒に縮む)。
-//   クラスの文字は大きさを変えず、ほぼ形に収まる最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る。多少の見切れは許す)
+//   クラスの文字: 六角形・丸・ひし形は Figma の見本の位置 (下の中央寄り、少し小さく、LETTER_PLACE)。角丸は大きさを変えず、
+//   ほぼ形に収まる最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る。多少の見切れは許す)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
@@ -57,6 +58,13 @@ function letterBox(letter) {
 }
 /** 形で切ったとき、字の箱の幅・高さのこの割合までは各辺で形の外に出てよい (見切れても、なるべく元の位置のまま) */
 const LETTER_CLIP = 0.22;
+/** 六角形・丸・ひし形の文字の置き場所 (Figma の見本 133:121 など、2026-10-20 デザイナー指定): 下の中央寄り、少し小さく (k)。
+ * 箱の右下からのずらし (一辺に対する割合)。丸は下が少し見切れる位置 */
+const LETTER_PLACE = /** @type {Record<string, { dx: number, dy: number, k: number }>} */ ({
+  hex: { dx: 0.2836, dy: -0.0229, k: 0.9153 },
+  diamond: { dx: 0.2836, dy: -0.0229, k: 0.9153 },
+  circle: { dx: 0.2836, dy: -0.0878, k: 0.9153 },
+});
 /** フォントがまだのときの箱 (一字のおおよそ) */
 const BOX_GUESS = { x0: -0.38, x1: -0.01, y0: -0.37, y1: 0.01 };
 
@@ -155,7 +163,7 @@ export function renderBadge(el, opts) {
   const crop = opts.transparent ? 1 : Math.max(CROP_MIN, Math.min(1, Number(opts.crop) || 1));
   const letter0 = opts.cls ? String(opts.cls).replace(/[^A-Za-z0-9]/g, '').slice(0, 2) : '';
   const box = letter0 && !opts.transparent ? letterBox(letter0) : null;
-  const pl = { ...letterShift(shape, box || BOX_GUESS), k: 1 };
+  const pl = LETTER_PLACE[shape] ? { ...LETTER_PLACE[shape] } : { ...letterShift(shape, box || BOX_GUESS), k: 1 };
   el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v} hb-k-${shape}`;
   el.style.setProperty('--hb-img', url);
   el.style.setProperty('--hb-zoom', String(1 / crop));
@@ -183,7 +191,7 @@ export function renderBadge(el, opts) {
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
   // フォントが届いたら字の輪郭を測り直して置き直す (形で切っているときだけ)
-  if (letter0 && !opts.transparent && !box && shape !== 'square' && document.fonts) {
+  if (letter0 && !opts.transparent && !box && shape !== 'square' && !LETTER_PLACE[shape] && document.fonts) {
     document.fonts.load(`italic 800 100px "Zalando Sans Expanded"`, letter0).then(() => {
       const b = letterBox(letter0);
       if (!b || !el.isConnected || !el.classList.contains(`hb-k-${shape}`)) return;
