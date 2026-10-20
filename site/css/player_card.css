@@ -231,8 +231,8 @@
 .pcb-rank-n { font-weight: 700; line-height: .724; }
 /* 裏面のシール (js/player_card.js paintBackStickers、設定 back)。カードからはみ出した所は切る。形・ホロは holo_badge.css */
 .pcb-st { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-/* 影は Figma の見本 (右下へ 1px・ぼかし 1px、2026-10-20 デザイナー指定。濃さは見本の 30〜45% の濃い方)。画像にしたときも同じ (player_card.js STICKER_SHADOW) */
-.pcb-sk { position: absolute; filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, .45)); }
+/* 影は Figma の見本 (右下へ 1px・ぼかし 1px、2026-10-20 デザイナー指定。濃さはカードの見本 142:183 の 30%)。画像にしたときも同じ (player_card.js STICKER_SHADOW) */
+.pcb-sk { position: absolute; filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, .3)); }
 .pcb-sk > .hb { container-type: size; --hb-size: 100cqw; width: 100%; height: 100%; }
 .pcb-sk > .hb, .pcb-sk > .hb:hover { transform: none; transition: none; }
 .pcb-sk .hb-sheen, .pcb-sk .hb-glare { display: none; }
