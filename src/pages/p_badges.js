@@ -620,7 +620,7 @@ async function main() {
   const searchIn = /** @type {HTMLInputElement} */ ($('bz-q'));
   const sortIn = /** @type {HTMLSelectElement} */ ($('bz-sort'));
   const seriesIn = /** @type {HTMLSelectElement} */ ($('bz-series'));
-  const relist = () => { shown = PAGE; $('bz-scroll').scrollTop = 0; paintTray(); };
+  const relist = () => { shown = PAGE; paintTray(); };
   searchIn.addEventListener('input', () => { query = norm(searchIn.value.trim()); relist(); });
   sortIn.addEventListener('change', () => { sortKey = sortIn.value; relist(); });
   seriesIn.addEventListener('change', () => { seriesSel = seriesIn.value; relist(); });
@@ -655,37 +655,16 @@ async function main() {
     btn.addEventListener('click', () => {
       filter = String(/** @type {HTMLElement} */ (btn).dataset.f);
       shown = PAGE;
-      $('bz-scroll').scrollTop = 0;
       for (const x of $('bz-filters').querySelectorAll('button')) x.classList.toggle('on', x === btn);
       paintTray();
     });
   }
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
-  // 一覧の箱の高さ = 画面からカードと操作 (上に貼り付く .bz-top) と検索・絞り込みの段を引いた残り。
-  // サイトのナビと題の行は、一覧を動かし始めたらページごとスクロールして画面の外へ送る (その分一覧が広い)
-  const scroller = $('bz-scroll');
-  const bzTop = $('bz-top');
-  const fitScroll = () => {
-    const gap = scroller.getBoundingClientRect().top - bzTop.getBoundingClientRect().bottom;   // 検索・絞り込みの段
-    scroller.style.height = Math.max(240, Math.floor(window.innerHeight - bzTop.offsetHeight - gap)) + 'px';
-  };
-  /** カードが画面の上に貼り付く位置 (ページのスクロール量) */
-  const pinY = () => Math.round($('bz-root').querySelector('.bz-head')?.getBoundingClientRect().bottom ?? 0) + window.scrollY;
-  scroller.addEventListener('scroll', () => {
-    if (scroller.scrollTop > 0 && window.scrollY < pinY() - 1) window.scrollTo({ top: pinY(), behavior: 'smooth' });
-  }, { passive: true });
-  fitScroll();
-  window.addEventListener('resize', fitScroll);
-  if (typeof ResizeObserver === 'function') {
-    const ro = new ResizeObserver(fitScroll);
-    ro.observe(bzTop);
-    ro.observe(/** @type {HTMLElement} */ ($('bz-root').querySelector('.bz-find')));
-  }
   // 一覧の下まで来たら続きを出す (「もっと見る」を押さなくても)
   if (typeof IntersectionObserver === 'function') {
     new IntersectionObserver(es => {
       if (es.some(x => x.isIntersecting) && $('bz-more').style.display !== 'none') { shown += PAGE; paintTray(); }
-    }, { root: scroller, rootMargin: '200px' }).observe($('bz-more'));
+    }, { rootMargin: '400px' }).observe($('bz-more'));
   }
   const TIER_SHORT = ['虹', '金', '銀', '素'];
   // 一覧の絵は本物のシール (ホロ・クラスの文字) で描く。重いので、一覧の箱の中で見える近くに来たものだけ
@@ -706,7 +685,7 @@ async function main() {
   const thumbIO = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver(es => {
       for (const x of es) if (x.isIntersecting) { thumbIO?.unobserve(x.target); paintThumb(/** @type {HTMLElement} */ (x.target)); }
-    }, { root: $('bz-scroll'), rootMargin: '300px 0px' })
+    }, { rootMargin: '300px 0px' })
     : null;
   /** @param {HTMLElement} tb */
   const watchThumb = tb => { if (thumbIO) thumbIO.observe(tb); else paintThumb(tb); };
@@ -758,8 +737,10 @@ async function main() {
     $('bz-more').style.display = list.length > shown ? '' : 'none';
     paintCounts();
   }
-  /** 一覧から押した: まだなら貼る (空いていそうな所、少しずつずらす)、貼ってあれば選ぶ @param {Badge} b */
+  /** 一覧から押した: まだなら貼る (空いていそうな所、少しずつずらす)、貼ってあれば選ぶ。
+   * 一覧はページごとスクロールするので、押したらページの上 (カード・操作) へ戻る @param {Badge} b */
   function addOrSelect(b) {
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
     if (!stickers.some(s => s.e === b.e)) {
       if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
       const n = stickers.length;

@@ -52,7 +52,7 @@
       </div>
     </div>
 
-    <!-- カードと操作 (画面の上に出たまま)。操作の欄は選んでいてもいなくても同じ高さ (一覧がずれないように) -->
+    <!-- カードと操作。操作の欄は選んでいてもいなくても同じ高さ (一覧がずれないように) -->
     <div class="bz-top" id="bz-top">
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
@@ -113,7 +113,7 @@
         <button type="button" data-f="n">素</button>
         <button type="button" data-f="placed">貼ったもの</button>
       </div>
-      <!-- 一覧はこの箱の中だけでスクロールする。高さは js が画面の残りに合わせる -->
+      <!-- 一覧はページごとスクロールする (カード・操作・絞り込みも流れて隠れる。シールを押すと上へ戻る) -->
       <div class="bz-scroll" id="bz-scroll">
         <div class="bz-tray" id="bz-tray"></div>
         <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
