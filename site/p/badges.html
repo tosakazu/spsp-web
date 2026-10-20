@@ -35,7 +35,7 @@
     <h1 class="bz-title">裏面のシール <span class="bz-tag">試作</span></h1>
 
     <!-- 裏面の上に貼る層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
-    <div class="bz-top">
+    <div class="bz-top" id="bz-top">
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
         <div class="bz-layer" id="bz-layer"></div>
@@ -83,15 +83,17 @@
         <button type="button" data-f="n">通常</button>
         <button type="button" data-f="placed">貼ったもの</button>
       </div>
-      <div class="bz-tray" id="bz-tray"></div>
-      <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
+      <!-- 一覧はこの箱の中だけでスクロールする (カードと操作は画面に出たまま)。高さは js が画面の残りに合わせる -->
+      <div class="bz-scroll" id="bz-scroll">
+        <div class="bz-tray" id="bz-tray"></div>
+        <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
+        <div class="bz-bar">
+          <button type="button" class="bz-sample" id="bz-sample">Figma の見本を再現</button>
+          <button type="button" class="bz-clear" id="bz-clear">全部剥がす</button>
+          <span class="bz-saved">このブラウザにだけ保存されます</span>
+        </div>
+      </div>
     </section>
-
-    <div class="bz-bar">
-      <button type="button" class="bz-sample" id="bz-sample">Figma の見本を再現</button>
-      <button type="button" class="bz-clear" id="bz-clear">全部剥がす</button>
-      <span class="bz-saved">このブラウザにだけ保存されます</span>
-    </div>
   </div>
 </main>
 

@@ -385,11 +385,27 @@ async function main() {
     btn.addEventListener('click', () => {
       filter = String(/** @type {HTMLElement} */ (btn).dataset.f);
       shown = PAGE;
+      $('bz-scroll').scrollTop = 0;
       for (const x of $('bz-filters').querySelectorAll('button')) x.classList.toggle('on', x === btn);
       paintTray();
     });
   }
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
+  // 一覧の箱の高さ = 画面の下までの残り (ページはなるべくスクロールさせず、一覧だけ動かす)。狭い画面でも 240px は取る
+  const scroller = $('bz-scroll');
+  const fitScroll = () => {
+    const top = scroller.getBoundingClientRect().top + window.scrollY;
+    scroller.style.height = Math.max(240, Math.floor(window.innerHeight - top - 8)) + 'px';
+  };
+  fitScroll();
+  window.addEventListener('resize', fitScroll);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fitScroll).observe($('bz-top'));
+  // 一覧の下まで来たら続きを出す (「もっと見る」を押さなくても)
+  if (typeof IntersectionObserver === 'function') {
+    new IntersectionObserver(es => {
+      if (es.some(x => x.isIntersecting) && $('bz-more').style.display !== 'none') { shown += PAGE; paintTray(); }
+    }, { root: scroller, rootMargin: '200px' }).observe($('bz-more'));
+  }
   function paintTray() {
     const on = new Set(stickers.map(s => s.e));
     const list = (filter === 'placed' ? [...badges, ...SAMPLE_BADGES] : badges).filter(b => filter === 'all' ? true
