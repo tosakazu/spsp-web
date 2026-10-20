@@ -222,12 +222,13 @@ async function main() {
     /** @type {HTMLButtonElement} */ ($('bz-undo')).disabled = past.length < 2 && snap() === past[0];
     /** @type {HTMLButtonElement} */ ($('bz-redo')).disabled = !future.length;
   };
-  /** 変えたものを保存し、少し手が止まったら履歴に積む */
-  const commit = () => {
+  /** 変えたものを保存して履歴に積む。続けて動かすもの (スライダー・ドラッグ・矢印) は手が止まってから 1 回に、
+   * 押すだけの操作 (貼る・剥がす・形・重なり順・既定に戻す) はすぐ 1 回に @param {boolean} [now] */
+  const commit = (now = false) => {
     saveStickers(uid, stickers);
     if (histTimer) clearTimeout(histTimer);
-    histTimer = setTimeout(flushHistory, 400);
-    paintHistory();
+    if (now) flushHistory();
+    else { histTimer = setTimeout(flushHistory, 400); paintHistory(); }
   };
   /** @param {string} json */
   const restore = json => {
@@ -390,7 +391,8 @@ async function main() {
     /** @type {HTMLButtonElement} */ ($('bz-down')).disabled = /** @type {HTMLButtonElement} */ ($('bz-backmost')).disabled = i === 0;
   }
   for (const x of $('bz-shapes').querySelectorAll('button')) /** @type {HTMLElement} */ (x).dataset.title = /** @type {HTMLElement} */ (x).title;
-  const changed = () => { place(); commit(); };
+  /** @param {boolean} [now] 押すだけの操作 (履歴をすぐ区切る) */
+  const changed = (now = false) => { place(); commit(now); };
   for (const btn of $('bz-tabs').querySelectorAll('button')) {
     btn.addEventListener('click', () => { tab = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.t); paintTools(); });
   }
@@ -413,10 +415,10 @@ async function main() {
     if (tab === 'size') s.s = S_DEF;
     else if (tab === 'rot') s.r = 0;
     else { s.s = clampSize(s.s / s.c); s.c = 1; }
-    changed();
+    changed(true);
   });
   for (const btn of $('bz-shapes').querySelectorAll('button')) {
-    btn.addEventListener('click', () => { const s = cur(); if (s) { s.k = String(/** @type {HTMLElement} */ (btn).dataset.k); changed(); } });
+    btn.addEventListener('click', () => { const s = cur(); if (s) { s.k = String(/** @type {HTMLElement} */ (btn).dataset.k); changed(true); } });
   }
   /** 重なり順を動かす @param {number} to 動かす先 (-Infinity = いちばん下、Infinity = いちばん上、±1 = 1 つ) */
   const move = to => {
@@ -425,7 +427,7 @@ async function main() {
     const j = to === Infinity ? stickers.length - 1 : to === -Infinity ? 0 : Math.max(0, Math.min(stickers.length - 1, i + to));
     stickers.splice(i, 1);
     stickers.splice(j, 0, s);
-    changed();
+    changed(true);
   };
   $('bz-up').addEventListener('click', () => move(1));
   $('bz-down').addEventListener('click', () => move(-1));
@@ -434,7 +436,7 @@ async function main() {
   const remove = (/** @type {string} */ e) => {
     stickers = stickers.filter(s => s.e !== e);
     if (sel === e) sel = null;
-    changed(); paintTray();
+    changed(true); paintTray();
     toast('剥がしました', '元に戻す', undo);
   };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
@@ -444,13 +446,13 @@ async function main() {
   document.addEventListener('pointerdown', e => { if (menu.open && !menu.contains(/** @type {Node} */ (e.target))) menu.open = false; });
   $('bz-sample').addEventListener('click', () => {
     menu.open = false;
-    stickers = SAMPLE_LAYOUT.map(s => ({ ...s, k: 'square', c: 1 })); sel = null; changed(); paintTray();
+    stickers = SAMPLE_LAYOUT.map(s => ({ ...s, k: 'square', c: 1 })); sel = null; changed(true); paintTray();
     toast('見本の並びにしました', '元に戻す', undo);
   });
   $('bz-clear').addEventListener('click', () => {
     menu.open = false;
     if (!stickers.length) return;
-    stickers = []; sel = null; changed(); paintTray();
+    stickers = []; sel = null; changed(true); paintTray();
     toast('全部剥がしました', '元に戻す', undo);
   });
 
@@ -671,7 +673,7 @@ async function main() {
       place();
       const el = els.get(b.e);
       if (el) { el.classList.remove('bz-pop'); void el.offsetWidth; el.classList.add('bz-pop'); }
-      commit();
+      commit(true);
       paintTray();
     } else select(b.e);
   }
