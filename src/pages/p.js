@@ -2115,6 +2115,73 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   });
 }
 
+// カードを指・マウスで動かす: ゆっくり動かすとその位置に合わせて傾き (裏面のシールがキラキラ = holo_badge.css の光)、
+// 横にはじくと裏返る。縦の動きはページのスクロール (touch-action: pan-y)。動かしたあとはタップ (編集・裏返す・保存のボタン) にしない
+{
+  const wrap = document.getElementById('pcard-wrap');
+  const FLICK_PX = 40;        // はじいたとみなす横の距離 (画面の px)
+  const FLICK_V = 0.45;       // と速さ (px/ms、離す直前 80ms)
+  const TILT_DEG = 16;        // 傾きの最大 (端を押したとき)
+  if (wrap) {
+    /** @type {null | { id: number, x0: number, y0: number, pts: { x: number, t: number }[], moved: boolean }} */
+    let g = null;
+    let suppressClick = false;
+    const clamp01 = (/** @type {number} */ v) => Math.max(0, Math.min(1, v));
+    const tilt = (/** @type {number} */ cx, /** @type {number} */ cy) => {
+      const r = wrap.getBoundingClientRect();
+      const mx = clamp01((cx - r.left) / r.width), my = clamp01((cy - r.top) / r.height);
+      wrap.style.setProperty('--card-mx', mx.toFixed(3));
+      wrap.style.setProperty('--card-my', my.toFixed(3));
+      wrap.style.transform = `perspective(900px) rotateX(${((0.5 - my) * TILT_DEG).toFixed(2)}deg) rotateY(${((mx - 0.5) * TILT_DEG).toFixed(2)}deg)`;
+    };
+    const release = () => {
+      wrap.classList.remove('pc-tilt');
+      wrap.style.transition = 'transform .35s ease';
+      wrap.style.transform = '';
+      setTimeout(() => { if (!g) wrap.style.transition = ''; }, 400);
+    };
+    const flip = () => {
+      const flipped = wrap.classList.toggle('flipped');
+      document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
+      document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
+    };
+    wrap.addEventListener('pointerdown', e => {
+      if (g || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (/** @type {Element} */ (e.target).closest('#pc-overlay')) return;
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, pts: [{ x: e.clientX, t: e.timeStamp }], moved: false };
+      wrap.style.transition = 'none';
+    });
+    wrap.addEventListener('pointermove', e => {
+      if (!g || e.pointerId !== g.id) return;
+      g.pts.push({ x: e.clientX, t: e.timeStamp });
+      while (g.pts.length > 2 && e.timeStamp - g.pts[0].t > 80) g.pts.shift();
+      if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 6) {
+        g.moved = true;
+        wrap.classList.add('pc-tilt');
+        try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
+      }
+      if (g.moved) tilt(e.clientX, e.clientY);
+    });
+    const end = (/** @type {PointerEvent} */ e) => {
+      if (!g || e.pointerId !== g.id) return;
+      const cur = g;
+      g = null;
+      if (!cur.moved) { wrap.style.transition = ''; return; }
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 350);
+      const dx = e.clientX - cur.x0, dy = e.clientY - cur.y0;
+      const p0 = cur.pts[0], dt = Math.max(1, e.timeStamp - p0.t);
+      const vx = (e.clientX - p0.x) / dt;
+      release();
+      if (e.type === 'pointerup' && Math.abs(dx) > FLICK_PX && Math.abs(vx) > FLICK_V && Math.abs(dx) > Math.abs(dy) * 1.2) flip();
+    };
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
+    // 動かしたあとのクリックは、カードのタップ (ボタンを出す) やリンクにしない
+    wrap.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
+  }
+}
+
 SPSPShare.setupSaveButton(document.getElementById('save-btn'), capturePng,
   () => `smash_banzuke_${SPSPShare.safeFileName(MAIN_REC && MAIN_REC.display, 'player')}`);
 

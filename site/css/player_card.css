@@ -159,6 +159,13 @@
 /* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
+/* 指・マウスで動かす (src/pages/p.js): 横の動きはこちらで受け、縦はページのスクロール。傾けている間 (.pc-tilt) はシールに光 */
+.pcard-wrap .pcard-flip { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.pcb-sk > .hb { --hb-mx: var(--card-mx, .5); --hb-my: var(--card-my, .5); }
+.pc-tilt .pcb-sk .hb-sheen, .pc-tilt .pcb-sk .hb-glare { display: block; }
+.pc-tilt .pcb-sk .hb-sheen { opacity: .22; }
+.pc-tilt .pcb-sk .hb-glare { opacity: .8; }
+@media (prefers-reduced-motion: reduce) { .pcard-wrap { transform: none !important; } }
 /* 表と裏: 裏面は表に重ねて裏向きに置き、.flipped で全体を回す (回っている間は両面の裏側を隠す) */
 .pcard-flip { position: relative; transition: transform .5s ease; transform-style: preserve-3d; }
 .pcard-flip .pcard { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
