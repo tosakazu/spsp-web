@@ -197,7 +197,7 @@ function backHtml(m) {
   // 名前・二つ名・順位をシールの上に出すときは、シールの層を文字の列より前 (下) に置く
   const b = m.back;
   const st = b && b.stickers.length ? `<div class="pcb-st">${b.stickers.map((s, i) =>
-    `<div class="pcb-sk" data-i="${i}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
+    `<div class="pcb-sk" data-i="${i}" data-x="${s.x}" data-y="${s.y}" data-s="${s.s}" data-r="${s.r}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
   const col = `<div class="pcb-col">
       ${title}
       <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
@@ -598,18 +598,19 @@ async function captureCanvas(el) {
   const clone = /** @type {HTMLElement} */ (src.cloneNode(true));
   clone.style.transform = 'none';
   // 裏面のシール: html2canvas はホロの重ね方 (ブレンド)・マスク・形の切り取りを描けない (複製したキャンバスも空になる) ので、
-  // 1 枚ずつ自前で描いた絵 (3 倍の細かさ) に差し替える。描けなかったシールは外す
+  // 1 枚ずつ自前で描いた絵 (3 倍の細かさ) に差し替える。描けなかったシールは外す。
+  // 絵は入れ物 (translate(-50%) + rotate の .pcb-sk) の中に入れず、カードの上の正しい位置に直接置いて回転だけかける
+  // (html2canvas は変形した要素の中の、はみ出して置いた子の位置を誤る。影の余白の分だけ右下にずれていた)
   const sks = [...src.querySelectorAll('.pcb-sk')], cks = [...clone.querySelectorAll('.pcb-sk')];
   await Promise.all(sks.map(async (sk, i) => {
     const ck = /** @type {HTMLElement | undefined} */ (cks[i]);
     if (!ck) return;
-    ck.innerHTML = '';
     try {
       const hb = /** @type {HTMLElement | null} */ (sk.querySelector('.hb'));
       const cv = hb ? await badgeToCanvas(hb, (parseFloat(ck.style.width) || 100) * 3) : null;
       if (!cv) throw new Error('no badge');
       // 影 (画面の drop-shadow と同じ: 下へ 1px・ぼかし 2px・黒 35%。html2canvas は filter を描かないので絵に入れる)。
-      // 影がはみ出す分だけ周りに余白を足し、img をその分外へ広げて置く。シールの回転は外側の要素なので影も一緒に回る (画面と同じ)
+      // 影がはみ出す分だけ周りに余白を足す。絵ごと回すので影も一緒に回る (画面と同じ)
       const k = cv.width / (parseFloat(ck.style.width) || 100);   // カードの px → 絵の px
       const pad = Math.ceil(STICKER_SHADOW.blur * 2 * k + STICKER_SHADOW.dy * k);
       const out = document.createElement('canvas');
@@ -622,10 +623,12 @@ async function captureCanvas(el) {
       const img = document.createElement('img');
       img.src = out.toDataURL('image/png');   // アイコンが CORS で読めずキャンバスが汚れていると、ここで例外
       const p = pad / k;
-      img.style.cssText = `display:block;position:absolute;left:${-p}px;top:${-p}px;width:calc(100% + ${2 * p}px);height:calc(100% + ${2 * p}px);max-width:none`;
-      ck.style.filter = 'none';
+      const x = Number(ck.dataset.x), y = Number(ck.dataset.y), size = Number(ck.dataset.s), rot = Number(ck.dataset.r) || 0;
+      const box = size + 2 * p;
+      img.className = 'pcb-sk-img';
+      img.style.cssText = `display:block;position:absolute;left:${x - box / 2}px;top:${y - box / 2}px;width:${box}px;height:${box}px;max-width:none;transform:rotate(${rot}deg)`;
       await img.decode().catch(() => {});
-      ck.appendChild(img);
+      ck.replaceWith(img);
     } catch (e) { ck.remove(); }
   }));
   box.appendChild(clone);
