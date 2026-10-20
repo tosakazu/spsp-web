@@ -376,7 +376,7 @@ async function main() {
       $('ce-pane-front').style.display = tab === 'front' ? '' : 'none';
       $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
       preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
-      $('ce-default').style.display = tab === 'front' ? '' : 'none';
+      $('ce-front-head').style.display = tab === 'front' ? '' : 'none';
     };
     const frontCard = () => /** @type {HTMLElement} */ (preview.querySelector('.pcard-flip'));
     const backCard = () => $('bz-stage');

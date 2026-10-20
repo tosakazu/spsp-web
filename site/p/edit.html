@@ -39,6 +39,11 @@
       <button type="button" role="tab" data-tab="back" aria-selected="false">裏</button>
     </div>
 
+    <!-- 表の道具の行 (裏の道具の行と同じ高さ。カードの位置をそろえて、裏返しのときにずれないように) -->
+    <div class="ce-front-head" id="ce-front-head" style="display:none">
+      <button type="button" class="ce-default" id="ce-default" data-i18n="card_edit.default">デフォルトに戻す</button>
+    </div>
+
     <!-- プレビュー: 表と裏 (英字名を入力している間・プレビューを押したときは裏面を見せる) -->
     <div class="ce-preview" id="ce-preview"><div class="pcard-flip"><div class="pcard" id="ce-card"></div><div class="pcard pcard-back" id="ce-card-back" aria-hidden="true"></div></div></div>
 
@@ -196,7 +201,6 @@
     </section>
       </div>
       <div class="ce-bar">
-        <button type="button" class="ce-default" id="ce-default" data-i18n="card_edit.default">デフォルトに戻す</button>
         <button type="button" class="ce-apply" id="ce-apply" data-i18n="card_edit.apply">適用</button>
       </div>
     </div>
