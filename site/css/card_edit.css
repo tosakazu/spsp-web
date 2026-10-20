@@ -10,6 +10,8 @@ main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
 .ce-preview .pcard-flip { cursor: pointer; }
 
 /* 英字名 */
+.ce-back-link { display: inline-block; font-size: 14px; font-weight: 600; color: #111827; text-decoration: none; padding: 6px 0; }
+.ce-back-link:hover { text-decoration: underline; }
 .ce-latin { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1.5px solid #e5e7eb; border-radius: 8px; font: inherit; font-size: 15px; }
 .ce-latin:focus { outline: none; border-color: #111827; }
 .ce-latin.bad { border-color: #dc2626; }

@@ -96,6 +96,15 @@
       </div>
     </div>
 
+    <!-- 裏面の名前 (英字名、カードの設定 latin)。入力するとカードに出し、「保存」でサーバに保存 (本人のログインが要る) -->
+    <div class="bz-name" id="bz-name">
+      <label class="bz-name-l" for="bz-latin">裏面の名前</label>
+      <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done">
+      <button type="button" class="bz-save" id="bz-latin-save" disabled>保存</button>
+      <button type="button" class="bz-ib bz-help" id="bz-latin-help" aria-expanded="false" aria-controls="bz-latin-note" title="説明" aria-label="説明">?</button>
+      <div class="bz-name-note" id="bz-latin-note"></div>
+    </div>
+
     <section class="bz-sec">
       <div class="bz-find">
         <label class="bz-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>

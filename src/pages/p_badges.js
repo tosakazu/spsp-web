@@ -17,7 +17,9 @@ import SPSPLinks from '../../site/js/links.js';
 import SPSPFormat from '../../site/js/format.js';
 import '../../site/nav.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
-import { loadCardData, buildCardModel, fetchAppliedCard } from '../../site/js/player_card_model.js';
+import { loadCardData, buildCardModel, fetchAppliedCard, putApplied, DEFAULT_SETTINGS } from '../../site/js/player_card_model.js';
+import SpspLogin from '../../site/js/login.js';
+import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
 import { isTransparent, renderBadge, reflatten, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 
 SPSPI18n.apply(document);
@@ -148,7 +150,7 @@ async function main() {
   const notFound = () => { $('loading').style.display = 'none'; $('not-found').style.display = ''; };
   if (!uid) { notFound(); return; }
   const [data, card, icons, stickerShard] = await Promise.all([
-    loadCardData(uid).catch(() => null),
+    SpspLogin.verify().catch(() => {}).then(() => loadCardData(uid)).catch(() => null),
     fetchAppliedCard(uid).catch(() => null),
     fetch(SPSP.root + 'data/event_icons.json').then(r => (r.ok ? r.json() : null)).catch(() => null),
     fetch(SPSP.root + `data/stickers_preview/${uid % STICKER_SHARDS}.json`).then(r => (r.ok ? r.json() : null)).catch(() => null),
@@ -159,9 +161,18 @@ async function main() {
   $('loading').style.display = 'none';
   $('bz-root').style.display = '';
 
-  // 裏面 (適用済みの設定・二つ名で)
-  const cardModel = buildCardModel(data, card ? card.settings : null, card ? card.titleText : null);
+  // 裏面 (適用済みの設定・二つ名で)。英字名を入力している間は、その名前で描き直す
+  /** @type {import('../../site/js/player_card_model.js').CardSettings | null} 適用済みの設定 */
+  let applied = card ? card.settings : null;
+  const titleText = card ? card.titleText : null;
+  let cardModel = buildCardModel(data, applied, titleText);
   SPSPPlayerCard.renderBack($('bz-card'), cardModel);
+  /** @param {string | null} latin */
+  const renderName = latin => {
+    cardModel = buildCardModel(data, { ...DEFAULT_SETTINGS, ...(applied || {}), latin }, titleText);
+    SPSPPlayerCard.renderBack($('bz-card'), cardModel);
+    if ($('bz-text').firstChild) SPSPPlayerCard.renderBack($('bz-text'), cardModel);
+  };
 
   // ── 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる) ──
   const textTopBtn = $('bz-text-top');
@@ -183,6 +194,75 @@ async function main() {
       localStorage.setItem(TEXT_TOP_KEY, JSON.stringify(m));
     } catch (e) { /* 保存できない環境では何もしない */ }
   });
+
+  // ── 裏面の名前 (英字名、カードの設定 latin)。空なら名前から自動 (js/latin_name.js)。
+  //    保存はカード編集の「適用」と同じ (本人のログインが要る。他の設定は今の適用済みのまま) ──
+  const latinEl = /** @type {HTMLInputElement} */ ($('bz-latin'));
+  const latinSave = /** @type {HTMLButtonElement} */ ($('bz-latin-save'));
+  const latinNote = $('bz-latin-note');
+  const latinHelp = $('bz-latin-help');
+  const NOTE = SPSPI18n.t('card_edit.latin_note');
+  latinEl.placeholder = autoLatin(SPSPFormat.stripTeamTag(data.rec.display), data.readings);
+  latinEl.value = (applied && applied.latin) || '';
+  /** @type {'ok' | 'login' | 'other'} */
+  const gate = !SpspLogin.apiAvailable() ? 'ok' : !SpspLogin.session() ? 'login' : SpspLogin.isSelf(uid) ? 'ok' : 'other';
+  const setNote = (/** @type {string} */ text, /** @type {'' | 'bad' | 'msg' | 'open'} */ kind) => {
+    latinNote.textContent = text;
+    latinNote.className = 'bz-name-note' + (kind ? ' ' + kind : '');
+  };
+  const latinState = () => {
+    const v = latinEl.value.trim();
+    const ok = v === '' || latinNameValid(v);
+    return { v: v || null, ok, changed: (v || null) !== ((applied && applied.latin) || null) };
+  };
+  const paintLatin = () => {
+    const { ok, changed } = latinState();
+    latinEl.classList.toggle('bad', !ok);
+    latinSave.disabled = gate !== 'ok' || !ok || !changed;
+    if (!ok) setNote(SPSPI18n.t('card_edit.latin_bad'), 'bad');
+    else if (latinNote.classList.contains('bad')) setNote(NOTE, '');
+  };
+  if (gate !== 'ok') {
+    latinEl.disabled = true;
+    if (gate === 'login') {
+      latinSave.disabled = false;
+      latinSave.textContent = 'ログイン';
+      latinSave.addEventListener('click', () => { latinSave.disabled = true; SpspLogin.startLogin().then(ok => { if (!ok) latinSave.disabled = false; }); });
+      setNote('本人が start.gg でログインすると変えられます', 'msg');
+    } else {
+      latinSave.style.display = 'none';
+      setNote('本人だけが変えられます', 'msg');
+    }
+  } else {
+    latinEl.addEventListener('input', () => {
+      const { v, ok } = latinState();
+      paintLatin();
+      if (ok) renderName(v);
+    });
+    const saveLatin = async () => {
+      const { v, ok, changed } = latinState();
+      if (!ok || !changed) return;
+      latinSave.disabled = true;
+      const next = { ...DEFAULT_SETTINGS, ...(applied || {}), latin: v };
+      const r = await putApplied(uid, next);
+      if (r.ok) {
+        applied = next;
+        toast('裏面の名前を保存しました');
+      } else {
+        toast(r.code === 'rate_limited' ? '続けて保存できません。少し待ってからもう一度' : '保存できませんでした');
+      }
+      paintLatin();
+    };
+    latinSave.addEventListener('click', saveLatin);
+    latinEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveLatin(); latinEl.blur(); } });
+  }
+  latinHelp.addEventListener('click', () => {
+    const open = !latinNote.classList.contains('open');
+    if (open) setNote(NOTE, 'open');
+    else setNote(gate === 'login' ? '本人が start.gg でログインすると変えられます' : gate === 'other' ? '本人だけが変えられます' : '', gate === 'ok' ? '' : 'msg');
+    latinHelp.setAttribute('aria-expanded', String(open));
+  });
+  paintLatin();
 
   // ── 名前・二つ名・順位の文字の縁取り (選手ごとにこのブラウザに保存) ──
   const outlineBtn = $('bz-outline');
