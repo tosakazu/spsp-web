@@ -59,7 +59,8 @@ const SAMPLE_LAYOUT = /** @type {Sticker[]} */ ([
 ].map(s => ({ ...s, k: 'square', c: 1 })));
 
 /** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
-/** @typedef {{ e: string, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null }} Badge */
+/** @typedef {{ e: string, name: string, date: string, place: number | null, nent: number | null, file: string, variant: number, cls: string | null,
+ *   pts?: number, eid?: number | null }} Badge */
 
 // ── 保存 (このブラウザ) ──
 /** @param {number} uid @returns {Sticker[]} */
@@ -110,7 +111,8 @@ function badgesOf(tours, icons, got) {
     const place = Number.isFinite(t.place) ? Number(t.place) : null;
     for (let v = TIERS.indexOf(/** @type {any} */ (top)); v >= 0 && v < TIERS.length; v++) {
       out.push({ e: `${key}:${TIERS[v]}`, name: String(t.name || ''), date: String(t.date || ''), place, nent: t.nent ?? null, file: icons.f[k],
-                 variant: v, cls: t.class_letter ? String(t.class_letter) : null });
+                 variant: v, cls: t.class_letter ? String(t.class_letter) : null,
+                 pts: Number(t.tjpr_raw) || 0, eid: Number(t.event_id || t.parent_event_id) || null });
     }
   }
   out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));   // 安定ソート: 同じ大会は上の色から
@@ -120,8 +122,9 @@ function badgesOf(tours, icons, got) {
 /** 順位の表示 @param {Badge} b */
 const placeText = b => (b.place == null ? '' : b.place === 1 ? '優勝' : `${b.place}位`) + (b.nent ? ` / ${b.nent}人` : '');
 
-/** 大会ごとにまとめた一覧の 1 つ (色は持っているものだけ、上の色から) @typedef {{ key: string, name: string, date: string, place: number | null,
- *   nent: number | null, file: string, cls: string | null, tiers: Badge[], sample: boolean }} EventGroup */
+/** 大会ごとにまとめた一覧の 1 つ (色は持っているものだけ、上の色から)。pts = 順位評価ポイント (大会記録の tjpr_raw)、series はあとから
+ * @typedef {{ key: string, name: string, date: string, place: number | null, nent: number | null, file: string, cls: string | null,
+ *   tiers: Badge[], sample: boolean, pts: number, eid: number | null, series: string }} EventGroup */
 /** シールのキー → 大会キー @param {string} e */
 const groupKey = e => e.split(':')[0];
 
@@ -189,7 +192,8 @@ async function main() {
     const k = sample ? b.e : groupKey(b.e);
     let g = groupOf.get(k);
     if (!g) {
-      g = { key: k, name: b.name, date: b.date, place: b.place, nent: b.nent, file: b.file, cls: b.cls, tiers: [], sample };
+      g = { key: k, name: b.name, date: b.date, place: b.place, nent: b.nent, file: b.file, cls: b.cls, tiers: [], sample,
+            pts: b.pts || 0, eid: b.eid ?? null, series: '' };
       groupOf.set(k, g); groups.push(g);
     }
     g.tiers.push(b);
@@ -592,8 +596,52 @@ async function main() {
   const topV = (/** @type {EventGroup} */ g) => g.tiers[0].variant;
   const real = groups.filter(g => !g.sample);
   const isPlaced = (/** @type {EventGroup} */ g) => g.tiers.some(b => stickers.some(s => s.e === b.e));
-  const listOf = (/** @type {string} */ f) => f === 'all' ? real : f === 'placed' ? groups.filter(isPlaced)
-    : real.filter(g => topV(g) === TIERS.indexOf(/** @type {any} */ (f)));
+  // 検索 (大会名・シリーズ・クラス)・シリーズ・並べ替え。色の絞り込みの件数は検索とシリーズを掛けたあとの数
+  let query = '';
+  let seriesSel = '';
+  let sortKey = 'new';
+  /** @type {Record<string, (a: EventGroup, b: EventGroup) => number>} */
+  const SORTS = {
+    new: (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0),
+    old: (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0),
+    pts: (a, b) => b.pts - a.pts,
+    place: (a, b) => (a.place ?? 1e9) - (b.place ?? 1e9) || (b.nent ?? 0) - (a.nent ?? 0),
+    nent: (a, b) => (b.nent ?? 0) - (a.nent ?? 0),
+  };
+  const norm = (/** @type {string} */ x) => x.normalize('NFKC').toLowerCase();
+  const matches = (/** @type {EventGroup} */ g) => (!seriesSel || g.series === seriesSel)
+    && (!query || norm(`${g.name} ${g.series} ${g.cls ? g.cls + 'クラス' : ''}`).includes(query));
+  const listOf = (/** @type {string} */ f) => {
+    const base = (f === 'placed' ? groups.filter(isPlaced) : real).filter(g => g.sample || matches(g));
+    const l = f === 'all' || f === 'placed' ? base : base.filter(g => topV(g) === TIERS.indexOf(/** @type {any} */ (f)));
+    return sortKey === 'new' ? l : [...l].sort(SORTS[sortKey]);   // groups は新しい順に並んでいる
+  };
+  const searchIn = /** @type {HTMLInputElement} */ ($('bz-q'));
+  const sortIn = /** @type {HTMLSelectElement} */ ($('bz-sort'));
+  const seriesIn = /** @type {HTMLSelectElement} */ ($('bz-series'));
+  const relist = () => { shown = PAGE; $('bz-scroll').scrollTop = 0; paintTray(); };
+  searchIn.addEventListener('input', () => { query = norm(searchIn.value.trim()); relist(); });
+  sortIn.addEventListener('change', () => { sortKey = sortIn.value; relist(); });
+  seriesIn.addEventListener('change', () => { seriesSel = seriesIn.value; relist(); });
+  // シリーズ: 大会一覧 (data/tournaments.json) の series を event_id で引く (下位クラスは親の大会)。後から届く
+  fetch(SPSP.data + 'data/tournaments.json').then(r => (r.ok ? r.json() : null)).then(j => {
+    if (!j || !Array.isArray(j.tournaments)) return;
+    /** @type {Map<number, string>} */
+    const se = new Map(j.tournaments.map((/** @type {any} */ t) => [Number(t.event_id), String(t.series || '')]));
+    /** @type {Map<string, number>} */
+    const cnt = new Map();
+    for (const g of real) {
+      g.series = (g.eid != null && se.get(g.eid)) || '';
+      if (g.series) cnt.set(g.series, (cnt.get(g.series) || 0) + 1);
+    }
+    for (const [name, n] of [...cnt].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'))) {
+      const o = document.createElement('option');
+      o.value = name; o.textContent = `${name} (${n})`;
+      seriesIn.appendChild(o);
+    }
+    seriesIn.disabled = !cnt.size;
+    paintTray();
+  }).catch(() => { /* シリーズなしで使う */ });
   const paintCounts = () => {
     for (const btn of $('bz-filters').querySelectorAll('button')) {
       const f = String(/** @type {HTMLElement} */ (btn).dataset.f);
@@ -628,24 +676,52 @@ async function main() {
     }, { root: scroller, rootMargin: '200px' }).observe($('bz-more'));
   }
   const TIER_SHORT = ['虹', '金', '銀', '通'];
+  // 一覧の絵は本物のシール (ホロ・クラスの文字) で描く。重いので、一覧の箱の中で見える近くに来たものだけ
+  /** @param {HTMLElement} tb */
+  const paintThumb = tb => {
+    if (tb.dataset.done) return;
+    tb.dataset.done = '1';
+    const src = String(tb.dataset.src), variant = Number(tb.dataset.v), cls = tb.dataset.cls || null;
+    const holder = document.createElement('div');
+    tb.appendChild(holder);
+    renderBadge(holder, { src, variant, transparent: false, cls });
+    isTransparent(src).then(tr => {
+      if (!tr || !holder.isConnected) return;
+      tb.classList.add('bz-shape');
+      renderBadge(holder, { src, variant, transparent: true, cls });
+    });
+  };
+  const thumbIO = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(es => {
+      for (const x of es) if (x.isIntersecting) { thumbIO?.unobserve(x.target); paintThumb(/** @type {HTMLElement} */ (x.target)); }
+    }, { root: $('bz-scroll'), rootMargin: '300px 0px' })
+    : null;
+  /** @param {HTMLElement} tb */
+  const watchThumb = tb => { if (thumbIO) thumbIO.observe(tb); else paintThumb(tb); };
+  /** 順位評価ポイントの表示の倍率 (プレイヤーページの出場大会と同じ) */
+  const PTS_SCALE = (data.meta.params && data.meta.params.TJPR_ELO_SCALE) || 17.5;
   function paintTray() {
     const on = new Set(stickers.map(s => s.e));
     const list = listOf(filter);
     tray.innerHTML = '';
     if (!list.length) {
-      tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
+      tray.innerHTML = `<div class="bz-empty">${query || seriesSel ? '見つかりません' : filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
     }
     for (const g of list.slice(0, shown)) {
       const it = document.createElement('div');
       it.className = 'bz-ev' + (g.tiers.some(b => b.e === sel) ? ' on' : '');
-      it.innerHTML = `<button type="button" class="bz-thumb"><img loading="lazy" alt="">${g.cls ? `<span class="bz-cls">${g.cls}</span>` : ''}</button>
+      it.innerHTML = `<button type="button" class="bz-thumb"><span class="bz-tb"></span></button>
         <div class="bz-tiers"></div><span class="bz-iname"></span><span class="bz-imeta"></span>`;
-      const img = /** @type {HTMLImageElement} */ (it.querySelector('img'));
-      img.src = IMG_BASE + g.file;
+      // 大会を押す: まだ貼っていない色のうちいちばん上を貼る (全部貼ってあれば、いちばん上を選ぶ)。見本の絵もその色
+      const next = g.tiers.find(b => !on.has(b.e)) || g.tiers[0];
       const thumb = /** @type {HTMLButtonElement} */ (it.querySelector('.bz-thumb'));
-      thumb.title = `${g.name} — ${HOLO_NAMES[topV(g)]}を貼る`;
-      // 大会を押す: まだ貼っていない色のうちいちばん上を貼る (全部貼ってあれば、いちばん上を選ぶ)
-      thumb.addEventListener('click', () => addOrSelect(g.tiers.find(b => !on.has(b.e)) || g.tiers[0]));
+      thumb.title = `${g.name} — ${HOLO_NAMES[next.variant]}を貼る`;
+      thumb.addEventListener('click', () => addOrSelect(next));
+      const tb = /** @type {HTMLElement} */ (it.querySelector('.bz-tb'));
+      tb.dataset.src = IMG_BASE + g.file;
+      tb.dataset.v = String(next.variant);
+      if (g.cls) tb.dataset.cls = g.cls;
+      watchThumb(tb);
       const tiers = /** @type {HTMLElement} */ (it.querySelector('.bz-tiers'));
       for (const b of g.tiers) {
         const d = document.createElement('button');
@@ -657,7 +733,14 @@ async function main() {
         tiers.appendChild(d);
       }
       /** @type {HTMLElement} */ (it.querySelector('.bz-iname')).textContent = g.name + (g.cls ? ` ${g.cls}` : '');
-      /** @type {HTMLElement} */ (it.querySelector('.bz-imeta')).textContent = g.date ? `${g.date.replace(/-/g, '/')} ${g.place == null ? '' : g.place === 1 ? '優勝' : g.place + '位'}` : '';
+      // 下の行: 日付・順位、並べ替えに使っている値 (ポイント・人数) は太く
+      const meta = /** @type {HTMLElement} */ (it.querySelector('.bz-imeta'));
+      if (g.date) {
+        const placeT = g.place == null ? '' : g.place === 1 ? '優勝' : g.place + '位';
+        const extra = sortKey === 'pts' ? `${(g.pts * PTS_SCALE).toFixed(1)}pt` : sortKey === 'nent' && g.nent ? `${g.nent}人` : '';
+        meta.textContent = `${g.date.replace(/-/g, '/')} ${placeT}${g.nent && sortKey === 'place' ? `/${g.nent}人` : ''}`;
+        if (extra) { const b = document.createElement('b'); b.textContent = ' ' + extra; meta.appendChild(b); }
+      }
       tray.appendChild(it);
     }
     $('bz-more').style.display = list.length > shown ? '' : 'none';

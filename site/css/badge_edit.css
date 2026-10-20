@@ -105,6 +105,19 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 
 /* 持っているシール */
 .bz-sec { margin-top: 4px; }
+/* 検索・シリーズ・並べ替え (狭い画面では検索が 1 行、選ぶ 2 つが次の行) */
+.bz-find { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.bz-q { flex: 1 1 100%; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+.bz-q:focus-within { border-color: #111827; }
+.bz-q svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: #9ca3af; stroke-width: 2; stroke-linecap: round; }
+.bz-q input { flex: 1 1 auto; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 16px; background: none; padding: 0; }   /* 16px: iOS で拡大されない */
+.bz-find select { flex: 1 1 0; min-width: 0; height: 34px; font: inherit; font-size: 13px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
+.bz-find select:disabled { color: #9ca3af; }
+@media (min-width: 480px) {
+  .bz-q { flex: 1 1 200px; }
+  .bz-find select { flex: 0 1 auto; max-width: 180px; }
+}
+.bz-imeta b { color: #111827; font-weight: 700; }
 .bz-filters { display: flex; gap: 6px; padding: 2px 0 8px; overflow-x: auto; scrollbar-width: none; }
 .bz-filters::-webkit-scrollbar { display: none; }
 .bz-filters button { flex: 0 0 auto; font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; color: #374151; cursor: pointer; white-space: nowrap; }
@@ -116,10 +129,12 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bz-ev { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bz-thumb { position: relative; display: block; width: 100%; aspect-ratio: 1; padding: 0; border-radius: 10px; overflow: hidden; background: #f3f4f6;
   border: 2px solid transparent; cursor: pointer; }
-.bz-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* 本物のシールの見た目 (js/holo_badge.js)。地は薄い灰色、カードに貼ったときと同じ影 */
+.bz-tb { position: absolute; inset: 12%; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
+.bz-tb > .hb { container-type: size; --hb-size: 100cqw; width: 100%; height: 100%; }
+.bz-tb .hb-sheen, .bz-tb .hb-glare { display: none; }
+.bz-thumb:hover .bz-tb { transform: translateY(-1px); }
 .bz-ev.on .bz-thumb { border-color: #111827; }
-.bz-cls { position: absolute; right: 4px; bottom: 3px; font: italic 800 15px/1 "Zalando Sans Expanded", sans-serif; color: #fff;
-  -webkit-text-stroke: .5px rgba(0, 0, 0, .5); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 /* 色の丸 (持っている色だけ。貼っていると印) */
 .bz-tiers { display: flex; gap: 3px; }
 .bz-tier { flex: 1 1 0; min-width: 0; height: 22px; padding: 0; border-radius: 6px; border: 1px solid transparent; font: inherit; font-size: 11px; font-weight: 700;

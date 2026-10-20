@@ -90,6 +90,18 @@
     </div>
 
     <section class="bz-sec">
+      <div class="bz-find">
+        <label class="bz-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+          <input type="search" id="bz-q" placeholder="大会名・シリーズで探す" autocomplete="off" enterkeyhint="search"></label>
+        <select id="bz-series" aria-label="シリーズ" disabled><option value="">シリーズ: すべて</option></select>
+        <select id="bz-sort" aria-label="並べ替え">
+          <option value="new">新しい順</option>
+          <option value="old">古い順</option>
+          <option value="pts">順位評価ポイント順</option>
+          <option value="place">順位順</option>
+          <option value="nent">参加人数順</option>
+        </select>
+      </div>
       <div class="bz-filters" id="bz-filters">
         <button type="button" data-f="all" class="on">全部</button>
         <button type="button" data-f="r">虹</button>
