@@ -146,6 +146,11 @@ const LAYERS = {
   sh2: [['sikaku_gin_2', 'hard-light'], ['sikaku_gin_2', 'overlay'], ['sikaku_gin_3', 'plus-lighter'], ['sikaku_gin_1', 'overlay']],
 };
 
+/** 虹を丸・六角形・ひし形に切ったとき。四角用の虹の素材は虹色を四隅に寄せてあり、切ると色がほぼ消えるので、
+ * 透過用の素材 (形を問わない) を使う (金・銀は四角用のままの方が色が残る。2026-10-20 に見比べた)
+ * @param {number} v @param {string} shape */
+const roundRainbow = (v, shape) => v === 0 && shape !== 'square' && shape !== 'round';
+
 /** @param {HTMLElement} el @param {BadgeOpts} opts */
 export function renderBadge(el, opts) {
   const v = Math.max(0, Math.min(3, Number(opts.variant) || 0));
@@ -163,7 +168,7 @@ export function renderBadge(el, opts) {
   el.style.setProperty('--hb-cls-dy', String(pl.dy));
   el.style.setProperty('--hb-cls-k', String(pl.k));
   // 層: 絵 / (透過なしならクラスの文字) / ホロのレイヤー (下から) / ポインタを乗せたときの光 / (透過ありならクラスの文字)
-  const layers = LAYERS[`${opts.transparent ? 'sh' : 'sq'}${v}`] || [];
+  const layers = LAYERS[`${opts.transparent || roundRainbow(v, shape) ? 'sh' : 'sq'}${v}`] || [];
   const impl = opts.impl || 'img';
   const kind = (/** @type {string} */ _name) => (impl === 'css' ? 'c' : impl === 'old' ? 'o' : 'l');
   // クラスの文字: 透過なしは絵の直上 (ホロの下)、透過ありはホロの上 (形で切り抜かない)
@@ -313,11 +318,11 @@ function shapePath(ctx, W, shape) {
 }
 
 /** バッジの絵とホロの素材を読んでおく (カードの準備完了を待つとき用)。透過かどうかも確かめる。全部読めたら true
- * @param {string} src @param {number} variant @returns {Promise<boolean>} */
-export async function preloadBadge(src, variant) {
+ * @param {string} src @param {number} variant @param {string} [shape] 透過なしのときの形 (renderBadge の shape) @returns {Promise<boolean>} */
+export async function preloadBadge(src, variant, shape = 'square') {
   const tr = await isTransparent(src);
   const v = Math.max(0, Math.min(3, Number(variant) || 0));
-  const layers = LAYERS[`${tr ? 'sh' : 'sq'}${v}`] || [];
+  const layers = LAYERS[`${tr || roundRainbow(v, shape) ? 'sh' : 'sq'}${v}`] || [];
   const got = await Promise.all([loadImage(src, true).catch(() => loadImage(src)).catch(() => null), ...layers.map(([n]) => layerImage(n, 'img').catch(() => null))]);
   return got.every(Boolean);
 }

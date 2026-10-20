@@ -496,7 +496,7 @@ export function renderBack(el, model, opts = {}) {
   trackReady(el, want ? Promise.all((model.back?.stickers || []).map(s => {
     const p = parseKey(s.e);
     const src = p ? iconUrl(p.eid) : null;
-    return src && p ? preloadBadge(src, p.variant) : true;   // アイコンの無いシールは出さないので待たない
+    return src && p ? preloadBadge(src, p.variant, s.k) : true;   // アイコンの無いシールは出さないので待たない
   })).then(a => a.every(Boolean)) : Promise.resolve(true));
 }
 
