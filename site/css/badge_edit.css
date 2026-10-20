@@ -21,9 +21,14 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bz-ib:disabled { opacity: .35; cursor: default; }
 .bz-ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .bz-menu summary svg { fill: currentColor; stroke: none; }
-.bz-tt { border-color: #d1d5db; padding: 0 9px; }
-.bz-tt[aria-pressed="true"] { background: #111827; border-color: #111827; color: #fff; }
+/* 名前を前に: シールの四角と A。オフは四角が A の手前 (.bz-tt-over)、オンは黒地で A が手前 */
+.bz-tt .bz-tt-st { fill: #d1d5db; stroke: none; }
+.bz-tt .bz-tt-a { stroke-width: 2.2; }
+.bz-tt[aria-pressed="false"] .bz-tt-a { stroke: #9ca3af; }
+.bz-tt[aria-pressed="true"] { background: #111827; color: #fff; }
 .bz-tt[aria-pressed="true"]:hover { background: #1f2937; }
+.bz-tt[aria-pressed="true"] .bz-tt-st { fill: #6b7280; }
+.bz-tt[aria-pressed="true"] .bz-tt-over { display: none; }
 
 /* その他のメニュー */
 .bz-menu { position: relative; }

@@ -173,6 +173,7 @@ async function main() {
   textTopBtn.addEventListener('click', () => {
     textTop = !textTop;
     paintTextTop();
+    toast(textTop ? '名前・二つ名・順位をシールの上に出しました' : '名前・二つ名・順位をシールの下にしました');
     try {
       const m = JSON.parse(localStorage.getItem(TEXT_TOP_KEY) || '{}') || {};
       if (textTop) m[String(uid)] = 1; else delete m[String(uid)];
