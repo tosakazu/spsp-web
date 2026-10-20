@@ -62,7 +62,8 @@
    切り取りは絵だけ拡大し、ホロは形いっぱいのまま */
 .hb-square .hb-art { transform: scale(var(--hb-zoom, 1)); }
 /* 角丸と丸は clip-path でなく border-radius (+ .hb の overflow: hidden) で切る: Windows の Chrome (描画の高速化あり) で
-   clip-path: circle() とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-20) */
+   clip-path: circle() とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-20)。
+   border-radius でも丸で再発したので (10-21)、形で切ったものはいつもキャンバスに描く (js/holo_badge.js の renderBadge)。ここは描けないとき用 */
 .hb-square.hb-k-round { border-radius: 15%; }
 .hb-square.hb-k-circle { border-radius: 50%; }
 .hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }

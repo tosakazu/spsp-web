@@ -196,7 +196,9 @@ export function renderBadge(el, opts) {
   // 描き方 (キャンバスに描くとき用)。画像にする (badgeToCanvas、カードの保存) ときにも使うので、いつも覚えておく
   const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl: impl === 'css' ? 'img' : impl, letter, crop, pl, shape };
   specOf.set(el, fo);
-  if (impl !== 'css' && (fl === 'always' || (fl === 'auto' && forcedDarkLikely()))) {
+  // 形で切ったもの (角丸・丸・六角形・ひし形) もいつもキャンバスに描く: Windows の Chrome で、切り方 (clip-path でも border-radius でも)
+  // とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-21、丸で再発)
+  if (impl !== 'css' && (fl === 'always' || (fl === 'auto' && (shape !== 'square' || forcedDarkLikely())))) {
     flatOpts.set(el, fo);
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
