@@ -88,6 +88,8 @@ function playerTourTag(t, kind) {
 }
 
 const params = new URLSearchParams(location.search);
+/** #back で来た (カード編集の裏で適用した): カードは裏のまま出す。ふだんは裏から表へ裏返して見せる */
+const CARD_KEEP_BACK = location.hash === '#back';
 // 選手の指定: ?d=<start.gg discriminator> が既定 (2026-09-14)。?uid=<uid> と #<uid> も引き続き通る。
 // ?d= は data/discriminators.json (js/links.js が読む) で uid に解決してから読み込む。
 const DISC_PARAM = (params.get('d') || '').trim().toLowerCase();
@@ -671,6 +673,23 @@ function render() {
   // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
   // 設定の読み込みは loadData で選手データと一緒に始めてある。待つのは 2 秒まで (遅ければ既定のカードを出し、届いたら描き直す)。
   // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
+  // カードは描き終わる (字体・シールの絵とホロ・強制ダークモードの画像) まで読み込み中の表示で隠し (.pc-loading)、
+  // 出したら裏から表へ裏返す (#back で来たときは裏のまま)。描き終わりが来なくても 10 秒で出す
+  const wrapEl = document.getElementById('pcard-wrap');
+  let revealed = false;
+  const reveal = () => {
+    if (revealed || !wrapEl) return;
+    revealed = true;
+    wrapEl.classList.remove('pc-loading');
+    if (CARD_KEEP_BACK) return;
+    setTimeout(() => {
+      wrapEl.classList.remove('flipped');
+      document.getElementById('pcard')?.setAttribute('aria-hidden', 'false');
+      document.getElementById('pcard-back')?.setAttribute('aria-hidden', 'true');
+    }, 700);
+  };
+  setTimeout(reveal, 10000);
+  if (!card) reveal();
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
     let drawn = false;
@@ -684,13 +703,18 @@ function render() {
       const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
       SPSPPlayerCard.render(card, model);
       if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
+      if (!revealed) Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null]).then(reveal);
     };
-    const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
-    settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
-    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す
-    if (SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display))) {
-      SpspLatinName.loadReadings().then(r => { NAME_READINGS = r; if (r && drawn) draw(last); });
-    }
+    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) を待ってから描く (3 秒まで。遅れて届いたら描き直す)
+    const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
+    const readingsP = kanji
+      ? Promise.race([SpspLatinName.loadReadings().then(r => { NAME_READINGS = r; }), new Promise(r => setTimeout(r, 3000))])
+      : Promise.resolve();
+    if (kanji) SpspLatinName.loadReadings().then(r => { if (r && drawn && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } });
+    readingsP.then(() => {
+      const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
+      settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
+    });
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
@@ -2094,10 +2118,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 // #back で来たら (カード編集の裏で適用したとき) 裏返して出す
 {
   const wrap = document.getElementById('pcard-wrap');
-  if (wrap && location.hash === '#back') {
-    wrap.classList.add('flipped');
-    document.getElementById('pcard')?.setAttribute('aria-hidden', 'true');
-    document.getElementById('pcard-back')?.setAttribute('aria-hidden', 'false');
+  if (wrap && CARD_KEEP_BACK) {
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 残っても困らない */ }
   }
   document.addEventListener('click', e => {
@@ -2146,7 +2167,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
     };
     wrap.addEventListener('pointerdown', e => {
-      if (g || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (g || (e.pointerType === 'mouse' && e.button !== 0) || wrap.classList.contains('pc-loading')) return;
       if (/** @type {Element} */ (e.target).closest('#pc-overlay')) return;
       g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, pts: [{ x: e.clientX, t: e.timeStamp }], moved: false };
       wrap.style.transition = 'none';

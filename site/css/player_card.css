@@ -159,6 +159,12 @@
 /* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
+/* 描き終わるまで (src/pages/p.js) はカードを隠して読み込み中の表示。カードの箱 (aspect-ratio) は場所を取ったまま */
+.pc-loader { display: none; }
+.pcard-wrap.pc-loading .pcard-flip, .pcard-wrap.pc-loading .pc-overlay { visibility: hidden; }
+.pcard-wrap.pc-loading .pc-loader { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 6px; }
+.pc-loader::after { content: ""; width: 28px; height: 28px; border: 3px solid #d1d5db; border-top-color: #6b7280; border-radius: 50%; animation: pc-spin .8s linear infinite; }
+@keyframes pc-spin { to { transform: rotate(360deg); } }
 /* 指・マウスで動かす (src/pages/p.js): 横の動きはこちらで受け、縦はページのスクロール。傾けている間 (.pc-tilt) はシールに光 */
 .pcard-wrap .pcard-flip { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
 /* シールの光の層 (player_card.js paintGlow): カードのいちばん上 (画像に差し替えていてもその上)、座標はカードの 514×333 */

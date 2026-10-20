@@ -312,6 +312,15 @@ function shapePath(ctx, W, shape) {
   }
 }
 
+/** バッジの絵とホロの素材を読んでおく (カードの準備完了を待つとき用。読めなくても resolve)。透過かどうかも確かめる
+ * @param {string} src @param {number} variant @returns {Promise<void>} */
+export async function preloadBadge(src, variant) {
+  const tr = await isTransparent(src);
+  const v = Math.max(0, Math.min(3, Number(variant) || 0));
+  const layers = LAYERS[`${tr ? 'sh' : 'sq'}${v}`] || [];
+  await Promise.all([loadImage(src, true).catch(() => loadImage(src)).catch(() => null), ...layers.map(([n]) => layerImage(n, 'img').catch(() => null))]);
+}
+
 /** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)
  * @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
  * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
@@ -420,7 +429,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas, preloadBadge };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

@@ -8,7 +8,7 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
-import { renderBadge, isTransparent, badgeToCanvas } from './holo_badge.js';
+import { renderBadge, isTransparent, badgeToCanvas, preloadBadge } from './holo_badge.js';
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
@@ -448,6 +448,30 @@ const observed = new WeakSet();
  *   古い画像を外して HTML のカードをすぐ見せ、手が止まってから (1.5 秒) 撮り直す */
 export function render(el, model, opts = {}) {
   mount(el, () => cardHtml(model), fitAll, !!opts.live);
+  trackReady(el, Promise.resolve());
+}
+
+// ── 描き終わりを待つ (プレイヤーページが、描きかけのカードを見せないように) ──
+/** @type {WeakMap<HTMLElement, Promise<void>>} */
+const readyOf = new WeakMap();
+/** 最後に描いたときの準備: Web フォント・(裏面のシールの絵とホロの素材)・(強制ダークモードなら重ねる画像) @param {HTMLElement} el @param {Promise<unknown>} extra */
+function trackReady(el, extra) {
+  readyOf.set(el, (async () => {
+    const fonts = /** @type {any} */ (document).fonts;
+    if (fonts && fonts.ready) await fonts.ready.catch(() => {});
+    await extra.catch(() => {});
+    if (needsImage()) await (imageDone.get(el) || Promise.resolve());
+  })());
+}
+/** el のカードが描き終わったら resolve (待つ間に描き直されたら、その分も待つ)。描いていなければすぐ
+ * @param {HTMLElement} el @returns {Promise<void>} */
+export async function ready(el) {
+  for (let i = 0; i < 5; i++) {
+    const p = readyOf.get(el);
+    if (!p) return;
+    await p;
+    if (readyOf.get(el) === p) return;
+  }
 }
 
 /** 裏面を el に描く (表の render と同じく、表示幅に合わせて縮め、強制ダークモードでは画像を重ねる)
@@ -455,8 +479,18 @@ export function render(el, model, opts = {}) {
 export function renderBack(el, model, opts = {}) {
   const want = !!(model.back && model.back.stickers.length);
   mount(el, () => backHtml(model), root => { fitBack(root); if (want) { paintBackStickers(root, model); paintGlow(el, model); } }, !!opts.live);
-  // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ)
-  if (want && !iconsNow()) loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
+  // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
+  if (want && !iconsNow()) {
+    const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
+    trackReady(el, again);
+    return;
+  }
+  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる
+  trackReady(el, want ? Promise.all((model.back?.stickers || []).map(s => {
+    const p = parseKey(s.e);
+    const src = p ? iconUrl(p.eid) : null;
+    return src && p ? preloadBadge(src, p.variant) : null;
+  })) : Promise.resolve());
 }
 
 /** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、
@@ -549,11 +583,16 @@ function needsImage() {
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
 const imageTimers = new WeakMap();
+/** 重ねる画像を撮り終えたら resolve (撮れなくても) @type {WeakMap<HTMLElement, Promise<void>>} */
+const imageDone = new WeakMap();
 /** @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) */
 function scheduleImage(el, delay) {
   if (!needsImage()) return;
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
+  /** @type {() => void} */
+  let done = () => {};
+  imageDone.set(el, new Promise(r => { done = r; }));
   imageTimers.set(el, setTimeout(() => {
     // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
     captureCanvas(el).then(node => {
@@ -567,7 +606,7 @@ function scheduleImage(el, delay) {
       if (prev) prev.remove();
       const glow = el.querySelector('.pcb-glow');
       if (glow) el.appendChild(glow);   // シールの光は画像の上に
-    }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
+    }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).finally(() => done());   // 重ねてから「撮り終えた」に
   }, delay));
 }
 
@@ -643,4 +682,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, renderBack, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, renderBack, ready, capture, makeAchFitTester, COLORS, TEMPLATES };
