@@ -3,7 +3,7 @@
 //   持っているシール = 大会シールの判定 (spsp_scripts feat/stickers の spsp/stickers.py) で配られた色のうち、アイコンのある大会のもの
 //   (大会 → アイコン = data/event_icons.json、tools/badges/build_event_icons.mjs)。下位クラスはクラスの文字を重ね、アイコンは親の大会のもの
 //   判定の結果はビルドに入るまでプレビュー専用の data/stickers_preview/<uid % 64>.json ({uid: {大会キー: r|g|s|n}}) から読む
-//   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・通常 の 4 枚)
+//   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・素 の 4 枚。素 = ホロなし)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
 //   操作の欄は選んでいてもいなくても同じ高さ (一覧がずれない)。大きさ・回転・切り取りは 1 本のスライダーを切り替える。元に戻す・やり直すあり
 //   一覧は大会ごと。大会を押すといちばん上の色、色の丸を押すとその色を貼る
@@ -32,7 +32,7 @@ const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
 const TEXT_TOP_KEY = 'spsp_card_badges_text_top_v1';   // 名前・二つ名・順位をシールの上に出すか (選手ごと、{uid: 1})
-const HOLO_NAMES = ['虹', '金', '銀', '通常'];
+const HOLO_NAMES = ['虹', '金', '銀', '素'];
 /** 色の記号 (判定のデータ) → js/holo_badge.js の variant。上の色から順 */
 const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
 const STICKER_SHARDS = 64;
@@ -675,7 +675,7 @@ async function main() {
       if (es.some(x => x.isIntersecting) && $('bz-more').style.display !== 'none') { shown += PAGE; paintTray(); }
     }, { root: scroller, rootMargin: '200px' }).observe($('bz-more'));
   }
-  const TIER_SHORT = ['虹', '金', '銀', '通'];
+  const TIER_SHORT = ['虹', '金', '銀', '素'];
   // 一覧の絵は本物のシール (ホロ・クラスの文字) で描く。重いので、一覧の箱の中で見える近くに来たものだけ
   /** @param {HTMLElement} tb */
   const paintThumb = tb => {
