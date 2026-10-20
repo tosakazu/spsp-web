@@ -28,13 +28,28 @@
   <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
 
   <div id="bz-root" style="display:none">
-    <a class="bz-back" id="bz-back" href="./">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
-      <span>マイページに戻る</span>
-    </a>
-    <h1 class="bz-title">裏面のシール <span class="bz-tag">試作</span></h1>
+    <!-- 上の段: 戻る・題・元に戻す/やり直す・文字を前に・その他 -->
+    <div class="bz-head">
+      <a class="bz-back" id="bz-back" href="./" title="マイページに戻る" aria-label="マイページに戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      </a>
+      <h1 class="bz-title">裏面のシール <span class="bz-tag">試作</span></h1>
+      <div class="bz-head-btns">
+        <button type="button" class="bz-ib" id="bz-undo" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button type="button" class="bz-ib" id="bz-redo" title="やり直す (Ctrl+Shift+Z)" aria-label="やり直す" disabled><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+        <button type="button" class="bz-ib bz-tt" id="bz-text-top" aria-pressed="false" title="名前・二つ名・順位をシールの上に出す">文字を前に</button>
+        <details class="bz-menu" id="bz-menu">
+          <summary class="bz-ib" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
+          <div class="bz-menu-pop">
+            <button type="button" id="bz-sample">Figma の見本を再現</button>
+            <button type="button" class="bz-danger" id="bz-clear">全部剥がす</button>
+            <div class="bz-menu-note">貼ったシールはこのブラウザにだけ保存されます</div>
+          </div>
+        </details>
+      </div>
+    </div>
 
-    <!-- 裏面の上に貼る層 (カードと同じ 514×333 の座標、表示幅に合わせて縮める) -->
+    <!-- カードと操作 (画面の上に出たまま)。操作の欄は選んでいてもいなくても同じ高さ (一覧がずれないように) -->
     <div class="bz-top" id="bz-top">
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
@@ -44,58 +59,50 @@
         <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ">↻</span><span class="bz-h bz-h-del" title="剥がす">×</span></div></div>
       </div>
 
-      <label class="bz-opt"><input type="checkbox" id="bz-text-top"> 名前・二つ名・順位をシールの上に出す</label>
-
-      <!-- 選んでいるシールの操作 (選んでいないときは使い方) -->
       <div class="bz-tools" id="bz-tools">
-        <div class="bz-hint" id="bz-hint">下の一覧から押すとカードに貼れます。貼ったシールは、ドラッグで移動、角の ↻ で回転と大きさ (2 本指でも可)。</div>
-        <div class="bz-sel" id="bz-sel" style="display:none">
-          <div class="bz-sel-name" id="bz-sel-name"></div>
-          <label class="bz-range"><span>大きさ</span><input type="range" id="bz-size" min="0" max="1000" step="1"><output id="bz-size-v"></output></label>
-          <label class="bz-range"><span>回転</span><input type="range" id="bz-rot" min="-180" max="180" step="1"><output id="bz-rot-v"></output></label>
-          <div class="bz-range" id="bz-shape-row"><span>形</span>
-            <div class="bz-shapes" id="bz-shapes">
-              <button type="button" data-k="square" title="四角"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14"/></svg></button>
-              <button type="button" data-k="round" title="角丸"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="3.5"/></svg></button>
-              <button type="button" data-k="circle" title="丸"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></button>
-              <button type="button" data-k="hex" title="六角形"><svg viewBox="0 0 20 20"><polygon points="10,2.5 16.5,6.25 16.5,13.75 10,17.5 3.5,13.75 3.5,6.25"/></svg></button>
-              <button type="button" data-k="diamond" title="ひし形"><svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg></button>
-            </div>
+        <div class="bz-sel-name" id="bz-sel-name"></div>
+        <div class="bz-row">
+          <div class="bz-seg bz-shapes" id="bz-shapes" role="group" aria-label="形">
+            <button type="button" data-k="square" title="四角"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14"/></svg></button>
+            <button type="button" data-k="round" title="角丸"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="3.5"/></svg></button>
+            <button type="button" data-k="circle" title="丸"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></button>
+            <button type="button" data-k="hex" title="六角形"><svg viewBox="0 0 20 20"><polygon points="10,2.5 16.5,6.25 16.5,13.75 10,17.5 3.5,13.75 3.5,6.25"/></svg></button>
+            <button type="button" data-k="diamond" title="ひし形"><svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg></button>
           </div>
-          <label class="bz-range" id="bz-crop-row"><span>切り取り</span><input type="range" id="bz-crop" min="35" max="100" step="1"><output id="bz-crop-v"></output></label>
-          <div class="bz-hint" id="bz-shape-note" style="display:none">透過のアイコンは形のまま貼ります。</div>
-          <div class="bz-btns">
-            <button type="button" id="bz-up" title="1 つ上へ">上へ</button>
-            <button type="button" id="bz-down" title="1 つ下へ">下へ</button>
-            <button type="button" id="bz-front">いちばん上</button>
-            <button type="button" id="bz-backmost">いちばん下</button>
-            <button type="button" id="bz-reset-tf">回転を戻す</button>
-            <button type="button" class="bz-del" id="bz-del">剥がす</button>
+          <div class="bz-seg bz-order" role="group" aria-label="重なり順">
+            <button type="button" id="bz-backmost" title="いちばん下へ"><svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg></button>
+            <button type="button" id="bz-down" title="1 つ下へ"><svg viewBox="0 0 24 24"><path d="M12 5v14M7 14l5 5 5-5"/></svg></button>
+            <button type="button" id="bz-up" title="1 つ上へ"><svg viewBox="0 0 24 24"><path d="M12 19V5M7 10l5-5 5 5"/></svg></button>
+            <button type="button" id="bz-front" title="いちばん上へ"><svg viewBox="0 0 24 24"><path d="M12 20V8M7 13l5-5 5 5M5 4h14"/></svg></button>
           </div>
+          <button type="button" class="bz-ib bz-del" id="bz-del" title="剥がす (Delete)" aria-label="剥がす"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+        </div>
+        <div class="bz-row">
+          <div class="bz-seg bz-tabs" id="bz-tabs" role="tablist">
+            <button type="button" data-t="size" class="on">大きさ</button>
+            <button type="button" data-t="rot">回転</button>
+            <button type="button" data-t="crop">切り取り</button>
+          </div>
+          <input type="range" class="bz-slider" id="bz-slider" aria-label="大きさ">
+          <button type="button" class="bz-val" id="bz-val" title="元に戻す"></button>
         </div>
       </div>
     </div>
 
     <section class="bz-sec">
-      <h2>持っているシール <span class="bz-count" id="bz-count"></span></h2>
-      <div class="bz-note">大会の成績で もらえる色が決まります (虹 = 優勝、金・銀 = 上位、通常 = 参加)。上の色をもらった大会は下の色も全部持っています。アイコンのある大会だけ出ます。</div>
       <div class="bz-filters" id="bz-filters">
         <button type="button" data-f="all" class="on">全部</button>
         <button type="button" data-f="r">虹</button>
         <button type="button" data-f="g">金</button>
         <button type="button" data-f="s">銀</button>
-        <button type="button" data-f="n">通常</button>
+        <button type="button" data-f="n">参加</button>
         <button type="button" data-f="placed">貼ったもの</button>
       </div>
-      <!-- 一覧はこの箱の中だけでスクロールする (カードと操作は画面に出たまま)。高さは js が画面の残りに合わせる -->
+      <!-- 一覧はこの箱の中だけでスクロールする。高さは js が画面の残りに合わせる -->
       <div class="bz-scroll" id="bz-scroll">
         <div class="bz-tray" id="bz-tray"></div>
         <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
-        <div class="bz-bar">
-          <button type="button" class="bz-sample" id="bz-sample">Figma の見本を再現</button>
-          <button type="button" class="bz-clear" id="bz-clear">全部剥がす</button>
-          <span class="bz-saved">このブラウザにだけ保存されます</span>
-        </div>
+        <div class="bz-note">1 つの大会につき、取った色から下の色まで全部持っています (虹 = 優勝、金・銀 = 上位、通常 = 参加)。大会を押すといちばん上の色を、色の丸を押すとその色を貼ります。アイコンのある大会だけ出ます。</div>
       </div>
     </section>
   </div>

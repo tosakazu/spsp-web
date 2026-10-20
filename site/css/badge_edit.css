@@ -1,12 +1,40 @@
-/* badge_edit.css — カードの裏面にシールを貼るページ (p/badges.html、試作)。カードと操作は上に固定、持っているシールはその下
+/* badge_edit.css — カードの裏面にシールを貼るページ (p/badges.html、試作)。上の段・カード・操作は画面の上に出たまま、
+   持っているシールはその下の箱の中だけでスクロールする
    貼る層 .bz-layer / 枠の層 .bz-over はカードに重ねる。位置・大きさは js が表示幅に合わせた px で置く */
-main.bz { max-width: 560px; margin: 0 auto; padding: 12px 16px 80px; }
-.bz-back { display: inline-flex; align-items: center; gap: 4px; color: #374151; text-decoration: none; font-weight: 600; font-size: 14px; }
-.bz-back svg { width: 18px; height: 18px; }
-.bz-title { font-size: 17px; margin: 8px 0 6px; display: flex; align-items: center; gap: 8px; }
-.bz-tag { font-size: 11px; font-weight: 600; color: #b45309; background: #fef3c7; border-radius: 6px; padding: 2px 6px; }
+main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 
-.bz-top { position: sticky; top: 0; z-index: 5; background: #fff; padding: 6px 0 8px; }
+/* 上の段 */
+.bz-head { display: flex; align-items: center; gap: 6px; min-height: 40px; }
+.bz-back { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: -6px;
+  color: #374151; text-decoration: none; border-radius: 8px; }
+.bz-back:hover { background: #f3f4f6; }
+.bz-back svg { width: 20px; height: 20px; }
+.bz-title { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; }
+.bz-tag { font-size: 10px; font-weight: 600; color: #b45309; background: #fef3c7; border-radius: 6px; padding: 2px 5px; }
+.bz-head-btns { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+/* 小さいボタン (アイコン・短い文字) */
+.bz-ib { font: inherit; font-size: 12px; font-weight: 600; min-width: 32px; height: 32px; padding: 0 6px; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: #374151; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; list-style: none; }
+.bz-ib::-webkit-details-marker { display: none; }
+.bz-ib:hover:not(:disabled) { background: #f3f4f6; }
+.bz-ib:disabled { opacity: .35; cursor: default; }
+.bz-ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bz-menu summary svg { fill: currentColor; stroke: none; }
+.bz-tt { border-color: #d1d5db; padding: 0 9px; }
+.bz-tt[aria-pressed="true"] { background: #111827; border-color: #111827; color: #fff; }
+.bz-tt[aria-pressed="true"]:hover { background: #1f2937; }
+
+/* その他のメニュー */
+.bz-menu { position: relative; }
+.bz-menu-pop { position: absolute; right: 0; top: 36px; z-index: 20; min-width: 200px; padding: 6px; background: #fff; border: 1px solid #e5e7eb;
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .14); display: flex; flex-direction: column; }
+.bz-menu-pop button { font: inherit; font-size: 13px; text-align: left; padding: 9px 10px; border: 0; border-radius: 6px; background: none; color: #111827; cursor: pointer; }
+.bz-menu-pop button:hover { background: #f3f4f6; }
+.bz-menu-pop .bz-danger { color: #dc2626; }
+.bz-menu-note { font-size: 11px; color: #9ca3af; padding: 6px 10px 2px; border-top: 1px solid #f3f4f6; margin-top: 4px; }
+
+.bz-top { position: sticky; top: 0; z-index: 5; background: #fff; padding: 4px 0 6px; }
 .bz-stage { position: relative; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
 .bz-stage.bz-has-sel { touch-action: none; }   /* 選んでいる間は 2 本指を画面の拡大に取られないように */
 .bz-stage .pcard { margin: 0; }
@@ -17,8 +45,6 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 12px 16px 80px; }
 .bz-stage .bz-text { position: absolute; inset: 0; z-index: 2; pointer-events: none; visibility: hidden; }
 .bz-text .pcb-col { visibility: visible; }
 .bz-text .pc-img { display: none; }
-.bz-opt { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #374151; cursor: pointer; }
-.bz-opt input { margin: 0; }
 
 /* 貼ったシール (left/top = 中心、幅 = 一辺、回転は transform) */
 .bz-st { position: absolute; cursor: grab; touch-action: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
@@ -31,6 +57,10 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 12px 16px 80px; }
 /* ポインタで傾くキラキラは、ドラッグと重なるので切る */
 .bz-st > .hb, .bz-st > .hb:hover { transform: none !important; transition: none; }
 .bz-st .hb-sheen, .bz-st .hb-glare { display: none; }
+/* 貼った直後に少し跳ねる (どこに貼られたか分かるように) */
+.bz-st.bz-pop > .hb { animation: bz-pop .32s ease-out; }
+@keyframes bz-pop { 0% { scale: .6; opacity: .3; } 70% { scale: 1.06; opacity: 1; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) { .bz-st.bz-pop > .hb { animation: none; } }
 
 /* 選んでいるシールの枠とつまみ */
 .bz-frame { position: absolute; box-sizing: border-box; border: 1.5px dashed #fff;
@@ -39,55 +69,75 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 12px 16px 80px; }
   border-radius: 50%; background: #111827; color: #fff; border: 2px solid #fff; box-sizing: border-box;
   display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; line-height: 1;
   pointer-events: auto; touch-action: none; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+/* 指で押しやすいよう、見た目より広く当たる */
+.bz-h::after { content: ""; position: absolute; inset: -8px; }
 .bz-h-rot { right: 0; bottom: 0; transform: translate(50%, 50%); cursor: nwse-resize; }
 .bz-h-del { right: 0; top: 0; transform: translate(50%, -50%); cursor: pointer; background: #dc2626; }
 
-/* 操作の欄 */
-.bz-tools { margin-top: 8px; min-height: 40px; font-size: 13px; }
-.bz-hint { color: #6b7280; font-size: 12px; line-height: 1.5; }
-.bz-sel-name { font-weight: 600; font-size: 12px; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-.bz-range { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
-.bz-range > span { flex: 0 0 4em; color: #6b7280; font-size: 12px; }
-.bz-range input { flex: 1 1 auto; min-width: 0; }
-.bz-range output { flex: 0 0 3.2em; text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
-.bz-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.bz-shapes { display: flex; gap: 6px; }
-.bz-shapes button { width: 34px; height: 30px; padding: 0; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; }
-.bz-shapes button svg { width: 18px; height: 18px; fill: #9ca3af; }
-.bz-shapes button.on { border-color: #111827; background: #f3f4f6; }
-.bz-shapes button.on svg { fill: #111827; }
-.bz-btns button { font: inherit; font-size: 12px; padding: 5px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; cursor: pointer; }
-.bz-btns button:disabled { opacity: .4; cursor: default; }
-.bz-btns .bz-del { color: #dc2626; border-color: #fca5a5; margin-left: auto; }
+/* 操作の欄 (高さは選んでいてもいなくても同じ。選んでいないときは押せない) */
+.bz-tools { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.bz-sel-name { font-size: 12px; line-height: 18px; height: 18px; color: #111827; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bz-sel-name.bz-hint { color: #6b7280; font-weight: 400; }
+.bz-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.bz-tools.bz-none .bz-row { opacity: .4; pointer-events: none; }
+.bz-seg { display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+.bz-seg button { font: inherit; font-size: 12px; height: 30px; min-width: 32px; padding: 0 8px; border: 0; border-left: 1px solid #e5e7eb; background: #fff; color: #374151;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.bz-seg button:first-child { border-left: 0; }
+.bz-seg button:hover:not(:disabled) { background: #f9fafb; }
+.bz-seg button:disabled { color: #d1d5db; cursor: default; }
+.bz-seg button.on { background: #111827; color: #fff; }
+.bz-seg svg { width: 16px; height: 16px; }
+.bz-shapes button { padding: 0 6px; }
+.bz-shapes svg { fill: currentColor; }
+.bz-order svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bz-del { margin-left: auto; color: #dc2626; border-color: #fecaca; }
+.bz-del:hover { background: #fef2f2 !important; }
+.bz-slider { flex: 1 1 auto; min-width: 0; margin: 0; }
+.bz-val { flex: 0 0 auto; min-width: 3.4em; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; padding: 4px 2px;
+  border: 0; background: none; color: #374151; cursor: pointer; border-radius: 6px; }
+.bz-val:hover { background: #f3f4f6; }
+/* 狭い画面: 形の 5 つと重なり順の 4 つが 1 行に入るように詰める */
+@media (max-width: 380px) {
+  .bz-seg button { min-width: 28px; padding: 0 4px; }
+  .bz-row { gap: 6px; }
+}
 
 /* 持っているシール */
-.bz-sec { margin-top: 14px; }
-.bz-sec h2 { font-size: 13px; font-weight: 600; color: #6b7280; margin: 0 0 4px; }
-.bz-count { font-weight: 500; }
-.bz-note { font-size: 11px; color: #9ca3af; margin-bottom: 8px; }
-.bz-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.bz-filters button { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; color: #374151; cursor: pointer; }
+.bz-sec { margin-top: 4px; }
+.bz-filters { display: flex; gap: 6px; padding: 2px 0 8px; overflow-x: auto; scrollbar-width: none; }
+.bz-filters::-webkit-scrollbar { display: none; }
+.bz-filters button { flex: 0 0 auto; font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; color: #374151; cursor: pointer; white-space: nowrap; }
+.bz-filters button .bz-n { color: #9ca3af; margin-left: 3px; font-variant-numeric: tabular-nums; }
 .bz-filters button.on { background: #111827; color: #fff; border-color: #111827; }
-.bz-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 2px 4px 12px; }
-.bz-tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
-.bz-item { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; min-width: 0; color: inherit; }
-.bz-thumb { position: relative; display: block; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f3f4f6; border: 2px solid transparent; }
+.bz-filters button.on .bz-n { color: #9ca3af; }
+.bz-scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 2px 4px 16px; }
+.bz-tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px 10px; }
+.bz-ev { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.bz-thumb { position: relative; display: block; width: 100%; aspect-ratio: 1; padding: 0; border-radius: 10px; overflow: hidden; background: #f3f4f6;
+  border: 2px solid transparent; cursor: pointer; }
 .bz-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.bz-item.on .bz-thumb { border-color: #111827; }
-.bz-chip { position: absolute; left: 4px; top: 4px; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 6px; color: #fff; }
-.bz-v0 .bz-chip { background: linear-gradient(90deg, #f43f5e, #f59e0b, #10b981, #3b82f6, #8b5cf6); }
-.bz-v1 .bz-chip { background: #c99a1a; }
-.bz-v2 .bz-chip { background: #8b95a1; }
-.bz-v3 .bz-chip { background: #4b5563; }
-.bz-on { position: absolute; right: 4px; bottom: 4px; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 6px; background: #111827; color: #fff; }
+.bz-ev.on .bz-thumb { border-color: #111827; }
+.bz-cls { position: absolute; right: 4px; bottom: 3px; font: italic 800 15px/1 "Zalando Sans Expanded", sans-serif; color: #fff;
+  -webkit-text-stroke: .5px rgba(0, 0, 0, .5); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+/* 色の丸 (持っている色だけ。貼っていると印) */
+.bz-tiers { display: flex; gap: 3px; }
+.bz-tier { flex: 1 1 0; min-width: 0; height: 22px; padding: 0; border-radius: 6px; border: 1px solid transparent; font: inherit; font-size: 11px; font-weight: 700;
+  color: #fff; cursor: pointer; position: relative; }
+.bz-tier.t0 { background: linear-gradient(90deg, #f43f5e, #f59e0b, #10b981, #3b82f6, #8b5cf6); }
+.bz-tier.t1 { background: #c99a1a; }
+.bz-tier.t2 { background: #8b95a1; }
+.bz-tier.t3 { background: #fff; color: #4b5563; border-color: #d1d5db; }
+.bz-tier.on { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #111827; }
+.bz-tier.on::after { content: "✓"; position: absolute; right: 2px; top: -1px; font-size: 9px; }
 .bz-iname { font-size: 11px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bz-imeta { font-size: 10px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bz-empty { grid-column: 1 / -1; color: #9ca3af; font-size: 13px; padding: 12px 0; }
+.bz-imeta { font-size: 10px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -3px; }
+.bz-empty { grid-column: 1 / -1; color: #9ca3af; font-size: 13px; padding: 16px 0; text-align: center; }
 .bz-more { display: block; margin: 14px auto 0; font: inherit; font-size: 13px; padding: 8px 24px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; }
+.bz-note { font-size: 11px; color: #9ca3af; line-height: 1.6; margin-top: 16px; }
 
-.bz-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(255, 255, 255, .96); border-top: 1px solid #e5e7eb;
-  padding: 10px 16px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 12px; }
-.bz-clear { font: inherit; font-size: 13px; padding: 7px 16px; border: 1px solid #fca5a5; border-radius: 8px; background: #fff; color: #dc2626; cursor: pointer; }
-.bz-sample { font: inherit; font-size: 13px; padding: 7px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; cursor: pointer; }
-.bz-saved { font-size: 11px; color: #9ca3af; }
+/* 一時的なお知らせ (貼れる枚数の上限など) */
+.bz-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; background: #111827; color: #fff; font-size: 13px;
+  padding: 9px 16px; border-radius: 999px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); pointer-events: none; transition: opacity .2s;
+  display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.bz-toast-act { font: inherit; font-size: 13px; font-weight: 700; color: #93c5fd; background: none; border: 0; padding: 0; cursor: pointer; }

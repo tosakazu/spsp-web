@@ -5,6 +5,8 @@
 //   判定の結果はビルドに入るまでプレビュー専用の data/stickers_preview/<uid % 64>.json ({uid: {大会キー: r|g|s|n}}) から読む
 //   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・通常 の 4 枚)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
+//   操作の欄は選んでいてもいなくても同じ高さ (一覧がずれない)。大きさ・回転・切り取りは 1 本のスライダーを切り替える。元に戻す・やり直すあり
+//   一覧は大会ごと。大会を押すといちばん上の色、色の丸を押すとその色を貼る
 //   透過なしのシールは形 (四角・角丸・丸・六角形・ひし形) と切り取り (絵の何割を見せるか) を選べる。切り取りは絵の縮尺を保ったまま
 //   シールを小さくする (はさみで外側を切る)。ホロは見えている形いっぱいに縮む (js/holo_badge.js の shape / crop)
 //   保存はこのブラウザだけ (localStorage、選手ごと)。1 枚 = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺 (px), r: 回転 (度),
@@ -118,6 +120,18 @@ function badgesOf(tours, icons, got) {
 /** 順位の表示 @param {Badge} b */
 const placeText = b => (b.place == null ? '' : b.place === 1 ? '優勝' : `${b.place}位`) + (b.nent ? ` / ${b.nent}人` : '');
 
+/** 大会ごとにまとめた一覧の 1 つ (色は持っているものだけ、上の色から) @typedef {{ key: string, name: string, date: string, place: number | null,
+ *   nent: number | null, file: string, cls: string | null, tiers: Badge[], sample: boolean }} EventGroup */
+/** シールのキー → 大会キー @param {string} e */
+const groupKey = e => e.split(':')[0];
+
+/** 押してから動かしたとみなすまでの距離 (画面の px)。これより小さい動きはタップ (選ぶだけ) */
+const DRAG_SLOP = 4;
+/** 回転を吸い付ける角度と幅 (度) */
+const SNAP_ANGLES = [0, 90, -90, 180, -180, 45, -45, 135, -135];
+const SNAP_DEG = 4;
+const HISTORY_MAX = 100;
+
 // ── 本体 ──
 async function main() {
   let uid = parseInt(params.get('uid') || '0');
@@ -143,38 +157,105 @@ async function main() {
   const cardModel = buildCardModel(data, card ? card.settings : null, card ? card.titleText : null);
   SPSPPlayerCard.renderBack($('bz-card'), cardModel);
 
-  // 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる)
-  const textTop = /** @type {HTMLInputElement} */ ($('bz-text-top'));
+  // ── 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる) ──
+  const textTopBtn = $('bz-text-top');
   const readTextTop = () => { try { return !!(JSON.parse(localStorage.getItem(TEXT_TOP_KEY) || '{}') || {})[String(uid)]; } catch (e) { return false; } };
+  let textTop = readTextTop();
   const paintTextTop = () => {
-    const on = textTop.checked;
-    $('bz-text').style.display = on ? '' : 'none';
-    if (on && !$('bz-text').firstChild) SPSPPlayerCard.renderBack($('bz-text'), cardModel);
+    textTopBtn.setAttribute('aria-pressed', String(textTop));
+    $('bz-text').style.display = textTop ? '' : 'none';
+    if (textTop && !$('bz-text').firstChild) SPSPPlayerCard.renderBack($('bz-text'), cardModel);
   };
-  textTop.checked = readTextTop();
   paintTextTop();
-  textTop.addEventListener('change', () => {
+  textTopBtn.addEventListener('click', () => {
+    textTop = !textTop;
     paintTextTop();
     try {
       const m = JSON.parse(localStorage.getItem(TEXT_TOP_KEY) || '{}') || {};
-      if (textTop.checked) m[String(uid)] = 1; else delete m[String(uid)];
+      if (textTop) m[String(uid)] = 1; else delete m[String(uid)];
       localStorage.setItem(TEXT_TOP_KEY, JSON.stringify(m));
     } catch (e) { /* 保存できない環境では何もしない */ }
   });
 
+  // ── 持っているシール ──
   const badges = badgesOf((data.player && data.player.tournaments) || [], icons, stickerShard ? stickerShard[String(uid)] || {} : null);
   const byE = new Map([...badges, ...SAMPLE_BADGES].map(b => [b.e, b]));
+  /** 大会ごと (新しい順)。見本はシールごとに 1 つ (貼ったものの絞り込みでだけ出す) @type {EventGroup[]} */
+  const groups = [];
+  /** @type {Map<string, EventGroup>} */
+  const groupOf = new Map();
+  for (const b of [...badges, ...SAMPLE_BADGES]) {
+    const sample = !b.date;
+    const k = sample ? b.e : groupKey(b.e);
+    let g = groupOf.get(k);
+    if (!g) {
+      g = { key: k, name: b.name, date: b.date, place: b.place, nent: b.nent, file: b.file, cls: b.cls, tiers: [], sample };
+      groupOf.set(k, g); groups.push(g);
+    }
+    g.tiers.push(b);
+  }
+
   /** @type {Sticker[]} */
   let stickers = loadStickers(uid).filter(s => byE.has(s.e));
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
-  const save = () => saveStickers(uid, stickers);
+
+  // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
+  const snap = () => JSON.stringify(stickers);
+  /** @type {string[]} */
+  const past = [snap()];
+  /** @type {string[]} */
+  let future = [];
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let histTimer = null;
+  const flushHistory = () => {
+    if (histTimer) { clearTimeout(histTimer); histTimer = null; }
+    const now = snap();
+    if (now !== past[past.length - 1]) {
+      past.push(now);
+      if (past.length > HISTORY_MAX) past.shift();
+      future = [];
+    }
+    paintHistory();
+  };
+  const paintHistory = () => {
+    /** @type {HTMLButtonElement} */ ($('bz-undo')).disabled = past.length < 2 && snap() === past[0];
+    /** @type {HTMLButtonElement} */ ($('bz-redo')).disabled = !future.length;
+  };
+  /** 変えたものを保存し、少し手が止まったら履歴に積む */
+  const commit = () => {
+    saveStickers(uid, stickers);
+    if (histTimer) clearTimeout(histTimer);
+    histTimer = setTimeout(flushHistory, 400);
+    paintHistory();
+  };
+  /** @param {string} json */
+  const restore = json => {
+    stickers = JSON.parse(json);
+    if (sel != null && !stickers.some(s => s.e === sel)) sel = null;
+    saveStickers(uid, stickers);
+    place(); paintTray(); paintHistory();
+  };
+  const undo = () => {
+    flushHistory();
+    if (past.length < 2) return;
+    future.push(/** @type {string} */ (past.pop()));
+    restore(past[past.length - 1]);
+  };
+  const redo = () => {
+    flushHistory();
+    const next = future.pop();
+    if (next == null) return;
+    past.push(next);
+    restore(next);
+  };
+  $('bz-undo').addEventListener('click', undo);
+  $('bz-redo').addEventListener('click', redo);
 
   // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
   //    (層ごと transform で縮めると、ブラウザによってはシールが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
   const stage = $('bz-stage');
   const layer = $('bz-layer');   // シール (カードからはみ出した所は切る)
-  const over = $('bz-over');     // 選んでいるシールの枠とつまみ (カードの外にはみ出してよい)
   const frame = $('bz-frame');
   let scale = 0;   // 画面の px / カードの px
   const fitLayer = () => {
@@ -258,44 +339,80 @@ async function main() {
     paintTools();
     scheduleReflatten();
   }
+  /** 選ぶ (null = 外す)。一覧の印も変わる @param {string | null} e */
+  const select = e => {
+    if (sel === e) return;
+    sel = e;
+    place();
+    paintTray();
+  };
 
-  // ── 操作の欄 ──
-  const sizeIn = /** @type {HTMLInputElement} */ ($('bz-size'));
-  const rotIn = /** @type {HTMLInputElement} */ ($('bz-rot'));
-  const cropIn = /** @type {HTMLInputElement} */ ($('bz-crop'));
+  // ── 操作の欄: 形・重なり順・剥がす、大きさ/回転/切り取りは 1 本のスライダーを切り替えて使う ──
+  const tools = $('bz-tools');
+  const slider = /** @type {HTMLInputElement} */ ($('bz-slider'));
+  /** @type {'size' | 'rot' | 'crop'} */
+  let tab = 'size';
+  const TAB_LABEL = { size: '大きさ', rot: '回転', crop: '切り取り' };
+  /** スライダーの範囲と今の値 @param {Sticker} s */
+  const sliderOf = s => tab === 'size' ? { min: 0, max: 1000, v: sizeToSlider(s.s), text: Math.round(s.s / S_DEF * 100) + '%' }
+    : tab === 'rot' ? { min: -180, max: 180, v: Math.round(s.r), text: Math.round(s.r) + '°' }
+    : { min: Math.round(CROP_MIN * 100), max: 100, v: Math.round(s.c * 100), text: Math.round(s.c * 100) + '%' };
   function paintTools() {
     const s = cur();
-    $('bz-hint').style.display = s ? 'none' : '';
-    $('bz-sel').style.display = s ? '' : 'none';
-    if (!s) return;
+    tools.classList.toggle('bz-none', !s);
+    const name = $('bz-sel-name');
+    name.classList.toggle('bz-hint', !s);
+    if (!s) {
+      name.textContent = stickers.length ? 'シールを押すと選べます。ドラッグで移動、↻ で回転と大きさ (2 本指でも)' : '下の一覧から押すとカードに貼れます';
+      return;
+    }
     const b = /** @type {Badge} */ (byE.get(s.e));
-    $('bz-sel-name').textContent = `${b.name} (${HOLO_NAMES[b.variant]}${b.place != null ? '・' + placeText(b) : ''})`;
-    if (document.activeElement !== sizeIn) sizeIn.value = String(sizeToSlider(s.s));
-    if (document.activeElement !== rotIn) rotIn.value = String(Math.round(s.r));
-    $('bz-size-v').textContent = Math.round(s.s / S_DEF * 100) + '%';
-    $('bz-rot-v').textContent = Math.round(s.r) + '°';
-    // 形・切り取り (透過ありのアイコンは形のまま)
+    name.textContent = `${b.name}${b.cls ? ` ${b.cls}クラス` : ''} · ${HOLO_NAMES[b.variant]}${b.place != null ? ' · ' + placeText(b) : ''}`;
     const tr = trans.has(s.e);
-    $('bz-shape-row').style.display = tr ? 'none' : '';
-    $('bz-crop-row').style.display = tr ? 'none' : '';
-    $('bz-shape-note').style.display = tr ? '' : 'none';
-    for (const x of $('bz-shapes').querySelectorAll('button')) x.classList.toggle('on', /** @type {HTMLElement} */ (x).dataset.k === s.k);
-    if (document.activeElement !== cropIn) cropIn.value = String(Math.round(s.c * 100));
-    $('bz-crop-v').textContent = Math.round(s.c * 100) + '%';
+    for (const x of $('bz-shapes').querySelectorAll('button')) {
+      const btn = /** @type {HTMLButtonElement} */ (x);
+      btn.classList.toggle('on', !tr && btn.dataset.k === s.k);
+      btn.disabled = tr;
+      btn.title = tr ? '透過のアイコンは形を変えられません' : String(btn.dataset.title || btn.title);
+    }
+    const cropBtn = /** @type {HTMLButtonElement} */ ($('bz-tabs').querySelector('[data-t="crop"]'));
+    cropBtn.disabled = tr;
+    if (tr && tab === 'crop') tab = 'size';
+    for (const x of $('bz-tabs').querySelectorAll('button')) x.classList.toggle('on', /** @type {HTMLElement} */ (x).dataset.t === tab);
+    const sv = sliderOf(s);
+    slider.min = String(sv.min); slider.max = String(sv.max);
+    if (document.activeElement !== slider) slider.value = String(sv.v);
+    slider.setAttribute('aria-label', TAB_LABEL[tab]);
+    $('bz-val').textContent = sv.text;
+    $('bz-val').title = tab === 'size' ? '標準の大きさに戻す' : tab === 'rot' ? 'まっすぐに戻す' : '切り取らない (100%) に戻す';
     const i = stickers.indexOf(s);
     /** @type {HTMLButtonElement} */ ($('bz-up')).disabled = /** @type {HTMLButtonElement} */ ($('bz-front')).disabled = i === stickers.length - 1;
     /** @type {HTMLButtonElement} */ ($('bz-down')).disabled = /** @type {HTMLButtonElement} */ ($('bz-backmost')).disabled = i === 0;
   }
-  const changed = () => { place(); save(); };
-  sizeIn.addEventListener('input', () => { const s = cur(); if (s) { s.s = clampSize(sliderToSize(Number(sizeIn.value))); changed(); } });
-  rotIn.addEventListener('input', () => { const s = cur(); if (s) { s.r = normRot(Number(rotIn.value)); changed(); } });
-  // 切り取り: 絵の縮尺はそのまま、外側を切った分だけシールが小さくなる (大きくする・小さくするは大きさの欄で)
-  cropIn.min = String(Math.round(CROP_MIN * 100));
-  cropIn.addEventListener('input', () => {
+  for (const x of $('bz-shapes').querySelectorAll('button')) /** @type {HTMLElement} */ (x).dataset.title = /** @type {HTMLElement} */ (x).title;
+  const changed = () => { place(); commit(); };
+  for (const btn of $('bz-tabs').querySelectorAll('button')) {
+    btn.addEventListener('click', () => { tab = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.t); paintTools(); });
+  }
+  slider.addEventListener('input', () => {
     const s = cur(); if (!s) return;
-    const c = clampCrop(Number(cropIn.value) / 100);
-    s.s = clampSize(s.s * c / s.c);
-    s.c = c;
+    const v = Number(slider.value);
+    if (tab === 'size') s.s = clampSize(sliderToSize(v));
+    else if (tab === 'rot') s.r = snapRot(v);
+    else {
+      // 切り取り: 絵の縮尺はそのまま、外側を切った分だけシールが小さくなる
+      const c = clampCrop(v / 100);
+      s.s = clampSize(s.s * c / s.c);
+      s.c = c;
+    }
+    changed();
+  });
+  // 値を押すと既定に戻す
+  $('bz-val').addEventListener('click', () => {
+    const s = cur(); if (!s) return;
+    if (tab === 'size') s.s = S_DEF;
+    else if (tab === 'rot') s.r = 0;
+    else { s.s = clampSize(s.s / s.c); s.c = 1; }
     changed();
   });
   for (const btn of $('bz-shapes').querySelectorAll('button')) {
@@ -314,28 +431,72 @@ async function main() {
   $('bz-down').addEventListener('click', () => move(-1));
   $('bz-front').addEventListener('click', () => move(Infinity));
   $('bz-backmost').addEventListener('click', () => move(-Infinity));
-  $('bz-reset-tf').addEventListener('click', () => { const s = cur(); if (s) { s.r = 0; changed(); } });
-  const remove = (/** @type {string} */ e) => { stickers = stickers.filter(s => s.e !== e); if (sel === e) sel = null; changed(); paintTray(); };
+  const remove = (/** @type {string} */ e) => {
+    stickers = stickers.filter(s => s.e !== e);
+    if (sel === e) sel = null;
+    changed(); paintTray();
+    toast('剥がしました', '元に戻す', undo);
+  };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
+
+  // その他のメニュー
+  const menu = /** @type {HTMLDetailsElement} */ ($('bz-menu'));
+  document.addEventListener('pointerdown', e => { if (menu.open && !menu.contains(/** @type {Node} */ (e.target))) menu.open = false; });
   $('bz-sample').addEventListener('click', () => {
-    if (stickers.length && !confirm('今貼っているシールを剥がして、Figma の見本の並びにしますか?')) return;
+    menu.open = false;
     stickers = SAMPLE_LAYOUT.map(s => ({ ...s, k: 'square', c: 1 })); sel = null; changed(); paintTray();
+    toast('見本の並びにしました', '元に戻す', undo);
   });
   $('bz-clear').addEventListener('click', () => {
-    if (!stickers.length || !confirm('貼ったシールを全部剥がしますか?')) return;
+    menu.open = false;
+    if (!stickers.length) return;
     stickers = []; sel = null; changed(); paintTray();
+    toast('全部剥がしました', '元に戻す', undo);
   });
+
+  // ── 一時的なお知らせ (取り消しのボタン付き) ──
+  /** @type {HTMLElement | null} */
+  let toastEl = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let toastTimer = null;
+  /** @param {string} text @param {string} [action] @param {() => void} [fn] */
+  function toast(text, action, fn) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'bz-toast';
+      toastEl.setAttribute('role', 'status');
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerHTML = '';
+    toastEl.append(text);
+    if (action && fn) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'bz-toast-act'; b.textContent = action;
+      b.addEventListener('click', () => { fn(); hideToast(); });
+      toastEl.append(b);
+    }
+    toastEl.style.opacity = '1';
+    toastEl.style.pointerEvents = action ? 'auto' : 'none';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 4000);
+  }
+  function hideToast() { if (toastEl) { toastEl.style.opacity = '0'; toastEl.style.pointerEvents = 'none'; } }
 
   // ── ドラッグ (移動)・つまみ (回転と大きさ)・2 本指 (回転と大きさ) ──
   /** @type {Map<number, { x: number, y: number }>} 押している指 (カードの座標) */
   const ptrs = new Map();
-  /** @type {null | { kind: 'move', s: Sticker, dx: number, dy: number } | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number }
+  /** @type {null | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean }
+   *          | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number }
    *          | { kind: 'pinch', s: Sticker, a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number }} */
   let drag = null;
   const angle = (/** @type {{x:number,y:number}} */ a, /** @type {{x:number,y:number}} */ b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
   const dist = (/** @type {{x:number,y:number}} */ a, /** @type {{x:number,y:number}} */ b) => Math.hypot(b.x - a.x, b.y - a.y);
-  /** 0° の近くは 0° に吸い付ける (まっすぐに戻しやすく) @param {number} r */
-  const snap = r => (Math.abs(normRot(r)) < 4 ? 0 : normRot(r));
+  /** 0°・90°・45° の刻みの近くは吸い付ける (まっすぐ・斜めに合わせやすく) @param {number} r */
+  function snapRot(r) {
+    const n = normRot(r);
+    for (const a of SNAP_ANGLES) if (Math.abs(n - a) < SNAP_DEG) return normRot(a);
+    return n;
+  }
   const startPinch = () => {
     const s = cur();
     const [p, q] = [...ptrs.values()];
@@ -353,15 +514,14 @@ async function main() {
     if (ptrs.size === 2) { startPinch(); return; }
     if (ptrs.size > 2) return;
     const s = onRot ? cur() : stEl ? stickers.find(x => x.e === stEl.dataset.e) : null;
-    if (!s) { sel = null; drag = null; place(); return; }
+    if (!s) { drag = null; select(null); return; }
     e.preventDefault();
-    sel = s.e;
     if (onRot) {
       drag = { kind: 'rot', s, a0: angle(s, pt), d0: Math.max(1, dist(s, pt)), r0: s.r, s0: s.s };
     } else {
-      drag = { kind: 'move', s, dx: pt.x - s.x, dy: pt.y - s.y };
+      drag = { kind: 'move', s, dx: pt.x - s.x, dy: pt.y - s.y, sx: e.clientX, sy: e.clientY, moved: false };
     }
-    place();
+    select(s.e);
   });
   stage.addEventListener('pointermove', e => {
     if (!ptrs.has(e.pointerId)) return;
@@ -370,15 +530,18 @@ async function main() {
     if (!drag) return;
     const s = drag.s;
     if (drag.kind === 'move') {
+      // 少し動くまではタップ (選ぶだけ) とみなして動かさない (押しただけでずれないように)
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < DRAG_SLOP) return;
+      drag.moved = true;
       s.x = Math.max(0, Math.min(W, pt.x - drag.dx));
       s.y = Math.max(0, Math.min(H, pt.y - drag.dy));
     } else if (drag.kind === 'rot') {
-      s.r = snap(drag.r0 + angle(s, pt) - drag.a0);
+      s.r = snapRot(drag.r0 + angle(s, pt) - drag.a0);
       s.s = clampSize(drag.s0 * dist(s, pt) / drag.d0);
     } else {
       const [p, q] = [...ptrs.values()];
       if (!p || !q) return;
-      s.r = snap(drag.r0 + angle(p, q) - drag.a0);
+      s.r = snapRot(drag.r0 + angle(p, q) - drag.a0);
       s.s = clampSize(drag.s0 * dist(p, q) / drag.d0);
       s.x = Math.max(0, Math.min(W, drag.x0 + (p.x + q.x) / 2 - drag.c0.x));
       s.y = Math.max(0, Math.min(H, drag.y0 + (p.y + q.y) / 2 - drag.c0.y));
@@ -387,21 +550,56 @@ async function main() {
   });
   const end = (/** @type {PointerEvent} */ e) => {
     if (!ptrs.delete(e.pointerId)) return;
-    if (drag) save();
+    if (drag) commit();
     // 2 本指の片方を離したら、残った指で移動を続ける
     if (ptrs.size === 1 && drag && drag.kind === 'pinch') {
       const [p] = [...ptrs.values()];
-      drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y };
+      drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y, sx: 0, sy: 0, moved: true };
     } else if (!ptrs.size) drag = null;
   };
   stage.addEventListener('pointerup', end);
   stage.addEventListener('pointercancel', end);
 
-  // ── 持っているシールの一覧 ──
+  // ── キーボード (パソコン): 矢印で 1px (Shift で 10px)、Delete で剥がす、Esc で外す、Ctrl+Z / Ctrl+Shift+Z ──
+  document.addEventListener('keydown', e => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (t && (t.tagName === 'INPUT' && /** @type {HTMLInputElement} */ (t).type !== 'range' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+    const s = cur();
+    if (!s) return;
+    if (t && t.tagName === 'INPUT') return;   // スライダーの矢印はスライダーに
+    if (e.key === 'Escape') { select(null); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(s.e); return; }
+    const d = e.shiftKey ? 10 : 1;
+    const mv = /** @type {Record<string, [number, number]>} */ ({ ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] })[e.key];
+    if (mv) {
+      e.preventDefault();
+      s.x = Math.max(0, Math.min(W, s.x + mv[0]));
+      s.y = Math.max(0, Math.min(H, s.y + mv[1]));
+      changed();
+    }
+  });
+
+  // ── 持っているシールの一覧 (大会ごと。色の丸で色を選ぶ) ──
+  /** 絞り込み: all / r g s n (その大会で取ったいちばん上の色) / placed */
   let filter = 'all';
   let shown = PAGE;
   const tray = $('bz-tray');
-  $('bz-count').textContent = `${badges.length} 枚` + (badges.length ? `（${TIERS.map((_, v) => `${HOLO_NAMES[v]} ${badges.filter(b => b.variant === v).length}`).join('・')}）` : '');
+  const topV = (/** @type {EventGroup} */ g) => g.tiers[0].variant;
+  const real = groups.filter(g => !g.sample);
+  const isPlaced = (/** @type {EventGroup} */ g) => g.tiers.some(b => stickers.some(s => s.e === b.e));
+  const listOf = (/** @type {string} */ f) => f === 'all' ? real : f === 'placed' ? groups.filter(isPlaced)
+    : real.filter(g => topV(g) === TIERS.indexOf(/** @type {any} */ (f)));
+  const paintCounts = () => {
+    for (const btn of $('bz-filters').querySelectorAll('button')) {
+      const f = String(/** @type {HTMLElement} */ (btn).dataset.f);
+      let n = btn.querySelector('.bz-n');
+      if (!n) { n = document.createElement('span'); n.className = 'bz-n'; btn.appendChild(n); }
+      n.textContent = String(listOf(f).length);
+    }
+  };
   for (const btn of $('bz-filters').querySelectorAll('button')) {
     btn.addEventListener('click', () => {
       filter = String(/** @type {HTMLElement} */ (btn).dataset.f);
@@ -412,11 +610,11 @@ async function main() {
     });
   }
   $('bz-more').addEventListener('click', () => { shown += PAGE; paintTray(); });
-  // 一覧の箱の高さ = 画面の下までの残り (ページはなるべくスクロールさせず、一覧だけ動かす)。狭い画面でも 240px は取る
+  // 一覧の箱の高さ = 画面の下までの残り (ページはなるべくスクロールさせず、一覧だけ動かす)。狭い画面でも 200px は取る
   const scroller = $('bz-scroll');
   const fitScroll = () => {
     const top = scroller.getBoundingClientRect().top + window.scrollY;
-    scroller.style.height = Math.max(240, Math.floor(window.innerHeight - top - 8)) + 'px';
+    scroller.style.height = Math.max(200, Math.floor(window.innerHeight - top)) + 'px';
   };
   fitScroll();
   window.addEventListener('resize', fitScroll);
@@ -427,46 +625,62 @@ async function main() {
       if (es.some(x => x.isIntersecting) && $('bz-more').style.display !== 'none') { shown += PAGE; paintTray(); }
     }, { root: scroller, rootMargin: '200px' }).observe($('bz-more'));
   }
+  const TIER_SHORT = ['虹', '金', '銀', '通'];
   function paintTray() {
     const on = new Set(stickers.map(s => s.e));
-    const list = (filter === 'placed' ? [...badges, ...SAMPLE_BADGES] : badges).filter(b => filter === 'all' ? true
-      : filter === 'placed' ? on.has(b.e) : b.variant === TIERS.indexOf(/** @type {any} */ (filter)));
+    const list = listOf(filter);
     tray.innerHTML = '';
     if (!list.length) {
       tray.innerHTML = `<div class="bz-empty">${filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
     }
-    for (const b of list.slice(0, shown)) {
-      const it = document.createElement('button');
-      it.type = 'button';
-      it.className = 'bz-item' + (on.has(b.e) ? ' on' : '');
-      it.innerHTML = `<span class="bz-thumb bz-v${b.variant}"><img loading="lazy" alt=""><span class="bz-chip">${HOLO_NAMES[b.variant]}</span>${on.has(b.e) ? '<span class="bz-on">貼付中</span>' : ''}</span>
-        <span class="bz-iname"></span><span class="bz-imeta"></span>`;
-      /** @type {HTMLImageElement} */ (it.querySelector('img')).src = IMG_BASE + b.file;
-      /** @type {HTMLElement} */ (it.querySelector('.bz-iname')).textContent = b.name;
-      /** @type {HTMLElement} */ (it.querySelector('.bz-imeta')).textContent = `${b.date.replace(/-/g, '/')} ${placeText(b)}`;
-      it.addEventListener('click', () => addOrSelect(b));
+    for (const g of list.slice(0, shown)) {
+      const it = document.createElement('div');
+      it.className = 'bz-ev' + (g.tiers.some(b => b.e === sel) ? ' on' : '');
+      it.innerHTML = `<button type="button" class="bz-thumb"><img loading="lazy" alt="">${g.cls ? `<span class="bz-cls">${g.cls}</span>` : ''}</button>
+        <div class="bz-tiers"></div><span class="bz-iname"></span><span class="bz-imeta"></span>`;
+      const img = /** @type {HTMLImageElement} */ (it.querySelector('img'));
+      img.src = IMG_BASE + g.file;
+      const thumb = /** @type {HTMLButtonElement} */ (it.querySelector('.bz-thumb'));
+      thumb.title = `${g.name} — ${HOLO_NAMES[topV(g)]}を貼る`;
+      // 大会を押す: まだ貼っていない色のうちいちばん上を貼る (全部貼ってあれば、いちばん上を選ぶ)
+      thumb.addEventListener('click', () => addOrSelect(g.tiers.find(b => !on.has(b.e)) || g.tiers[0]));
+      const tiers = /** @type {HTMLElement} */ (it.querySelector('.bz-tiers'));
+      for (const b of g.tiers) {
+        const d = document.createElement('button');
+        d.type = 'button';
+        d.className = `bz-tier t${b.variant}` + (on.has(b.e) ? ' on' : '');
+        d.textContent = TIER_SHORT[b.variant];
+        d.title = `${HOLO_NAMES[b.variant]}${on.has(b.e) ? ' (貼っています。押すと選ぶ)' : 'を貼る'}`;
+        d.addEventListener('click', () => addOrSelect(b));
+        tiers.appendChild(d);
+      }
+      /** @type {HTMLElement} */ (it.querySelector('.bz-iname')).textContent = g.name + (g.cls ? ` ${g.cls}` : '');
+      /** @type {HTMLElement} */ (it.querySelector('.bz-imeta')).textContent = g.date ? `${g.date.replace(/-/g, '/')} ${g.place == null ? '' : g.place === 1 ? '優勝' : g.place + '位'}` : '';
       tray.appendChild(it);
     }
     $('bz-more').style.display = list.length > shown ? '' : 'none';
+    paintCounts();
   }
-  /** 一覧から押した: まだなら貼る (真ん中あたり、少しずつずらす)、貼ってあれば選ぶ @param {Badge} b */
+  /** 一覧から押した: まだなら貼る (空いていそうな所、少しずつずらす)、貼ってあれば選ぶ @param {Badge} b */
   function addOrSelect(b) {
     if (!stickers.some(s => s.e === b.e)) {
-      if (stickers.length >= MAX_STICKERS) { alert(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+      if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
       const n = stickers.length;
       stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0, k: 'square', c: 1 });
-      save();
+      sel = b.e;
+      place();
+      const el = els.get(b.e);
+      if (el) { el.classList.remove('bz-pop'); void el.offsetWidth; el.classList.add('bz-pop'); }
+      commit();
       paintTray();
-    }
-    sel = b.e;
-    place();
-    if (stage.scrollIntoView) stage.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else select(b.e);
   }
 
   fitLayer();
   if (typeof ResizeObserver === 'function') new ResizeObserver(fitLayer).observe(stage);
   place();
   paintTray();
+  paintHistory();
 }
 
 main();
