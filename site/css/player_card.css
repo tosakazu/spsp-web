@@ -159,6 +159,15 @@
 /* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
+/* カードの外の影 (浮いて見えるように)。プレイヤーページ・カード編集のプレビューと裏の台。表と裏の面それぞれに付く (裏返しで一緒に回る)。
+   傾けている間は、傾きと反対へ少しずらす (--card-mx / --card-my、src/pages/p.js) */
+.pcard-wrap .pcard, .ce-preview .pcard, .bz-stage > .pcard:not(.bz-text) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 8px 22px rgba(0, 0, 0, .16);
+}
+.pcard-wrap.pc-tilt .pcard {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12),
+    calc((.5 - var(--card-mx, .5)) * 16px) calc(10px + (.5 - var(--card-my, .5)) * 12px) 28px rgba(0, 0, 0, .22);
+}
 /* 描き終わるまで (src/pages/p.js) はカードを隠して読み込み中の表示。カードの箱 (aspect-ratio) は場所を取ったまま */
 .pc-loader { display: none; }
 .pcard-wrap.pc-loading .pcard-flip, .pcard-wrap.pc-loading .pc-overlay { visibility: hidden; }
