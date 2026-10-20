@@ -2,6 +2,7 @@
 // src/pages/p.js — site/p/index.html のスクリプト。以前はインライン <script> と <script src> の並びだった (2026-09-14 に移動)。
 // import が依存 (default import = そのモジュールの api、副作用 import = グローバルに置くだけのもの)。tools/build/build_site.mjs が esbuild で束ねて dist/assets/p.js にする。
 import { escapeHtml } from '../../site/js/html.js';
+import SPSPLogo from '../../site/logo.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
@@ -690,6 +691,20 @@ function render() {
   };
   setTimeout(reveal, 10000);
   if (!card) reveal();
+  // 読み込み中の表示: SPSP のロゴのアニメーション (logo.js、ほかのページの読み込み中と同じ) と、その下に総合評価の順位
+  const loaderEl = document.getElementById('pc-loader');
+  if (loaderEl && !revealed) {
+    const logoBox = document.createElement('div');
+    loaderEl.appendChild(logoBox);
+    SPSPLogo.inline(logoBox, { sub: true });
+    const er = MAIN_REC && MAIN_REC.ranks ? MAIN_REC.ranks.ensemble : null;
+    if (er != null) {
+      const t = document.createElement('div');
+      t.className = 'pc-loader-rank';
+      t.innerHTML = `<span>${escapeHtml(i18n('ranking.tab.ensemble'))}</span><b>#${escapeHtml(String(er))}</b>`;
+      loaderEl.appendChild(t);
+    }
+  }
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
     let drawn = false;
