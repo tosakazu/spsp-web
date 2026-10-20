@@ -29,6 +29,7 @@ const S_MIN = 22, S_MAX = 520, S_DEF = 84;   // 最大はカードの幅くら�
 const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
+const TEXT_TOP_KEY = 'spsp_card_badges_text_top_v1';   // 名前・二つ名・順位をシールの上に出すか (選手ごと、{uid: 1})
 const HOLO_NAMES = ['虹', '金', '銀', '通常'];
 /** 色の記号 (判定のデータ) → js/holo_badge.js の variant。上の色から順 */
 const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
@@ -139,7 +140,27 @@ async function main() {
   $('bz-root').style.display = '';
 
   // 裏面 (適用済みの設定・二つ名で)
-  SPSPPlayerCard.renderBack($('bz-card'), buildCardModel(data, card ? card.settings : null, card ? card.titleText : null));
+  const cardModel = buildCardModel(data, card ? card.settings : null, card ? card.titleText : null);
+  SPSPPlayerCard.renderBack($('bz-card'), cardModel);
+
+  // 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる)
+  const textTop = /** @type {HTMLInputElement} */ ($('bz-text-top'));
+  const readTextTop = () => { try { return !!(JSON.parse(localStorage.getItem(TEXT_TOP_KEY) || '{}') || {})[String(uid)]; } catch (e) { return false; } };
+  const paintTextTop = () => {
+    const on = textTop.checked;
+    $('bz-text').style.display = on ? '' : 'none';
+    if (on && !$('bz-text').firstChild) SPSPPlayerCard.renderBack($('bz-text'), cardModel);
+  };
+  textTop.checked = readTextTop();
+  paintTextTop();
+  textTop.addEventListener('change', () => {
+    paintTextTop();
+    try {
+      const m = JSON.parse(localStorage.getItem(TEXT_TOP_KEY) || '{}') || {};
+      if (textTop.checked) m[String(uid)] = 1; else delete m[String(uid)];
+      localStorage.setItem(TEXT_TOP_KEY, JSON.stringify(m));
+    } catch (e) { /* 保存できない環境では何もしない */ }
+  });
 
   const badges = badgesOf((data.player && data.player.tournaments) || [], icons, stickerShard ? stickerShard[String(uid)] || {} : null);
   const byE = new Map([...badges, ...SAMPLE_BADGES].map(b => [b.e, b]));

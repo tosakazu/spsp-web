@@ -11,8 +11,14 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 12px 16px 80px; }
 .bz-stage.bz-has-sel { touch-action: none; }   /* 選んでいる間は 2 本指を画面の拡大に取られないように */
 .bz-stage .pcard { margin: 0; }
 .bz-layer, .bz-over { position: absolute; inset: 0; }
-.bz-layer { overflow: hidden; }   /* カードからはみ出した所は切る */
-.bz-over { pointer-events: none; z-index: 2; }
+.bz-layer { overflow: hidden; z-index: 1; }   /* カードからはみ出した所は切る。シールの重なり順はこの中だけ */
+.bz-over { pointer-events: none; z-index: 3; }
+/* 名前・二つ名・順位をシールの上に: 裏面の複製のうち文字の列 (.pcb-col) だけを見せる (地の色・線・強制ダークモード用の画像は隠す) */
+.bz-stage .bz-text { position: absolute; inset: 0; z-index: 2; pointer-events: none; visibility: hidden; }
+.bz-text .pcb-col { visibility: visible; }
+.bz-text .pc-img { display: none; }
+.bz-opt { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #374151; cursor: pointer; }
+.bz-opt input { margin: 0; }
 
 /* 貼ったシール (left/top = 中心、幅 = 一辺、回転は transform) */
 .bz-st { position: absolute; cursor: grab; touch-action: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }

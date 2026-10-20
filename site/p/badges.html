@@ -39,8 +39,12 @@
       <div class="bz-stage" id="bz-stage">
         <div class="pcard pcard-back" id="bz-card" aria-hidden="true"></div>
         <div class="bz-layer" id="bz-layer"></div>
+        <!-- 名前・二つ名・順位をシールの上に出すとき: 裏面をもう 1 枚描き、文字の所だけ見せる -->
+        <div class="pcard pcard-back bz-text" id="bz-text" aria-hidden="true" style="display:none"></div>
         <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ">↻</span><span class="bz-h bz-h-del" title="剥がす">×</span></div></div>
       </div>
+
+      <label class="bz-opt"><input type="checkbox" id="bz-text-top"> 名前・二つ名・順位をシールの上に出す</label>
 
       <!-- 選んでいるシールの操作 (選んでいないときは使い方) -->
       <div class="bz-tools" id="bz-tools">
