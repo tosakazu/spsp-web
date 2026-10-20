@@ -56,7 +56,7 @@ function letterBox(letter) {
   return b;
 }
 /** 形で切ったとき、字の箱の幅・高さのこの割合までは各辺で形の外に出てよい (見切れても、なるべく元の位置のまま) */
-const LETTER_CLIP = 0.3;
+const LETTER_CLIP = 0.22;
 /** フォントがまだのときの箱 (一字のおおよそ) */
 const BOX_GUESS = { x0: -0.38, x1: -0.01, y0: -0.37, y1: 0.01 };
 
