@@ -312,13 +312,14 @@ function shapePath(ctx, W, shape) {
   }
 }
 
-/** バッジの絵とホロの素材を読んでおく (カードの準備完了を待つとき用。読めなくても resolve)。透過かどうかも確かめる
- * @param {string} src @param {number} variant @returns {Promise<void>} */
+/** バッジの絵とホロの素材を読んでおく (カードの準備完了を待つとき用)。透過かどうかも確かめる。全部読めたら true
+ * @param {string} src @param {number} variant @returns {Promise<boolean>} */
 export async function preloadBadge(src, variant) {
   const tr = await isTransparent(src);
   const v = Math.max(0, Math.min(3, Number(variant) || 0));
   const layers = LAYERS[`${tr ? 'sh' : 'sq'}${v}`] || [];
-  await Promise.all([loadImage(src, true).catch(() => loadImage(src)).catch(() => null), ...layers.map(([n]) => layerImage(n, 'img').catch(() => null))]);
+  const got = await Promise.all([loadImage(src, true).catch(() => loadImage(src)).catch(() => null), ...layers.map(([n]) => layerImage(n, 'img').catch(() => null))]);
+  return got.every(Boolean);
 }
 
 /** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)

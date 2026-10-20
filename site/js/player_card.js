@@ -452,26 +452,31 @@ export function render(el, model, opts = {}) {
 }
 
 // ── 描き終わりを待つ (プレイヤーページが、描きかけのカードを見せないように) ──
-/** @type {WeakMap<HTMLElement, Promise<void>>} */
+/** @type {WeakMap<HTMLElement, Promise<boolean>>} */
 const readyOf = new WeakMap();
-/** 最後に描いたときの準備: Web フォント・(裏面のシールの絵とホロの素材)・(強制ダークモードなら重ねる画像) @param {HTMLElement} el @param {Promise<unknown>} extra */
+/** 最後に描いたときの準備: Web フォント・(裏面のシールの絵とホロの素材)・(強制ダークモードなら重ねる画像)。
+ * extra が false で終わったら (シールの絵が読めなかった・間に合わなかった) 「描き終わっていない」
+ * @param {HTMLElement} el @param {Promise<unknown>} extra */
 function trackReady(el, extra) {
   readyOf.set(el, (async () => {
     const fonts = /** @type {any} */ (document).fonts;
     if (fonts && fonts.ready) await fonts.ready.catch(() => {});
-    await extra.catch(() => {});
+    const ok = await extra.then(v => v !== false, () => false);
     if (needsImage()) await (imageDone.get(el) || Promise.resolve());
+    return ok;
   })());
 }
-/** el のカードが描き終わったら resolve (待つ間に描き直されたら、その分も待つ)。描いていなければすぐ
- * @param {HTMLElement} el @returns {Promise<void>} */
+/** el のカードが描き終わるのを待つ (待つ間に描き直されたら、その分も待つ)。全部描けたら true、
+ * シールの絵などが読めなかった・間に合わなかったら false。描いていなければ true
+ * @param {HTMLElement} el @returns {Promise<boolean>} */
 export async function ready(el) {
   for (let i = 0; i < 5; i++) {
     const p = readyOf.get(el);
-    if (!p) return;
-    await p;
-    if (readyOf.get(el) === p) return;
+    if (!p) return true;
+    const ok = await p;
+    if (readyOf.get(el) === p) return ok;
   }
+  return false;
 }
 
 /** 裏面を el に描く (表の render と同じく、表示幅に合わせて縮め、強制ダークモードでは画像を重ねる)
@@ -481,16 +486,16 @@ export function renderBack(el, model, opts = {}) {
   mount(el, () => backHtml(model), root => { fitBack(root); if (want) { paintBackStickers(root, model); paintGlow(el, model); } }, !!opts.live);
   // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
   if (want && !iconsNow()) {
-    const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
+    const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); return !!t; });
     trackReady(el, again);
     return;
   }
-  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる (届かない画像で止まらないよう 3 秒まで)
-  trackReady(el, want ? Promise.race([Promise.all((model.back?.stickers || []).map(s => {
+  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる (時間では打ち切らない)。読めなかったら「描き終わっていない」
+  trackReady(el, want ? Promise.all((model.back?.stickers || []).map(s => {
     const p = parseKey(s.e);
     const src = p ? iconUrl(p.eid) : null;
-    return src && p ? preloadBadge(src, p.variant) : null;
-  })), new Promise(r => setTimeout(r, 3000))]) : Promise.resolve());
+    return src && p ? preloadBadge(src, p.variant) : true;   // アイコンの無いシールは出さないので待たない
+  })).then(a => a.every(Boolean)) : Promise.resolve(true));
 }
 
 /** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、

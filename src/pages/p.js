@@ -676,7 +676,8 @@ function render() {
   // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
   // カードの表はすぐ既定の設定で仮に描いて出し (読み込み中の表示 .pc-loading はそれまで)、設定が届いたら描き直す。
   // 設定・英字名の読みの表・裏の準備 (シールの絵とホロ・強制ダークモードの画像) がそろったら、裏返して裏を見せ、
-  // 少ししたら表に戻す (#back で来たときは裏のまま)。それまでに自分で裏返していたら何もしない
+  // 少ししたら表に戻す (#back で来たときは裏のまま)。それまでに自分で裏返していたら何もしない。
+  // 時間では打ち切らない (遅くても描き終わったら裏返す。描き終わる前には裏返さない)。どれかが読めなかったときだけ裏返さない
   const wrapEl = document.getElementById('pcard-wrap');
   let revealed = false;
   let introDone = false;
@@ -730,21 +731,17 @@ function render() {
       reveal();
     };
     draw(null);   // 仮: 既定の設定ですぐ
-    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す
+    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す。読めたら true
     const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
     const readingsP = kanji
-      ? Promise.race([SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } }), new Promise(r => setTimeout(r, 3000))])
-      : Promise.resolve();
-    // 設定 (本人が適用したもの) が届いたら描き直す。紹介が待つのは 2.5 秒まで (遅れて届いても描き直す)
-    const sleep = (/** @type {number} */ ms) => new Promise(r => setTimeout(r, ms));
-    const settledP = Promise.race([settingsP.then(x => { if (x && x.settings) draw(x); }).catch(() => {}), sleep(2500)]);
-    // そろったら裏返しの紹介 (その時点の描画の準備を待つ)。表を出してから 5 秒たったら、そろっていなくても始める
-    // (初めて開いたときはシールの素材の読み込みで遅れ、日によって紹介が出たり出なかったりに見えた)。失敗しても始める
-    Promise.race([
-      Promise.all([readingsP.catch(() => {}), settledP])
-        .then(() => Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null])),
-      sleep(5000),
-    ]).catch(() => {}).then(intro);
+      ? SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } return !!r; }, () => false)
+      : Promise.resolve(true);
+    // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
+    const settledP = settingsP.then(x => { if (x && x.settings) draw(x); return true; }, () => false);
+    // 全部そろって描き終わったら裏返しの紹介。読めなかったものがあれば紹介しない
+    Promise.all([readingsP, settledP])
+      .then(([a, b]) => (a && b ? Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : true]).then(r => r.every(Boolean)) : false))
+      .then(ok => { if (ok) intro(); }, () => {});
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
