@@ -20,6 +20,7 @@ import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
+import { normBack } from './card_stickers.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -31,10 +32,12 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
  * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
  * latin = カードの裏面に出す英字の名前 (本人が登録。null = 自動、js/latin_name.js)
- * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null, latin?: string | null }} CardSettings */
+ * back = 裏面のシール (js/card_stickers.js、null = 貼っていない)
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null, latin?: string | null,
+ *   back?: import('./card_stickers.js').CardBack | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null, back: null };
 
 /** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
@@ -245,6 +248,7 @@ export function buildCardModel(data, settings, titleText) {
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
     totalTournaments: tours.length,
+    back: st.back || null,   // 裏面のシール (js/card_stickers.js)
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: pickedTour ? i18n('player.card.picked') : bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
@@ -298,7 +302,7 @@ function normalize(s) {
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
            tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
-           title: normTitle(s.title), latin: typeof s.latin === 'string' && latinNameValid(s.latin) ? s.latin : null };
+           title: normTitle(s.title), latin: typeof s.latin === 'string' && latinNameValid(s.latin) ? s.latin : null, back: normBack(s.back) };
 }
 /** 二つ名の値はサーバ (worker/src/api/card.ts の設定の検査) と同じ: id / null =「なし」/ 'default' = 既定。両方既定は null (設定無しと同じ)、「なし / なし」は残す
  * @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
@@ -335,9 +339,16 @@ export async function fetchAppliedCard(uid) {
  * @param {number} uid @param {CardSettings | null} s @returns {Promise<{ ok: boolean, code?: string }>} */
 export async function putApplied(uid, s) {
   if (!SpspLogin.apiAvailable()) { writeOne(APPLIED_KEY, uid, s); return { ok: true }; }
+  // サーバに送る形: 裏面は貼っているときだけ (サーバの検査と同じ。無い欄は既定)
+  const body = s && !s.back ? (({ back: _b, ...rest }) => rest)(s) : s;
   const sess = SpspLogin.session();
-  if (!sess || !SpspLogin.isSelf(uid)) return { ok: false, code: 'not_owner' };
-  const r = await SpspLogin.api({ action: 'card_put', token: sess.token, settings: s });
+  if (!sess || !SpspLogin.isSelf(uid)) {
+    // preview だけ: ログインなしで誰の分でも (見た目の確認用)
+    if (!SpspLogin.openEdit()) return { ok: false, code: 'not_owner' };
+    const r = await SpspLogin.api({ action: 'card_put', uid: String(uid), settings: body });
+    return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
+  }
+  const r = await SpspLogin.api({ action: 'card_put', token: sess.token, settings: body });
   return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
 }
 /** @param {number} uid */ export const loadDraft = uid => normalize(readMap(DRAFT_KEY)[String(uid)]);

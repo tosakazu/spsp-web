@@ -22,6 +22,8 @@ export interface Env {
   STATE_TTL_MS?: string;
   /** 投票の資格判定を免除するテスト用 uid (カンマ区切り)。免除された投票は status='debug' で保存し、集計しない。 */
   VOTE_TESTER_UIDS?: string;
+  /** "1" のとき (preview だけ)、カードの設定をログインなしで誰の分でも書ける (見た目の確認用)。本番には置かない */
+  CARD_OPEN_EDIT?: string;
   // secrets
   STARTGG_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
@@ -76,6 +78,7 @@ export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participan
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
+export const CARD_STICKER_MAX = 30;                  // 裏面に貼れるシールの数 (フロントの js/card_stickers.js MAX_STICKERS と同じ)
 export const CARD_ACH_KEY_MAX = 300;                 // 実績の key 1 つの長さ (文字数)
 export const TITLE_SYNC_MAX_ITEMS = 500;             // title_sync 1 回で受け付ける選手の数
 export const TITLE_BITS_MAX_BYTES = 4096;            // 1 人分のビット列 (通し番号 32767 まで。今の一覧は 7076 まで)
@@ -141,6 +144,8 @@ export interface Config {
   tsOffsetMin: number;
   /** 資格判定を免除するテスト用 uid (VOTE_TESTER_UIDS)。 */
   voteTesterUids?: string[];
+  /** CARD_OPEN_EDIT="1" (preview だけ): card_put をログインなしで、リクエストの uid に書ける */
+  cardOpenEdit?: boolean;
 }
 
 function intOr(v: string | undefined, dflt: number): number {
@@ -173,6 +178,7 @@ export function configFromEnv(env: Env): Config {
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),
     tsOffsetMin: parseOffset(env.TS_OFFSET),
     voteTesterUids: String(env.VOTE_TESTER_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    cardOpenEdit: env.CARD_OPEN_EDIT === '1',
   };
 }
 

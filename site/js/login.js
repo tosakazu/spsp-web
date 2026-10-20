@@ -9,6 +9,7 @@
 //   onChange(fn)     ログイン状態が変わったら (別のタブの変化も)
 //   apiAvailable()   このサイトで API (/api) が使えるか。spsp.games と preview の Worker だけ (ConoHa のプレビューには無い)
 //   api(body)        POST /api (JSON)。失敗は { ok: false, error: { code } }
+//   openEdit()       preview の Worker だけ true: カードの編集をログインなしで誰の分でもできる (サーバも CARD_OPEN_EDIT=1 の preview だけ受ける)
 import SpspAuth from './auth.js';
 import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
@@ -18,6 +19,8 @@ const S = SpspOAuthState;
 
 export function session() { return SpspAuth.load(); }
 export function apiAvailable() { return !!(CFG.GAS_ENDPOINT && S.isCanonicalOrigin(CFG, location.origin)); }
+/** preview の Worker (spsp-web-preview.*.workers.dev) か。見た目の確認用に、カードを誰でも編集できる */
+export function openEdit() { return apiAvailable() && /^spsp-web-preview\./.test(location.hostname); }
 
 /** @param {Record<string, unknown>} body @returns {Promise<any>} */
 export async function api(body) {
@@ -88,7 +91,7 @@ if (typeof location !== 'undefined' && typeof history !== 'undefined') {
   } catch (e) { /* 何もしない */ }
 }
 
-const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, api };
+const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むときは import がグローバル参照になるため)
 if (typeof window !== 'undefined') {
   /** @type {any} */ (window).SpspLogin = API;

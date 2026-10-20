@@ -8,6 +8,8 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
+import { renderBadge, isTransparent } from './holo_badge.js';
+import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
 
@@ -37,7 +39,7 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
  * @typedef {{ name: string, nameLatin?: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
- *              totalTournaments: number, totalMatches: number,
+ *              totalTournaments: number, totalMatches: number, back?: import('./card_stickers.js').CardBack | null,
  *              labels: { evalDate: string, achievements: string, latest: string, overall: string, national: string, equivalent: string, noAch: string } }} PCardModel */
 
 // 数字・英字・記号の並びは欧文フォント (Zalando Sans) で組む (デザインの「Lv.5」「UF 10」「#3」と同じ)
@@ -191,13 +193,19 @@ function cardHtml(m) {
  * @param {PCardModel} m */
 function backHtml(m) {
   const title = titleHtml(m, 'pcb-title');
-  return `<div class="pc-in pc-back" style="--pc-red:${colorHex(m.color)}">
-    <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
-    <div class="pcb-col">
+  // 裏面のシール (js/card_stickers.js)。置き場所だけ書き、絵 (ホロ) は組み立てたあとに paintBackStickers で。
+  // 名前・二つ名・順位をシールの上に出すときは、シールの層を文字の列より前 (下) に置く
+  const b = m.back;
+  const st = b && b.stickers.length ? `<div class="pcb-st">${b.stickers.map((s, i) =>
+    `<div class="pcb-sk" data-i="${i}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
+  const col = `<div class="pcb-col">
       ${title}
       <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
       <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
-    </div>
+    </div>`;
+  return `<div class="pc-in pc-back${b && b.outline ? ' pcb-outline' : ''}" style="--pc-red:${colorHex(m.color)}">
+    <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
+    ${b && b.text_top ? st + col : col + st}
   </div>`;
 }
 
@@ -443,7 +451,27 @@ export function render(el, model, opts = {}) {
 /** 裏面を el に描く (表の render と同じく、表示幅に合わせて縮め、強制ダークモードでは画像を重ねる)
  * @param {HTMLElement} el @param {PCardModel} model @param {{ live?: boolean }} [opts] */
 export function renderBack(el, model, opts = {}) {
-  mount(el, () => backHtml(model), fitBack, !!opts.live);
+  const want = !!(model.back && model.back.stickers.length);
+  mount(el, () => backHtml(model), root => { fitBack(root); if (want) paintBackStickers(root, model); }, !!opts.live);
+  // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ)
+  if (want && !iconsNow()) loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
+}
+
+/** 裏面のシールの絵 (js/holo_badge.js)。アイコンの無い大会のシールは出さない
+ * @param {HTMLElement} root .pc-in @param {PCardModel} m */
+function paintBackStickers(root, m) {
+  const list = (m.back && m.back.stickers) || [];
+  for (const el of /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('.pcb-sk'))) {
+    const s = list[Number(el.dataset.i)];
+    const p = s ? parseKey(s.e) : null;
+    const src = p ? iconUrl(p.eid) : null;
+    if (!s || !p || !src) { el.remove(); continue; }
+    const holder = document.createElement('div');
+    el.appendChild(holder);
+    const draw = (/** @type {boolean} */ tr) => renderBadge(holder, { src, variant: p.variant, transparent: tr, cls: p.cls, shape: s.k, crop: s.c });
+    draw(false);
+    isTransparent(src).then(tr => { if (tr && holder.isConnected) draw(true); });
+  }
 }
 
 /** @param {HTMLElement} el @param {() => string} html @param {(root: HTMLElement) => void} fit @param {boolean} live */

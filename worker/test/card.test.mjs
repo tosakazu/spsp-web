@@ -317,3 +317,36 @@ test('titleTextOf: 既定は null、「なし」は ""、設定なしは null', 
   assert.strictEqual(titleTextOf('ja', null), null);
   assert.deepStrictEqual(titleTextOf('ja', { pre: 'default', post: null }), { pre: null, post: '' });
 });
+
+test('card_put: 裏面のシール (back) を確かめて保存。形が違えば bad_settings、何も無ければ欄なし', async () => {
+  const e = env();
+  const token = await loginToken(e);
+  let now = Date.parse('2026-10-20T00:00:00Z');
+  e.nowMs = now;
+  const back = { stickers: [{ e: '1724470B:g', x: 100.04, y: 50, s: 120, r: -10.26, k: 'circle', c: 0.6 }, { e: '1700000:r', x: 0, y: 333, s: 22, r: 180 }], text_top: true, outline: false };
+  const put = await post(e, { action: 'card_put', token, settings: { ...GOOD, back } });
+  assert.strictEqual(put.ok, true, JSON.stringify(put));
+  assert.deepStrictEqual(put.settings.back, { stickers: [{ e: '1724470B:g', x: 100, y: 50, s: 120, r: -10.3, k: 'circle', c: 0.6 },
+    { e: '1700000:r', x: 0, y: 333, s: 22, r: 180, k: 'square', c: 1 }], text_top: true, outline: false });
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.back, put.settings.back);
+  const bad = async (b) => (await post(e, { action: 'card_put', token, settings: { ...GOOD, back: b } })).error?.code;
+  for (const b of [{ stickers: [{ e: 'sample1:r', x: 1, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:x', x: 1, y: 1, s: 30, r: 0 }] },
+    { stickers: [{ e: '1:r', x: 600, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0, k: 'star' }] },
+    { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0 }, { e: '1:r', x: 2, y: 2, s: 30, r: 0 }] }, { foo: 1 },
+    { stickers: Array.from({ length: 31 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) }]) {
+    assert.strictEqual(await bad(b), 'bad_settings', JSON.stringify(b).slice(0, 80));
+  }
+  e.nowMs = now += 60_000;   // 書き込み間隔
+  const empty = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: false, outline: false } } });
+  assert.strictEqual('back' in empty.settings, false);
+});
+
+test('card_put: preview (cardOpenEdit) だけ、ログインなしで uid を指定して書ける', async () => {
+  const e = env();
+  e.nowMs = Date.parse('2026-10-20T00:00:00Z');
+  assert.strictEqual((await post(e, { action: 'card_put', uid: '777', settings: GOOD })).error.code, 'invalid_session', '本番は不可');
+  e.cfg.cardOpenEdit = true;
+  const put = await post(e, { action: 'card_put', uid: '777', settings: GOOD });
+  assert.strictEqual(put.ok, true, JSON.stringify(put));
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '777' })).settings, GOOD);
+});

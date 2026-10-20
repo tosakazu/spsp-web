@@ -90,6 +90,7 @@ REDIRECT_URI = "https://spsp-web-preview.tosakazu.workers.dev/callback.html"
 CHALLONGE_REDIRECT_URI = "https://spsp-web-preview.tosakazu.workers.dev/callback.html"
 DATA_ORIGIN = "https://data.spsp.games/jp"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
+CARD_OPEN_EDIT = "1"           # preview だけ: カードの設定をログインなしで誰の分でも書ける (見た目の確認用、本番の vars には置かない)
 SITE_PREFIX = "/jp"
 TS_OFFSET = "+09:00"
 SESSION_TTL_MS = "15552000000"

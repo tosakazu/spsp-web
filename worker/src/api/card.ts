@@ -5,13 +5,14 @@
  *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
  *                                            title_text = 二つ名の文字 { pre, post } (null = 既定、"" = なし。設定が無ければ全体が null = 両方既定)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
+ *                       preview (CARD_OPEN_EDIT=1) だけ { uid, settings } でもよい (ログインなしで誰の分でも。見た目の確認用)
  *
  * card_put で書く uid はトークンの uid だけ (リクエストに uid を持たせない = 他人のカードは書けない)。
  * settings の中身 (実績の key) はサーバでは解釈しない。形と長さだけ確かめる。
  */
 import type { Config } from '../config.ts';
 import {
-  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
+  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_STICKER_MAX, CARD_TEMPLATES,
 } from '../config.ts';
 import type { Store } from '../store.ts';
 import { bitsHas, titleById, usableIn } from './titles.ts';
@@ -31,6 +32,46 @@ export interface CardSettings {
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
   title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
   latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)
+  back?: CardBack;        // 裏面のシール (無ければ欄ごと無し = 貼っていない・既定)
+}
+
+/** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・縁取りを付けるか (フロントの js/card_stickers.js と同じ規則) */
+export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean }
+/** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
+export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
+/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかはサーバでは確かめない */
+export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
+const STICKER_SHAPES = ['square', 'round', 'circle', 'hex', 'diamond'];
+
+/** 裏面を確かめて正規化 (数値は小数 1 桁 / 切り取りは 2 桁に丸める)。形が違えば undefined、何も無ければ null */
+export function validateCardBack(v: unknown): CardBack | null | undefined {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline') return undefined;
+  if (o.text_top !== undefined && typeof o.text_top !== 'boolean') return undefined;
+  if (o.outline !== undefined && typeof o.outline !== 'boolean') return undefined;
+  const list = o.stickers === undefined ? [] : o.stickers;
+  if (!Array.isArray(list) || list.length > CARD_STICKER_MAX) return undefined;
+  const num = (x: unknown, lo: number, hi: number): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi ? x : null);
+  const r1 = (x: number): number => Math.round(x * 10) / 10;
+  const seen = new Set<string>();
+  const stickers: CardSticker[] = [];
+  for (const it of list) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return undefined;
+    const s = it as Record<string, unknown>;
+    for (const k of Object.keys(s)) if (!['e', 'x', 'y', 's', 'r', 'k', 'c'].includes(k)) return undefined;
+    if (typeof s.e !== 'string' || !STICKER_KEY.test(s.e) || seen.has(s.e)) return undefined;
+    const x = num(s.x, 0, 514), y = num(s.y, 0, 333), size = num(s.s, 22, 520), rot = num(s.r, -180, 180);
+    const shape = s.k === undefined ? 'square' : s.k;
+    const crop = s.c === undefined ? 1 : num(s.c, 0.35, 1);
+    if (x === null || y === null || size === null || rot === null || crop === null) return undefined;
+    if (typeof shape !== 'string' || !STICKER_SHAPES.includes(shape)) return undefined;
+    seen.add(s.e);
+    stickers.push({ e: s.e, x: r1(x), y: r1(y), s: r1(size), r: r1(rot), k: shape, c: Math.round(crop * 100) / 100 });
+  }
+  const back = { stickers, text_top: o.text_top === true, outline: o.outline === true };
+  return stickers.length || back.text_top || back.outline ? back : null;
 }
 
 /** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜45 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */
@@ -53,7 +94,7 @@ const TITLE_ID = /^[a-z]{2}-\d{4}$/;
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title' && k !== 'latin') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title' && k !== 'latin' && k !== 'back') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -90,7 +131,10 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     if (typeof o.latin !== 'string' || !LATIN_NAME.test(o.latin) || !/[A-Za-z0-9]/.test(o.latin) || o.latin.length > 45) return null;
     latin = o.latin;
   }
-  return { template: o.template, color: o.color, ach, tour, title, latin };
+  const back = validateCardBack(o.back);
+  if (back === undefined) return null;
+  // 裏面は貼っているときだけ欄を置く (前からの設定・応答の形を変えない)
+  return back ? { template: o.template, color: o.color, ach, tour, title, latin, back } : { template: o.template, color: o.color, ach, tour, title, latin };
 }
 
 /** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
@@ -160,8 +204,10 @@ export async function handleCardGet(cfg: Config, store: Store, req: Record<strin
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
 export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const sess = await verifySessionToken(cfg, req.token, now);
-  if (!sess) return err('invalid_session', MSG_INVALID_SESSION);
-  const uid = validUid(sess.id);
+  // preview (CARD_OPEN_EDIT=1) だけ: ログインなしなら、リクエストの uid に書く (誰でも編集できる確認用)
+  const openUid = !sess && cfg.cardOpenEdit ? validUid(req.uid) : null;
+  if (!sess && !openUid) return err('invalid_session', MSG_INVALID_SESSION);
+  const uid = sess ? validUid(sess.id) : openUid;
   if (!uid) return err('invalid_session', MSG_INVALID_SESSION);
 
   let settings: CardSettings | null = null;

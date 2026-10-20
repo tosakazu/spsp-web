@@ -1,6 +1,8 @@
 // @ts-check
 // src/pages/p_edit.js — site/p/edit.html (プレイヤーカードの編集、2026-09-30)。
 //   選べるもの: テンプレート (今は 1 種類)・色 (js/player_card.js COLORS)・カードに出す実績 (選んだ順に入る。入りきらないものは選べない)。
+//   表と裏はタブで切り替える (?tab=back で裏から)。裏 = 裏面の名前とシール (src/pages/card_back_edit.js)。「適用」で表も裏もまとめて保存。
+//   preview の Worker だけは、ログインなしで誰のカードでも編集・適用できる (見た目の確認用、js/login.js openEdit)。
 //   編集中の状態はこのブラウザに自動で保存し (下書き)、「適用」でサーバに保存してカードに出す (js/player_card_model.js)。
 //   本人確認: start.gg でログインし (js/login.js)、ログインした人がこの選手のときだけ編集できる (サーバも token の本人の分しか書かない)。
 //   API の無い ConoHa のプレビューでは本人確認を飛ばし、保存もこのブラウザ (見た目の確認用)。docs/login_design.md
@@ -13,6 +15,7 @@ import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
+import { mountBackEditor } from './card_back_edit.js';
 import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -37,6 +40,7 @@ function notFound(msg) {
 /** @param {number} uid @returns {'ok' | 'login' | 'other'} */
 function ownerState(uid) {
   if (!SpspLogin.apiAvailable()) return 'ok';   // ConoHa のプレビュー (ログインできない) では確認しない
+  if (SpspLogin.openEdit() && !(SpspLogin.session() && SpspLogin.isSelf(uid))) return 'ok';   // preview の Worker: 誰でも
   if (!SpspLogin.session()) return 'login';
   return SpspLogin.isSelf(uid) ? 'ok' : 'other';
 }
@@ -67,8 +71,6 @@ async function main() {
   let applied = appliedRes;
   /** @type {CardSettings} */
   let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
-  // 英字名は裏面の編集ページで適用したものを使う (前の下書きに残っている古い英字名で上書きしない)
-  st = { ...st, latin: applied ? applied.latin ?? null : null };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
   // 二つ名: 持っているものは記録 (D1、GET /api/titles)。API の無い ConoHa のプレビューだけは、記録の代わりに出た大会から計算して見た目を確かめる
@@ -336,12 +338,44 @@ async function main() {
   });
   // リセットは見出しの行 (summary) の中にあるので、押しても欄が開閉しないようにする
   $('ce-reset').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); update({ ach: null }); });
-  // 裏面の英字名は裏面の編集ページ (p/badges.html) で変える (2026-10-20〜)。プレビューを押すと表と裏が入れ替わる
-  /** @type {HTMLAnchorElement} */ ($('ce-back-link')).href = 'badges' + (DISC ? '?d=' + encodeURIComponent(DISC) : '?uid=' + uid);
+  // プレビューを押すと表と裏が入れ替わる
   const preview = $('ce-preview');
   preview.addEventListener('click', e => { if (!(/** @type {Element} */ (e.target)).closest('a')) preview.classList.toggle('flipped'); });
-  // デフォルトに戻す: テンプレート・色・実績・大会・二つ名を既定に (保存は「適用」で)。英字名は裏面の編集ページのものなので残す
-  $('ce-default').addEventListener('click', () => { update({ ...DEFAULT_SETTINGS, latin: st.latin ?? null }); });
+  // デフォルトに戻す: 表 (テンプレート・色・実績・大会・二つ名) を既定に (保存は「適用」で)。裏 (名前・シール) はそのまま
+  $('ce-default').addEventListener('click', () => { update({ ...DEFAULT_SETTINGS, latin: st.latin ?? null, back: st.back ?? null }); });
+
+  // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
+  $('ce-tabs').style.display = '';
+  let backMounted = false;
+  /** @param {'front' | 'back'} tab */
+  const setTab = tab => {
+    for (const b of $('ce-tabs').querySelectorAll('button')) {
+      const on = /** @type {HTMLElement} */ (b).dataset.tab === tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    }
+    $('ce-pane-front').style.display = tab === 'front' ? '' : 'none';
+    $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
+    preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
+    $('ce-default').style.display = tab === 'front' ? '' : 'none';
+    try {
+      const u = new URL(location.href);
+      if (tab === 'back') u.searchParams.set('tab', 'back'); else u.searchParams.delete('tab');
+      history.replaceState(null, '', u.toString());
+    } catch (e) { /* URL を変えられなくても切り替えはできる */ }
+    if (tab === 'back' && !backMounted) {
+      backMounted = true;
+      mountBackEditor({
+        uid, data, back: st.back ?? null, latin: st.latin ?? null,
+        model: (latin, back) => buildCardModel(data, { ...st, latin, back }, titleText),
+        onChange: patch => update(patch),
+      }).catch(e => console.error(e));
+    }
+  };
+  for (const b of $('ce-tabs').querySelectorAll('button')) {
+    b.addEventListener('click', () => setTab(/** @type {'front' | 'back'} */ (/** @type {HTMLElement} */ (b).dataset.tab)));
+  }
+  setTab(params.get('tab') === 'back' ? 'back' : 'front');
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;

@@ -1,4 +1,4 @@
-/* badge_edit.css — カードの裏面にシールを貼るページ (p/badges.html、試作)。上の段・カード・操作は画面の上に出たまま、
+/* badge_edit.css — カード編集 (p/edit.html) の「裏」タブ: 裏面にシールを貼る (src/pages/card_back_edit.js)。上の段・カード・操作は画面の上に出たまま、
    持っているシールはその下の箱の中だけでスクロールする
    貼る層 .bz-layer / 枠の層 .bz-over はカードに重ねる。位置・大きさは js が表示幅に合わせた px で置く */
 main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
@@ -35,15 +35,7 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bz-ol[aria-pressed="true"] .bz-ol-out { stroke: #fff; }
 .bz-ol[aria-pressed="true"] .bz-ol-in { stroke: #111827; }
 
-/* 名前・二つ名・順位の縁取り (カードと、シールの上に出す複製の両方)。線は字の外側だけに 8 方向の影で
-   (text-stroke は字の内側にも食い込んで細く見える)。太さは字の大きさに比例 */
-.bz-stage.bz-outline .pcb-name-t, .bz-stage.bz-outline .pcb-rank, .bz-stage.bz-outline .pcb-title {
-  --ol: .05em; --olc: rgb(0 0 0 / .8);
-  text-shadow: var(--ol) 0 0 var(--olc), calc(-1 * var(--ol)) 0 0 var(--olc), 0 var(--ol) 0 var(--olc), 0 calc(-1 * var(--ol)) 0 var(--olc),
-    calc(.7 * var(--ol)) calc(.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(.7 * var(--ol)) 0 var(--olc),
-    calc(.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc);
-}
-.bz-stage.bz-outline .pcb-title { --ol: .09em; }   /* 二つ名は小さい字なので太めに */
+/* 名前・二つ名・順位の縁取りは js/player_card.js の裏面 (player_card.css の .pcb-outline) */
 
 /* その他のメニュー */
 .bz-menu { position: relative; }
