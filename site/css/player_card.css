@@ -216,3 +216,6 @@
     calc(.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc);
 }
 .pcb-outline .pcb-title { --ol: .09em; }
+
+/* シールの影なし (見比べる用、<html>.no-sticker-shadow。js/card_stickers.js ?shadow=0 / カード編集の裏のメニュー) */
+.no-sticker-shadow .pcb-sk, .no-sticker-shadow .bz-st, .no-sticker-shadow .bz-tb { filter: none; }
