@@ -2091,8 +2091,15 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 }
 
 // カードをタップすると、カードの上に編集 (本人のページだけ)・裏返す・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+// #back で来たら (カード編集の裏で適用したとき) 裏返して出す
 {
   const wrap = document.getElementById('pcard-wrap');
+  if (wrap && location.hash === '#back') {
+    wrap.classList.add('flipped');
+    document.getElementById('pcard')?.setAttribute('aria-hidden', 'true');
+    document.getElementById('pcard-back')?.setAttribute('aria-hidden', 'false');
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 残っても困らない */ }
+  }
   document.addEventListener('click', e => {
     if (!wrap) return;
     const el = /** @type {Element} */ (e.target);

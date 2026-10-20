@@ -408,7 +408,8 @@ async function main() {
     if (r.ok) {
       // 適用したら編集ページを閉じてプレイヤーページへ (新しい設定のカードがすぐ出る)
       applied = { ...st }; clearDraft(uid);
-      location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href);
+      // 裏のタブで適用したら、プレイヤーページのカードを裏返して見せる
+      location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href + (curTab === 'back' ? '#back' : ''));
       return;
     }
     // 間隔が短すぎて断られたときは待てばよいことを伝える (それ以外は保存できなかった旨だけ)
