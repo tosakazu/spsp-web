@@ -32,6 +32,7 @@ const MAX_STICKERS = 30;
 const PAGE = 60;
 const STORE_KEY = 'spsp_card_badges_draft_v1';
 const TEXT_TOP_KEY = 'spsp_card_badges_text_top_v1';   // 名前・二つ名・順位をシールの上に出すか (選手ごと、{uid: 1})
+const OUTLINE_KEY = 'spsp_card_badges_outline_v1';     // 名前・二つ名・順位の文字に縁取りを付けるか (選手ごと、{uid: 1})
 const HOLO_NAMES = ['虹', '金', '銀', '素'];
 /** 色の記号 (判定のデータ) → js/holo_badge.js の variant。上の色から順 */
 const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
@@ -181,6 +182,29 @@ async function main() {
       if (textTop) m[String(uid)] = 1; else delete m[String(uid)];
       localStorage.setItem(TEXT_TOP_KEY, JSON.stringify(m));
     } catch (e) { /* 保存できない環境では何もしない */ }
+  });
+
+  // ── 名前・二つ名・順位の文字の縁取り (選手ごとにこのブラウザに保存) ──
+  const outlineBtn = $('bz-outline');
+  const readFlag = (/** @type {string} */ key) => { try { return !!(JSON.parse(localStorage.getItem(key) || '{}') || {})[String(uid)]; } catch (e) { return false; } };
+  const writeFlag = (/** @type {string} */ key, /** @type {boolean} */ on) => {
+    try {
+      const m = JSON.parse(localStorage.getItem(key) || '{}') || {};
+      if (on) m[String(uid)] = 1; else delete m[String(uid)];
+      localStorage.setItem(key, JSON.stringify(m));
+    } catch (e) { /* 保存できない環境では何もしない */ }
+  };
+  let outline = readFlag(OUTLINE_KEY);
+  const paintOutline = () => {
+    outlineBtn.setAttribute('aria-pressed', String(outline));
+    $('bz-stage').classList.toggle('bz-outline', outline);
+  };
+  paintOutline();
+  outlineBtn.addEventListener('click', () => {
+    outline = !outline;
+    paintOutline();
+    writeFlag(OUTLINE_KEY, outline);
+    toast(outline ? '名前・二つ名・順位に縁取りを付けました' : '縁取りを外しました');
   });
 
   // ── 持っているシール ──

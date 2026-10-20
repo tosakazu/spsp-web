@@ -29,6 +29,21 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bz-tt[aria-pressed="true"]:hover { background: #1f2937; }
 .bz-tt[aria-pressed="true"] .bz-tt-st { fill: #6b7280; }
 .bz-tt[aria-pressed="true"] .bz-tt-over { display: none; }
+/* 縁取り: 太い線 (縁) の上に細い線 (字)。オフは縁なし */
+.bz-ol .bz-ol-out { stroke: transparent; stroke-width: 5.5; }
+.bz-ol .bz-ol-in { stroke: #9ca3af; stroke-width: 2; }
+.bz-ol[aria-pressed="true"] .bz-ol-out { stroke: #fff; }
+.bz-ol[aria-pressed="true"] .bz-ol-in { stroke: #111827; }
+
+/* 名前・二つ名・順位の縁取り (カードと、シールの上に出す複製の両方)。線は字の外側だけに 8 方向の影で
+   (text-stroke は字の内側にも食い込んで細く見える)。太さは字の大きさに比例 */
+.bz-stage.bz-outline .pcb-name-t, .bz-stage.bz-outline .pcb-rank, .bz-stage.bz-outline .pcb-title {
+  --ol: .05em; --olc: rgb(0 0 0 / .8);
+  text-shadow: var(--ol) 0 0 var(--olc), calc(-1 * var(--ol)) 0 0 var(--olc), 0 var(--ol) 0 var(--olc), 0 calc(-1 * var(--ol)) 0 var(--olc),
+    calc(.7 * var(--ol)) calc(.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(.7 * var(--ol)) 0 var(--olc),
+    calc(.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc), calc(-.7 * var(--ol)) calc(-.7 * var(--ol)) 0 var(--olc);
+}
+.bz-stage.bz-outline .pcb-title { --ol: .09em; }   /* 二つ名は小さい字なので太めに */
 
 /* その他のメニュー */
 .bz-menu { position: relative; }
@@ -161,3 +176,10 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
   padding: 9px 16px; border-radius: 999px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); pointer-events: none; transition: opacity .2s;
   display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .bz-toast-act { font: inherit; font-size: 13px; font-weight: 700; color: #93c5fd; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* 狭い画面: 上の段のボタンが 5 つ並ぶので、題を詰める */
+@media (max-width: 400px) {
+  .bz-tag { display: none; }
+  .bz-title { font-size: 15px; }
+  .bz-head-btns { gap: 2px; }
+}
