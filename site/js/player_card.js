@@ -436,6 +436,8 @@ function applyScale(el) {
   const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
   if (!inner || !el.clientWidth) return;
   inner.style.transform = `scale(${el.clientWidth / W})`;
+  const glow = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-glow'));
+  if (glow) glow.style.transform = inner.style.transform;
 }
 
 /** @type {WeakSet<HTMLElement>} */
@@ -452,9 +454,37 @@ export function render(el, model, opts = {}) {
  * @param {HTMLElement} el @param {PCardModel} model @param {{ live?: boolean }} [opts] */
 export function renderBack(el, model, opts = {}) {
   const want = !!(model.back && model.back.stickers.length);
-  mount(el, () => backHtml(model), root => { fitBack(root); if (want) paintBackStickers(root, model); }, !!opts.live);
+  mount(el, () => backHtml(model), root => { fitBack(root); if (want) { paintBackStickers(root, model); paintGlow(el, model); } }, !!opts.live);
   // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ)
   if (want && !iconsNow()) loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); });
+}
+
+/** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、
+ * カードのいちばん上 (強制ダークモードでカードを画像に差し替えていても、その上) に重ねる。座標はカード (514×333) で、.pc-in と同じ倍率
+ * @param {HTMLElement} el .pcard @param {PCardModel} m */
+function paintGlow(el, m) {
+  el.querySelector('.pcb-glow')?.remove();
+  const list = (m.back && m.back.stickers) || [];
+  if (!list.length) return;
+  const glow = document.createElement('div');
+  glow.className = 'pcb-glow';
+  glow.setAttribute('aria-hidden', 'true');
+  for (const s of list) {
+    const p = parseKey(s.e);
+    const src = p ? iconUrl(p.eid) : null;
+    if (!p || !src) continue;
+    const g = document.createElement('div');
+    g.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)`;
+    g.style.setProperty('--hb-img', `url("${src.replace(/"/g, '%22')}")`);
+    const shape = (/** @type {boolean} */ tr) => { g.className = tr ? 'hb hb-shape' : `hb hb-square hb-k-${s.k}`; };
+    shape(false);
+    isTransparent(src).then(tr => { if (tr) shape(true); });
+    g.innerHTML = '<div class="hb-sheen"></div><div class="hb-glare"></div>';
+    glow.appendChild(g);
+  }
+  el.appendChild(glow);
+  const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
+  if (inner) glow.style.transform = inner.style.transform;
 }
 
 /** シールの影 (player_card.css .pcb-sk の drop-shadow と同じ値。カードを画像にするときに絵に入れる) */
@@ -535,6 +565,8 @@ function scheduleImage(el, delay) {
       node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
+      const glow = el.querySelector('.pcb-glow');
+      if (glow) el.appendChild(glow);   // シールの光は画像の上に
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
   }, delay));
 }

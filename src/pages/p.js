@@ -2121,7 +2121,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   const wrap = document.getElementById('pcard-wrap');
   const FLICK_PX = 40;        // はじいたとみなす横の距離 (画面の px)
   const FLICK_V = 0.45;       // と速さ (px/ms、離す直前 80ms)
-  const TILT_DEG = 16;        // 傾きの最大 (端を押したとき)
+  const TILT_DEG = 30;        // 傾きの最大 (端を押したとき)
   if (wrap) {
     /** @type {null | { id: number, x0: number, y0: number, pts: { x: number, t: number }[], moved: boolean }} */
     let g = null;

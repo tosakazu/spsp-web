@@ -161,10 +161,12 @@
 .pcard-wrap .pcard { cursor: pointer; }
 /* 指・マウスで動かす (src/pages/p.js): 横の動きはこちらで受け、縦はページのスクロール。傾けている間 (.pc-tilt) はシールに光 */
 .pcard-wrap .pcard-flip { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
-.pcb-sk > .hb { --hb-mx: var(--card-mx, .5); --hb-my: var(--card-my, .5); }
-.pc-tilt .pcb-sk .hb-sheen, .pc-tilt .pcb-sk .hb-glare { display: block; }
-.pc-tilt .pcb-sk .hb-sheen { opacity: .22; }
-.pc-tilt .pcb-sk .hb-glare { opacity: .8; }
+/* シールの光の層 (player_card.js paintGlow): カードのいちばん上 (画像に差し替えていてもその上)、座標はカードの 514×333 */
+.pcb-glow { position: absolute; left: 0; top: 0; width: 514px; height: 333px; transform-origin: 0 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.pcb-glow > .hb { position: absolute; aspect-ratio: auto; --hb-mx: var(--card-mx, .5); --hb-my: var(--card-my, .5); }
+.pcb-glow > .hb, .pcb-glow > .hb:hover { transform-origin: 50% 50%; transition: none; }
+.pc-tilt .pcb-glow .hb-sheen { opacity: .22; }
+.pc-tilt .pcb-glow .hb-glare { opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .pcard-wrap { transform: none !important; } }
 /* 表と裏: 裏面は表に重ねて裏向きに置き、.flipped で全体を回す (回っている間は両面の裏側を隠す) */
 .pcard-flip { position: relative; transition: transform .5s ease; transform-style: preserve-3d; }
