@@ -128,8 +128,10 @@ const placeText = b => (b.place == null ? '' : b.place === 1 ? '優勝' : `${b.p
 /** シールのキー → 大会キー @param {string} e */
 const groupKey = e => e.split(':')[0];
 
-/** 押してから動かしたとみなすまでの距離 (画面の px)。これより小さい動きはタップ (選ぶだけ) */
-const DRAG_SLOP = 4;
+/** 押してから動かしたとみなすまでの距離 (画面の px)。これより小さい動きはタップ (選ぶだけ)。
+ * 指は押しただけでもぶれるので広め、まだ選んでいなかったシール (選ぶつもりで押した) はさらに広め */
+const slopOf = (/** @type {string} */ pointerType, /** @type {boolean} */ wasSel) =>
+  (pointerType === 'mouse' ? 4 : 10) * (wasSel ? 1 : 1.8);
 /** 回転を吸い付ける角度と幅 (度) */
 const SNAP_ANGLES = [0, 90, -90, 180, -180, 45, -45, 135, -135];
 const SNAP_DEG = 4;
@@ -492,9 +494,9 @@ async function main() {
   // ── ドラッグ (移動)・つまみ (回転と大きさ)・2 本指 (回転と大きさ) ──
   /** @type {Map<number, { x: number, y: number }>} 押している指 (カードの座標) */
   const ptrs = new Map();
-  /** @type {null | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean }
-   *          | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number }
-   *          | { kind: 'pinch', s: Sticker, a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number }} */
+  /** @type {null | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean, slop: number }
+   *          | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number, sx: number, sy: number, moved: boolean, slop: number }
+   *          | { kind: 'pinch', s: Sticker, a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number, moved: boolean }} */
   let drag = null;
   const angle = (/** @type {{x:number,y:number}} */ a, /** @type {{x:number,y:number}} */ b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
   const dist = (/** @type {{x:number,y:number}} */ a, /** @type {{x:number,y:number}} */ b) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -508,7 +510,7 @@ async function main() {
     const s = cur();
     const [p, q] = [...ptrs.values()];
     if (!s || !p || !q) return;
-    drag = { kind: 'pinch', s, a0: angle(p, q), d0: Math.max(1, dist(p, q)), r0: s.r, s0: s.s, c0: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, x0: s.x, y0: s.y };
+    drag = { kind: 'pinch', s, a0: angle(p, q), d0: Math.max(1, dist(p, q)), r0: s.r, s0: s.s, c0: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, x0: s.x, y0: s.y, moved: false };
   };
   stage.addEventListener('pointerdown', e => {
     const pt = toCard(e.clientX, e.clientY);
@@ -523,10 +525,11 @@ async function main() {
     const s = onRot ? cur() : stEl ? stickers.find(x => x.e === stEl.dataset.e) : null;
     if (!s) { drag = null; select(null); return; }
     e.preventDefault();
+    const slop = slopOf(e.pointerType, sel === s.e);
     if (onRot) {
-      drag = { kind: 'rot', s, a0: angle(s, pt), d0: Math.max(1, dist(s, pt)), r0: s.r, s0: s.s };
+      drag = { kind: 'rot', s, a0: angle(s, pt), d0: Math.max(1, dist(s, pt)), r0: s.r, s0: s.s, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
     } else {
-      drag = { kind: 'move', s, dx: pt.x - s.x, dy: pt.y - s.y, sx: e.clientX, sy: e.clientY, moved: false };
+      drag = { kind: 'move', s, dx: pt.x - s.x, dy: pt.y - s.y, sx: e.clientX, sy: e.clientY, moved: false, slop };
     }
     select(s.e);
   });
@@ -537,17 +540,37 @@ async function main() {
     if (!drag) return;
     const s = drag.s;
     if (drag.kind === 'move') {
-      // 少し動くまではタップ (選ぶだけ) とみなして動かさない (押しただけでずれないように)
-      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < DRAG_SLOP) return;
-      drag.moved = true;
+      // 少し動くまではタップ (選ぶだけ) とみなして動かさない (押しただけでずれないように)。
+      // 動き始めたら、その時の指の位置から追う (遊びの分だけ飛ばないように)
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+        drag.moved = true;
+        drag.dx = pt.x - s.x; drag.dy = pt.y - s.y;
+        return;
+      }
       s.x = Math.max(0, Math.min(W, pt.x - drag.dx));
       s.y = Math.max(0, Math.min(H, pt.y - drag.dy));
     } else if (drag.kind === 'rot') {
+      // つまみも同じ: 少し動くまでは回さない。動き始めた所を基準に
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+        drag.moved = true;
+        drag.a0 = angle(s, pt); drag.d0 = Math.max(1, dist(s, pt));
+        return;
+      }
       s.r = snapRot(drag.r0 + angle(s, pt) - drag.a0);
       s.s = clampSize(drag.s0 * dist(s, pt) / drag.d0);
     } else {
       const [p, q] = [...ptrs.values()];
       if (!p || !q) return;
+      // 2 本指も、置いただけのぶれ (間隔 6%・角度 4°・中心 10px 未満) では変えない。超えたらそこを基準に
+      if (!drag.moved) {
+        const c = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+        if (Math.abs(dist(p, q) / drag.d0 - 1) < 0.06 && Math.abs(normRot(angle(p, q) - drag.a0)) < 4 && dist(c, drag.c0) * scale < 10) return;
+        drag.moved = true;
+        drag.a0 = angle(p, q); drag.d0 = Math.max(1, dist(p, q)); drag.c0 = c;
+        return;
+      }
       s.r = snapRot(drag.r0 + angle(p, q) - drag.a0);
       s.s = clampSize(drag.s0 * dist(p, q) / drag.d0);
       s.x = Math.max(0, Math.min(W, drag.x0 + (p.x + q.x) / 2 - drag.c0.x));
@@ -561,7 +584,7 @@ async function main() {
     // 2 本指の片方を離したら、残った指で移動を続ける
     if (ptrs.size === 1 && drag && drag.kind === 'pinch') {
       const [p] = [...ptrs.values()];
-      drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y, sx: 0, sy: 0, moved: true };
+      drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y, sx: 0, sy: 0, moved: true, slop: 0 };
     } else if (!ptrs.size) drag = null;
   };
   stage.addEventListener('pointerup', end);
