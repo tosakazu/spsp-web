@@ -674,9 +674,9 @@ function render() {
   // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
   // 設定の読み込みは loadData で選手データと一緒に始めてある。待つのは 2 秒まで (遅ければ既定のカードを出し、届いたら描き直す)。
   // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
-  // カードは表が描き終わる (字体・強制ダークモードの画像) まで読み込み中の表示で隠し (.pc-loading)、表を出す。
-  // 裏が描き終わったら (シールの絵とホロも) 裏返して裏を見せ、少ししたら表に戻す (#back で来たときは裏のまま)。
-  // それまでに自分で裏返していたら何もしない。描き終わりが来なくても 10 秒で表を出す
+  // カードの表はすぐ既定の設定で仮に描いて出し (読み込み中の表示 .pc-loading はそれまで)、設定が届いたら描き直す。
+  // 設定・英字名の読みの表・裏の準備 (シールの絵とホロ・強制ダークモードの画像) がそろったら、裏返して裏を見せ、
+  // 少ししたら表に戻す (#back で来たときは裏のまま)。それまでに自分で裏返していたら何もしない
   const wrapEl = document.getElementById('pcard-wrap');
   let revealed = false;
   let introDone = false;
@@ -718,30 +718,27 @@ function render() {
   }
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
-    let drawn = false;
     // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
     const back = document.getElementById('pcard-back');
     /** @type {any} */
     let last = null;
     const draw = (/** @type {any} */ x) => {
-      drawn = true;
       last = x;
       const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
       SPSPPlayerCard.render(card, model);
       if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
-      if (!revealed) SPSPPlayerCard.ready(card).then(reveal);
-      if (back && !introDone) Promise.all([SPSPPlayerCard.ready(card), SPSPPlayerCard.ready(back)]).then(() => { reveal(); intro(); });
+      reveal();
     };
-    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) を待ってから描く (3 秒まで。遅れて届いたら描き直す)
+    draw(null);   // 仮: 既定の設定ですぐ
+    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す
     const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
     const readingsP = kanji
-      ? Promise.race([SpspLatinName.loadReadings().then(r => { NAME_READINGS = r; }), new Promise(r => setTimeout(r, 3000))])
+      ? Promise.race([SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } }), new Promise(r => setTimeout(r, 3000))])
       : Promise.resolve();
-    if (kanji) SpspLatinName.loadReadings().then(r => { if (r && drawn && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } });
-    readingsP.then(() => {
-      const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
-      settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
-    });
+    // 設定 (本人が適用したもの) が届いたら描き直す。待つのは 4 秒まで (遅れて届いても描き直す)
+    const settledP = Promise.race([settingsP.then(x => { if (x && x.settings) draw(x); }), new Promise(r => setTimeout(r, 4000))]);
+    // そろったら裏返しの紹介 (その時点の描画の準備を待つ)
+    Promise.all([readingsP, settledP]).then(() => Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null])).then(intro);
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
