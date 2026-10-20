@@ -175,8 +175,10 @@ export function renderBadge(el, opts) {
     '</div>' + (opts.transparent ? cls : '') + '<div class="hb-sheen"></div><div class="hb-glare"></div>';
   for (const d of el.querySelectorAll('.hb-l, .hb-c, .hb-o')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
   const fl = opts.flatten || 'auto';
+  // 描き方 (キャンバスに描くとき用)。画像にする (badgeToCanvas、カードの保存) ときにも使うので、いつも覚えておく
+  const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl: impl === 'css' ? 'img' : impl, letter, crop, pl, shape };
+  specOf.set(el, fo);
   if (impl !== 'css' && (fl === 'always' || (fl === 'auto' && forcedDarkLikely()))) {
-    const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl, letter, crop, pl };
     flatOpts.set(el, fo);
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
@@ -188,6 +190,8 @@ export function renderBadge(el, opts) {
       const p2 = letterShift(shape, b);
       el.style.setProperty('--hb-cls-dx', String(p2.dx));
       el.style.setProperty('--hb-cls-dy', String(p2.dy));
+      const sp = specOf.get(el);
+      if (sp) sp.pl = { ...p2, k: 1 };
       const fo = flatOpts.get(el);
       if (fo) { fo.pl = { ...p2, k: 1 }; flattenBadge(el, fo).catch(() => { /* 前の絵のまま */ }); }
     }).catch(() => { /* おおよその箱のまま */ });
@@ -282,6 +286,36 @@ async function flattenBadge(el, o) {
   const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width) || 160;
   const W = flatWidth(css);
   flatSize.set(el, W);
+  const cv = await drawBadge(o, W);
+  if (!el.isConnected || flatOpts.get(el) !== o) return;   // 描いている間に作り直された
+  cv.className = 'hb-flat';
+  // ブラウザがメモリ節約でキャンバスの中身を捨てたら (裏に回ったタブ・閉じて復元したタブ)、すぐ重ねた表示に戻し、表に戻ったら描き直す
+  cv.addEventListener('contextlost', () => { unflatten(el); lost.add(el); });
+  el.querySelector('.hb-flat')?.remove();
+  const inner = el.querySelector('.hb-in');
+  if (inner) inner.after(cv); else el.prepend(cv);
+  el.classList.add('hb-flattened');
+}
+
+/** 形の外形の線 (holo_badge.css の clip-path と同じ) を引く @param {CanvasRenderingContext2D} ctx @param {number} W @param {string} shape */
+function shapePath(ctx, W, shape) {
+  ctx.beginPath();
+  if (shape === 'circle') ctx.arc(W / 2, W / 2, W / 2, 0, Math.PI * 2);
+  else if (shape === 'round') {
+    const r = W * 0.15;
+    ctx.moveTo(r, 0); ctx.arcTo(W, 0, W, W, r); ctx.arcTo(W, W, 0, W, r); ctx.arcTo(0, W, 0, 0, r); ctx.arcTo(0, 0, W, 0, r); ctx.closePath();
+  } else {
+    const pts = shape === 'hex' ? [[0.5, 0], [0.933, 0.25], [0.933, 0.75], [0.5, 1], [0.067, 0.75], [0.067, 0.25]]
+      : shape === 'diamond' ? [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]] : [[0, 0], [1, 0], [1, 1], [0, 1]];
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * W, y * W) : ctx.moveTo(x * W, y * W)));
+    ctx.closePath();
+  }
+}
+
+/** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)
+ * @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
+ * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
+async function drawBadge(o, W) {
   const [icon, ...imgs] = await Promise.all([loadImage(o.src, true).catch(() => loadImage(o.src)), ...o.layers.map(([n]) => layerImage(n, o.impl))]);
   if (o.letter && document.fonts) {
     try { await document.fonts.load(`italic 800 ${W / 3}px "Zalando Sans Expanded"`, o.letter); } catch (e) { /* 別の字体で描く */ }
@@ -289,6 +323,8 @@ async function flattenBadge(el, o) {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = W;
   const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+  const clip = !o.transparent && o.shape && o.shape !== 'square';
+  if (clip) { ctx.save(); shapePath(ctx, W, String(o.shape)); ctx.clip(); }
   // 絵: 透過なしは cover、透過ありは contain (CSS と同じ)
   const iw = icon.naturalWidth || W, ih = icon.naturalHeight || W;
   const s = o.transparent ? Math.min(W / iw, W / ih) : Math.max(W / iw, W / ih) / o.crop;   // 切り取り = 絵だけ拡大 (CSS の --hb-zoom)
@@ -306,14 +342,16 @@ async function flattenBadge(el, o) {
     ctx.globalCompositeOperation = 'source-over';
     if (o.letter) drawLetter(ctx, W, o.letter, true);
   }
-  if (!el.isConnected || flatOpts.get(el) !== o) return;   // 描いている間に作り直された
-  cv.className = 'hb-flat';
-  // ブラウザがメモリ節約でキャンバスの中身を捨てたら (裏に回ったタブ・閉じて復元したタブ)、すぐ重ねた表示に戻し、表に戻ったら描き直す
-  cv.addEventListener('contextlost', () => { unflatten(el); lost.add(el); });
-  el.querySelector('.hb-flat')?.remove();
-  const inner = el.querySelector('.hb-in');
-  if (inner) inner.after(cv); else el.prepend(cv);
-  el.classList.add('hb-flattened');
+  if (clip) ctx.restore();
+  return cv;
+}
+
+/** renderBadge で組み立てたバッジを、一辺 W px のキャンバスに描く (カードを画像にするとき: html2canvas はブレンド・マスク・clip-path を
+ * 描けないので、シールはこの絵に差し替えて撮る)。組み立てていない要素なら null
+ * @param {HTMLElement} el @param {number} W @returns {Promise<HTMLCanvasElement | null>} */
+export async function badgeToCanvas(el, W) {
+  const o = specOf.get(el);
+  return o ? drawBadge(o, Math.max(16, Math.round(W))) : null;
 }
 
 /** キャンバスの一辺 (画面の大きさ × 画素の密度、64〜740) @param {number} css */
@@ -332,8 +370,11 @@ export function reflatten(el) {
   return true;
 }
 
+/** 組み立てたバッジの描き方 (renderBadge のたびに。badgeToCanvas 用) */
+/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
+const specOf = new WeakMap();
 /** キャンバスに差し替えたときの描き方 (描き直す用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
 const flatOpts = new WeakMap();
 /** 中身を捨てられたバッジ (表に戻ったら描き直す) */
 /** @type {Set<HTMLElement>} */
@@ -379,7 +420,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

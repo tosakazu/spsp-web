@@ -8,7 +8,7 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
-import { renderBadge, isTransparent } from './holo_badge.js';
+import { renderBadge, isTransparent, badgeToCanvas } from './holo_badge.js';
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
@@ -562,6 +562,24 @@ async function captureCanvas(el) {
   box.className = 'pcard pc-offscreen';   // 色の変数 (--pc-red など) は .pcard が持つ
   const clone = /** @type {HTMLElement} */ (src.cloneNode(true));
   clone.style.transform = 'none';
+  // 裏面のシール: html2canvas はホロの重ね方 (ブレンド)・マスク・形の切り取りを描けない (複製したキャンバスも空になる) ので、
+  // 1 枚ずつ自前で描いた絵 (3 倍の細かさ) に差し替える。描けなかったシールは外す
+  const sks = [...src.querySelectorAll('.pcb-sk')], cks = [...clone.querySelectorAll('.pcb-sk')];
+  await Promise.all(sks.map(async (sk, i) => {
+    const ck = /** @type {HTMLElement | undefined} */ (cks[i]);
+    if (!ck) return;
+    ck.innerHTML = '';
+    try {
+      const hb = /** @type {HTMLElement | null} */ (sk.querySelector('.hb'));
+      const cv = hb ? await badgeToCanvas(hb, (parseFloat(ck.style.width) || 100) * 3) : null;
+      if (!cv) throw new Error('no badge');
+      const img = document.createElement('img');
+      img.src = cv.toDataURL('image/png');   // アイコンが CORS で読めずキャンバスが汚れていると、ここで例外
+      img.style.cssText = 'display:block;width:100%;height:100%';
+      await img.decode().catch(() => {});
+      ck.appendChild(img);
+    } catch (e) { ck.remove(); }
+  }));
   box.appendChild(clone);
   document.body.appendChild(box);
   // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
