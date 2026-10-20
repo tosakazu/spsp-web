@@ -9,7 +9,7 @@
 //   3 = 通常 (ホロなし。絵とクラスの文字だけ、ポインタの光は残す)
 // 形と切り取り (透過なしだけ、2026-10-20): shape = square / round (角丸) / circle / hex (六角形) / diamond (ひし形) で外形を切る。
 //   crop = 絵のうち見せる幅の割合 (0.35〜1)。絵だけ 1 / crop 倍に拡大し、ホロは見えている形いっぱいのまま (狭めるとホロも一緒に縮む)。
-//   クラスの文字は大きさを変えず、形からはみ出さない最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る)
+//   クラスの文字は大きさを変えず、ほぼ形に収まる最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る。多少の見切れは許す)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
@@ -55,6 +55,8 @@ function letterBox(letter) {
   boxCache.set(letter, b);
   return b;
 }
+/** 形で切ったとき、字の箱の幅・高さのこの割合までは各辺で形の外に出てよい (見切れても、なるべく元の位置のまま) */
+const LETTER_CLIP = 0.3;
 /** フォントがまだのときの箱 (一字のおおよそ) */
 const BOX_GUESS = { x0: -0.38, x1: -0.01, y0: -0.37, y1: 0.01 };
 
@@ -66,7 +68,10 @@ function letterShift(shape, b) {
   const key = `${shape}|${b.x0}|${b.x1}|${b.y0}|${b.y1}`;
   if (shiftCache.has(key)) return shiftCache.get(key);
   const inside = SHAPES[shape];
-  const fits = (/** @type {number} */ dx, /** @type {number} */ dy) => [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]
+  // 多少見切れてよい: 字の箱の外側 LETTER_CLIP ずつは形の外に出てよいとし、内側の芯だけを入れる (ずらしを小さく)
+  const mx = (b.x1 - b.x0) * LETTER_CLIP, my = (b.y1 - b.y0) * LETTER_CLIP;
+  const x0 = b.x0 + mx, x1 = b.x1 - mx, y0 = b.y0 + my, y1 = b.y1 - my;
+  const fits = (/** @type {number} */ dx, /** @type {number} */ dy) => [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]
     .every(([x, y]) => inside(1 - dx + x, 1 - dy + y));
   let best = { dx: 0.3, dy: 0.3 }, bestD = Infinity;
   const step = 0.0025;
