@@ -9,7 +9,7 @@
 //   3 = 通常 (ホロなし。絵とクラスの文字だけ、ポインタの光は残す)
 // 形と切り取り (透過なしだけ、2026-10-20): shape = square / round (角丸) / circle / hex (六角形) / diamond (ひし形) で外形を切る。
 //   crop = 絵のうち見せる幅の割合 (0.35〜1)。絵だけ 1 / crop 倍に拡大し、ホロは見えている形いっぱいのまま (狭めるとホロも一緒に縮む)。
-//   クラスの文字は形の内側に入るよう、形ごとに右下からずらして小さくする (SHAPES)
+//   クラスの文字は大きさを変えず、形からはみ出さない最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
@@ -18,16 +18,67 @@ import { HOLO_FILES } from './holo_assets.js';
 
 /** ホロの種類 (variant の番号)。色に意味があるので、名前で使う */
 export const HOLO = { rainbow: 0, gold: 1, silver: 2, normal: 3 };
-/** 形ごとのクラスの文字の置き方: 右下の角から dx・dy (一辺に対する割合) 内側へ、大きさ k 倍。
- * 文字の箱 (一辺の約 1/3 四方) の右下の角が形の内側に入る値 (丸: 中心からの距離、六角形: 右下の辺、ひし形: |x|+|y|) に少し余裕を足した */
-export const SHAPES = /** @type {Record<string, { dx: number, dy: number, k: number }>} */ ({
-  square: { dx: 0, dy: 0, k: 1 },
-  round: { dx: 0.05, dy: 0.05, k: 0.95 },
-  circle: { dx: 0.17, dy: 0.17, k: 0.8 },
-  hex: { dx: 0.12, dy: 0.25, k: 0.75 },
-  diamond: { dx: 0.3, dy: 0.3, k: 0.6 },
+/** 形 → 点 (一辺を 1 とした座標、左上が 0,0) が内側か。どれも凸なので、文字の箱の 4 隅が内側なら箱ごと内側
+ * (holo_badge.css の clip-path と同じ形) */
+export const SHAPES = /** @type {Record<string, (u: number, v: number) => boolean>} */ ({
+  square: (u, v) => u >= 0 && u <= 1 && v >= 0 && v <= 1,
+  round: (u, v) => {
+    if (u < 0 || u > 1 || v < 0 || v > 1) return false;
+    const cu = Math.min(Math.max(u, 0.15), 0.85), cv = Math.min(Math.max(v, 0.15), 0.85);
+    return (u - cu) ** 2 + (v - cv) ** 2 <= 0.15 ** 2;
+  },
+  circle: (u, v) => (u - 0.5) ** 2 + (v - 0.5) ** 2 <= 0.25,
+  hex: (u, v) => Math.abs(u - 0.5) <= 0.433 && Math.abs(v - 0.5) + Math.abs(u - 0.5) * (0.25 / 0.433) <= 0.5,
+  diamond: (u, v) => Math.abs(u - 0.5) + Math.abs(v - 0.5) <= 0.5,
 });
 export const CROP_MIN = 0.35;
+
+/** クラスの文字 (透過なし) の輪郭の箱。右下の角 (0, 0) からの位置、一辺に対する割合 (= 負の値)。線・影の分を少し足す。
+ * フォントがまだなら null @param {string} letter @returns {{ x0: number, x1: number, y0: number, y1: number } | null} */
+const boxCache = new Map();
+function letterBox(letter) {
+  if (boxCache.has(letter)) return boxCache.get(letter);
+  const W = 740, size = W * 350 / 740;
+  const font = `italic 800 ${size}px "Zalando Sans Expanded"`;
+  if (!document.fonts || !document.fonts.check(font, letter)) return null;
+  const ctx = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  ctx.font = font;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  const m = ctx.measureText(letter);
+  // drawLetter と同じ置き方 (右下からずらし、1.016 / 1.02 倍)
+  const asc = m.fontBoundingBoxAscent || size * 0.8, desc = m.fontBoundingBoxDescent || size * 0.2;
+  const y = -size + (size - (asc + desc)) / 2 + asc;
+  const tx = -0.0371 * size, ty = 0.0514 * size, pad = 0.025 * size;
+  const b = { x0: (tx + 1.016 * -m.actualBoundingBoxLeft - pad) / W, x1: (tx + 1.016 * m.actualBoundingBoxRight + pad) / W,
+              y0: (ty + 1.02 * (y - m.actualBoundingBoxAscent) - pad) / W, y1: (ty + 1.02 * (y + m.actualBoundingBoxDescent) + pad) / W };
+  boxCache.set(letter, b);
+  return b;
+}
+/** フォントがまだのときの箱 (一字のおおよそ) */
+const BOX_GUESS = { x0: -0.38, x1: -0.01, y0: -0.37, y1: 0.01 };
+
+/** 文字を形の内側に入れるための、右下からのずらし (dx, dy、一辺に対する割合)。入る中でずらす距離がいちばん短いもの
+ * @param {string} shape @param {{ x0: number, x1: number, y0: number, y1: number }} b */
+const shiftCache = new Map();
+function letterShift(shape, b) {
+  if (shape === 'square') return { dx: 0, dy: 0 };
+  const key = `${shape}|${b.x0}|${b.x1}|${b.y0}|${b.y1}`;
+  if (shiftCache.has(key)) return shiftCache.get(key);
+  const inside = SHAPES[shape];
+  const fits = (/** @type {number} */ dx, /** @type {number} */ dy) => [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]
+    .every(([x, y]) => inside(1 - dx + x, 1 - dy + y));
+  let best = { dx: 0.3, dy: 0.3 }, bestD = Infinity;
+  const step = 0.0025;
+  for (let dx = 0; dx <= 0.5; dx += step) {
+    if (dx * dx >= bestD) break;
+    for (let dy = 0; dy <= 0.5 && dx * dx + dy * dy < bestD; dy += step) {
+      if (fits(dx, dy)) { best = { dx, dy }; bestD = dx * dx + dy * dy; break; }
+    }
+  }
+  shiftCache.set(key, best);
+  return best;
+}
 /** impl: 'img' (既定、画像版: 740px の AVIF、ラメは前の画像版のまま) | 'css' (画像を使わない) | 'old' (前の画像版、740px)
  * cls: 下位クラスの文字 ('B' など。無ければ出さない)
  * flatten: キャンバスに 1 枚に描いて差し替えるか。'auto' (既定) = Samsung Internet かダークモードのときだけ、'always'、'never'
@@ -97,7 +148,9 @@ export function renderBadge(el, opts) {
   // 形と切り取りは透過なしだけ (透過ありはアイコンの形がそのまま外形)
   const shape = !opts.transparent && opts.shape && SHAPES[opts.shape] ? opts.shape : 'square';
   const crop = opts.transparent ? 1 : Math.max(CROP_MIN, Math.min(1, Number(opts.crop) || 1));
-  const pl = SHAPES[shape];
+  const letter0 = opts.cls ? String(opts.cls).replace(/[^A-Za-z0-9]/g, '').slice(0, 2) : '';
+  const box = letter0 && !opts.transparent ? letterBox(letter0) : null;
+  const pl = { ...letterShift(shape, box || BOX_GUESS), k: 1 };
   el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v} hb-k-${shape}`;
   el.style.setProperty('--hb-img', url);
   el.style.setProperty('--hb-zoom', String(1 / crop));
@@ -122,6 +175,18 @@ export function renderBadge(el, opts) {
     flatOpts.set(el, fo);
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
+  // フォントが届いたら字の輪郭を測り直して置き直す (形で切っているときだけ)
+  if (letter0 && !opts.transparent && !box && shape !== 'square' && document.fonts) {
+    document.fonts.load(`italic 800 100px "Zalando Sans Expanded"`, letter0).then(() => {
+      const b = letterBox(letter0);
+      if (!b || !el.isConnected || !el.classList.contains(`hb-k-${shape}`)) return;
+      const p2 = letterShift(shape, b);
+      el.style.setProperty('--hb-cls-dx', String(p2.dx));
+      el.style.setProperty('--hb-cls-dy', String(p2.dy));
+      const fo = flatOpts.get(el);
+      if (fo) { fo.pl = { ...p2, k: 1 }; flattenBadge(el, fo).catch(() => { /* 前の絵のまま */ }); }
+    }).catch(() => { /* おおよその箱のまま */ });
+  }
 }
 
 /** ブラウザが色を書き換えるかもしれないとき (プレイヤーカードの needsImage と同じ判定)。
@@ -177,8 +242,8 @@ async function layerImage(name, impl) {
 
 /** 文字を CSS と同じ位置・見た目で描く (holo_badge.css の .hb-square / .hb-shape .hb-cls の数値と同じ)
  * @param {CanvasRenderingContext2D} ctx @param {number} W @param {string} letter @param {boolean} shape
- * @param {{ dx: number, dy: number, k: number }} [pl] 透過なしの形ごとの置き方 (SHAPES) */
-function drawLetter(ctx, W, letter, shape, pl = SHAPES.square) {
+ * @param {{ dx: number, dy: number, k: number }} [pl] 透過なしの形ごとのずらし (letterShift) */
+function drawLetter(ctx, W, letter, shape, pl = { dx: 0, dy: 0, k: 1 }) {
   const size = W * (shape ? 220 : 350) / 740 * (shape ? 1 : pl.k);
   ctx.save();
   ctx.font = `italic 800 ${size}px "Zalando Sans Expanded", sans-serif`;
