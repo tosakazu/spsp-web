@@ -65,8 +65,11 @@ export const iconsNow = () => icons;
 /** 大会 → アイコンの表を読む (1 回だけ)。サイトの配信ファイル (SPSP.root) @returns {Promise<{ f: string[], e: Record<string, number> } | null>} */
 export function loadIcons() {
   if (!iconsP) {
-    iconsP = fetch(/** @type {any} */ (globalThis).SPSP.data + 'data/event_icons.json')
-      .then(r => (r.ok ? r.json() : null)).then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null);
+    const S = /** @type {any} */ (globalThis).SPSP;
+    const get = (/** @type {string} */ base) => fetch(base + 'data/event_icons.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    // データ (R2、ビルドが作る) に無ければ、サイトに置いた表 (preview だけ、公開前の確認用) を使う
+    iconsP = get(S.data).then(j => (j && j.f && j.e ? j : S.root !== S.data ? get(S.root) : null))
+      .then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null);
   }
   return iconsP;
 }

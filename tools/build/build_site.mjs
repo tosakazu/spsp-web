@@ -166,6 +166,8 @@ for (const f of ['char_emoji.json', 'overseas_manual.json', 'name_readings.json'
 }
 // 大会シールのプレビュー用の判定 (preview だけ。git に入れず、置いたときだけ写す。シールの判定がビルドに入るまで
 // js/card_stickers.js loadOwnedStickers と Worker の持ち物の確認 (CARD_STICKERS_PREVIEW) が読む)
+const EVI = path.join(SITE, 'data', 'event_icons.json');   // 大会アイコンの表 (同じく preview だけ。データ (R2) に無いときの代わり)
+if (fs.existsSync(EVI) && writeIfChanged(path.join(OUT, 'data', 'event_icons.json'), fs.readFileSync(EVI))) nStatic++;
 const STK = path.join(SITE, 'data', 'stickers_preview');
 if (fs.existsSync(STK)) {
   for (const f of fs.readdirSync(STK)) {
