@@ -24,6 +24,8 @@ export interface Env {
   VOTE_TESTER_UIDS?: string;
   /** "1" のとき (preview だけ)、カードの設定をログインなしで誰の分でも書ける (見た目の確認用)。本番には置かない */
   CARD_OPEN_EDIT?: string;
+  /** "1" のとき (preview だけ)、選手のデータに大会シールが無ければ、サイトに置いたプレビュー用の判定 (data/stickers_preview/) で確かめる */
+  CARD_STICKERS_PREVIEW?: string;
   // secrets
   STARTGG_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
@@ -146,6 +148,8 @@ export interface Config {
   voteTesterUids?: string[];
   /** CARD_OPEN_EDIT="1" (preview だけ): card_put をログインなしで、リクエストの uid に書ける */
   cardOpenEdit?: boolean;
+  /** CARD_STICKERS_PREVIEW="1" (preview だけ): シールの持ち物はプレビュー用の判定でも確かめる */
+  stickersPreview?: boolean;
 }
 
 function intOr(v: string | undefined, dflt: number): number {
@@ -179,6 +183,7 @@ export function configFromEnv(env: Env): Config {
     tsOffsetMin: parseOffset(env.TS_OFFSET),
     voteTesterUids: String(env.VOTE_TESTER_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean),
     cardOpenEdit: env.CARD_OPEN_EDIT === '1',
+    stickersPreview: env.CARD_STICKERS_PREVIEW === '1',
   };
 }
 

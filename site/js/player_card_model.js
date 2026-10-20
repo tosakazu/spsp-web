@@ -20,7 +20,7 @@ import { achievementLabel } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
-import { normBack, ownedStickers, isOwned } from './card_stickers.js';
+import { normBack, ownedStickers, hasStickerData, isOwned } from './card_stickers.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -177,6 +177,7 @@ function classSuffix(t) {
  * @param {import('./card_stickers.js').CardBack | null} back @param {any[]} tours */
 function ownBack(back, tours) {
   if (!back || !back.stickers.length) return back;
+  if (!hasStickerData(tours)) return back;   // 判定がまだデータに無い (ビルドに入る前、preview)。保存のときサーバが確かめている
   const owned = ownedStickers(tours);
   return { ...back, stickers: back.stickers.filter(s => isOwned(owned, s.e)) };
 }

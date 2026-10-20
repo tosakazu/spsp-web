@@ -2213,12 +2213,34 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
     let g = null;
     let suppressClick = false;
     const clamp01 = (/** @type {number} */ v) => Math.max(0, Math.min(1, v));
-    const tilt = (/** @type {number} */ cx, /** @type {number} */ cy) => {
+    // 軽くするため: 傾きの値 (--card-mx / --card-my) はカード全体ではなく、使う所 (影 = 両面の .pcard、光の層 .pcb-glow) にだけ置く
+    // (全体に置くと、動かすたびにホロを重ねたシールまでスタイルを計算し直す)。指の動きは画面の描き換え 1 回につき 1 回
+    /** @type {HTMLElement[]} */
+    let varEls = [];
+    let pending = /** @type {{ x: number, y: number } | null} */ (null);
+    let raf = 0;
+    const applyTilt = () => {
+      raf = 0;
+      if (!pending) return;
+      const { x: cx, y: cy } = pending;
+      pending = null;
       const r = wrap.getBoundingClientRect();
       const mx = clamp01((cx - r.left) / r.width), my = clamp01((cy - r.top) / r.height);
-      wrap.style.setProperty('--card-mx', mx.toFixed(3));
-      wrap.style.setProperty('--card-my', my.toFixed(3));
+      for (const el of varEls) {
+        el.style.setProperty('--card-mx', mx.toFixed(3));
+        el.style.setProperty('--card-my', my.toFixed(3));
+      }
       wrap.style.transform = `perspective(900px) rotateX(${((0.5 - my) * TILT_DEG).toFixed(2)}deg) rotateY(${((mx - 0.5) * TILT_DEG).toFixed(2)}deg)`;
+    };
+    const tilt = (/** @type {number} */ cx, /** @type {number} */ cy) => {
+      pending = { x: cx, y: cy };
+      if (!raf) raf = requestAnimationFrame(applyTilt);
+    };
+    /** 傾け始め: 光の層を用意し (初めて傾けたときに作る、js/player_card.js ensureGlow)、値を置く所を集める */
+    const startTilt = () => {
+      const back = document.getElementById('pcard-back');
+      if (back && CARD_BACK_ON) SPSPPlayerCard.ensureGlow(back);
+      varEls = /** @type {HTMLElement[]} */ ([...wrap.querySelectorAll('.pcard, .pcb-glow')]);
     };
     const release = () => {
       wrap.classList.remove('pc-tilt');
@@ -2244,6 +2266,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       while (g.pts.length > 2 && e.timeStamp - g.pts[0].t > 80) g.pts.shift();
       if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 6) {
         g.moved = true;
+        startTilt();
         wrap.classList.add('pc-tilt');
         try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
       }

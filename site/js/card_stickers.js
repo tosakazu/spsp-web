@@ -86,6 +86,19 @@ export function ownedStickers(tours) {
   }
   return out;
 }
+/** 選手の大会記録に大会シールの判定が入っているか (ビルドに入る前は無い) @param {any[]} tours */
+export const hasStickerData = tours => (tours || []).some(t => t && 'sticker' in t);
+/** 持っているシール。大会記録に判定が無ければ (ビルドに入る前)、preview のビルドだけが置くプレビュー用の判定
+ * (サイトの data/stickers_preview/<uid % 64>.json = {uid: {大会キー: r|g|s|n}}) から。どちらも無ければ空
+ * @param {number} uid @param {any[]} tours @returns {Promise<Record<string, string>>} */
+export async function loadOwnedStickers(uid, tours) {
+  if (hasStickerData(tours)) return ownedStickers(tours);
+  try {
+    const r = await fetch(/** @type {any} */ (globalThis).SPSP.root + `data/stickers_preview/${uid % 64}.json`);
+    const j = r.ok ? await r.json() : null;
+    return (j && j[String(uid)]) || {};
+  } catch (e) { return {}; }
+}
 /** 持っているシールか (一番上の色以下なら持っている) @param {Record<string, string>} owned @param {string} e シールのキー */
 export function isOwned(owned, e) {
   const i = e.lastIndexOf(':');
@@ -99,4 +112,4 @@ export function iconUrl(eid, tbl = icons) {
   return k != null && tbl && tbl.f[k] ? IMG_BASE + tbl.f[k] : null;
 }
 
-export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, tourKey, ownedStickers, isOwned, iconsNow, loadIcons, iconUrl };
+export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, tourKey, ownedStickers, hasStickerData, loadOwnedStickers, isOwned, iconsNow, loadIcons, iconUrl };

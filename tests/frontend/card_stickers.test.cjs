@@ -63,3 +63,18 @@ test('ownedStickers / isOwned: 一番上の色から下は全部持っている'
   assert.strictEqual(isOwned(owned, '3:s'), false);
   assert.strictEqual(isOwned(owned, '4:n'), false);
 });
+
+test('loadOwnedStickers: 大会記録に判定があればそれ、無ければプレビュー用の判定 (サイトの data/stickers_preview/)', async () => {
+  const { loadOwnedStickers, hasStickerData } = await load();
+  /** @type {string[]} */
+  const asked = [];
+  globalThis.SPSP = { root: '/jp/' };
+  globalThis.fetch = async (/** @type {string} */ u) => { asked.push(String(u)); return { ok: true, json: async () => ({ 130: { 5: 'g' } }) }; };
+  assert.strictEqual(hasStickerData([{ event_id: 1 }]), false);
+  assert.deepStrictEqual(await loadOwnedStickers(130, [{ event_id: 1, sticker: 'silver' }]), { 1: 's' });
+  assert.deepStrictEqual(asked, []);
+  assert.deepStrictEqual(await loadOwnedStickers(130, [{ event_id: 1 }]), { 5: 'g' });
+  assert.deepStrictEqual(asked, ['/jp/data/stickers_preview/2.json']);   // 130 % 64
+  globalThis.fetch = async () => ({ ok: false, json: async () => null });
+  assert.deepStrictEqual(await loadOwnedStickers(1, []), {});
+});

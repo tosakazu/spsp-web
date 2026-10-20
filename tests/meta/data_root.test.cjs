@@ -27,6 +27,8 @@ test('JSON の fetch は SPSP.data 経由 (SPSP.root は assets など配信フ�
     for (const m of src.matchAll(/SPSP\.root\s*\+\s*['`](data\/|meta\.json|latest_|players|tournaments\/|history\/|upcoming)/g)) {   // news.json はフロントが持つ (2026-09-29) ので対象外
       // 例外: キャラ絵文字の表はフロント (spsp-web) が持ち、サイトと一緒に配信する (js/char_emoji.js、2026-09-28)
       if (/^SPSP\.root\s*\+\s*['`]data\/char_emoji\.json/.test(src.slice(m.index, m.index + 60))) continue;
+      // 大会シールのプレビュー用の判定 (data/stickers_preview/、preview のビルドだけがサイトに置く。シールの判定がビルドに入るまで) (2026-10-20)
+      if (/^SPSP\.root\s*\+\s*`data\/stickers_preview\//.test(src.slice(m.index, m.index + 60))) continue;
       bad.push(path.relative(ROOT, f) + ': ' + m[0]);
     }
     for (const m of src.matchAll(/(loadMaster|loadCurrent|loadDiscriminators|loadGeo|defaultFetchers|cachedFetchers)\(SPSP\.root/g)) bad.push(path.relative(ROOT, f) + ': ' + m[0]);

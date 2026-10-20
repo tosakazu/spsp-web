@@ -146,7 +146,7 @@ const TIER_CODE: Record<string, number> = { r: 0, g: 1, s: 2, n: 3 };
  * spsp_scripts spsp/stickers.py) を読み、大会キー (event_id、下位クラスは親の event_id + クラスの文字) ごとに一番上の色を出し、
  * 貼った色がそれ以下 (下の色は全部持っている) か確かめる。返り値: null = 全部持っている / 'not_owned' / 'unavailable' (データが読めない)
  */
-export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back: CardBack): Promise<null | 'not_owned' | 'unavailable'> {
+export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back: CardBack, preview = false): Promise<null | 'not_owned' | 'unavailable'> {
   if (!back.stickers.length) return null;
   let rec: { tournaments?: unknown } | null;
   try {
@@ -158,7 +158,19 @@ export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back
     return 'unavailable';
   }
   const top = new Map<string, number>();
-  for (const t of Array.isArray(rec && rec.tournaments) ? (rec as { tournaments: unknown[] }).tournaments : []) {
+  const tours = Array.isArray(rec && rec.tournaments) ? (rec as { tournaments: unknown[] }).tournaments : [];
+  // preview だけ: 選手のデータにまだ大会シールが無ければ (ビルドに入る前)、プレビュー用の判定 {uid: {大会キー: r|g|s|n}} で確かめる
+  if (preview && !tours.some(t => t && typeof t === 'object' && 'sticker' in (t as object))) {
+    try {
+      const res = await dataFetch(`/data/stickers_preview/${Number(uid) % 64}.json`);
+      if (res.status !== 200) return 'unavailable';
+      const shard = (await res.json()) as Record<string, Record<string, string>>;
+      for (const [k, c] of Object.entries((shard && shard[String(uid)]) || {})) if (c in TIER_CODE) top.set(k, TIER_CODE[c]);
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+  for (const t of tours) {
     if (!t || typeof t !== 'object') continue;
     const o = t as Record<string, unknown>;
     const tier = TIER_ORDER.indexOf(String(o.sticker));
@@ -268,7 +280,7 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
 
   // 裏面のシール: 持っているものだけ (選手のデータと突き合わせる。読めないときは保存しない)
   if (settings && settings.back && settings.back.stickers.length) {
-    const r = dataFetch ? await checkStickersOwned(dataFetch, uid, settings.back) : 'unavailable';
+    const r = dataFetch ? await checkStickersOwned(dataFetch, uid, settings.back, !!cfg.stickersPreview) : 'unavailable';
     if (r === 'not_owned') return err('sticker_not_owned', 'まだ持っていないシールがあります。', 'sticker_not_owned');
     if (r === 'unavailable') return err('internal', '選手のデータを読めませんでした。少し待ってからやり直してください。', 'sticker_check');
   }

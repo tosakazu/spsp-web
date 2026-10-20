@@ -483,7 +483,9 @@ export async function ready(el) {
  * @param {HTMLElement} el @param {PCardModel} model @param {{ live?: boolean }} [opts] */
 export function renderBack(el, model, opts = {}) {
   const want = !!(model.back && model.back.stickers.length);
-  mount(el, () => backHtml(model), root => { fitBack(root); if (want) { paintBackStickers(root, model); paintGlow(el, model); } }, !!opts.live);
+  // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る (ensureGlow)。描き直したら作り直す
+  glowModel.set(el, model);
+  mount(el, () => backHtml(model), root => { fitBack(root); if (want) paintBackStickers(root, model); }, !!opts.live);
   // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
   if (want && !iconsNow()) {
     const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); return !!t; });
@@ -496,6 +498,14 @@ export function renderBack(el, model, opts = {}) {
     const src = p ? iconUrl(p.eid) : null;
     return src && p ? preloadBadge(src, p.variant) : true;   // アイコンの無いシールは出さないので待たない
   })).then(a => a.every(Boolean)) : Promise.resolve(true));
+}
+
+/** 裏面に描いたモデル (光の層を後から作る用) @type {WeakMap<HTMLElement, PCardModel>} */
+const glowModel = new WeakMap();
+/** 裏面の光の層を用意する (無ければ作る)。カードを傾け始めたときに呼ぶ (プレイヤーページ) @param {HTMLElement} el .pcard (裏面) */
+export function ensureGlow(el) {
+  const m = glowModel.get(el);
+  if (m && !el.querySelector('.pcb-glow')) paintGlow(el, m);
 }
 
 /** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、
@@ -697,4 +707,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, renderBack, ready, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, renderBack, ready, ensureGlow, capture, makeAchFitTester, COLORS, TEMPLATES };

@@ -164,6 +164,8 @@
 .pcard-wrap .pcard, .ce-preview .pcard, .bz-stage > .pcard:not(.bz-text) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 8px 22px rgba(0, 0, 0, .16);
 }
+/* 傾けている間だけ、動かすことをブラウザに知らせる (中身を描き直さずに動かせる) */
+.pcard-wrap.pc-tilt { will-change: transform; }
 .pcard-wrap.pc-tilt .pcard {
   box-shadow: 0 1px 3px rgba(0, 0, 0, .12),
     calc((.5 - var(--card-mx, .5)) * 16px) calc(10px + (.5 - var(--card-my, .5)) * 12px) 28px rgba(0, 0, 0, .22);

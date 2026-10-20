@@ -81,6 +81,7 @@ export function makeEnv(opts) {
       fetches.push({ url: 'data:' + path });
       let spec;
       if (path.indexOf('/players/') !== -1) spec = (o.player === undefined ? PLAYER_DEFAULT : o.player);
+      else if (path.indexOf('/data/stickers_preview/') !== -1) spec = env.previewShard ? { status: 200, body: env.previewShard } : { status: 404, body: {} };
       else if (path.indexOf('char_emoji.json') !== -1) spec = (o.charEmoji === undefined ? CHAR_EMOJI_DEFAULT : o.charEmoji);
       if (spec === undefined || spec === null) throw new Error('network');
       return resp(spec);

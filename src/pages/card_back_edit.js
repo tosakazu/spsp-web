@@ -4,7 +4,8 @@
 //   保存は表と同じ「適用」(カードの設定 back / latin、js/player_card_model.js・js/card_stickers.js)
 //   持っているシール = 大会シールの判定 (spsp_scripts feat/stickers の spsp/stickers.py) で配られた色のうち、アイコンのある大会のもの
 //   (大会 → アイコン = データの data/event_icons.json、js/card_stickers.js loadIcons)。下位クラスはクラスの文字を重ね、アイコンは親の大会のもの
-//   持っているかは選手の大会記録の sticker (js/card_stickers.js ownedStickers)。保存のときサーバも確かめる (worker/src/api/card.ts)
+//   持っているかは選手の大会記録の sticker (js/card_stickers.js loadOwnedStickers。ビルドに入る前は preview だけのプレビュー用の判定)。
+//   保存のときサーバも確かめる (worker/src/api/card.ts)
 //   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・素 の 4 枚。素 = ホロなし)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
 //   操作の欄は選んでいてもいなくても同じ高さ (一覧がずれない)。大きさ・回転・切り取りは 1 本のスライダーを切り替える。元に戻す・やり直すあり
@@ -17,7 +18,7 @@ import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
 import { isTransparent, renderBadge, reflatten, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
-import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, normRot, normBack, loadIcons, ownedStickers, tourKey } from '../../site/js/card_stickers.js';
+import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** 貼ったときの大きさ (一辺、カードの px)。カードの高さの 3 分の 1 強 */
@@ -88,7 +89,8 @@ const HISTORY_MAX = 100;
  */
 export async function mountBackEditor(o) {
   const { uid, data } = o;
-  const icons = await loadIcons();
+  const tours = (data.player && data.player.tournaments) || [];
+  const [icons, owned] = await Promise.all([loadIcons(), loadOwnedStickers(uid, tours)]);
   const root = $('ce-pane-back');
 
   // ── 裏面の土台 (シールなし。名前・縁取りは今の値で) ──
@@ -149,8 +151,7 @@ export async function mountBackEditor(o) {
   latinEl.addEventListener('keydown', e => { if (e.key === 'Enter') latinEl.blur(); });
 
   // ── 持っているシール ──
-  const tours = (data.player && data.player.tournaments) || [];
-  const badges = badgesOf(tours, icons, ownedStickers(tours));
+  const badges = badgesOf(tours, icons, owned);
   const byE = new Map(badges.map(b => [b.e, b]));
   /** 大会ごと (新しい順) @type {EventGroup[]} */
   const groups = [];

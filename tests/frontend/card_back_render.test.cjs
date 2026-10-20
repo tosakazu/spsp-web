@@ -51,7 +51,11 @@ test('シールを置く: 場所・大きさ・回転、アイコンの無いシ
   assert.strictEqual(hb.style.getPropertyValue('--hb-zoom'), String(1 / 0.6));
   assert.ok(/hb-v3/.test(sks[1].querySelector('.hb').className));   // 素
   assert.strictEqual(sks[1].querySelector('.hb-cls')?.textContent, 'B');
-  // 光の層 (傾けたときのキラキラ) はカードのいちばん上に、シールと同じ数
+  // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る。カードのいちばん上に、シールと同じ数
+  assert.strictEqual(el.querySelector('.pcb-glow'), null);
+  PC.ensureGlow(el);
+  PC.ensureGlow(el);   // 2 回呼んでも 1 つ
+  assert.strictEqual(el.querySelectorAll('.pcb-glow').length, 1);
   assert.strictEqual(el.lastElementChild.className, 'pcb-glow');
   assert.strictEqual(el.querySelectorAll('.pcb-glow > .hb').length, 2);
 });

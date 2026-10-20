@@ -91,7 +91,8 @@ function makeDataFetch(env: Env, request: Request): (path: string) => Promise<Re
 function makePublicFetch(env: Env, request: Request): (path: string) => Promise<Response> {
   const data = makeDataFetch(env, request);
   const sitePrefix = String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '');
-  return (path) => path === '/data/char_emoji.json'
+  // プレビュー用の大会シールの判定 (data/stickers_preview/、preview のビルドだけが置く) もサイトの静的ファイル
+  return (path) => path === '/data/char_emoji.json' || path.startsWith('/data/stickers_preview/')
     ? env.ASSETS.fetch(new Request(new URL(sitePrefix + path, request.url).toString(), { method: 'GET' }))
     : data(path);
 }

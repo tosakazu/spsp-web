@@ -318,6 +318,7 @@ test('titleTextOf: 既定は null、「なし」は ""、設定なしは null', 
   assert.deepStrictEqual(titleTextOf('ja', { pre: 'default', post: null }), { pre: null, post: '' });
 });
 
+const PLAYER_NO_STICKER = { status: 200, body: { user_id: 4242, characters: [], tournaments: [{ event_id: 1700000 }] } };
 /** シールを持っている選手のデータ (ビルドの大会記録の sticker) */
 const STICKER_PLAYER = { status: 200, body: { user_id: 4242, characters: [], tournaments: [
   { event_id: 1700000, sticker: 'rainbow' }, { event_id: null, parent_event_id: 1724470, class_letter: 'B', sticker: 'gold' },
@@ -375,4 +376,18 @@ test('card_put: シールは持っているものだけ (選手のデータの s
   e2.nowMs = now;
   assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [{ e: '1700000:r', x: 1, y: 1, s: 30, r: 0 }] } } })).error.code, 'internal');
   assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [], text_top: true } } })).ok, true);
+});
+
+test('card_put: preview (stickersPreview) だけ、選手のデータにシールが無ければプレビュー用の判定で確かめる', async () => {
+  const e = env({ player: PLAYER_NO_STICKER });
+  const token = await loginToken(e);
+  e.nowMs = Date.parse('2026-10-22T00:00:00Z');
+  const put = (k) => post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [{ e: k, x: 1, y: 1, s: 30, r: 0 }] } } });
+  assert.strictEqual((await put('1700000:g')).error.code, 'sticker_not_owned', '本番はプレビュー用を見ない');
+  e.cfg.stickersPreview = true;
+  e.previewShard = { 4242: { 1700000: 'g', '1724470B': 'n' } };
+  e.nowMs += 60_000;
+  assert.strictEqual((await put('1700000:s')).ok, true);
+  e.nowMs += 60_000;
+  assert.strictEqual((await put('1700000:r')).error.code, 'sticker_not_owned');
 });
