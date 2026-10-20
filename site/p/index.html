@@ -471,11 +471,11 @@
 
     <!-- 選手カード (Figma「submit」を再現。中身は js/player_card.js が作る)。タップするとカードの上に編集 (本人のページだけ)・裏返す・保存が出る。
          裏面 (Figma「back」) は表の裏に重ねてあり、裏返すと回って見える -->
-    <!-- 描き終わるまでは読み込み中の表示 (.pc-loading)。最初は裏 (.flipped) で出して表へ裏返す (src/pages/p.js) -->
-    <div class="pcard-wrap pc-loading flipped" id="pcard-wrap">
+    <!-- 表が描き終わるまでは読み込み中の表示 (.pc-loading)。裏が描き終わったら裏返して見せ、表に戻す (src/pages/p.js) -->
+    <div class="pcard-wrap pc-loading" id="pcard-wrap">
       <div class="pcard-flip">
-        <div class="pcard" id="pcard" aria-hidden="true"></div>
-        <div class="pcard pcard-back" id="pcard-back"></div>
+        <div class="pcard" id="pcard"></div>
+        <div class="pcard pcard-back" id="pcard-back" aria-hidden="true"></div>
       </div>
       <div class="pc-loader" id="pc-loader" role="status"></div>
       <div class="pc-overlay" id="pc-overlay">

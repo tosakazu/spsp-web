@@ -89,7 +89,7 @@ function playerTourTag(t, kind) {
 }
 
 const params = new URLSearchParams(location.search);
-/** #back で来た (カード編集の裏で適用した): カードは裏のまま出す。ふだんは裏から表へ裏返して見せる */
+/** #back で来た (カード編集の裏で適用した): 裏を見せたら裏のまま止める。ふだんは裏を見せてから表に戻す */
 const CARD_KEEP_BACK = location.hash === '#back';
 // 選手の指定: ?d=<start.gg discriminator> が既定 (2026-09-14)。?uid=<uid> と #<uid> も引き続き通る。
 // ?d= は data/discriminators.json (js/links.js が読む) で uid に解決してから読み込む。
@@ -674,20 +674,31 @@ function render() {
   // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
   // 設定の読み込みは loadData で選手データと一緒に始めてある。待つのは 2 秒まで (遅ければ既定のカードを出し、届いたら描き直す)。
   // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
-  // カードは描き終わる (字体・シールの絵とホロ・強制ダークモードの画像) まで読み込み中の表示で隠し (.pc-loading)、
-  // 出したら裏から表へ裏返す (#back で来たときは裏のまま)。描き終わりが来なくても 10 秒で出す
+  // カードは表が描き終わる (字体・強制ダークモードの画像) まで読み込み中の表示で隠し (.pc-loading)、表を出す。
+  // 裏が描き終わったら (シールの絵とホロも) 裏返して裏を見せ、少ししたら表に戻す (#back で来たときは裏のまま)。
+  // それまでに自分で裏返していたら何もしない。描き終わりが来なくても 10 秒で表を出す
   const wrapEl = document.getElementById('pcard-wrap');
   let revealed = false;
+  let introDone = false;
+  const setFlipped = (/** @type {boolean} */ on) => {
+    if (!wrapEl) return;
+    wrapEl.classList.toggle('flipped', on);
+    document.getElementById('pcard')?.setAttribute('aria-hidden', String(on));
+    document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!on));
+  };
   const reveal = () => {
     if (revealed || !wrapEl) return;
     revealed = true;
     wrapEl.classList.remove('pc-loading');
-    if (CARD_KEEP_BACK) return;
+  };
+  const intro = () => {
+    if (introDone || !wrapEl) return;
+    introDone = true;
+    if (wrapEl.classList.contains('flipped')) return;   // もう自分で裏返している
     setTimeout(() => {
-      wrapEl.classList.remove('flipped');
-      document.getElementById('pcard')?.setAttribute('aria-hidden', 'false');
-      document.getElementById('pcard-back')?.setAttribute('aria-hidden', 'true');
-    }, 700);
+      setFlipped(true);
+      if (!CARD_KEEP_BACK) setTimeout(() => { if (wrapEl.classList.contains('flipped')) setFlipped(false); }, 500 + 1200);   // 裏返し 0.5 秒 + 見せる 1.2 秒
+    }, 300);
   };
   setTimeout(reveal, 10000);
   if (!card) reveal();
@@ -718,7 +729,8 @@ function render() {
       const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
       SPSPPlayerCard.render(card, model);
       if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
-      if (!revealed) Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : null]).then(reveal);
+      if (!revealed) SPSPPlayerCard.ready(card).then(reveal);
+      if (back && !introDone) Promise.all([SPSPPlayerCard.ready(card), SPSPPlayerCard.ready(back)]).then(() => { reveal(); intro(); });
     };
     // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) を待ってから描く (3 秒まで。遅れて届いたら描き直す)
     const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
