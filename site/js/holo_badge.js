@@ -143,16 +143,26 @@ export function isTransparent(src) {
   return p;
 }
 
-// 重ねるレイヤー (下から順) と重ね方。sq = 透過なし、sh = 透過あり、0 虹・1 金・2 銀。
-// Figma の sticker (98:2) のレイヤーとブレンドモードそのまま (REST API で取得。同じ画像を別のグループで使い回している所もそのまま)
-const LAYERS = {
+// 重ねるレイヤー (下から順) と重ね方 [名前, 重ね方, 大きさ (一辺に対する倍率、中央に置く。無ければ 1)]。
+// sq = 透過なし (四角・角丸)、zk = 透過なしの丸・六角形・ひし形 (Figma の 図形_虹/金/銀 153:288 など)、sh = 透過あり、0 虹・1 金・2 銀。
+// Figma の sticker (98:2) のレイヤーとブレンドモードそのまま (REST API で取得。同じ画像を別のグループで使い回している所もそのまま。
+// 図形の 1 番は虹・金とも四角の金の 1 番と同じ画像、銀の 1 番は四角の銀の 1 番と同じ画像なので、それを使う)
+const LAYERS = /** @type {Record<string, [string, string, number?][]>} */ ({
   sq0: [['sikaku_nizi_5', 'hard-light'], ['sikaku_nizi_4', 'color-burn'], ['sikaku_nizi_3', 'screen'], ['sikaku_nizi_2', 'color-dodge'], ['sikaku_nizi_1', 'overlay']],
   sq1: [['sikaku_kin_4', 'hard-light'], ['sikaku_kin_3', 'color-dodge'], ['sikaku_kin_2', 'plus-lighter'], ['sikaku_kin_1', 'overlay']],
   sq2: [['sikaku_gin_4', 'normal'], ['sikaku_gin_3', 'hard-light'], ['sikaku_gin_2', 'overlay'], ['sikaku_gin_1', 'overlay']],
   sh0: [['sikaku_nizi_5', 'hard-light'], ['sikaku_nizi_4', 'color-burn'], ['touka_nizi_3', 'screen'], ['touka_nizi_2', 'color-dodge'], ['touka_nizi_1', 'overlay']],
   sh1: [['touka_kin_4', 'plus-lighter'], ['touka_kin_3', 'color-burn'], ['touka_kin_2', 'plus-lighter'], ['sikaku_kin_1', 'overlay']],
   sh2: [['sikaku_gin_2', 'hard-light'], ['sikaku_gin_2', 'overlay'], ['sikaku_gin_3', 'plus-lighter'], ['sikaku_gin_1', 'overlay']],
-};
+  // 虹の 2 番 (ラメ) は Figma で 968px (一辺 740 の外へはみ出して中央に置き、形で切る)
+  zk0: [['zukei_nizi_5', 'plus-lighter'], ['zukei_nizi_4', 'overlay'], ['zukei_nizi_3', 'normal'], ['zukei_nizi_2', 'color-dodge', 968 / 740], ['sikaku_kin_1', 'overlay']],
+  zk1: [['zukei_kin_4', 'hard-light'], ['zukei_kin_3', 'color-dodge'], ['zukei_kin_2', 'plus-lighter'], ['sikaku_kin_1', 'overlay']],
+  zk2: [['zukei_gin_4', 'normal'], ['zukei_gin_3', 'hard-light'], ['zukei_gin_2', 'overlay'], ['sikaku_gin_1', 'overlay']],
+});
+/** 図形用のホロを使う形 */
+const ZK_SHAPES = new Set(['circle', 'hex', 'diamond']);
+/** 重ねるレイヤー @param {boolean} transparent @param {number} v @param {string} shape */
+const layersFor = (transparent, v, shape) => LAYERS[`${transparent ? 'sh' : ZK_SHAPES.has(shape) ? 'zk' : 'sq'}${v}`] || [];
 
 /** @param {HTMLElement} el @param {BadgeOpts} opts */
 export function renderBadge(el, opts) {
@@ -171,7 +181,7 @@ export function renderBadge(el, opts) {
   el.style.setProperty('--hb-cls-dy', String(pl.dy));
   el.style.setProperty('--hb-cls-k', String(pl.k));
   // 層: 絵 / (透過なしならクラスの文字) / ホロのレイヤー (下から) / ポインタを乗せたときの光 / (透過ありならクラスの文字)
-  const layers = LAYERS[`${opts.transparent ? 'sh' : 'sq'}${v}`] || [];
+  const layers = layersFor(!!opts.transparent, v, shape);
   const impl = opts.impl || 'img';
   const kind = (/** @type {string} */ _name) => (impl === 'css' ? 'c' : impl === 'old' ? 'o' : 'l');
   // クラスの文字: 透過なしは絵の直上 (ホロの下)、透過ありはホロの上 (形で切り抜かない)
@@ -179,7 +189,7 @@ export function renderBadge(el, opts) {
   const cls = letter ? `<div class="hb-cls">${letter}</div>` : '';
   // ポインタの光 (sheen / glare) は .hb の直下 (キャンバスに差し替えたあとも、その上で重なるように)。透過ありは光も形で切り抜く
   el.innerHTML = '<div class="hb-in"><div class="hb-art"></div>' + (opts.transparent ? '' : cls) +
-    layers.map(([name, mode]) => `<div class="hb-${kind(name)} hb-${kind(name)}-${name}" data-mode="${mode}"></div>`).join('') +
+    layers.map(([name, mode, sc]) => `<div class="hb-${kind(name)} hb-${kind(name)}-${name}" data-mode="${mode}"${sc ? ` style="inset:${-(sc - 1) / 2 * 100}%"` : ''}></div>`).join('') +
     '</div>' + (opts.transparent ? cls : '') + '<div class="hb-sheen"></div><div class="hb-glare"></div>';
   for (const d of el.querySelectorAll('.hb-l, .hb-c, .hb-o')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
   const fl = opts.flatten || 'auto';
@@ -288,7 +298,7 @@ function drawLetter(ctx, W, letter, shape, pl = { dx: 0, dy: 0, k: 1 }) {
 }
 
 /** 重ねた見た目をキャンバスに 1 枚に描いて、上に置く (下の重ねた要素は隠す)
- * @param {HTMLElement} el @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }} o */
+ * @param {HTMLElement} el @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }} o */
 async function flattenBadge(el, o) {
   // 幅は回転・傾きを含まない大きさ (offsetWidth)。祖先を transform で縮めている所では getBoundingClientRect の方が実際の大きさ
   const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width) || 160;
@@ -321,17 +331,17 @@ function shapePath(ctx, W, shape) {
 }
 
 /** バッジの絵とホロの素材を読んでおく (カードの準備完了を待つとき用)。透過かどうかも確かめる。全部読めたら true
- * @param {string} src @param {number} variant @returns {Promise<boolean>} */
-export async function preloadBadge(src, variant) {
+ * @param {string} src @param {number} variant @param {string} [shape] 形 (丸・六角形・ひし形はホロの素材が違う) @returns {Promise<boolean>} */
+export async function preloadBadge(src, variant, shape = 'square') {
   const tr = await isTransparent(src);
   const v = Math.max(0, Math.min(3, Number(variant) || 0));
-  const layers = LAYERS[`${tr ? 'sh' : 'sq'}${v}`] || [];
+  const layers = layersFor(tr, v, shape);
   const got = await Promise.all([loadImage(src, true).catch(() => loadImage(src)).catch(() => null), ...layers.map(([n]) => layerImage(n, 'img').catch(() => null))]);
   return got.every(Boolean);
 }
 
 /** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)
- * @param {{ src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
+ * @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
  * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
 async function drawBadge(o, W) {
   const [icon, ...imgs] = await Promise.all([loadImage(o.src, true).catch(() => loadImage(o.src)), ...o.layers.map(([n]) => layerImage(n, o.impl))]);
@@ -349,9 +359,9 @@ async function drawBadge(o, W) {
   const dw = iw * s, dh = ih * s, dx = (W - dw) / 2, dy = (W - dh) / 2;
   ctx.drawImage(icon, dx, dy, dw, dh);
   if (o.letter && !o.transparent) drawLetter(ctx, W, o.letter, false, o.pl);
-  o.layers.forEach(([, mode], i) => {
+  o.layers.forEach(([, mode, sc = 1], i) => {
     ctx.globalCompositeOperation = CANVAS_OP[mode] || 'source-over';
-    ctx.drawImage(imgs[i], 0, 0, W, W);
+    ctx.drawImage(imgs[i], -(sc - 1) / 2 * W, -(sc - 1) / 2 * W, W * sc, W * sc);
   });
   if (o.transparent) {
     // 形の外を消す (CSS の mask と同じ)
@@ -389,10 +399,10 @@ export function reflatten(el) {
 }
 
 /** 組み立てたバッジの描き方 (renderBadge のたびに。badgeToCanvas 用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
 const specOf = new WeakMap();
 /** キャンバスに差し替えたときの描き方 (描き直す用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: string[][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
 const flatOpts = new WeakMap();
 /** 中身を捨てられたバッジ (表に戻ったら描き直す) */
 /** @type {Set<HTMLElement>} */

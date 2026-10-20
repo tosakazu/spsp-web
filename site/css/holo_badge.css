@@ -113,6 +113,17 @@
 .hb-l-touka_nizi_3 { background-image: url("../img/holo/l740/touka_nizi_3.f46661ea.webp"); background-image: image-set(url("../img/holo/l/touka_nizi_3.be515608.avif") type("image/avif"), url("../img/holo/l740/touka_nizi_3.f46661ea.webp") type("image/webp")); }
 .hb-l-sikaku_nizi_2 { background-image: url("../img/holo/l740/sikaku_nizi_2.9ef61ab7.webp"); }
 .hb-l-touka_nizi_2 { background-image: url("../img/holo/l740/touka_nizi_2.a8da273f.webp"); }
+/* 丸・六角形・ひし形のホロ (Figma の 図形_虹/金/銀 153:288 など、2026-10-21)。ラメ (虹の 2 番) は WebP そのまま */
+.hb-l-zukei_gin_2 { background-image: url("../img/holo/l740/zukei_gin_2.5b17effd.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_2.6bb9a1d1.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_2.5b17effd.webp") type("image/webp")); }
+.hb-l-zukei_gin_3 { background-image: url("../img/holo/l740/zukei_gin_3.5a4f631a.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_3.eea23555.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_3.5a4f631a.webp") type("image/webp")); }
+.hb-l-zukei_gin_4 { background-image: url("../img/holo/l740/zukei_gin_4.44095fa6.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_4.8a7c992b.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_4.44095fa6.webp") type("image/webp")); }
+.hb-l-zukei_kin_2 { background-image: url("../img/holo/l740/zukei_kin_2.9a45c066.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_2.88553b18.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_2.9a45c066.webp") type("image/webp")); }
+.hb-l-zukei_kin_3 { background-image: url("../img/holo/l740/zukei_kin_3.f9371640.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_3.f6a48bd0.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_3.f9371640.webp") type("image/webp")); }
+.hb-l-zukei_kin_4 { background-image: url("../img/holo/l740/zukei_kin_4.1f9f7d17.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_4.e53101d8.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_4.1f9f7d17.webp") type("image/webp")); }
+.hb-l-zukei_nizi_3 { background-image: url("../img/holo/l740/zukei_nizi_3.18ada745.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_3.bb55776a.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_3.18ada745.webp") type("image/webp")); }
+.hb-l-zukei_nizi_4 { background-image: url("../img/holo/l740/zukei_nizi_4.24183693.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_4.7b5f3a11.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_4.24183693.webp") type("image/webp")); }
+.hb-l-zukei_nizi_5 { background-image: url("../img/holo/l740/zukei_nizi_5.04ce102e.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_5.52657e66.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_5.04ce102e.webp") type("image/webp")); }
+.hb-l-zukei_nizi_2 { background-image: url("../img/holo/l740/zukei_nizi_2.9a8cc451.webp"); }
 
 /* レイヤーの画像 (前の画像版) */
 .hb-o-sikaku_gin_1 { background-image: url("../img/holo/l740/sikaku_gin_1.86fbb127.webp"); }
@@ -133,6 +144,16 @@
 .hb-o-touka_kin_4 { background-image: url("../img/holo/l740/touka_kin_4.97471ff0.webp"); }
 .hb-o-touka_nizi_1 { background-image: url("../img/holo/l740/touka_nizi_1.f7a50bdd.webp"); }
 .hb-o-touka_nizi_2 { background-image: url("../img/holo/l740/touka_nizi_2.a8da273f.webp"); }
+.hb-o-zukei_gin_2 { background-image: url("../img/holo/l740/zukei_gin_2.5b17effd.webp"); }
+.hb-o-zukei_gin_3 { background-image: url("../img/holo/l740/zukei_gin_3.5a4f631a.webp"); }
+.hb-o-zukei_gin_4 { background-image: url("../img/holo/l740/zukei_gin_4.44095fa6.webp"); }
+.hb-o-zukei_kin_2 { background-image: url("../img/holo/l740/zukei_kin_2.9a45c066.webp"); }
+.hb-o-zukei_kin_3 { background-image: url("../img/holo/l740/zukei_kin_3.f9371640.webp"); }
+.hb-o-zukei_kin_4 { background-image: url("../img/holo/l740/zukei_kin_4.1f9f7d17.webp"); }
+.hb-o-zukei_nizi_3 { background-image: url("../img/holo/l740/zukei_nizi_3.18ada745.webp"); }
+.hb-o-zukei_nizi_4 { background-image: url("../img/holo/l740/zukei_nizi_4.24183693.webp"); }
+.hb-o-zukei_nizi_5 { background-image: url("../img/holo/l740/zukei_nizi_5.04ce102e.webp"); }
+.hb-o-zukei_nizi_2 { background-image: url("../img/holo/l740/zukei_nizi_2.9a8cc451.webp"); }
 .hb-o-touka_nizi_3 { background-image: url("../img/holo/l740/touka_nizi_3.f46661ea.webp"); }
 
 /* CSS 版のレイヤー (画像なし) */

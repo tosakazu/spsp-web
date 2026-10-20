@@ -1,5 +1,5 @@
 // tests/frontend/card_back_render.test.cjs — カードの裏面にシールを描く (js/player_card.js renderBack): 置く場所・重なり順 (名前を前に)・
-// 縁取り・アイコンの無いシールは出さない・光の層・持っていないシールは出さない (player_card_model.js buildCardModel)
+// 縁取り・アイコンの無いシールは出さない・形ごとのホロ・光の層・持っていないシールは出さない (player_card_model.js buildCardModel)
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
@@ -49,6 +49,12 @@ test('シールを置く: 場所・大きさ・回転、アイコンの無いシ
   const hb = sks[0].querySelector('.hb');
   assert.ok(hb && /hb-k-circle/.test(hb.className) && /hb-v0/.test(hb.className), hb && hb.className);
   assert.strictEqual(hb.style.getPropertyValue('--hb-zoom'), String(1 / 0.6));
+  // 丸・六角形・ひし形は図形用のホロ (Figma 図形_虹)。虹のラメ (2 番) は 968/740 の大きさで中央に。四角は四角のホロ
+  assert.ok(hb.querySelector('.hb-l-zukei_nizi_5') && !hb.querySelector('.hb-l-sikaku_nizi_5'));
+  const lame = /** @type {HTMLElement} */ (hb.querySelector('.hb-l-zukei_nizi_2'));
+  assert.strictEqual(lame.style.inset, `${-(968 / 740 - 1) / 2 * 100}%`);
+  assert.strictEqual(lame.style.mixBlendMode, 'color-dodge');
+  assert.ok(hb.querySelector('.hb-l-sikaku_kin_1'));   // 図形の 1 番は四角の金の 1 番と同じ画像
   assert.ok(/hb-v3/.test(sks[1].querySelector('.hb').className));   // 素
   assert.strictEqual(sks[1].querySelector('.hb-cls')?.textContent, 'B');
   // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る。カードのいちばん上に、シールと同じ数

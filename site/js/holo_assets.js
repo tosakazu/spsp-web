@@ -71,10 +71,49 @@ export const HOLO_FILES = {
     "l": "l/touka_nizi_3.be515608.avif",
     "l740": "l740/touka_nizi_3.f46661ea.webp"
   },
+  "zukei_gin_2": {
+    "l": "l/zukei_gin_2.6bb9a1d1.avif",
+    "l740": "l740/zukei_gin_2.5b17effd.webp"
+  },
+  "zukei_gin_3": {
+    "l": "l/zukei_gin_3.eea23555.avif",
+    "l740": "l740/zukei_gin_3.5a4f631a.webp"
+  },
+  "zukei_gin_4": {
+    "l": "l/zukei_gin_4.8a7c992b.avif",
+    "l740": "l740/zukei_gin_4.44095fa6.webp"
+  },
+  "zukei_kin_2": {
+    "l": "l/zukei_kin_2.88553b18.avif",
+    "l740": "l740/zukei_kin_2.9a45c066.webp"
+  },
+  "zukei_kin_3": {
+    "l": "l/zukei_kin_3.f6a48bd0.avif",
+    "l740": "l740/zukei_kin_3.f9371640.webp"
+  },
+  "zukei_kin_4": {
+    "l": "l/zukei_kin_4.e53101d8.avif",
+    "l740": "l740/zukei_kin_4.1f9f7d17.webp"
+  },
+  "zukei_nizi_3": {
+    "l": "l/zukei_nizi_3.bb55776a.avif",
+    "l740": "l740/zukei_nizi_3.18ada745.webp"
+  },
+  "zukei_nizi_4": {
+    "l": "l/zukei_nizi_4.7b5f3a11.avif",
+    "l740": "l740/zukei_nizi_4.24183693.webp"
+  },
+  "zukei_nizi_5": {
+    "l": "l/zukei_nizi_5.52657e66.avif",
+    "l740": "l740/zukei_nizi_5.04ce102e.webp"
+  },
   "sikaku_nizi_2": {
     "l740": "l740/sikaku_nizi_2.9ef61ab7.webp"
   },
   "touka_nizi_2": {
     "l740": "l740/touka_nizi_2.a8da273f.webp"
+  },
+  "zukei_nizi_2": {
+    "l740": "l740/zukei_nizi_2.9a8cc451.webp"
   }
 };
