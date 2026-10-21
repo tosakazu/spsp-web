@@ -159,6 +159,14 @@
 /* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
+/* 裏の準備ができて裏返せるようになるまで (.pc-wait、src/pages/p.js) は、カードのすぐ下の右端 (下の欄との間の余白) に小さなグルグル。
+   カードの中は右下まで詰まっているので外に出す。読み込み中の表示 (.pc-loading) の間は出さない */
+.pcard-wrap.pc-wait:not(.pc-loading)::after {
+  content: ''; position: absolute; right: 2px; bottom: -11px; width: 10px; height: 10px; box-sizing: border-box;
+  border: 2px solid #e5e7eb; border-top-color: #9ca3af; border-radius: 50%; animation: pc-spin .8s linear infinite; pointer-events: none;
+}
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pcard-wrap.pc-wait:not(.pc-loading)::after { animation-duration: 2s; } }
 /* カードの外の影 (浮いて見えるように)。プレイヤーページ・カード編集のプレビューと裏の台。表と裏の面それぞれに付く (裏返しで一緒に回る)。
    傾けている間は、傾きと反対へ少しずらす (--card-mx / --card-my、src/pages/p.js) */
 .pcard-wrap .pcard, .ce-preview .pcard, .bz-stage > .pcard:not(.bz-text) {
