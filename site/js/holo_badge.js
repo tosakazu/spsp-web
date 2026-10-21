@@ -128,10 +128,11 @@ export function isTransparent(src) {
           for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
             const a = d[(y * N + x) * 4 + 3];
             const onEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
-            if (a < 200) clear++;
-            if (onEdge) { edge++; if (a < 200) edgeClear++; }
+            if (a < 64) clear++;
+            if (onEdge) { edge++; if (a < 64) edgeClear++; }
           }
-          // 端の 3 割以上か全体の 1 割以上が透明なら「透過あり」
+          // 端の 3 割以上か全体の 1 割以上が透明 (ほぼ透明 = 不透明度 64 未満。縁に細い透明の枠があるだけの四角い絵は、縮めると
+          // 端が 200 前後の半透明になり、ブラウザの縮め方しだいで透過扱いになっていた。2026-10-21) なら「透過あり」
           resolve(edgeClear / edge > 0.3 || clear / (N * N) > 0.1);
         } catch (e) { resolve(false); }
       };
