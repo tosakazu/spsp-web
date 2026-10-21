@@ -253,9 +253,8 @@ export async function mountBackEditor(o) {
   const els = new Map();
   /** シールを描き直す関数 (形・切り取りを変えたとき) @type {Map<string, () => void>} */
   const paints = new Map();
-  // ホロの素材は最初に全部読んでおく (形・種類を変えても取りに行かない)。読み終わったら貼ってあるシールを描き直す
-  // (読み終わる前に描いた丸のシールは、後から届いた素材が出ないままになることがある)
-  preloadAllHolo().then(() => { for (const f of paints.values()) f(); });
+  // ホロの素材は最初に全部読んでおく (形・種類を変えても取りに行かない)
+  preloadAllHolo();
   /** 透過ありのアイコンのシール (形・切り取りは選べない) @type {Set<string>} */
   const trans = new Set();
   // 強制ダークモード対策でキャンバスに描いたシール (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、

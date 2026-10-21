@@ -362,6 +362,29 @@ export function preloadAllHolo() {
  * @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
  * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
 async function drawBadge(o, W) {
+  // 同じ絵 (同じシール・形・大きさ) は描いたものを写すだけにする (GPU を使わずに描くので 1 枚が重い。カードの裏面は変えるたびに作り直される)
+  const key = JSON.stringify([o.src, o.layers, o.transparent, o.impl, o.letter, o.crop, o.pl, o.shape || '', W]);
+  let p = drawn.get(key);
+  if (p) { drawn.delete(key); drawn.set(key, p); }   // 最近使った順
+  else {
+    p = drawBadgeNow(o, W);
+    drawn.set(key, p);
+    p.catch(() => drawn.delete(key));
+    while (drawn.size > DRAWN_MAX) drawn.delete(/** @type {string} */ (drawn.keys().next().value));
+  }
+  const src = await p;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = W;
+  /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d')).drawImage(src, 0, 0);
+  return cv;
+}
+/** 描いた絵 (key → キャンバス)。古いものから捨てる (740px で 1 枚 2MB ほど) */
+/** @type {Map<string, Promise<HTMLCanvasElement>>} */
+const drawn = new Map();
+const DRAWN_MAX = 32;
+
+/** @param {Parameters<typeof drawBadge>[0]} o @param {number} W @returns {Promise<HTMLCanvasElement>} */
+async function drawBadgeNow(o, W) {
   const [icon, ...imgs] = await Promise.all([loadImage(o.src, true).catch(() => loadImage(o.src)), ...o.layers.map(([n]) => layerImage(n, o.impl))]);
   if (o.letter && document.fonts) {
     try { await document.fonts.load(`italic 800 ${W / 3}px "Zalando Sans Expanded"`, o.letter); } catch (e) { /* 別の字体で描く */ }
