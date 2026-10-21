@@ -108,6 +108,25 @@ function corsUrl(src) {
   return src + (src.includes('?') ? '&' : '?') + 'cors=1';
 }
 
+/** 縮めた絵の透明な所の割合。何も描けなかった (全部透明) ときは null
+ * @param {HTMLImageElement} img @returns {{ edge: number, all: number } | null} */
+function clearRatio(img) {
+  const N = 32;
+  const c = document.createElement('canvas');
+  c.width = N; c.height = N;
+  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+  ctx.drawImage(img, 0, 0, N, N);
+  const d = ctx.getImageData(0, 0, N, N).data;
+  let clear = 0, edge = 0, edgeClear = 0;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const a = d[(y * N + x) * 4 + 3];
+    const onEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
+    if (a < 64) clear++;
+    if (onEdge) { edge++; if (a < 64) edgeClear++; }
+  }
+  return clear === N * N ? null : { edge: edgeClear / edge, all: clear / (N * N) };
+}
+
 /** @param {string} src @returns {Promise<boolean>} */
 export function isTransparent(src) {
   if (/\.jpe?g($|\?)/i.test(src)) return Promise.resolve(false);
@@ -116,27 +135,21 @@ export function isTransparent(src) {
     p = new Promise(resolve => {
       const img = new Image();
       img.crossOrigin = 'anonymous';   // data.spsp.games は CORS *。読めないと getImageData が例外になる
-      img.onload = () => {
+      img.onload = async () => {
+        // 絵にほどき終わってから縮める: 読めた直後に描くと、ブラウザ (iPhone の Safari など) によっては何も描かれず
+        // 全部透明 = 「透過あり」になり、透過でないシールの形を選べなくなっていた (読み込みの遅さしだい。2026-10-21)
+        try { if (img.decode) await img.decode(); } catch (e) { /* 描いてみる */ }
         try {
-          const N = 32;
-          const c = document.createElement('canvas');
-          c.width = N; c.height = N;
-          const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-          ctx.drawImage(img, 0, 0, N, N);
-          const d = ctx.getImageData(0, 0, N, N).data;
-          let clear = 0, edge = 0, edgeClear = 0;
-          for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-            const a = d[(y * N + x) * 4 + 3];
-            const onEdge = x === 0 || y === 0 || x === N - 1 || y === N - 1;
-            if (a < 64) clear++;
-            if (onEdge) { edge++; if (a < 64) edgeClear++; }
-          }
+          let r = clearRatio(img);
+          if (!r) { await new Promise(res => setTimeout(res, 400)); r = clearRatio(img); }
+          // それでも何も描けなければ分からない: 透過なしとして、次に聞かれたときに調べ直す
+          if (!r) { cache.delete(src); resolve(false); return; }
           // 端の 3 割以上か全体の 1 割以上が透明 (ほぼ透明 = 不透明度 64 未満。縁に細い透明の枠があるだけの四角い絵は、縮めると
           // 端が 200 前後の半透明になり、ブラウザの縮め方しだいで透過扱いになっていた。2026-10-21) なら「透過あり」
-          resolve(edgeClear / edge > 0.3 || clear / (N * N) > 0.1);
+          resolve(r.edge > 0.3 || r.all > 0.1);
         } catch (e) { resolve(false); }
       };
-      img.onerror = () => resolve(false);
+      img.onerror = () => { cache.delete(src); resolve(false); };
       img.src = corsUrl(src);
     });
     cache.set(src, p);
