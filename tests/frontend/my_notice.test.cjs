@@ -75,3 +75,30 @@ test('人ごとに別', () => {
   assert.strictEqual(kinds(N.items(1)), 'rank:50->45');
   assert.strictEqual(kinds(N.items(2)), '');
 });
+
+test('二つ名の行: 「N 件入手 ▼」を押すと一覧が開き、もう一度押すと閉じる (一覧は初めて開いたときだけ作る)', async () => {
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<!doctype html><div id="b"></div>', { runScripts: 'outside-only', url: 'https://example.test/jp/' });
+  const w = dom.window;
+  w.SPSPI18n = { t: (k, p) => k + JSON.stringify(p || {}) };
+  w.eval(built('js/my_notice.js'));
+  const N = w.SpspMyNotice;
+  const el = w.document.getElementById('b');
+  el.innerHTML = N.itemHTML({ kind: 'titles', n: 2 });
+  const demo = [{ part: 'pre', text: '択を<拒む>' }, { part: 'both', text: 'カメラに抜かれた' }];
+  N.bindTitles(el, 1, 'p/edit.html?uid=1', demo);
+  const btn = el.querySelector('.my-notice-titles-toggle');
+  const box = el.querySelector('.my-notice-titles-list');
+  assert.ok(btn.textContent.includes('▼'));
+  assert.strictEqual(box.hidden, true);
+  btn.click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.strictEqual(btn.getAttribute('aria-expanded'), 'true');
+  assert.strictEqual(box.hidden, false);
+  const lis = [...box.querySelectorAll('li')].map((li) => li.textContent);
+  assert.deepStrictEqual(lis, ['択を<拒む> card_edit.title_pre{}', 'カメラに抜かれた']);   // 名前はエスケープして入れる、前半・後半の両方に使えるものは印なし
+  assert.strictEqual(box.querySelector('a.my-notice-titles-edit').getAttribute('href'), 'p/edit.html?uid=1');
+  btn.click();
+  assert.strictEqual(box.hidden, true);
+  assert.strictEqual(btn.getAttribute('aria-expanded'), 'false');
+});

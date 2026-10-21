@@ -180,10 +180,10 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
           </span>
         </button>
         <div class="nav-news-panel" role="menu">
-          <a class="news-section news-section-me" id="__nav_news_me_section" href="${prefix}${pageHref('me.html')}" style="display:none">
-            <div class="news-section-title">${t('nav.news.me')}</div>
+          <div class="news-section news-section-me" id="__nav_news_me_section" style="display:none">
+            <a class="news-section-title" href="${prefix}${pageHref('me.html')}">${t('nav.news.me')}</a>
             <div class="news-section-body" id="__nav_news_me"></div>
-          </a>
+          </div>
           <a class="news-section" id="__nav_news_today_section" href="${prefix}news/?filter=auto">
             <div class="news-section-title">${t('nav.news.auto')}</div>
             <div class="news-section-body" id="__nav_news_today">${t('nav.news.loading')}</div>
@@ -197,7 +197,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       </div>
       <div class="nav-dropdown nav-user${cur === 'vote' ? ' has-current' : ''}">
         <button type="button" class="nav-trigger nav-user-trigger${cur === 'vote' ? ' current' : ''}" aria-haspopup="true" aria-expanded="false" aria-label="${t('nav.user_aria')}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="nav-user-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
         </button>
         <div class="nav-menu" role="menu" id="__nav_user_menu">
           <a href="${assetPrefix}${pageHref('vote.html')}"${cur === 'vote' ? ' class="current"' : ''} role="menuitem">${t('nav.user.vote')}</a>
@@ -257,10 +257,12 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .nav-news .nav-news-trigger { color:#6b7280; display:inline-flex; align-items:center;
                                      padding:4px 8px; }
       .nav-news.has-current .nav-news-trigger { color:#dc2626; background:#f3f4f6; }
-      .nav-news-bell { position:relative; display:inline-flex; line-height:0; }
-      .nav-news-bell.has-unread::before, .nav-news-bell.has-me::before { content:''; position:absolute; top:-2px; left:-2px;
-                                            width:7px; height:7px; background:#fca5a5;
-                                            border-radius:50%; }
+      .nav-news-bell, .nav-user-icon { position:relative; display:inline-flex; line-height:0; }
+      /* お知らせの印: ベル (ニュースの未読・本人へのお知らせ) と人型 (新しい二つ名) で同じ位置・色 (アイコンの右上) */
+      .nav-news-bell.has-unread::before, .nav-news-bell.has-me::before,
+      .nav-user-trigger.has-new .nav-user-icon::before { content:''; position:absolute; top:-2px; right:-3px;
+                                            width:7px; height:7px; background:#dc2626;
+                                            border-radius:50%; box-shadow:0 0 0 2px #fff; }
       /* User dropdown (= 選手本人が使う操作をまとめる). ベルと同じ見た目に揃える. */
       .nav-user .nav-user-trigger { color:#6b7280; display:inline-flex; align-items:center;
                                     line-height:0; padding:4px 8px; }
@@ -284,8 +286,6 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
                             max-width:calc(100vw - 24px); }
       /* アカウントメニュー: 項目はほかのメニューのリンクと同じ見た目 (色も同じ灰色)。
          名前は押せないので見出しとして: 濃い字・太字、下に細い線 */
-      .nav-user-trigger { position:relative; }
-      .nav-user-trigger.has-new::after { content:""; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#dc2626; box-shadow:0 0 0 2px #fff; }
       .nav-user .nav-menu .nav-user-new { color:#dc2626; font-weight:600; }
       .nav-user-name { padding:7px 14px 6px; margin-bottom:4px; font-size:13px; font-weight:600; color:#111827;
                        border-bottom:1px solid #f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -303,7 +303,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       a.news-section { display:block; padding:8px 14px; text-decoration:none;
                        color:inherit; transition:background-color .12s; border-radius:0; }
       a.news-section:hover { background:#fef2f2; }
-      a.news-section + a.news-section { border-top:1px solid #f3f4f6; }
+      .news-section + .news-section { border-top:1px solid #f3f4f6; }
       .news-section-title { font-size:11px; color:#6b7280; font-weight:600;
                              margin-bottom:6px; letter-spacing:0.05em; }
       a.news-section:hover .news-section-title { color:#dc2626; }
@@ -312,8 +312,12 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .news-section-body .news-item .date { color:#9ca3af; font-size:10px;
                                               font-family:ui-monospace,monospace; margin-right:6px; }
       .news-section-body .empty { color:#9ca3af; font-size:11px; }
-      a.news-section-me .news-section-title { color:#047857; }
-      a.news-section-me:hover { background:#ecfdf5; }
+      /* 本人へのお知らせ: 見出しはマイページへのリンク、順位・Lv の行もマイページへ。二つ名の行は押すと一覧が開く (js/my_notice.js) */
+      .news-section-me { padding:8px 14px; }
+      .news-section-me a.news-section-title { display:block; color:#047857; text-decoration:none; }
+      .news-section-me a.news-section-title:hover { text-decoration:underline; }
+      .news-section-me a.news-item { display:block; color:inherit; text-decoration:none; }
+      .news-section-me a.news-item:hover { color:#047857; text-decoration:underline; }
       /* 本人へのお知らせの帯 (トップ・自分のプレイヤーページ。トップの速報・通知の帯と同じ形、js/my_notice.js) */
       .my-notice { display:flex; align-items:center; gap:8px; padding:4px 0 4px 10px; border-radius:6px;
                    background:#ecfdf5; border:1px solid #d1fae5; color:#065f46; font-size:12px; line-height:1.4; }
@@ -325,6 +329,19 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .my-notice .my-notice-item { color:#065f46; }
       .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
+      /* 二つ名を N 件入手 ▼ (帯とベルで共通)。押すと新しく入手した二つ名が下に並ぶ */
+      .my-notice-titles-toggle { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-align:left; }
+      .my-notice-titles-toggle:hover { text-decoration:underline; }
+      .my-notice-titles-toggle .caret { display:inline-block; margin-left:4px; font-size:9px; opacity:.8; transition:transform .12s; }
+      .my-notice-titles-toggle[aria-expanded="true"] .caret { transform:rotate(180deg); }
+      .my-notice-titles-list { display:block; margin:4px 0 2px; }
+      .my-notice-titles-list[hidden] { display:none; }
+      .my-notice-titles-list ul { margin:0; padding:0 0 0 1.2em; }
+      .my-notice-titles-list li { padding:1px 0; }
+      .my-notice-titles-list .part { font-size:10px; color:#6b7280; }
+      .my-notice-titles-list .empty { color:#9ca3af; }
+      .my-notice-titles-edit { display:inline-block; margin-top:3px; font-size:11px; color:#047857; }
+      .my-notice .my-notice-item.titles:has([aria-expanded="true"]) { flex-basis:100%; }   /* 開いたら一覧の分だけ 1 行使う */
       /* × は速報・通知の帯 (index.html .news-ticker .ticker-close) と同じ位置・形 (右端 44px の真ん中、× を中心にした丸い背景) */
       .my-notice .ticker-close { flex:none; align-self:stretch; position:relative; z-index:1; width:44px; min-height:26px; margin:-4px 0;
                                  border:none; background:transparent; color:#059669; padding:0; cursor:pointer;
@@ -408,13 +425,13 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
     if (!sess) {
       renderMyNotice(null);
-      trigger.innerHTML = USER_SVG;
+      trigger.innerHTML = `<span class="nav-user-icon">${USER_SVG}</span>`;
       menu.innerHTML = vote + (SpspLogin && SpspLogin.apiAvailable() ? `<button type="button" class="nav-login" role="menuitem">${t('nav.user.login')}</button>` : '');   // ログインはログアウトと同じく一番下
       return;
     }
     const name = sess.user.gamerTag || sess.user.slug || String(sess.user.id);
     const uid = encodeURIComponent(String(sess.user.id));
-    trigger.innerHTML = USER_SVG_IN;
+    trigger.innerHTML = `<span class="nav-user-icon">${USER_SVG_IN}</span>`;
     menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
       `<a href="${prefix}${pageHref('me.html')}" role="menuitem">${t('nav.user.mypage')}</a>` +   // 自分のプレイヤーページへの共通リンク
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
@@ -449,7 +466,11 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     myNoticeArgs = myId ? { uid: myId, n: n || 0 } : null;
     const list = (SpspMyNotice && myId) ? SpspMyNotice.items(myId, n) : [];
     if (sec && body) {
-      body.innerHTML = list.map(it => `<div class="news-item">${SpspMyNotice.text(it)}</div>`).join('');
+      const me = `${prefix}${pageHref('me.html')}`;
+      body.innerHTML = list.map(it => it.kind === 'titles'
+        ? `<div class="news-item">${SpspMyNotice.itemHTML(it)}</div>`
+        : `<a class="news-item" href="${me}">${SpspMyNotice.text(it)}</a>`).join('');
+      if (myId) SpspMyNotice.bindTitles(body, myId, `${prefix}${pageHref('p/edit.html')}?uid=${encodeURIComponent(myId)}`);
       sec.style.display = list.length ? '' : 'none';
     }
     if (bell) bell.classList.toggle('has-me', list.length > 0);
