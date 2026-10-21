@@ -2224,7 +2224,8 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
     let raf = 0;
     const applyTilt = () => {
       raf = 0;
-      if (!pending) return;
+      // 指を離したあと (戻したあと) に描き換え待ちの傾きが届いても置かない (置くと傾いたまま戻らなかった)
+      if (!pending || !g) { pending = null; return; }
       const { x: cx, y: cy } = pending;
       pending = null;
       const r = wrap.getBoundingClientRect();
