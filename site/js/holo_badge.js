@@ -392,11 +392,9 @@ async function drawBadgeNow(o, W) {
   }
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = W;
-  // 丸と角丸 (曲線で切る形) は GPU を使わずに描く (willReadFrequently)。形で切る (clip) のも最後にする: Android の Chrome で、丸く切った中に
-  // ホロを重ね合わせるとホロが描かれないことがあった (CSS でもキャンバスでも、別の形から丸にしたときに。2026-10-21)。
-  // GPU を使わないと 1 枚が重いので、直線だけの形 (四角・六角形・ひし形) は GPU のまま
-  const cpu = o.shape === 'circle' || o.shape === 'round';
-  const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d', cpu ? { willReadFrequently: true } : undefined));
+  // 形で切る (clip) のは重ね終わってから: Android の Chrome で、丸く切った中にホロを重ね合わせるとホロが描かれないことがあった
+  // (別の形から丸にしたときに。2026-10-21)。GPU を使わない描き方 (willReadFrequently) は iPhone の Safari で色が変わるので、どの形も使わない
+  const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
   const clip = !o.transparent && o.shape && o.shape !== 'square';
   // 絵: 透過なしは cover、透過ありは contain (CSS と同じ)
   const iw = icon.naturalWidth || W, ih = icon.naturalHeight || W;
