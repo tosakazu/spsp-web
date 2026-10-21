@@ -17,7 +17,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
-import { isTransparent, renderBadge, reflatten, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
+import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -253,6 +253,9 @@ export async function mountBackEditor(o) {
   const els = new Map();
   /** シールを描き直す関数 (形・切り取りを変えたとき) @type {Map<string, () => void>} */
   const paints = new Map();
+  // ホロの素材は最初に全部読んでおく (形・種類を変えても取りに行かない)。読み終わったら貼ってあるシールを描き直す
+  // (読み終わる前に描いた丸のシールは、後から届いた素材が出ないままになることがある)
+  preloadAllHolo().then(() => { for (const f of paints.values()) f(); });
   /** 透過ありのアイコンのシール (形・切り取りは選べない) @type {Set<string>} */
   const trans = new Set();
   // 強制ダークモード対策でキャンバスに描いたシール (js/holo_badge.js の flatten) は、描いたときの大きさの絵なので、

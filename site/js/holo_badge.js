@@ -342,6 +342,18 @@ export async function preloadBadge(src, variant, shape = 'square') {
   return got.every(Boolean);
 }
 
+/** @type {Promise<boolean> | null} */
+let allHolo = null;
+/** ホロの素材を全部 (全種類・全部の形) 一度に読んでおく (シールの編集用: 形や種類を変えたときに取りに行かない)。
+ * 読んだ画像は持ったままにする (CSS の背景も同じ URL なので取り直さない)。何度呼んでも 1 回だけ。全部読めたら true */
+export function preloadAllHolo() {
+  if (!allHolo) {
+    const names = [...new Set(Object.values(LAYERS).flat().map(([n]) => n))];
+    allHolo = Promise.all(names.map(n => layerImage(n, 'img').then(() => true, () => false))).then(r => r.every(Boolean));
+  }
+  return allHolo;
+}
+
 /** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)
  * @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
  * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
@@ -450,7 +462,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas, preloadBadge };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas, preloadBadge, preloadAllHolo };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;
