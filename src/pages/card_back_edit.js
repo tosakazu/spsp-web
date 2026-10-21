@@ -429,7 +429,7 @@ export async function mountBackEditor(o) {
   // その他のメニュー
   const menu = /** @type {HTMLDetailsElement} */ ($('bz-menu'));
   document.addEventListener('pointerdown', e => { if (menu.open && !menu.contains(/** @type {Node} */ (e.target))) menu.open = false; });
-  // ランダムに k 枚貼る (まだ貼っていないシールのある大会から k 大会。貼れる枚数の残りまで)。k は − / + で 1〜貼れる上限、最初は 5
+  // ランダムに k 枚貼る (まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会。貼れる枚数の残りまで)。k は − / + で 1〜貼れる上限、最初は 5
   let randK = 5;
   const paintRandK = () => {
     $('bz-rand-k').textContent = String(randK);
@@ -443,14 +443,16 @@ export async function mountBackEditor(o) {
     menu.open = false;
     const room = MAX_STICKERS - stickers.length;
     if (room <= 0) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
-    // ランダムに選ぶのは大会 (下位クラスは別の大会)。その大会のシールは、まだ貼っていないものの中で一番上の色 (虹 > 金 > 銀 > 素)
+    // ランダムに選ぶのは大会 (下位クラスも同じ大会)。その大会のシールは、まだ貼っていないものの中で一番上のもの:
+    // 色 (虹 > 金 > 銀 > 素)、同じ色なら本戦 > 下位クラス (B > C > …)
+    const rank = (/** @type {Badge} */ b) => b.variant * 10 + (b.cls ? ' ABCDE'.indexOf(b.cls) : 0);
     /** @type {Map<string, Badge>} */
     const best = new Map();
     for (const b of badges) {
       if (stickers.some(s => s.e === b.e)) continue;
-      const t = b.e.split(':')[0];
+      const t = b.e.replace(/[A-E]?:.*$/, '');
       const cur = best.get(t);
-      if (!cur || b.variant < cur.variant) best.set(t, b);
+      if (!cur || rank(b) < rank(cur)) best.set(t, b);
     }
     const pool = [...best.values()];
     if (!pool.length) { toast('まだ貼っていないシールがありません'); return; }
