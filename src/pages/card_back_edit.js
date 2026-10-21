@@ -429,6 +429,38 @@ export async function mountBackEditor(o) {
   // その他のメニュー
   const menu = /** @type {HTMLDetailsElement} */ ($('bz-menu'));
   document.addEventListener('pointerdown', e => { if (menu.open && !menu.contains(/** @type {Node} */ (e.target))) menu.open = false; });
+  // ランダムに k 枚貼る (まだ貼っていないシールから。貼れる枚数の残りまで)。k は − / + で 1〜貼れる上限、最初は 5
+  let randK = 5;
+  const paintRandK = () => {
+    $('bz-rand-k').textContent = String(randK);
+    /** @type {HTMLButtonElement} */ ($('bz-rand-minus')).disabled = randK <= 1;
+    /** @type {HTMLButtonElement} */ ($('bz-rand-plus')).disabled = randK >= MAX_STICKERS;
+  };
+  $('bz-rand-minus').addEventListener('click', () => { randK = Math.max(1, randK - 1); paintRandK(); });
+  $('bz-rand-plus').addEventListener('click', () => { randK = Math.min(MAX_STICKERS, randK + 1); paintRandK(); });
+  paintRandK();
+  $('bz-rand').addEventListener('click', async () => {
+    menu.open = false;
+    const room = MAX_STICKERS - stickers.length;
+    if (room <= 0) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+    const pool = badges.filter(b => !stickers.some(s => s.e === b.e));
+    if (!pool.length) { toast('まだ貼っていないシールがありません'); return; }
+    // 混ぜて先頭から (Fisher–Yates)
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const pick = pool.slice(0, Math.min(randK, room));
+    const trs = await Promise.all(pick.map(b => isTransparent(IMG_BASE + b.file)));
+    let n = 0;
+    pick.forEach((b, i) => {
+      if (stickers.length >= MAX_STICKERS || stickers.some(s => s.e === b.e)) return;
+      stickers.push(randomSticker(b.e, trs[i]));
+      n++;
+    });
+    if (!n) return;
+    sel = null;
+    changed(true);
+    paintTray();
+    toast(n < randK ? `${n} 枚貼りました (貼れるのはここまで)` : `${n} 枚貼りました`, '元に戻す', undo);
+  });
   $('bz-clear').addEventListener('click', () => {
     menu.open = false;
     if (!stickers.length) return;
