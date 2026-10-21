@@ -308,29 +308,16 @@ async function flattenBadge(el, o) {
   flatSize.set(el, W);
   const cv = await drawBadge(o, W);
   if (!el.isConnected || flatOpts.get(el) !== o) return;   // 描いている間に作り直された
-  // 置くのは画像 (img) にする: キャンバスのままだと、ブラウザがメモリ節約で中身を捨てることがあり (重ねた表示に戻ると、丸ではホロが消える)、
-  // Android の Chrome では角を丸く切った中のキャンバスが描かれないことがあった (2026-10-21)。画像にできない (アイコンが別のサイトで
-  // 読み出せない) ときだけキャンバスのまま
-  /** @type {HTMLElement} */
-  let out = cv;
-  const blob = await new Promise(res => { try { cv.toBlob(b => res(b), 'image/png'); } catch (e) { res(null); } });
-  if (!el.isConnected || flatOpts.get(el) !== o) return;
-  if (blob) {
-    const im = new Image();
-    im.decoding = 'sync';
-    im.src = URL.createObjectURL(/** @type {Blob} */ (blob));
-    try { await im.decode(); } catch (e) { /* 読めたら出る */ }
-    if (!el.isConnected || flatOpts.get(el) !== o) { URL.revokeObjectURL(im.src); return; }
-    out = im;
-  } else {
-    // ブラウザがメモリ節約でキャンバスの中身を捨てたら (裏に回ったタブ・閉じて復元したタブ)、すぐ重ねた表示に戻し、表に戻ったら描き直す
-    cv.addEventListener('contextlost', () => { unflatten(el); lost.add(el); });
-  }
-  out.className = 'hb-flat';
-  out.setAttribute('alt', '');
+  // 置くのはキャンバスのまま (画像 (img) にすると、ブラウザの強制ダークモードが画像として暗く・色を変えてしまう。2026-10-21)。
+  // ブラウザがメモリ節約でキャンバスの中身を捨てたら、重ねた表示には戻さず (丸ではホロが消える) 描き直す (裏に回っていれば表に戻ったとき)
+  cv.addEventListener('contextlost', () => {
+    lost.add(el);
+    if (document.visibilityState !== 'hidden') setTimeout(redrawLost, 0);
+  });
+  cv.className = 'hb-flat';
   unflatten(el);
   const inner = el.querySelector('.hb-in');
-  if (inner) inner.after(out); else el.prepend(out);
+  if (inner) inner.after(cv); else el.prepend(cv);
   el.classList.add('hb-flattened');
 }
 
@@ -440,9 +427,7 @@ const flatOpts = new WeakMap();
 const lost = new Set();
 /** @param {HTMLElement} el */
 function unflatten(el) {
-  const f = el.querySelector('.hb-flat');
-  if (f instanceof HTMLImageElement && f.src.startsWith('blob:')) URL.revokeObjectURL(f.src);
-  f?.remove();
+  el.querySelector('.hb-flat')?.remove();
   el.classList.remove('hb-flattened');
 }
 function redrawLost() {

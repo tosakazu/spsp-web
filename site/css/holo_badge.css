@@ -68,7 +68,7 @@
 .hb-square.hb-k-circle { border-radius: 50%; }
 .hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
 .hb-square.hb-k-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
-/* 画像に描いたあと (絵はもう形に切ってある) は外側で切らない (Android の Chrome で、角を丸く切った中の画像・キャンバスが描かれないことが
+/* キャンバスに描いたあと (絵はもう形に切ってある) は外側で切らない (Android の Chrome で、角を丸く切った中のキャンバスが描かれないことが
    あった)。ポインタの光だけを形で切る */
 .hb-square.hb-flattened { border-radius: 0; clip-path: none; overflow: visible; }
 .hb-flattened.hb-k-round > .hb-sheen, .hb-flattened.hb-k-round > .hb-glare { border-radius: 15%; }
