@@ -8,7 +8,7 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
-import { renderBadge, isTransparent, badgeToCanvas, preloadBadge } from './holo_badge.js';
+import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten } from './holo_badge.js';
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
@@ -438,6 +438,8 @@ function applyScale(el) {
   inner.style.transform = `scale(${el.clientWidth / W})`;
   const glow = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-glow'));
   if (glow) glow.style.transform = inner.style.transform;
+  // 画像に描いたシール (丸・六角形など) は描いたときの大きさの絵なので、大きく表示するようになったら描き直す (粗くならないように)
+  for (const hb of /** @type {NodeListOf<HTMLElement>} */ (inner.querySelectorAll('.pcb-sk .hb'))) reflatten(hb);
 }
 
 /** @type {WeakSet<HTMLElement>} */
