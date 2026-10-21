@@ -276,11 +276,18 @@ export async function mountBackEditor(o) {
     el.dataset.e = String(s.e);
     el.innerHTML = '<div class="bz-badge"></div>';
     const src = IMG_BASE + b.file;
-    const holder = /** @type {HTMLElement} */ (el.querySelector('.bz-badge'));
+    let holder = /** @type {HTMLElement} */ (el.querySelector('.bz-badge'));
     const paintBadge = () => {
       const now = stickers.find(x => x.e === s.e) || s;
       const tr = trans.has(s.e);
       el.classList.toggle('bz-shape', tr);
+      // 描き直すときは要素ごと作り直す: Android の Chrome で、別の形にしてから丸にするとホロが消えた (最初から丸なら出る。2026-10-21)
+      if (el.dataset.kc) {
+        const fresh = document.createElement('div');
+        fresh.className = 'bz-badge';
+        holder.replaceWith(fresh);
+        holder = fresh;
+      }
       el.dataset.kc = `${now.k}|${now.c}`;
       renderBadge(holder, { src, variant: b.variant, transparent: tr, cls: b.cls, shape: now.k, crop: now.c });
     };
