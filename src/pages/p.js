@@ -2246,6 +2246,9 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       varEls = /** @type {HTMLElement[]} */ ([...wrap.querySelectorAll('.pcard, .pcb-glow')]);
     };
     const release = () => {
+      // 描き換え待ちの傾きは捨てる (指の動きと離したのが同じ描き換えの間だと、離したあとにその傾きが置かれて戻らなかった)
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      pending = null;
       wrap.classList.remove('pc-tilt');
       wrap.style.transition = 'transform .35s ease';
       wrap.style.transform = '';
@@ -2290,6 +2293,13 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
     };
     wrap.addEventListener('pointerup', end);
     wrap.addEventListener('pointercancel', end);
+    // 指を離したのがカードに届かなかったとき (捕まえ損ねた・外れた) も戻す: ページ全体の離した / 捕まえが外れた / 裏に回った
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    wrap.addEventListener('lostpointercapture', e => { if (g && e.pointerId === g.id) end(e); });
+    const abort = () => { if (!g) return; const cur = g; g = null; if (cur.moved) release(); else wrap.style.transition = ''; };
+    window.addEventListener('blur', abort);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abort(); });
     // 動かしたあとのクリックは、カードのタップ (ボタンを出す) やリンクにしない
     wrap.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
   }
