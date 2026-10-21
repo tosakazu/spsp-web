@@ -334,7 +334,8 @@ export async function fetchAppliedCard(uid) {
   if (!SpspLogin.apiAvailable()) return { settings: loadLocalApplied(uid), titleText: null };
   try {
     // 本人が見るときはブラウザのキャッシュ (60 秒) を使わない: 編集ページで適用した直後に古い設定が出ないように
-    const self = SpspLogin.isSelf(uid);
+    // (preview は誰でも誰の分でも編集できるので、常に使わない)
+    const self = SpspLogin.isSelf(uid) || SpspLogin.openEdit();
     const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
                           self ? { cache: 'no-store' } : undefined);
     const j = r.ok ? await r.json() : null;
