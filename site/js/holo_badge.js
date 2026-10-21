@@ -368,9 +368,10 @@ async function drawBadge(o, W) {
   }
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = W;
-  const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+  // willReadFrequently = GPU を使わずに描く。形で切る (clip) のも最後にする: Android の Chrome で、丸く切った中にホロを重ね合わせると
+  // ホロが描かれないことがあった (CSS でもキャンバスでも、別の形から丸にしたときに。2026-10-21)
+  const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d', { willReadFrequently: true }));
   const clip = !o.transparent && o.shape && o.shape !== 'square';
-  if (clip) { ctx.save(); shapePath(ctx, W, String(o.shape)); ctx.clip(); }
   // 絵: 透過なしは cover、透過ありは contain (CSS と同じ)
   const iw = icon.naturalWidth || W, ih = icon.naturalHeight || W;
   const s = o.transparent ? Math.min(W / iw, W / ih) : Math.max(W / iw, W / ih) / o.crop;   // 切り取り = 絵だけ拡大 (CSS の --hb-zoom)
@@ -388,7 +389,13 @@ async function drawBadge(o, W) {
     ctx.globalCompositeOperation = 'source-over';
     if (o.letter) drawLetter(ctx, W, o.letter, true);
   }
-  if (clip) ctx.restore();
+  if (clip) {
+    // 形の外を消す (重ね終わってから)
+    ctx.globalCompositeOperation = 'destination-in';
+    shapePath(ctx, W, String(o.shape));
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
   return cv;
 }
 
