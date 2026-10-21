@@ -339,7 +339,7 @@ test('card_put: 裏面のシール (back) を確かめて保存。形が違え�
   for (const b of [{ stickers: [{ e: 'sample1:r', x: 1, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:x', x: 1, y: 1, s: 30, r: 0 }] },
     { stickers: [{ e: '1:r', x: 600, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0, k: 'star' }] },
     { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0 }, { e: '1:r', x: 2, y: 2, s: 30, r: 0 }] }, { foo: 1 },
-    { stickers: Array.from({ length: 31 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) }]) {
+    { stickers: Array.from({ length: 51 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) }]) {
     assert.strictEqual(await bad(b), 'bad_settings', JSON.stringify(b).slice(0, 80));
   }
   e.nowMs = now += 60_000;   // 書き込み間隔

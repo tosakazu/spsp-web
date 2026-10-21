@@ -119,9 +119,12 @@ async function main() {
     st = { ...st, ...patch };
     if (st.ach && !st.ach.length) st.ach = null;   // 何も選んでいなければ自動
     saveDraft(uid, st);
-    draw();
+    // 裏のタブ (シールを貼っている間) はプレビューのカードが隠れているので描かない (シールを動かすたびに全部描き直すと重い)。表に戻るときに描く
+    if (curTab === 'back') previewStale = true;
+    else draw();
     paint();
   };
+  let previewStale = false;
 
   // テンプレート: 小さなカードの絵 (今の色で)
   const tplEl = $('ce-templates');
@@ -380,6 +383,7 @@ async function main() {
       preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
       $('ce-front-head').style.display = tab === 'front' ? '' : 'none';
     };
+    if (tab === 'front' && previewStale) { previewStale = false; draw(); }
     const frontCard = () => /** @type {HTMLElement} */ (preview.querySelector('.pcard-flip'));
     const backCard = () => $('bz-stage');
     if (first) swap();

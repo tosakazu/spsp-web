@@ -242,7 +242,8 @@ function loadImage(url, cors = false) {
     p = new Promise((resolve, reject) => {
       const im = new Image();
       if (cors) im.crossOrigin = 'anonymous';
-      im.onload = () => resolve(im);
+      // 読めたら絵にほどいておく (decode。描くときにほどくと、その分そのとき重い)
+      im.onload = () => { if (im.decode) im.decode().then(() => resolve(im), () => resolve(im)); else resolve(im); };
       im.onerror = () => reject(new Error('image ' + url));
       im.src = cors ? corsUrl(url) : url;
     });

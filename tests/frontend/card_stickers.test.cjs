@@ -30,9 +30,9 @@ test('normBack: 形が違うシールは外し、範囲に丸め、何も無け�
     { e: '1700000:r', x: 514, y: 0, s: 520, r: -170, k: 'square', c: 0.35 },
     { e: '1724470B:g', x: 10, y: 20, s: 50, r: -45, k: 'circle', c: 0.56 },
   ]);
-  // 30 枚まで
-  const many = normBack({ stickers: Array.from({ length: 40 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) });
-  assert.strictEqual(many.stickers.length, 30);
+  // 50 枚まで
+  const many = normBack({ stickers: Array.from({ length: 60 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) });
+  assert.strictEqual(many.stickers.length, 50);
 });
 
 test('parseKey / tourKey: 大会キーは event_id、下位クラスは親の event_id + クラスの文字', async () => {

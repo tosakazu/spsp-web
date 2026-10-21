@@ -12,7 +12,7 @@ import { SHAPES, CROP_MIN } from './holo_badge.js';
 export const CARD_W = 514, CARD_H = 333;
 /** 一辺の幅 (カードの px)。最大はカードの幅くらい */
 export const S_MIN = 22, S_MAX = 520;
-export const MAX_STICKERS = 30;
+export const MAX_STICKERS = 50;
 /** 色の記号 → holo_badge.js の variant (0 虹・1 金・2 銀・3 素) */
 export const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
 export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
