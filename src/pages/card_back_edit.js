@@ -429,7 +429,7 @@ export async function mountBackEditor(o) {
   // その他のメニュー
   const menu = /** @type {HTMLDetailsElement} */ ($('bz-menu'));
   document.addEventListener('pointerdown', e => { if (menu.open && !menu.contains(/** @type {Node} */ (e.target))) menu.open = false; });
-  // ランダムに k 枚貼る (まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会。貼れる枚数の残りまで)。k は − / + で 1〜貼れる上限、最初は 5
+  // ランダムに k 枚貼る (まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会。大会が足りなければ同じ大会から 2 枚目、…。貼れる枚数の残りまで)。k は − / + で 1〜貼れる上限、最初は 5
   let randK = 5;
   const paintRandK = () => {
     $('bz-rand-k').textContent = String(randK);
@@ -446,19 +446,28 @@ export async function mountBackEditor(o) {
     // ランダムに選ぶのは大会 (下位クラスも同じ大会)。その大会のシールは、まだ貼っていないものの中で一番上のもの:
     // 色 (虹 > 金 > 銀 > 素)、同じ色なら本戦 > 下位クラス (B > C > …)
     const rank = (/** @type {Badge} */ b) => b.variant * 10 + (b.cls ? ' ABCDE'.indexOf(b.cls) : 0);
-    /** @type {Map<string, Badge>} */
-    const best = new Map();
+    // 大会ごとに、まだ貼っていないシールを上から並べる
+    /** @type {Map<string, Badge[]>} */
+    const byTour = new Map();
     for (const b of badges) {
       if (stickers.some(s => s.e === b.e)) continue;
       const t = b.e.replace(/[A-E]?:.*$/, '');
-      const cur = best.get(t);
-      if (!cur || rank(b) < rank(cur)) best.set(t, b);
+      const l = byTour.get(t);
+      if (l) l.push(b); else byTour.set(t, [b]);
     }
-    const pool = [...best.values()];
-    if (!pool.length) { toast('まだ貼っていないシールがありません'); return; }
-    // 混ぜて先頭から (Fisher–Yates)
-    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-    const pick = pool.slice(0, Math.min(randK, room));
+    const lists = [...byTour.values()].map(l => l.sort((x, y) => rank(x) - rank(y)));
+    if (!lists.length) { toast('まだ貼っていないシールがありません'); return; }
+    /** 混ぜる (Fisher–Yates) @template T @param {T[]} a */
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    // 1 周目は大会ごとに 1 枚 (一番上)。k に足りなければ、2 周目は残っている大会から次のものを、… (周ごとに大会の順を混ぜ直す)
+    const want = Math.min(randK, room);
+    /** @type {Badge[]} */
+    const pick = [];
+    for (let r = 0; pick.length < want; r++) {
+      const round = shuffle(lists.filter(l => l.length > r));
+      if (!round.length) break;
+      for (const l of round) { if (pick.length >= want) break; pick.push(l[r]); }
+    }
     const trs = await Promise.all(pick.map(b => isTransparent(IMG_BASE + b.file)));
     let n = 0;
     pick.forEach((b, i) => {
@@ -470,7 +479,8 @@ export async function mountBackEditor(o) {
     sel = null;
     changed(true);
     paintTray();
-    toast(n < randK ? `${n} 枚貼りました (貼れるのはここまで)` : `${n} 枚貼りました`, '元に戻す', undo);
+    const why = n >= randK ? '' : stickers.length >= MAX_STICKERS ? ' (貼れるのはここまで)' : ' (まだ貼っていないシールはこれで全部)';
+    toast(`${n} 枚貼りました${why}`, '元に戻す', undo);
   });
   $('bz-clear').addEventListener('click', () => {
     menu.open = false;
