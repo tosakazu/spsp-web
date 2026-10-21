@@ -2235,9 +2235,21 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       }
       wrap.style.transform = `perspective(900px) rotateX(${((0.5 - my) * TILT_DEG).toFixed(2)}deg) rotateY(${((mx - 0.5) * TILT_DEG).toFixed(2)}deg)`;
     };
+    // 傾けたまま一定時間 (指が動かない) ならまっすぐに戻す (指を離したのが届かず、傾いたまま残ることがあった)
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let idleTimer = null;
+    const IDLE_MS = 1500;
     const tilt = (/** @type {number} */ cx, /** @type {number} */ cy) => {
       pending = { x: cx, y: cy };
       if (!raf) raf = requestAnimationFrame(applyTilt);
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        idleTimer = null;
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        pending = null;
+        g = null;
+        release();
+      }, IDLE_MS);
     };
     /** 傾け始め: 光の層を用意し (初めて傾けたときに作る、js/player_card.js ensureGlow)、値を置く所を集める */
     const startTilt = () => {
@@ -2246,6 +2258,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       varEls = /** @type {HTMLElement[]} */ ([...wrap.querySelectorAll('.pcard, .pcb-glow')]);
     };
     const release = () => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
       wrap.classList.remove('pc-tilt');
       wrap.style.transition = 'transform .35s ease';
       wrap.style.transform = '';
