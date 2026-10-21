@@ -734,15 +734,34 @@ export async function mountBackEditor(o) {
     $('bz-more').style.display = list.length > shown ? '' : 'none';
     paintCounts();
   }
-  /** 一覧から押した: まだなら貼る (空いていそうな所、少しずつずらす)、貼ってあれば選ぶ。
+  /** 貼るときの大きさ・場所・角度・形 (ランダム)。大きさは標準の 0.75〜1.35 倍 (小さすぎ・大きすぎにはしない)、
+   * 場所は半分より多くはカードの外に出ない所 (重なるのは気にしない)、角度は ±40°、形は透過なしなら 5 種類から (切り取りは標準のまま)
+   * @param {string} e @param {boolean} tr 透過あり @returns {Sticker} */
+  const randomSticker = (e, tr) => {
+    const size = S_DEF * Math.exp(Math.log(0.75) + Math.random() * Math.log(1.35 / 0.75));
+    const h = size / 2;
+    // 見えている割合 (回転は考えない) = 横の割合 × 縦の割合
+    const seen = (/** @type {number} */ c, /** @type {number} */ L) => (Math.min(L, c + h) - Math.max(0, c - h)) / size;
+    let x = W / 2, y = H / 2;
+    for (let i = 0; i < 50; i++) {
+      const tx = -h + Math.random() * (W + size), ty = -h + Math.random() * (H + size);
+      if (seen(tx, W) * seen(ty, H) >= 0.5) { x = tx; y = ty; break; }
+    }
+    const kinds = Object.keys(SHAPES);
+    return { e, x, y, s: size, r: Math.round((Math.random() * 2 - 1) * 40), k: tr ? 'square' : kinds[Math.floor(Math.random() * kinds.length)], c: 1 };
+  };
+  /** 一覧から押した: まだなら貼る (大きさ・場所・角度・形はランダム)、貼ってあれば選ぶ。
    * 一覧はページごとスクロールするので、押したらページの上 (カード・操作) へ戻る @param {Badge} b */
-  function addOrSelect(b) {
+  async function addOrSelect(b) {
     const top = root.getBoundingClientRect().top + window.scrollY - 8;
     if (window.scrollY > top) window.scrollTo({ top, behavior: 'smooth' });
     if (!stickers.some(s => s.e === b.e)) {
       if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
-      const n = stickers.length;
-      stickers.push({ e: b.e, x: W / 2 + ((n * 37) % 160) - 80, y: H / 2 + ((n * 23) % 100) - 50, s: S_DEF, r: 0, k: 'square', c: 1 });
+      // 透過かどうか (形を選べるか)。一覧の絵を描いたときに調べてあるので、たいていすぐ分かる
+      const tr = await isTransparent(IMG_BASE + b.file);
+      if (stickers.some(s => s.e === b.e)) { select(b.e); return; }   // 待つ間に 2 回押した
+      if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+      stickers.push(randomSticker(b.e, tr));
       sel = b.e;
       place();
       const el = els.get(b.e);
