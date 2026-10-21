@@ -19,7 +19,7 @@
 .hb-in { isolation: isolate; }
 /* キャンバスに 1 枚に描いて差し替えたあと (js/holo_badge.js の flatten)。重ねた要素は隠す (光はそのまま上に重なる) */
 .hb .hb-flat { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.hb-flattened > .hb-in, .hb-flattened > .hb-cls { visibility: hidden; }
+.hb-flattened > .hb-in, .hb-flattened > .hb-cls { display: none; }
 .hb-art { background: var(--hb-img) center / cover no-repeat; }
 .hb-l, .hb-o { background: center / 100% 100% no-repeat; }
 .hb-c { background-repeat: no-repeat; }
@@ -68,6 +68,13 @@
 .hb-square.hb-k-circle { border-radius: 50%; }
 .hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
 .hb-square.hb-k-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+/* 画像に描いたあと (絵はもう形に切ってある) は外側で切らない (Android の Chrome で、角を丸く切った中の画像・キャンバスが描かれないことが
+   あった)。ポインタの光だけを形で切る */
+.hb-square.hb-flattened { border-radius: 0; clip-path: none; overflow: visible; }
+.hb-flattened.hb-k-round > .hb-sheen, .hb-flattened.hb-k-round > .hb-glare { border-radius: 15%; }
+.hb-flattened.hb-k-circle > .hb-sheen, .hb-flattened.hb-k-circle > .hb-glare { border-radius: 50%; }
+.hb-flattened.hb-k-hex > .hb-sheen, .hb-flattened.hb-k-hex > .hb-glare { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
+.hb-flattened.hb-k-diamond > .hb-sheen, .hb-flattened.hb-k-diamond > .hb-glare { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 
 /* クラスの文字 (B・C・D・E)。Figma の sticker (117:209 / 115:203) に合わせた位置と大きさ (740px のバッジで測って、em に直した)
    フォント = Zalando Sans Expanded ExtraBold Italic (Figma と同じ。外形は Figma の書き出しと 1px 以内で一致)
