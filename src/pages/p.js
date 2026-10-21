@@ -769,9 +769,12 @@ function render() {
     // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
     const settledP = settingsP.then(x => { if (x && x.settings) draw(x); return true; }, () => false);
     // 全部そろって描き終わったら裏返しの紹介。読めなかったものがあれば紹介しない
+    // それまではカードを指で動かせない (.pc-wait。裏返せるようになってから。読めなかったときも、そこで動かせるようにする)
+    const settle = () => wrapEl?.classList.remove('pc-wait');
+    if (back) { wrapEl?.classList.add('pc-wait'); setTimeout(settle, 15000); }   // 万一終わらなくても、いつまでも動かせないままにはしない
     Promise.all([readingsP, settledP])
       .then(([a, b]) => (a && b ? Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : true]).then(r => r.every(Boolean)) : false))
-      .then(ok => { if (ok) intro(); }, () => {});
+      .then(ok => { settle(); if (ok) intro(); }, settle);
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
@@ -2202,7 +2205,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 }
 
 // カードを指・マウスで動かす: ゆっくり動かすとその位置に合わせて傾き (裏面のシールがキラキラ = holo_badge.css の光)、
-// 横にはじくと裏返る。縦の動きはページのスクロール (touch-action: pan-y)。動かしたあとはタップ (編集・裏返す・保存のボタン) にしない
+// 横にはじくと裏返る。読み込み中 (.pc-loading) と裏の準備ができるまで (.pc-wait) は動かせない。縦の動きはページのスクロール (touch-action: pan-y)。動かしたあとはタップ (編集・裏返す・保存のボタン) にしない
 {
   const wrap = document.getElementById('pcard-wrap');
   const FLICK_PX = 40;        // はじいたとみなす横の距離 (画面の px)
@@ -2255,7 +2258,7 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
       document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
     };
     wrap.addEventListener('pointerdown', e => {
-      if (g || (e.pointerType === 'mouse' && e.button !== 0) || wrap.classList.contains('pc-loading')) return;
+      if (g || (e.pointerType === 'mouse' && e.button !== 0) || wrap.classList.contains('pc-loading') || wrap.classList.contains('pc-wait')) return;
       if (/** @type {Element} */ (e.target).closest('#pc-overlay')) return;
       g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, pts: [{ x: e.clientX, t: e.timeStamp }], moved: false };
       wrap.style.transition = 'none';
