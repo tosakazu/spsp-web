@@ -119,6 +119,7 @@
   /* Pager (prev/next + page indicator) — player page と統一 */
 
   /* Standings 検索 */
+  .std-note { font-size: 11px; color: #6b7280; margin: -4px 0 6px; }
   .standings-controls { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
   .standings-controls input {
     flex: 1; min-width: 120px;
@@ -308,6 +309,7 @@
 
     <div class="section">
       <h2 data-i18n="tournament.sec.standings">📋 全順位表</h2>
+      <div class="std-note" data-i18n="tournament.standings_note">全国順位・ポイント・表示名は大会当時のものです</div>
       <div class="standings-controls">
         <input type="search" id="std-search" placeholder="プレイヤー名で検索…" autocomplete="off" data-i18n-attr="placeholder:tournament.search_placeholder">
       </div>

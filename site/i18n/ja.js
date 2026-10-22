@@ -555,6 +555,7 @@ window.SPSP_I18N.ja = {
   'tournament.sec.rank_gain_tjpr': '⬆️ 順位上昇ランキング (順位評価)',
   'tournament.sec.rank_gain_bt': '⬆️ 順位上昇ランキング (直対評価)',
   'tournament.sec.standings': '📋 全順位表',
+  'tournament.standings_note': '全国順位・ポイント・表示名は大会当時のものです',
   'tournament.search_placeholder': 'プレイヤー名で検索…',
   'tournament.render_failed': '表示に失敗しました: {message}',
   'tournament.place_spaced': '{place} 位',

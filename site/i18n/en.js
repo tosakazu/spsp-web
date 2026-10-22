@@ -552,6 +552,7 @@ window.SPSP_I18N.en = {
   'tournament.sec.rank_gain_tjpr': '⬆️ Biggest rank climbs (placement)',
   'tournament.sec.rank_gain_bt': '⬆️ Biggest rank climbs (head-to-head)',
   'tournament.sec.standings': '📋 Full standings',
+  'tournament.standings_note': 'National ranks, points and names are as of the tournament.',
   'tournament.search_placeholder': 'Search players…',
   'tournament.render_failed': 'Failed to render: {message}',
   'tournament.place_spaced': '{place, selectordinal, one{{place}st} two{{place}nd} few{{place}rd} other{{place}th}}',
