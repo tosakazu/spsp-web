@@ -563,7 +563,6 @@ window.SPSP_I18N.en = {
   'tournament.empty.bt_gain': 'No head-to-head gains',
   'tournament.empty.losers_run': 'No losers runs',
   'tournament.empty.rank_gain': 'No rank climbs',
-  'tournament.now_rank': '· now #{rank}',
   'tournament.share.text': '{name} ({n} entrants) — SPSP',
 
   // ── Common (4) ──

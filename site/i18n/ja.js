@@ -566,7 +566,6 @@ window.SPSP_I18N.ja = {
   'tournament.empty.bt_gain': 'BT 上昇なし',
   'tournament.empty.losers_run': 'ルーザーズランなし',
   'tournament.empty.rank_gain': '順位上昇なし',
-  'tournament.now_rank': '・現在 #{rank}',
   'tournament.share.text': '{name} ({n} 名) — SPSP',
 
   // ── 共通 (4) ──
