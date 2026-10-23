@@ -6,8 +6,6 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
 import '../../site/js/data.js';
-import '../../site/js/views.js';
-import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPager from '../../site/js/pager.js';
 import SPSPMatch from '../../site/js/match.js';
@@ -36,7 +34,7 @@ const TID = parseInt(params.get('id') || location.hash.replace(/^#/, '') || '0')
  *              w_d?: number, l_d?: number, w_tracked?: boolean, l_tracked?: boolean, [k: string]: any }} TMatch */
 /** tournaments/<id>.json */
 /** @typedef {{ event_id: number, name: string, event_name?: string, startgg_url?: string, date: string, end_date?: string, nent?: number,
- *              standings: Standing[], matches?: TMatch[],
+ *              standings: Standing[], matches?: TMatch[], chars?: Record<string, number[]>,
  *              highlights?: { top_match_upsets?: { winner: Standing, loser: Standing, uf: number }[], top_contrib_points?: Standing[],
  *                             top_spr_gains?: Standing[], top_bt_gains?: Standing[], top_losers_runs?: Standing[],
  *                             top_rank_gains_ensemble?: Standing[], top_rank_gains_tjpr?: Standing[], top_rank_gains_bt?: Standing[] },
@@ -46,16 +44,14 @@ const TID = parseInt(params.get('id') || location.hash.replace(/^#/, '') || '0')
 let META = null;
 /** @type {Tourney | null} */
 let TOURNEY = null;
-/** @type {any} */
-let CURRENT = null;            // 全選手の現在順位 (SPSPPlayerData.loadRanks。SPSPPlayerData.currentRank で引く)
 /** @type {string | null} */
 let TOURNEY_PREF = null;       // この大会の開催地 都道府県 (tournament_prefectures.json[TID])
 /** @type {Record<string, string> | null} */
-let CHAR_EMOJI_BY_UID = null;  // uid -> メイン使用キャラ絵文字 (character_index × char_emoji)
+let CHAR_EMOJI_BY_UID = null;  // uid -> この大会で一番使ったキャラの絵文字 (大会 JSON の chars × char_emoji)
 
 const fmtRank = SPSPFormat.fmtRank;   // ../js/format.js
 
-// uid -> メイン使用キャラ絵文字 (character_index.main_by_char 逆引き × char_emoji)。
+// uid -> この大会で一番使ったキャラの絵文字。大会ページは当時の情報だけで作る (今のメインキャラは見ない)。
 /** @param {number | null | undefined} uid @returns {string} */
 function charEmojiOf(uid) {
   return (uid != null && CHAR_EMOJI_BY_UID && CHAR_EMOJI_BY_UID[uid]) || '';
@@ -64,37 +60,30 @@ function charEmojiOf(uid) {
 async function load() {
   if (!TID || TID < 1) { showNotFound(); return; }
   try {
-    const [metaRes, tRes, tprefRes, , charIdxRes, charEmojiRes, curFile] = await Promise.all([
+    const [metaRes, tRes, tprefRes, , charEmojiRes] = await Promise.all([
       fetch(SPSP.data + 'meta.json'),
       fetch(SPSP.data + `tournaments/${TID}.json`),
       fetch(SPSP.data + 'data/tournament_prefectures.json').catch(() => null),
       SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 開催地の表示名 (英語ページでは Chiba)
-      fetch(SPSP.data + 'data/character_index.json').catch(() => null),
       fetch(SPSPCharEmoji.url()).catch(() => null),
-      // 参加者の現在の全国順位 (大会 JSON には当時の値だけがある。../js/player_data.js。
-      // data/views/ があれば players_index.json、無ければ players_current.json)
-      SPSPPlayerData.loadRanks(SPSP.data).catch(() => null),
     ]);
     if (!tRes.ok) { showNotFound(); return; }
     META = await metaRes.json();
     TOURNEY = await tRes.json();
-    CURRENT = curFile;
     if (tprefRes && tprefRes.ok) {
       try { TOURNEY_PREF = (await tprefRes.json())[String(TID)] || null; } catch (e) {}
     }
-    // uid -> キャラ絵文字 マップ (character_index.main_by_char × char_emoji)。
-    if (charIdxRes && charIdxRes.ok && charEmojiRes && charEmojiRes.ok) {
+    // uid -> キャラ絵文字 マップ (大会 JSON の chars = その大会で使ったキャラ、多い順 × char_emoji)。
+    // chars が無い大会 (キャラの記録が無い・古いビルドの JSON) は絵文字を出さない
+    if (TOURNEY && TOURNEY.chars && charEmojiRes && charEmojiRes.ok) {
       try {
-        const idx = await charIdxRes.json();
         const ce = await charEmojiRes.json();
         /** @type {Record<string, string>} */
         const byUid = {};
         CHAR_EMOJI_BY_UID = byUid;
-        const mbc = idx.main_by_char || {};
-        for (const cid in mbc) {
-          const em = ce[cid] && ce[cid].emoji;
-          if (!em) continue;
-          for (const u of mbc[cid]) byUid[u] = em;
+        for (const [u, cids] of Object.entries(TOURNEY.chars)) {
+          const em = cids && cids.length && ce[cids[0]] && ce[cids[0]].emoji;
+          if (em) byUid[u] = em;
         }
       } catch (e) {}
     }
@@ -134,18 +123,12 @@ function placeClass(p) {
   return '';
 }
 
-// 大会ページの「全国 #」は参加前 (= 大会開催時点) の順位を表示する.
-// pretour_ranks が無い古いデータは現在の順位 (players_current.json) に fallback.
+// 大会ページの「全国 #」は参加前 (= 大会開催時点) の順位を表示する。大会ページは当時の情報だけで作るので、
+// pretour_ranks が無い (当時は未計測) ときは今の順位で埋めずに出さない
 /** @param {Standing | null | undefined} p @param {string} field @returns {number | null} */
 function preRank(p, field) {
   if (p && p.pretour_ranks && p.pretour_ranks[field] != null) return p.pretour_ranks[field];
-  return curRank(p, field);
-}
-// 現在の全国順位。大会 JSON からは外した (毎ビルド全大会が書き換わる原因だった) ので players_current.json から
-/** @param {Standing | null | undefined} p @param {string} field @returns {number | null} */
-function curRank(p, field) {
-  if (p && p.global_ranks && p.global_ranks[field] != null) return p.global_ranks[field];   // 旧データ互換
-  return p ? SPSPPlayerData.currentRank(CURRENT, p.user_id, field) : null;
+  return null;
 }
 
 // 当時のレベル表記 (lv = 当時の TJPR レベル、rank = 当時の全国順位で +/メダルを判定)。../js/format.js
@@ -323,9 +306,8 @@ function renderStandings() {
     const er = preRank(p, 'ensemble');                         // 当時 (参加前) の全国#
     const after = (er != null && p.rank_delta_ensemble != null) // T直後 (大会結果確定直後) の全国#
       ? (er - p.rank_delta_ensemble) : null;
-    const cur = curRank(p, 'ensemble');                        // 現在の全国#
     const grank = er != null
-      ? `<div class="sub">${i18n('player.national_then')} #${er}${after != null ? ' → #' + after : ''}${cur != null ? ' ' + i18n('tournament.now_rank', { rank: cur }) : ''}</div>` : '';
+      ? `<div class="sub">${i18n('player.national_then')} #${er}${after != null ? ' → #' + after : ''}</div>` : '';
     // SPR chip. sub 行に seed 番号を表示 (= 他 chip と高さ揃える).
     const seedSub = p.seed != null
       ? `<span class="sub">seed ${p.seed}</span>`
