@@ -352,6 +352,8 @@ async function main() {
   // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
   if (backOn) $('ce-tabs').style.display = '';
   let backMounted = false;
+  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void } | null} */
+  let backEditor = null;
   /** @type {'front' | 'back' | null} */
   let curTab = null;
   /** 切り替えをプレイヤーページの裏返し (player_card.css .pcard-flip: rotateY 180°、0.5 秒 ease) と同じ見え方で:
@@ -382,8 +384,12 @@ async function main() {
       $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
       preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
       $('ce-front-head').style.display = tab === 'front' ? '' : 'none';
+      // 表のカードは見えるようになってから描き直す: 隠れている間に描くと幅が測れず、長い名前が詰まらない
+      // (裏のタブで開いたとき、Web フォントを読み終えたあとの描き直しも隠れたままだった)
+      if (tab === 'front' && !first) { previewStale = false; draw(); }
+      // 裏のカードにも表で変えたもの (色・二つ名など) を出す
+      if (tab === 'back' && backEditor) backEditor.refresh();
     };
-    if (tab === 'front' && previewStale) { previewStale = false; draw(); }
     const frontCard = () => /** @type {HTMLElement} */ (preview.querySelector('.pcard-flip'));
     const backCard = () => $('bz-stage');
     if (first) swap();
@@ -400,6 +406,10 @@ async function main() {
         uid, data, back: st.back ?? null, latin: st.latin ?? null,
         model: (latin, back) => buildCardModel(data, { ...st, latin, back }, titleText),
         onChange: patch => update(patch),
+      }).then(api => {
+        backEditor = api;
+        // 組み立てが裏返しの途中 (裏の欄が隠れている間) だと名前の幅が測れないので、もう見えていれば描き直す (まだなら見せるときに描く)
+        if ($('ce-pane-back').style.display !== 'none') api.refresh();
       }).catch(e => console.error(e));
     }
   };

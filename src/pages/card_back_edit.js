@@ -89,6 +89,7 @@ const HISTORY_MAX = 100;
  * @param {{ uid: number, data: any, back: CardBack | null, latin: string | null,
  *   model: (latin: string | null, back: CardBack | null) => import('../../site/js/player_card.js').PCardModel,
  *   onChange: (patch: { back?: CardBack | null, latin?: string | null }) => void }} o
+ * @returns {Promise<{ refresh: () => void }>}
  */
 export async function mountBackEditor(o) {
   const { uid, data } = o;
@@ -1018,5 +1019,7 @@ export async function mountBackEditor(o) {
   place();
   paintTray();
   paintHistory();
+  // 表のタブで変えたもの (色・二つ名など) を裏のカードにも出す (裏のタブに戻ったときに p_edit.js が呼ぶ)
+  return { refresh: () => { renderBase(); paintTextSel(); } };
 }
 
