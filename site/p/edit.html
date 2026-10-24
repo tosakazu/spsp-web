@@ -108,12 +108,11 @@
       <!-- 裏: 裏面の名前とシール (src/pages/card_back_edit.js、裏のタブを初めて開いたときに組み立てる) -->
       <div class="ce-pane-back" id="ce-pane-back" style="display:none">
         <!-- 道具の行: 裏面の名前 (英字名、カードの設定 latin。最初から今の名前 = 未設定なら名前から自動で作ったものが入っている) と、
-             元に戻す・やり直す・文字を前に・文字の影・その他 -->
+             元に戻す・文字を前に・白フチ・その他 (やり直すはその他の中) -->
         <div class="bz-head">
           <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done" aria-label="裏面の名前" title="裏面の名前">
           <div class="bz-head-btns">
         <button type="button" class="bz-ib" id="bz-undo" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-        <button type="button" class="bz-ib" id="bz-redo" title="やり直す (Ctrl+Shift+Z)" aria-label="やり直す" disabled><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
         <!-- 名前・二つ名・順位をシールの上に (絵: シールの四角の手前に A) -->
         <button type="button" class="bz-ib bz-tt" id="bz-text-top" aria-pressed="false" title="名前・二つ名・順位をシールの上に出す" aria-label="名前・二つ名・順位をシールの上に出す">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect class="bz-tt-st" x="9" y="3" width="12" height="12" rx="2.5"/><path class="bz-tt-a" d="M3.5 21L8.5 8.5h1.6L15 21M5.4 16.6h7.8"/><rect class="bz-tt-st bz-tt-over" x="9" y="3" width="12" height="12" rx="2.5"/></svg>
@@ -125,6 +124,7 @@
             <details class="bz-menu" id="bz-menu">
               <summary class="bz-ib" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
               <div class="bz-menu-pop">
+                <button type="button" class="bz-menu-redo" id="bz-redo" title="Ctrl+Shift+Z" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>やり直す</button>
                 <!-- まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会を選び (その大会で残っている一番上のもの)、ランダムな大きさ・場所・角度・形で貼る (k は − / + で) -->
                 <div class="bz-rand">
                   <button type="button" class="bz-rand-go" id="bz-rand">ランダムに <b id="bz-rand-k">5</b> 枚貼る</button>
