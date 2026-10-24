@@ -483,6 +483,7 @@ async function loadData() {
       try { CHAR_IDX = await charIdxRes.json(); } catch (e) {}
     }
     if (!playerRec) {
+      if (await redirectMerged(UID)) return;
       showNotFound(i18n('player.not_in_db', { uid: UID }));
       return;
     }
@@ -511,6 +512,27 @@ async function loadData() {
   } catch (e) {
     console.error(e);
     showNotFound(i18n('common.load_error', { message: /** @type {any} */ (e).message }));
+  }
+}
+
+/** 統合した旧アカウント (data/user_merges.json: 旧 uid → 新 uid、連鎖は解決済み) なら新しい方のページへ置き換える。
+ * 旧アカウントの ?d= は discriminators.json に旧 uid として載っている (新しい方が収録者のとき)。lang などほかのクエリは残す
+ * @param {number} uid @returns {Promise<boolean>} 飛ばしたら true */
+async function redirectMerged(uid) {
+  try {
+    const r = await fetch(SPSP.data + 'data/user_merges.json');
+    if (!r.ok) return false;
+    const to = Number((await r.json())[String(uid)]);
+    if (!to || to === uid) return false;
+    await SPSPLinks.loadDiscriminators(SPSP.data);
+    const q = new URLSearchParams(location.search);
+    q.delete('d');
+    q.delete('uid');
+    const rest = q.toString();
+    location.replace(SPSPLinks.playerHref(SPSPLinks.SELF, to) + (rest ? '&' + rest : ''));
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
