@@ -198,7 +198,7 @@ function backHtml(m) {
   const b = m.back;
   const st = b && b.stickers.length ? `<div class="pcb-st">${b.stickers.map((s, i) =>
     `<div class="pcb-sk" data-i="${i}" data-x="${s.x}" data-y="${s.y}" data-s="${s.s}" data-r="${s.r}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
-  const col = `<div class="pcb-col">
+  const col = `<div class="pcb-col"${b && b.text_xy ? ` style="${textPosCss(b.text_xy)}"` : ''}>
       ${title}
       <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
       <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
@@ -207,6 +207,15 @@ function backHtml(m) {
     <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
     ${b && b.text_top ? st + col : col + st}
   </div>`;
+}
+
+/** 名前・二つ名・順位の位置 (設定 back.text_xy = 真ん中からのずれ、カードの px)。列ごと上下左右にずらす
+ * (transform は使わない: html2canvas が変形した要素の中の、回したシールの絵の位置を誤る) @param {{ x: number, y: number } | null | undefined} p */
+const textPosCss = p => p ? `left:${p.x}px;right:${-p.x}px;top:${p.y}px;bottom:${-p.y}px` : '';
+/** 描いてある裏面の、名前・二つ名・順位だけを動かす (編集中のドラッグ。描き直さない) @param {HTMLElement} el renderBack した箱 @param {{ x: number, y: number } | null} p */
+export function setTextPos(el, p) {
+  const col = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-col'));
+  if (col) col.style.cssText = textPosCss(p);
 }
 
 // ── 文字サイズの自動調整 (スケール前の 514×333 座標で測る。transform は scrollWidth に影響しない) ──
@@ -864,4 +873,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, renderBack, ready, ensureGlow, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, renderBack, setTextPos, ready, ensureGlow, capture, makeAchFitTester, COLORS, TEMPLATES };

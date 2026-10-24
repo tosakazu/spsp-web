@@ -80,6 +80,19 @@ test('名前を前に (text_top) なら文字の列がシールより後 (上)�
   assert.ok(el.querySelector('.pc-in.pcb-outline'));
 });
 
+test('名前・二つ名・順位の位置 (text_xy) は文字の列ごとずらす (transform は使わない)。setTextPos で描き直さずに動かせる', async () => {
+  const { w, PC } = await load();
+  const el = w.document.getElementById('b');
+  PC.renderBack(el, model({ stickers: [], text_top: false, outline: false, text_xy: { x: -20, y: 15 } }));
+  const col = /** @type {HTMLElement} */ (el.querySelector('.pcb-col'));
+  assert.strictEqual(col.style.left, '-20px');
+  assert.strictEqual(col.style.right, '20px');
+  assert.strictEqual(col.style.top, '15px');
+  assert.strictEqual(col.style.transform, '');
+  PC.setTextPos(el, null);
+  assert.strictEqual(col.style.left, '');
+});
+
 test('シールが無ければ層も光も作らない', async () => {
   const { w, PC } = await load();
   const el = w.document.getElementById('b');

@@ -18,7 +18,7 @@ import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
 import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
-import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
+import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** 貼ったときの大きさ (一辺、カードの px)。カードの高さの 3 分の 1 強 */
@@ -97,12 +97,19 @@ export async function mountBackEditor(o) {
   let latin = o.latin;
   let textTop = !!(o.back && o.back.text_top);
   let stickerText = !!(o.back && o.back.sticker_text);
+  /** 名前・二つ名・順位の位置 (真ん中からのずれ。null = 真ん中) @type {{ x: number, y: number } | null} */
+  let txt = o.back && o.back.text_xy ? { ...o.back.text_xy } : null;
   // 文字の影は、前に出していて白フチでないときだけ (js/card_stickers.js normBack と同じ。前に出した文字は裏面の複製 bz-text に描く)
-  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline: textTop && !stickerText, sticker_text: stickerText });
+  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline: textTop && !stickerText, sticker_text: stickerText, text_xy: txt || undefined });
   const renderBase = () => {
     const m = baseModel();
     SPSPPlayerCard.renderBack($('bz-card'), m);
     if (textTop) SPSPPlayerCard.renderBack($('bz-text'), m);
+  };
+  /** 名前・二つ名・順位の位置だけを描いてある裏面に写す (ドラッグ中は描き直さない) */
+  const showTextPos = () => {
+    SPSPPlayerCard.setTextPos($('bz-card'), txt);
+    SPSPPlayerCard.setTextPos($('bz-text'), txt);
   };
 
   // ── 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる) ──
@@ -176,10 +183,10 @@ export async function mountBackEditor(o) {
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
   /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
-  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, sticker_text: stickerText }) }); }
+  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, sticker_text: stickerText, text_xy: txt }) }); }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
-  const snap = () => JSON.stringify(stickers);
+  const snap = () => JSON.stringify({ stickers, txt });
   /** @type {string[]} */
   const past = [snap()];
   /** @type {string[]} */
@@ -200,6 +207,7 @@ export async function mountBackEditor(o) {
   const paintHistory = () => {
     /** @type {HTMLButtonElement} */ ($('bz-undo')).disabled = past.length < 2 && snap() === past[0];
     /** @type {HTMLButtonElement} */ ($('bz-redo')).disabled = !future.length;
+    /** @type {HTMLButtonElement} */ ($('bz-text-center')).disabled = !txt;
   };
   /** 変えたものを履歴に積み、カードの設定に返す。続けて動かすもの (スライダー・ドラッグ・矢印) は手が止まってから 1 回に、
    * 押すだけの操作 (貼る・剥がす・形・重なり順・既定に戻す) はすぐ 1 回に @param {boolean} [now] */
@@ -210,7 +218,10 @@ export async function mountBackEditor(o) {
   };
   /** @param {string} json */
   const restore = json => {
-    stickers = JSON.parse(json);
+    const j = JSON.parse(json);
+    stickers = j.stickers;
+    txt = j.txt;
+    showTextPos();
     if (sel != null && !stickers.some(s => s.e === sel)) sel = null;
     emit();
     place(); paintTray(); paintHistory();
@@ -230,6 +241,14 @@ export async function mountBackEditor(o) {
   };
   $('bz-undo').addEventListener('click', undo);
   $('bz-redo').addEventListener('click', redo);
+  // 名前・二つ名・順位を真ん中に戻す (その他のメニュー)
+  $('bz-text-center').addEventListener('click', () => {
+    if (!txt) return;
+    txt = null;
+    showTextPos(); commit(true);
+    /** @type {HTMLDetailsElement} */ ($('bz-menu')).open = false;
+    toast('名前・二つ名・順位を真ん中に戻しました', '元に戻す', undo);
+  });
 
   // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
   //    (層ごと transform で縮めると、ブラウザによってはシールが粗く見えるので、1 枚ずつ実際の大きさで描く) ──
@@ -522,7 +541,17 @@ export async function mountBackEditor(o) {
   // ── ドラッグ (移動)・つまみ (回転と大きさ)・2 本指 (回転と大きさ) ──
   /** @type {Map<number, { x: number, y: number }>} 押している指 (カードの座標) */
   const ptrs = new Map();
-  /** @type {null | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean, slop: number }
+  /** 名前・二つ名・順位の所か (描いてある裏面の文字の箱。白フチならその絵、少し広め) @param {number} cx @param {number} cy */
+  const textHit = (cx, cy) => {
+    const card = $('bz-card');
+    const sel0 = card.querySelector('.pcb-sx') ? '.pcb-sx-l' : '.pcb-title, .pcb-name-t, .pcb-rank';
+    return Array.from(card.querySelectorAll(sel0)).some(n => {
+      const r = n.getBoundingClientRect(), m = 4;
+      return cx >= r.left - m && cx <= r.right + m && cy >= r.top - m && cy <= r.bottom + m;
+    });
+  };
+  /** @type {null | { kind: 'text', x0: number, y0: number, px: number, py: number, sx: number, sy: number, moved: boolean, slop: number }
+   *          | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean, slop: number }
    *          | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number, sx: number, sy: number, moved: boolean, slop: number }
    *          | { kind: 'pinch', s: Sticker, a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number, moved: boolean }} */
   let drag = null;
@@ -550,6 +579,13 @@ export async function mountBackEditor(o) {
     try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
     if (ptrs.size === 2) { startPinch(); return; }
     if (ptrs.size > 2) return;
+    // 名前・二つ名・順位: 前に出しているときはシールより先に、シールの下にあるときはシールの無い所で掴める
+    if (!onRot && (textTop || !stEl) && textHit(e.clientX, e.clientY)) {
+      e.preventDefault();
+      drag = { kind: 'text', x0: txt ? txt.x : 0, y0: txt ? txt.y : 0, px: pt.x, py: pt.y, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
+      select(null);
+      return;
+    }
     const s = onRot ? cur() : stEl ? stickers.find(x => x.e === stEl.dataset.e) : null;
     if (!s) { drag = null; select(null); return; }
     e.preventDefault();
@@ -566,6 +602,21 @@ export async function mountBackEditor(o) {
     const pt = toCard(e.clientX, e.clientY);
     ptrs.set(e.pointerId, pt);
     if (!drag) return;
+    if (drag.kind === 'text') {
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+        drag.moved = true;
+        drag.px = pt.x; drag.py = pt.y;
+        return;
+      }
+      // 真ん中の近く (4px) は真ん中に吸い付ける (戻しやすく)
+      const snap0 = (/** @type {number} */ v) => (Math.abs(v) < 4 ? 0 : Math.round(v * 10) / 10);
+      const x = snap0(Math.max(-TEXT_DX, Math.min(TEXT_DX, drag.x0 + pt.x - drag.px)));
+      const y = snap0(Math.max(-TEXT_DY, Math.min(TEXT_DY, drag.y0 + pt.y - drag.py)));
+      txt = x || y ? { x, y } : null;
+      showTextPos();
+      return;
+    }
     const s = drag.s;
     if (drag.kind === 'move') {
       // 少し動くまではタップ (選ぶだけ) とみなして動かさない (押しただけでずれないように)。
@@ -610,7 +661,7 @@ export async function mountBackEditor(o) {
     if (!ptrs.delete(e.pointerId)) return;
     if (drag) commit();
     // 2 本指の片方を離したら、残った指で移動を続ける
-    if (ptrs.size === 1 && drag && drag.kind === 'pinch') {
+    if (ptrs.size === 1 && drag && drag.kind === 'pinch' && drag.s) {
       const [p] = [...ptrs.values()];
       drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y, sx: 0, sy: 0, moved: true, slop: 0 };
     } else if (!ptrs.size) drag = null;
