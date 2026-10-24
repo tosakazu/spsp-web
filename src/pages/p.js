@@ -787,7 +787,8 @@ function render() {
     });
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
     // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
-    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
+    // preview (誰でも編集できる、CARD_OPEN_EDIT) はログインしていてもいなくても、どの選手でも出す
+    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable() || SpspLogin.openEdit()) ? '' : 'none'; };
     showEdit();
     SpspLogin.onChange(showEdit);
     SpspLogin.verify().then(showEdit).catch(() => {});
