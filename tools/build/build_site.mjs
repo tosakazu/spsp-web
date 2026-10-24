@@ -4,7 +4,7 @@
 //   node tools/build/build_site.mjs [--region JP] [--out dist] [--site site] [--data-root https://data.spsp.games/jp/] [--quiet]
 //   --data-root: JSON の置き場 (別ホスト = R2 など)。out/region/config.js の dataRoot に書く (無ければ config のまま = 同じルート)
 //
-// やること (docs/frontend_stack_review.md の B、docs/frontend_i18n_review.md §4.5):
+// やること (docs/archive/frontend_stack_review.md の B、docs/archive/frontend_i18n_review.md §4.5):
 //   1. site/ の静的ファイル (js / css / 画像 / 辞書 / regions) を out/ に写す。region symlink は配信する地域の実体に置き換える。
 //      out/ にビルド (spsp_scripts) が書く生成物 (players/ data/ meta.json …) は触らない (消さない)。
 //   2. HTML ページを既定言語で 1 系統だけ生成する (2026-09-28 から。以前は他言語を out/<lang>/ に別の木で出していた)。

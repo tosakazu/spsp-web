@@ -5,6 +5,7 @@ import '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/js/links.js';
 import '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import '../../site/js/tags.js';
@@ -30,9 +31,95 @@ const DATA = [];
 let META = null;
 let currentMethod = 'ensemble';
 let filterText = '';
+// 海外・計測中の選手を表に出すか (表の上のチェックボックス。既定は出さない)。検索中は隠さない (名前で探した人は必ず出す)
+let showOverseas = false;
+let showProvisional = false;
+/** @param {SpspRankRecord} r */
+const isHidden = (r) => (!showOverseas && !!r._is_overseas) || (!showProvisional && SPSPRankingTable.isProvisional(r));
+const hiding = () => !filterText && (!showOverseas || !showProvisional);
+/** 表の rowFilter (隠さないときは null) */
+const rowFilter = () => (hiding() ? (/** @type {SpspRankRecord} */ r) => !isHidden(r) : null);
 // page-level state. sort / cap / filtered rows は TABLE (= SPSPRankingTable) 内部で保持.
 // tourSortMode は SPSPDetail 内部で管理. PAGE_INCREMENT は infinite scroll の 1 段分.
 const PAGE_INCREMENT = 512;
+
+// ── data/views/ 読み (js/views.js) ──
+// ビルドが data/views/ を出していれば、全選手の latest_tjpr_full.jsonl は読まず、表の行は
+// ranking/<method>/<k>.json (順位順に 1000 人ずつ) を無限スクロールが届いた分だけ取る。表示順位 (_display_rank) と
+// 海外 (_is_overseas) はビルドが全選手で計算済み。検索は players_index.json (全選手の名前) で当て、当たった人の行だけ取る。
+// views が無ければ従来どおり全選手を読んで表が並べ替え・絞り込みをする (VIEWS = null)。
+/** @type {any} manifest.json (null = 従来どおり) */
+let VIEWS = null;
+/** @type {any} character_index.json (取ってきた行に全一を付ける) */
+let CHAR_IDX = null;
+/** @type {Set<number> | null} */
+let OVERSEAS_UIDS = null;
+/** 表の行の出どころ: 順位評価ごとの全国表 (chunk を順に) か、検索の当たり (uid の並び) */
+/** @typedef {{ kind: 'method', method: string, rows: SpspRankRecord[], next: number, total: number, busy: Promise<void> | null }
+ *          | { kind: 'search', method: string, q: string, hits: number[], rows: SpspRankRecord[], total: number, busy: Promise<void> | null }} RowSource */
+/** @type {Record<string, RowSource>} */
+const METHOD_SOURCES = {};
+/** @type {RowSource | null} */
+let SOURCE = null;
+
+/** @param {SpspRankRecord[]} rows */
+function decorate(rows) {
+  if (CHAR_IDX && SPSPRankingTable && SPSPRankingTable.attachZenichi) SPSPRankingTable.attachZenichi(rows, CHAR_IDX, OVERSEAS_UIDS);
+  return rows;
+}
+/** @param {string} method @returns {RowSource} */
+function methodSource(method) {
+  if (!METHOD_SOURCES[method]) METHOD_SOURCES[method] = { kind: 'method', method, rows: [], next: 0, total: VIEWS.n_players, busy: null };
+  return METHOD_SOURCES[method];
+}
+/** 表に出る行の数 (順位評価の表では隠す人を数えない) @param {RowSource} src */
+function shownCount(src) {
+  return src.kind === 'method' && hiding() ? src.rows.reduce((n, r) => (isHidden(r) ? n : n + 1), 0) : src.rows.length;
+}
+/** 表に出る行を n 行目まで (全体がそれより少なければ全部) 取ってくる @param {RowSource} src @param {number} n @returns {Promise<void>} */
+function ensureRows(src, n) {
+  if (src.rows.length >= src.total || shownCount(src) >= n) return Promise.resolve();
+  if (!src.busy) {
+    src.busy = (async () => {
+      if (src.kind === 'method') {
+        const recs = await SPSPViews.chunk(src.method, src.next);
+        src.next++;
+        if (!recs.length) src.total = src.rows.length;   // 想定より少ない (manifest とずれた) ときは打ち切る
+        for (const r of decorate(recs)) src.rows.push(r);
+      } else {
+        const want = src.hits.slice(src.rows.length, Math.max(n, src.rows.length + PAGE_INCREMENT));
+        const recs = await SPSPViews.rowsByUids(want);
+        if (recs.length < want.length) src.total -= want.length - recs.length;   // index と表がずれた人は数えない
+        for (const r of decorate(recs)) src.rows.push(r);
+      }
+    })().finally(() => { src.busy = null; });
+  }
+  return src.busy.then(() => ensureRows(src, n));
+}
+/** 表に出す行の出どころを差し替える (タブ切替・検索) @param {RowSource} src */
+async function useSource(src) {
+  SOURCE = src;
+  await ensureRows(src, PAGE_INCREMENT);
+  if (SOURCE !== src || !TABLE) return;
+  TABLE.method = src.method;   // タブの順位評価に (行が届いてから切り替える。途中の行を別の順位で並べ直さない)
+  TABLE.setRows(src.rows);   // 表示件数は先頭から
+}
+/** 検索の当たり (players_index.json。並びは表と同じ = いまの順位評価の順位順、順位なしは末尾) @param {string} q @param {string} method */
+async function searchSource(q, method) {
+  const hits = await SPSPViews.searchIndex(q);
+  const key = method === 'tjpr' ? 'tjpr' : method === 'bt_gated' ? 'bt' : 'ens';
+  const rk = (/** @type {any} */ h) => (h[key] > 0 ? h[key] : Infinity);
+  const order = hits.map((h, i) => ({ h, i })).sort((a, b) => (rk(a.h) - rk(b.h)) || (a.i - b.i)).map((x) => x.h.uid);
+  return /** @type {RowSource} */ ({ kind: 'search', method, q, hits: order, rows: [], total: order.length, busy: null });
+}
+let searchSeq = 0;
+/** views 読みのときの検索・タブ切替 */
+async function refreshViewsSource() {
+  const seq = ++searchSeq;
+  const src = filterText ? await searchSource(filterText, currentMethod) : methodSource(currentMethod);
+  if (seq !== searchSeq) return;
+  await useSource(src);
+}
 
 // トップだけはロゴのアニメーションを最後まで見せてから表を出す。
 // 読み込みが先に終わっても待つ (画面のどこかをタップ/クリックすれば即スキップ)。
@@ -47,7 +134,9 @@ async function loadData() {
   const t0 = performance.now();
   try {
     // meta.json + latest_tjpr_full.jsonl (+ overseas.json / character_index.json) は js/ranking_page.js
-    const master = await SPSPRankingPage.loadMaster(SPSP.data, { overseas: true, charIdx: true });
+    // data/views/ があれば全国表の先頭 1000 人 (ranking/ensemble/0.json) だけ。無ければ全選手 (latest_tjpr_full.jsonl)
+    const master = await SPSPRankingPage.loadMaster(SPSP.data, { overseas: true, charIdx: true, views: (V) => V.chunk('ensemble', 0) });
+    VIEWS = master.views;
     const meta = /** @type {MainMeta} */ (master.meta);
     META = meta;
     const overseasUids = master.overseasUids;
@@ -57,27 +146,39 @@ async function loadData() {
     const SITE_VERSION_FULL = '__SITE_VERSION__';
     const versionShort = SITE_VERSION_FULL.split(' · ')[0] || SITE_VERSION_FULL;
     const navMeta = document.getElementById('meta-info');
-    if (navMeta) navMeta.textContent = t('nav.meta.updated_version', { time: genTime, version: versionShort });
+    // 版が入っていない (ローカルのビルド) ときは nav.js と同じく版を出さない (どちらが後に書いても同じ表示になるように)
+    const isStamped = !versionShort.includes('SITE_VERSION');
+    if (navMeta) navMeta.textContent = isStamped ? t('nav.meta.updated_version', { time: genTime, version: versionShort }) : t('nav.meta.updated', { time: genTime });
     const footer = document.getElementById('footer-info');
     if (footer) footer.innerHTML =
       t('ranking.footer.summary', { date: meta.eval_date, n: meta.n_players, days: meta.lookback_days }) + ' · ' +
       `<a href="${SPSP.root}${SPSP.pageHref('overview.html')}" style="color:#dc2626">${t('ranking.footer.overview')}</a> · ` +
       `<a href="${SPSP.root}${SPSP.pageHref('details.html')}" style="color:#dc2626">${t('ranking.footer.details')}</a>`;
     const recs = master.recs;
-    status.textContent = t('ranking.status.parsing', { n: recs.length });
+    const nAll = VIEWS ? VIEWS.n_players : recs.length;   // views 読みでは取ってきたのは先頭だけ。件数は全選手で出す
+    status.textContent = t('ranking.status.parsing', { n: nAll });
     for (const rec of recs) DATA.push(rec);
-    if (overseasUids && SPSPRankingTable && SPSPRankingTable.computeDisplayRanks) {
+    if (VIEWS) {
+      // 表示順位・海外はビルドが計算済み (行の _display_rank / _is_overseas)。一部の行で計算し直さない
+      CHAR_IDX = charIdx; OVERSEAS_UIDS = overseasUids;
+      const src = methodSource('ensemble');
+      src.rows = DATA; /** @type {any} */ (src).next = 1;
+      SOURCE = src;
+    } else if (overseasUids && SPSPRankingTable && SPSPRankingTable.computeDisplayRanks) {
       SPSPRankingTable.computeDisplayRanks(DATA, overseasUids);
     }
     if (charIdx && SPSPRankingTable && SPSPRankingTable.attachZenichi) {
       SPSPRankingTable.attachZenichi(DATA, charIdx, overseasUids);
     }
-    status.textContent = t('ranking.status.loaded', { n: DATA.length, ms: (performance.now()-t0).toFixed(0) });
+    status.textContent = t('ranking.status.loaded', { n: VIEWS ? nAll : DATA.length, ms: (performance.now()-t0).toFixed(0) });
     await INTRO_GATE;          // アニメーションを最後まで (タップで飛ばせる)
     render();
+    if (VIEWS && filterText) refreshViewsSource().catch(() => {});   // 読み込み中に検索欄へ打たれていた
     fadeInOnce(document.querySelector('.table-wrap'));
     // ログイン中なら速報の上に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
-    SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) || null).catch(() => {});
+    // views 読みでは表に居ない (まだ取っていない) 人の行は ranking/ensemble/ から 1 つだけ取る
+    SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) ||
+      (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }
@@ -132,6 +233,24 @@ function ensureTable() {
     totalForRankFrac: 'meta',         // 分母 = META.n_players
     playerHrefPrefix: '',             // ルート直下
     columns: _columnsForMeta(META),
+    sortable: false,                  // 全国ランキングは並べ替えなし (並びは常に いまのタブの順位順)
+    rowFilter: rowFilter(),
+    // views 読み: 持っている行の先まで届いたら続きを取る (タブ・検索の出どころごと)
+    // 海外・計測中を隠しているときは、まだ取っていない行のうち何人出るか分からない。取り終わるまでは「出した数 + 1」(続きがある印) にする
+    moreRows: VIEWS ? {
+      total: () => {
+        if (!SOURCE) return 0;
+        if (SOURCE.kind !== 'method' || !hiding()) return SOURCE.total;
+        const n = shownCount(SOURCE);
+        return SOURCE.rows.length >= SOURCE.total ? n : n + 1;
+      },
+      exact: () => !(SOURCE && SOURCE.kind === 'method' && hiding() && SOURCE.rows.length < SOURCE.total),
+      need: (/** @type {number} */ cap) => {
+        const src = SOURCE;
+        if (!src) return;
+        ensureRows(src, cap).then(() => { if (SOURCE === src && TABLE) TABLE.replaceRows(src.rows); }).catch(() => {});
+      },
+    } : null,
     rowClick: (rec, tr, ev) => mainRowClickHandler(rec, tr, ev),
   });
   tbl.meta = META;
@@ -150,7 +269,8 @@ function fadeInOnce(el) {
 function render() {
   const tbl = ensureTable();
   tbl.meta = META;
-  SPSPRankingPage.applyState(tbl, { rows: DATA, method: currentMethod, filterText });
+  // views 読みでは行は出どころ (SOURCE) が持つ。絞り込みは検索の当たりとして出どころの側で済んでいる
+  SPSPRankingPage.applyState(tbl, { rows: VIEWS && SOURCE ? SOURCE.rows : DATA, method: currentMethod, filterText: VIEWS ? '' : filterText });
 }
 
 
@@ -158,7 +278,7 @@ function render() {
 function getDetailCfg() {
   return {
     getMeta: () => META || {},
-    getDataArray: () => DATA,
+    getDataArray: () => (VIEWS && SOURCE ? SOURCE.rows : DATA),
     pathPrefix: SPSP.langRoot, dataPrefix: SPSP.data,  // メインランキングはルート直下 ('' / 言語別ページでは '' と '../')
   };
 }
@@ -170,23 +290,50 @@ function getDetailCfg() {
 
 SPSPRankingPage.bindSearch(text => {
   filterText = text;
+  if (TABLE) TABLE.rowFilter = rowFilter();   // 検索中は隠さない (次の描画から)
+  if (VIEWS) { if (TABLE) refreshViewsSource().catch(() => {}); return; }
   if (TABLE) TABLE.setFilterText(filterText);
 });
 
 SPSPRankingPage.bindMethodTabs(method => {
   currentMethod = method;
+  if (VIEWS) { if (TABLE) refreshViewsSource().catch(() => {}); return; }   // そのタブの順位順の行 (ranking/<method>/) に差し替える
   if (TABLE) {
     TABLE.setSort('rank', 'asc');   // トップだけタブ切替で並びを順位に戻す
     TABLE.setMethod(currentMethod);
   }
 });
 
+// 海外・計測中を表示 (チェックボックス)
+/** @param {string} id @param {(on: boolean) => void} set */
+function bindShowToggle(id, set) {
+  const cb = /** @type {HTMLInputElement | null} */ (document.getElementById(id));
+  if (!cb) return;
+  cb.checked = false;   // 戻るで来たときにブラウザが前の状態を残すことがある。表は既定 (隠す) で描くので合わせる
+  cb.addEventListener('change', () => {
+    set(cb.checked);
+    if (TABLE) TABLE.setRowFilter(rowFilter());   // views 読みで足りなければ表が続きを取らせる (moreRows.need)
+  });
+}
+bindShowToggle('show-overseas', (on) => { showOverseas = on; });
+bindShowToggle('show-provisional', (on) => { showProvisional = on; });
+
 // Top N ジャンプボタン
 document.querySelectorAll('.jump').forEach(btn0 => {
   const btn = /** @type {HTMLElement} */ (btn0);
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const target = parseInt(/** @type {string} */ (btn.dataset.jump));
     if (!TABLE) return;
+    // views 読み: 表示順位が target に届くところまで行を取ってくる
+    if (VIEWS && SOURCE && SOURCE.kind === 'method') {
+      const src = SOURCE;
+      const drOf = (/** @type {SpspRankRecord} */ r) => SPSPRankingTable.getDisplayRank(r, src.method);
+      while (src.rows.length < src.total && !(src.rows.length && drOf(src.rows[src.rows.length - 1]) >= target)) {
+        await ensureRows(src, src.rows.length + 1);
+      }
+      if (SOURCE !== src) return;
+      TABLE.replaceRows(src.rows);
+    }
     // 表示順位 (= jp-counter) で target に到達する行 index を先に走査して見つける.
     // 旧コード (= currentCap = target + 32) は raw rank == display rank を仮定して
     // いたが、海外勢込みの jp-counter では raw rank > display rank になるため

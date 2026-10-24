@@ -1,204 +1,121 @@
-# spsp-web Worker — 静的配信 + `/api` (gas/*.gs の Cloudflare 移植)
+# spsp-web Worker
 
-`gas/*.gs` (Google Apps Script + スプレッドシート) を Cloudflare Worker + D1 に **1 対 1 で移植**したもの。
-フロントは `post_config.js` のエンドポイント URL を替えるだけで動く (action 名・JSON の形・エラーコードと文言は同じ)。
-設計の背景は [docs/refactor/07_cloudflare_plan.md](../docs/refactor/07_cloudflare_plan.md)。
+The Cloudflare Worker behind **spsp.games**. It serves the static site built from `site/`
+(under `/jp/` and `/na/`) and the JSON API under `/api`, with Cloudflare D1 as storage.
+Large generated JSON (player pages, tournaments, history) is **not** served here; it lives
+in R2 at `data.spsp.games`. The API began as a port of the old Google Apps Script backend
+(`gas/`); background is in [docs/archive/refactor/07_cloudflare_plan.md](../docs/archive/refactor/07_cloudflare_plan.md).
+
+## Layout
 
 ```
 worker/
-  wrangler.toml            Worker / assets / D1 / vars / 環境 (preview, na)
-  src/index.ts             fetch handler: /api → API、/ → 301 /jp/、旧 URL → 301、他 → ASSETS (+ヘッダ、callback.html に CSP)
-  src/config.ts            定数 (gas/config.gs) と env → Config
-  src/store.ts / db.ts     保存先の抽象と D1 実装 (シートの代わり)
-  src/api/router.ts        action の振り分け (gas/main.gs doPost / doGet)
-  src/api/session.ts       HMAC 署名のセッショントークン / state (gas/session.gs)
-  src/api/login.ts         action login
-  src/api/oauth.ts         start.gg の code 交換と currentUser (gas/oauth.gs)
-  src/api/vote.ts          キャラ投票の規則・資格判定 (gas/vote.gs)
-  src/api/card.ts          ログインの確認 (me) とプレイヤーカードの設定 (card_get / card_put)。GAS には無い
-  src/api/class_bracket.ts 下位クラス (Challonge) の作成・取得待ちの一覧・取得済み (docs/class_bracket_design.md)
-  src/api/challonge.ts     Challonge OAuth (challonge_begin / challonge_token) と API v2.1 の呼び出し
-  src/api/post.ts          投稿 (gas/main.gs handlePost_。未公開だが移植)
-  src/api/errlog.ts        失敗の記録 (gas/errlog.gs)
-  src/api/export.ts        ビルド向けエクスポート (gas/export.gs)
-  src/api/ratelimit.ts     連投判定 (gas/sheet.gs)
-  src/api/time.ts          固定オフセットの ISO 時刻
-  migrations/0001_init.sql D1 のテーブル
-  migrations/0002_card_settings.sql プレイヤーカードの設定 (card_settings / card_writes)
-  migrations/0003_class_brackets.sql 下位クラスの登録 (class_brackets)
-  migrations/0005_title_owned.sql   持っている二つ名の記録 (title_owned、D1 が正本)
-  migrations/0007_title_owned_without_rowid.sql  title_owned を WITHOUT ROWID に (1 行の書き込みを 1 回に。0006 は別ブランチの csp_reports)
-  migrations/0008_title_owned_draw_counts.sql    title_owned に大会で引いた回数 (n_pre / n_post)
-  migrations/0004_class_delete.sql   下位クラスの削除 (deleted_at 列) と class_mine / class_delete の連投判定 (class_actions)
-  scripts/import_votes.mjs シートの内容 → D1 の INSERT
-  scripts/assemble_dist.sh npm run build:cf の後に assets/_headers を dist-cf/ に写す
-  assets/_headers          Worker を通らないアセット用のセキュリティヘッダ
-  test/*.test.mjs          node:test (Cloudflare のランタイム不要。tests/post/gas*.test.cjs の移植)
+  wrangler.toml        Worker, assets, D1 binding, vars, environments (preview, na)
+  src/index.ts         fetch handler: routing, redirects, assets, security headers
+  src/config.ts        Env (bindings / vars / secrets) -> Config
+  src/store.ts, db.ts  storage interface and its D1 implementation
+  src/api/router.ts    /api entry point and action dispatch
+  src/api/*.ts         one module per feature (see below)
+  migrations/*.sql     D1 schema
+  scripts/             assemble_dist.sh (finishes dist-cf/), import_votes.mjs (one-off import)
+  assets/              _headers, 404.html, robots.txt copied into dist-cf/
+  test/*.test.mjs      node:test suites (no Cloudflare runtime needed)
 ```
 
-## 検証 (アカウント不要)
+## Routing (`src/index.ts`)
 
-```sh
-# リポジトリ直下で。ConoHa ではスレッド上限があるので GOMAXPROCS=1 / concurrency=1 を付ける
-GOMAXPROCS=1 npx tsc --noEmit -p worker/tsconfig.json
-UV_THREADPOOL_SIZE=1 node --test --test-concurrency=1 worker/test/*.test.mjs
-# 設定の検証とバンドル (デプロイはしない)
-cd worker && GOMAXPROCS=1 npx wrangler deploy --dry-run --outdir /tmp/cf-out
-```
+1. `/api`, `/api/*` -> the API.
+2. `/callback.html` (the region-neutral OAuth redirect URI) -> 302 to `/<region>/callback.html`,
+   choosing the region from the return path inside the signed `state`.
+3. `/` -> 301 to `SITE_PREFIX` (`/jp/` in production).
+4. Legacy URLs -> 301: `/spsp/...` (old GitHub Pages paths) and pre-region paths such as `/p/`, `/t/`,
+   `/blog/`, `/index.html` get `/jp` prepended; old per-language trees (`/jp/en/...`, `/na/ja/...`)
+   become the same page with `?lang=en|ja`.
+5. Everything else -> static assets (`dist-cf/`). Missing files get the Worker's 404 page (`/_errors/404`).
 
-`@cloudflare/workers-types` をリポジトリの devDependency に足してある (`worker/tsconfig.json` の `types`)。
-テストは Node 22.18+ / 24 の型ストリップで `.ts` を直接 import する (構文は erasable なものだけ = `erasableSyntaxOnly`)。
+Assets matching a file normally bypass the Worker (`run_worker_first` only lists `/api/*` and the
+callback pages), so their security headers come from `assets/_headers`. Responses that do go through
+the Worker get the same headers in code, and the callback page additionally gets a strict CSP
+(`connect-src 'self'`), `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
 
-## エンドポイント (GAS action → Worker)
+## API
 
-すべて **HTTP 200 の JSON** で返す (GAS と同じ。ビルドの urllib が非 2xx を例外にするため)。
-成功 `{ ok: true, ... }`、失敗 `{ ok: false, error: { code, message } }`。CORS は `*` (認証は body の token。Cookie は使わない)。
+Every response is **HTTP 200 JSON**: `{ ok: true, ... }` or `{ ok: false, error: { code, message } }`
+(the build's fetchers treat non-2xx as exceptions). Clients POST a JSON string with
+`Content-Type: text/plain` to `/api` as `{ action, ... }`; `POST /api/<action>` also works when the body
+has no `action`. CORS is `*`; auth travels in the body (no cookies). Body limit is 64 KB (2 MB for
+`title_sync`). A few read-only GET shortcuts exist, noted below; any other GET returns `bad_request`.
 
-| GAS (`gas/*.gs`) | Worker | 入力 | 応答 |
-|---|---|---|---|
-| `POST /exec` `{action, ...}` | `POST /api` (body は同じ。`Content-Type: text/plain` のまま) | | |
-| `begin_login` (session.gs) | `POST /api` `{action:"begin_login"}` または `POST /api/begin_login` | `nonce` (≤128), `returnPath` (≤512), `flow` (`post`/他は `login`) | `{state, ttlMs}` |
-| `login` (session.gs) | `POST /api` `{action:"login"}` / `POST /api/login` | `code`, `state` | `{token, user:{id,slug,gamerTag}, exp}` / `bad_request` `state_invalid` `auth_failed` |
-| `vote` (vote.gs) | `POST /api` `{action:"vote"}` / `POST /api/vote` | `token`, `charId` | `{user, charId, charName}` / `auth_failed` `bad_request` `internal` `bad_char` `not_player` `char_exists` `not_candidate` `rate_limited` |
-| `post` (main.gs) | `POST /api` `{action:"post"}` / `POST /api/post` | `code`, `state`, `body` | `{user}` / `bad_request` `body_invalid` `state_invalid` `auth_failed` `rate_limited` |
-| `me` | `POST /api` `{action:"me"}` / `POST /api/me` | `token` | `{user:{id,slug,gamerTag}, exp}` / `invalid_session` (記録しない) |
-| `card_get` | `POST /api` `{action:"card_get"}` **または** `GET /api/card?uid=` (成功は `Cache-Control: public, max-age=60`) | `uid` | `{settings:{template,color,ach,tour,title}|null, updated_at|null, title_text:{pre,post}|null}` (title_text = 付けている二つ名の文字。一覧に無い・位置に使えないものは "") / `bad_request` |
-| `title_get` | `GET /api/titles?uid=&lang=` (lang 省略は ja、成功は public, max-age=60) | `uid`, `lang` | `{bits, updated}` / 記録が無ければ `{bits:"", updated:null}` |
-| `title_sync` | `POST /api/title_sync` (body 2 MB まで。`/api` は 64 KB) | `key` (= secret `TITLE_SYNC_KEY`), `lang`, `items:[{uid, prev:{bits,n_pre,n_post}|null, bits, n_pre, n_post}]` (500 人まで), `date?` | `{changed, received, conflicts:[uid]}`。行が prev のままのときだけ書く (prev null = 無ければ作る)。違えば conflicts (書かない)。ビット列を減らす・回数を戻す送り方は `bad_request`。一覧に無い番号も受ける。updated はビットが増えたときだけ。送るのは tools/titles/sync_owned.mjs (docs/card_titles_design.md) |
-| `title_export` | `POST /api` `{action:"title_export"}` | `key`, `lang`, `after_uid?`, `limit?` (≤2000) | `{items:[{uid, bits, updated, n_pre, n_post}], next_after}` (uid の昇順。同期の道具が今の記録を読む) |
-| `card_put` | `POST /api` `{action:"card_put"}` / `POST /api/card_put` | `token`, `settings` (`null` で削除)。書く uid は token のものだけ | `{settings, updated_at}` / `invalid_session` `bad_settings` `rate_limited` (2 秒に 1 回・1 日 300 回) |
-|  | (二つ名) | `settings.title` = `{pre, post}` (id は `ja-0001` の形、両方 null なら付けない。同じ id を前後両方に置くのは今は可) | 一覧 (site/js/titles.js の TITLES[地域の言語]) に無い id・その位置に使えない id (usableIn、part は pre / post / both) は `bad_settings` (note `title_unknown`)、記録 (D1 title_owned) に無い二つ名は `title_not_owned` (記録がまだ無い選手は unlock initial のものだけ)。選手データ (R2) は読まない。言語は SITE_PREFIX (/na = en、他は ja)。titles.js は Worker から相対パスで import (worker/src/api/titles.ts) |
-| `challonge_begin` | `POST /api` `{action:"challonge_begin"}` | `nonce` (≤128), `returnPath` (≤512) | `{url, ttlMs}` = Challonge の認可画面 (client_id・scope・戻り先 `CHALLONGE_REDIRECT_URI`・state f=challonge は Worker が決める) |
-| `challonge_token` | `POST /api` `{action:"challonge_token"}` | `code`, `state` (f=challonge、単回使用) | `{access_token, expires_in, username}` (username は GET /v2.1/me.json、取れなければ null。どれも保存・記録しない) / `bad_request` `state_invalid` `challonge_auth` `challonge_error` |
-| `challonge_me` | `POST /api` `{action:"challonge_me"}` | `challonge_token` | `{username}` (GET /v2.1/me.json。ブラウザからは応答を読めない = CORS のため Worker 経由) / `challonge_auth` (401) `challonge_error` (理由は errors の note だけ: `me:http_403`、`me:no_username:keys=<キー名>` など) `bad_request` |
-| `class_create` | `POST /api` `{action:"class_create"}` | `startgg_token`, `challonge_token` (どちらも問い合わせにだけ使い保存・記録しない), `parent_event_id`, `class_letter` (B〜E), `name`, `format`, `counted`, `place_min`, `place_max`, `seeding` (random / main_result / main_spsp / spsp), `participants:[{name, seed, misc:"startgg:<id>" または "startgg:<id>:nocount" (本戦に出ていない人、SPSP では数えない)}]` (2〜512、同じ id は 1 人まで) | `{id, challonge:{id,url}}` / `bad_request` `not_admin` `startgg_error` `challonge_auth` `challonge_error` (文言は Challonge のもの) `rate_limited` `duplicate`。順に start.gg で TO か確認 (owner / admins / 本人の管理している大会の一覧 50 件×最大 4 ページ) → Challonge v2.1 にトーナメント作成 → 参加者を bulk_add → D1 に登録。作成後に失敗したら応答に `challonge:{id,url}` を添える。同じ TO は 10 秒に 1 回・1 日 50 回 (Challonge に作る前に判定) |
-| `class_mine` | `POST /api` `{action:"class_mine"}` | `startgg_token` | `{items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, counted, status, created_at, entrant_count}]}` = start.gg の本人が作った直近 60 日・削除していないもの (新しい順) / `bad_request` `startgg_error` `rate_limited` (2 秒に 1 回・1 日 500 回) |
-| `class_delete` | `POST /api` `{action:"class_delete"}` | `startgg_token`, `challonge_token`, `id` | `{id}` / `bad_request` `not_found` `not_admin` `already_imported` (取得済み = done は消さない) `challonge_auth` `challonge_error` `startgg_error` `rate_limited` (5 秒に 1 回・1 日 50 回)。作った本人か本戦の TO だけ。Challonge の DELETE (404 = もう無いは続ける。422 = 終了済み・進行中は change_state で reset してから消し直す) の後に status=deleted (行は残す)。deleted は class_waitlist に出ず、class_done を送っても done にならない (`{status:"deleted"}` を返す) |
-| `class_waitlist` | `GET /api/class_waitlist` (または POST) | なし | `{items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at}]}` (counted かつ waiting) |
-| `class_done` | `POST /api` `{action:"class_done"}` | `key` (= secret `CLASS_DONE_KEY`), `id` | `{id, status:"done"}` (TO が削除したものは done にせず `status:"deleted"`) / `auth_failed` `bad_request` `not_found` `internal` (鍵未設定) |
-| `client_error` (errlog.gs) | `POST /api` `{action:"client_error"}` / `POST /api/client_error` | `kind` (白リスト), `flow`, `note`, `token?` | `{logged: true|false}` |
-| `export_votes` (export.gs) | `POST /api` `{action:"export_votes"}` **または** `GET /api/export/votes?key=&since=` | `key`, `since?` | `{votes:[{ts,userId,charId,charName,status}], total, since}` / `auth_failed` `internal` |
-| `export_errors` (export.gs) | `POST /api` `{action:"export_errors"}` **または** `GET /api/export/errors?key=&limit=` | `key`, `limit?` (既定 100 / 上限 1000) | `{errors:[{ts,source,action,code,userId,note}], total}` |
-| `doGet` | `GET /api` (上記以外) | | `bad_request` 「このエンドポイントは POST のみ受け付けます。」 |
-| — | `OPTIONS /api` | | 204 (preflight) |
-
-`POST /api/<action>` は body に `action` が無いときだけパスから補う。ビルドの `spsp/cli/fetch_char_votes.py` は
-`post_config.js` の `GAS_ENDPOINT` に `{action:"export_votes"}` を POST するので、そのままで動く (エンドポイントを `/api` にするだけ)。
-
-### エクスポート鍵
-
-GAS と同じく `base64url(HMAC-SHA256(key=STARTGG_CLIENT_SECRET, msg="spsp:export_votes:v1"))` (末尾 `=` 無し) を受け付ける
-(ビルド側 `fetch_char_votes.py` の `derive_key` と一致。固定ベクタは `test/export.test.mjs`)。
-加えて secret `EXPORT_KEY` を設定すればその値も受け付ける (client secret を配らずに読み出し権限を渡せる)。両方無ければ `internal`。
-
-## D1 のスキーマ (`migrations/0001_init.sql`)
-
-| テーブル | 列 (シートの列 + 索引用) | 備考 |
+| Area | Actions | Notes |
 |---|---|---|
-| `votes` | `id`, `ts`, `ts_ms`, `day`, `user_id`, `user_slug`, `gamer_tag`, `char_id`, `char_name`, `status` | = `char_votes` シート。`ts` は `yyyy-MM-ddTHH:mm:ss+09:00`、`ts_ms`/`day` は連投判定用。索引 `(user_id, ts_ms)`, `(user_id, day)`, `(ts)` |
-| `posts` | `id`, `ts`, `ts_ms`, `day`, `user_id`, `user_slug`, `gamer_tag`, `body`, `status` | = `posts` シート |
-| `errors` | `id`, `ts`, `source`, `action`, `code`, `user_id`, `note` | = `errors` シート。3,000 行を超えたら古い行から削って 2,000 行にする (errlog.gs と同じ) |
-| `used_states` | `key` (署名の先頭 100 文字), `expires_ms` | 署名 state の単回使用。GAS は CacheService (揮発) に置いていた。期限切れは検証時に掃除 |
-| `card_settings` (0002) | `uid` (INTEGER PK), `settings` (検証済み JSON), `updated_at` | プレイヤーカードの設定。本人 (token の uid) だけが書く |
-| `card_writes` (0002) | `id`, `uid`, `ts_ms`, `day` | card_put の連投判定用。2 日より古い行は書き込みのたびに消す |
+| Login (start.gg OAuth) | `begin_login`, `login`, `me` | Signed `state` (single use, recorded in D1); `login` exchanges the code and issues a stateless HMAC session token. `me` checks a token. (`session.ts`, `oauth.ts`, `login.ts`) |
+| Player card | `card_get` (`GET /api/card?uid=`), `card_put` | Anyone can read; only the token's own uid can write. Rate limited. (`card.ts`) |
+| Titles | `title_get` (`GET /api/titles?uid=&lang=`), `title_sync`, `title_export` | Owned titles per player; D1 is the source of truth. Sync/export are key-protected and used by the build. Title ids are validated against `site/js/titles.js`. (`title_owned.ts`, `titles.ts`) |
+| Character votes | `vote` | Eligibility is checked against public player data from `DATA_ORIGIN`. (`vote.ts`) |
+| Class brackets (Challonge) | `challonge_begin`, `challonge_token`, `challonge_me`, `class_create`, `class_mine`, `class_delete`, `class_waitlist` (`GET /api/class_waitlist`), `class_done` | TOs create lower-class brackets on their own Challonge account. start.gg and Challonge tokens are used per request and never stored. `class_done` is key-protected and called by the data importer. See [docs/class_bracket_design.md](../docs/class_bracket_design.md). |
+| Posts | `post` | Ported but not public yet. (`post.ts`) |
+| Logging / export | `client_error`, `export_votes` (`GET /api/export/votes`), `export_errors` (`GET /api/export/errors`) | Failures are logged to D1 with codes only (no tokens or secrets). Exports are key-protected and read by the build. |
 
-| `class_brackets` (0003) | `id`, `created_at`, `ts_ms`, `day`, `parent_event_id`, `parent_tournament_id`, `class_letter`, `name`, `challonge_id` (UNIQUE), `challonge_url`, `format`, `counted`, `place_min`, `place_max`, `seeding`, `entrant_count`, `registered_by`, `status` | 下位クラスの登録。大会 ID と登録者は start.gg に問い合わせた値。start.gg のキーは持たない |
+## Storage (D1, `migrations/`)
 
-**マイグレーションはデプロイ (Actions) では当たらない。** 0002 を足した版を本番に出すときは、先に
-`npx wrangler d1 migrations apply spsp --remote` を打つ (当てないと card_get / card_put が internal になる)。
+| Table | Purpose |
+|---|---|
+| `votes`, `posts` | character votes and posts (0001) |
+| `errors` | failure log, trimmed automatically (0001) |
+| `used_states` | single-use OAuth `state` values (0001) |
+| `card_settings`, `card_writes` | player card settings and their rate-limit log (0002) |
+| `class_brackets`, `class_actions` | registered lower-class brackets (soft delete via `deleted_at`) and rate-limit log (0003, 0004) |
+| `title_owned` | owned title bits and draw counts per player (0005, 0007, 0008; 0006 is intentionally unused) |
 
-セッショントークンは署名のみ (stateless) なのでテーブルは無い。
+Session tokens are stateless, so there is no session table.
 
-## 初期設定 (アカウントのある端末で)
+**Migrations are not applied by the deploy workflow.** A change that needs a new migration must be
+applied to the remote database by a maintainer before (or together with) the deploy.
+
+## Configuration
+
+- **Vars** (public, in `wrangler.toml`, per environment): `STARTGG_CLIENT_ID`, `REDIRECT_URI`,
+  `CHALLONGE_REDIRECT_URI`, `DATA_ORIGIN` (URL, or `assets:/<prefix>` to read from the Worker's own
+  assets), `SITE_PREFIX`, `TS_OFFSET`, `SESSION_TTL_MS`, `STATE_TTL_MS`, `VOTE_TESTER_UIDS`.
+- **Secrets** (set with `wrangler secret put`, never committed): `STARTGG_CLIENT_SECRET`,
+  `SESSION_SECRET`, `EXPORT_KEY` (optional), `CHALLONGE_CLIENT_ID`, `CHALLONGE_CLIENT_SECRET`,
+  `TITLE_SYNC_KEY`, `CLASS_DONE_KEY`. A missing secret makes only the dependent actions return `internal`.
+- **Environments**: default = production (`spsp-web`, custom domain `spsp.games`);
+  `preview` = `spsp-web-preview` on workers.dev with its own D1 and start.gg app;
+  `na` = a separate North America Worker (not in use; production serves `/na/` from the main Worker).
+
+## Testing
+
+From the repository root:
 
 ```sh
+npm ci
+npm run worker:test                               # node:test suites in worker/test/
+(cd worker && npm run typecheck)                  # tsc --noEmit for the Worker
+```
+
+Tests import the `.ts` sources directly via Node's type stripping (Node 22.18+), so only erasable
+TypeScript syntax is allowed. They use an in-memory or SQLite store and stubbed `fetch`, so no
+Cloudflare account is needed.
+
+## Running locally
+
+`wrangler dev` works with the existing config (local D1, no account required):
+
+```sh
+npm run build:cf && sh worker/scripts/assemble_dist.sh --no-build   # build dist-cf/
 cd worker
-npx wrangler login
-
-# 1. D1 を作り、出力の database_id を wrangler.toml に貼る (本番 / preview / na)
-npx wrangler d1 create spsp
-npx wrangler d1 create spsp-preview
-npx wrangler d1 create spsp-na
-# 2. テーブル
-npx wrangler d1 migrations apply spsp --remote
-npx wrangler d1 migrations apply spsp-preview --remote --env preview
-# 3. secrets (値はコードにも [vars] にも書かない)
-npx wrangler secret put STARTGG_CLIENT_SECRET     # ~/spsp-secrets/startgg_oauth_client_secret の値
-npx wrangler secret put SESSION_SECRET            # GAS のスクリプトプロパティ SESSION_SECRET を写すと既存ログインが引き継げる。無ければ openssl rand -hex 32
-npx wrangler secret put EXPORT_KEY                # 任意
-npx wrangler secret put CHALLONGE_CLIENT_ID       # Challonge OAuth アプリ (下位クラス)。値は ~/spsp-secrets/challonge_oauth.env
-npx wrangler secret put CHALLONGE_CLIENT_SECRET
-npx wrangler secret put TITLE_SYNC_KEY            # 持っている二つ名の記録 (title_sync / title_export)。spsp_scripts の Actions の Secrets にも同じ値
-npx wrangler secret put CLASS_DONE_KEY            # 下位クラスの取得側 (smash_database) と同じ値。openssl rand -hex 32 で作って両方に入れる
-#    preview / na は --env preview / --env na を付けて同じことをする
+npx wrangler d1 migrations apply spsp --local
+npx wrangler dev                                  # or: npm run dev
 ```
 
-`[vars]` の `REDIRECT_URI` / `DATA_ORIGIN` / `SITE_PREFIX` / `TS_OFFSET` / `SESSION_TTL_MS` / `STATE_TTL_MS` は `wrangler.toml` 内のコメントを参照。
-`DATA_ORIGIN` は投票の資格判定で読む公開データの場所 (`/players/<uid>.json`, `/data/char_emoji.json`)。
-本番・preview とも `https://data.spsp.games/jp` (R2、2026-09-22〜)。同じ Worker の assets から読むなら `assets:/jp` (na 環境はこれ)。
+Put any secrets you need for local testing in `worker/.dev.vars` (never commit it). OAuth login
+will not complete locally because the redirect URIs point at the deployed hosts.
 
-### 投票データの移行 (シート → D1、1 回だけ)
+## Deploying
 
-```sh
-# A. ビルドが持っている写し (GAS の export_votes の JSON = build/data/char_votes.json。user_slug / gamer_tag は入っていない)
-#    GAS の /exec は GET を受け付けないので、生の応答が要るときは POST {action:"export_votes", key} で取る (fetch_char_votes.py --full が同じことをする)
-node worker/scripts/import_votes.mjs ~/spsp-ranking/build/data/char_votes.json > /tmp/votes.sql
-# B. シートを CSV でダウンロードしたもの (全列が入る。こちらを推奨)
-node worker/scripts/import_votes.mjs ~/Downloads/char_votes.csv > /tmp/votes.sql
-
-cd worker && npx wrangler d1 execute spsp --remote --file /tmp/votes.sql
-npx wrangler d1 execute spsp --remote --command 'SELECT COUNT(*) FROM votes'
-```
-
-`status=debug` の行と uid / char_id の無い行は入れない (エクスポートと同じ基準)。同じ入力を 2 回流しても `(ts, user_id, char_id)` が既にある行は増えない。
-GAS を止める直前にもう一度 A を流せば差分が入る。
-
-### アセットとデプロイ
-
-```sh
-npm run build:cf                           # dist-cf/jp (JP) + dist-cf/na (NA)。--canonical https://spsp.games/jp/ と --data-root 付き (package.json)
-sh worker/scripts/assemble_dist.sh --no-build   # assets/_headers を dist-cf/ に写す (Worker を通らないアセットのヘッダ)
-cd worker
-npx wrangler deploy --env preview          # spsp-web-preview.<account>.workers.dev
-npx wrangler deploy --env ""               # 本番 (spsp-web)
-```
-
-`.github/workflows/deploy.yml` (main への push) は `npm run build:cf` → `cd worker && npx wrangler deploy` を行う。
-`_headers` を CI でも効かせるには deploy.yml に `cp worker/assets/_headers dist-cf/` を 1 行足す (worker/ の外なので未変更)。
-`dist-cf/` は `.gitignore` で無視される。assets は 1 デプロイ 20,000 ファイルまでなので、`players/` 等の JSON は入れない (R2 で配信する、plan §経路)。
-`spsp.games/*` の routes は DNS を Cloudflare に移してから `wrangler.toml` のコメントを外す。手順の全体は [docs/refactor/08_cloudflare_steps.md](../docs/refactor/08_cloudflare_steps.md)。
-
-## フロントの切替 (`site/` 側。別コミット)
-
-1. `site/js/post_config.js` (08_cloudflare_steps.md §4 の「regions config の auth に集約」をするならそちらに。いまのコードは `post_config.js` を読む)
-   - `GAS_ENDPOINT: 'https://spsp.games/api'` (相対 `/api` でもよいが、ビルドの `fetch_char_votes.py` がこの値をそのまま叩くので絶対 URL にする)
-   - `REDIRECT_URI: 'https://spsp.games/jp/callback.html'`
-   - `CANONICAL_ORIGIN: 'https://spsp.games'`, `CANONICAL_BASE: '/jp/'` — `post.js` / `vote.js` は正規配信元でしか認証を始めず、`callback.js` は `safeReturnPath(r, CANONICAL_BASE)` で戻り先を縛るので、ここを替えないと spsp.games では認証が始まらない / 戻り先が `/spsp/index.html` に落ちる
-2. `site/callback.html` の `<meta http-equiv="Content-Security-Policy">` の `connect-src` を `'self'` にする
-   (meta と Worker のヘッダの両方が効くので、meta が `script.google.com` のままだと `/api` への fetch が CSP で止まる)。
-   `tests/post/page.test.cjs` の INV-8 (connect-src が google であること) も合わせて直す。
-3. **start.gg アプリ (client_id 582) の Redirect URI に `https://spsp.games/jp/callback.html` を追加**する (認可時と token 交換で完全一致が必要。旧 URI は並走期間中は残す)。
-4. `~/spsp-ranking` 側は `post_config.js` の `GAS_ENDPOINT` を読むだけなので変更不要。`fetch_char_votes.py --full` を 1 回流し、`source_rows` が D1 の行数になることを確認する。
-5. GAS は読み取り専用で 1 週間ほど残し (旧フロント = gh-pages がまだ叩く)、その後停止。
-
-## 1 対 1 にできなかった点
-
-| GAS | Worker | 影響 |
-|---|---|---|
-| `SESSION_SECRET` が無ければ自動生成してスクリプトプロパティに保存 | secret は必須。無ければ `internal` (Worker は実行時に secret を書けない) | 初期設定で 1 回 `secret put`。GAS の値を写せば既存ログインが有効なまま |
-| state の単回使用は CacheService (揮発。飛べば 1 回だけ再利用できる) | D1 `used_states` (永続) | 厳密になる方向 |
-| 連投判定は末尾 500 行 (`RATE_SCAN_ROWS`) を走査、`LockService` で直列化 | ユーザーの行を索引で直接引く。`INSERT ... SELECT ... WHERE 条件` の条件付き挿入で直列化 (`db.ts`) | 500 行より前の自分の行も見えるが、60 秒 / 当日 の条件では実質同じ |
-| `LAST_OAUTH_ERROR` (グローバル) | ハンドラの返り値 (`HandlerResult.note`) で失敗ログに渡す | 同時リクエストで混ざらない |
-| `Utilities.formatDate(..., 'Asia/Tokyo')` | 固定オフセット `TS_OFFSET` (+09:00) | JST は DST が無いので同じ。北米 env は固定オフセットにするか UTC にするか要決定 |
-| シートのセルが日時値になった場合の保険 (`isoOf_` / `parseTimestamp_` の Date 分岐) | 不要 (`ts` は TEXT、`ts_ms` は INTEGER) | — |
-| 応答は POST のみ | 加えて `GET /api/export/*`、`POST /api/<action>`、`OPTIONS`、CORS `*`、body 64 KB 上限 | 既存クライアントには影響なし |
-| `setup.gs` (シート作成 / 設定確認) | `migrations/` と `wrangler d1` コマンド、`wrangler deploy --dry-run` | 手順は上記 |
-| エクスポート鍵は導出鍵のみ | 導出鍵 + 任意の `EXPORT_KEY` | 追加のみ |
-| 公開データは gh-pages (`DATA_BASE_URL`) 固定 | `DATA_ORIGIN` var (URL か `assets:<prefix>`) | 既定は gh-pages のままなので判定の鮮度は同じ。R2 に移すと nightly と同時に更新される |
-
-## 挙動の要点 (GAS と同じ)
-
-- INV-1: 保存する uid / slug / gamerTag は start.gg の `currentUser` 由来のみ (`vote` はトークンの中身 = login 時の currentUser)。
-- INV-2/4: currentUser が取れなければ何も書かない。access token / code / secret はログにも保存にもレスポンスにも出ない。
-- INV-8: `*/callback.html` の応答に `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'` と `Referrer-Policy: no-referrer` を付ける (`run_worker_first` で Worker を通す)。他のアセットは `assets/_headers` のヘッダだけ。
-- 失敗は `errors` に `source/action/code/user_id/note` だけ残す (`begin_login` / `export_*` / `client_error` 自身の失敗は残さない)。
+Contributors do not deploy. A push to `main` runs `.github/workflows/deploy.yml` in the `production`
+GitHub environment (restricted to `main`): `npm test`, `npm run typecheck`, `npm run build:cf`,
+`assemble_dist.sh`, then `wrangler deploy`. Maintainers can also run it manually with
+`workflow_dispatch` to target `preview`. Docs-only changes (`docs/**`, `*.md`) do not trigger a deploy.
+The assets limit is 20,000 files per deploy, which is why generated JSON stays in R2.

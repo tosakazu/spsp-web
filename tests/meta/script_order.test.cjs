@@ -1,5 +1,5 @@
 'use strict';
-// 各ページのスクリプト (src/pages/<id>.js の import の並び = ビルドの結合順) が site/js/README.md の依存関係の表と矛盾しないか。
+// 各ページのスクリプト (src/pages/<id>.js の import の並び = ビルドの結合順) が 下の DEPS の依存関係の表 (以前は site/js/README.md にあった) と矛盾しないか。
 // bundler が無いので、共通モジュールは依存先より後に読まれていないと (評価時か呼び出し時に) 壊れる。
 // また、参照しているファイルが存在するか。
 const test = require('node:test');
@@ -16,9 +16,10 @@ const DEPS = {
   'js/i18n.js': ['region/config.js', 'i18n/ja.js', 'region/i18n.js'],
   'region/i18n.js': ['i18n/ja.js'],
   'js/tags.js': ['js/i18n.js'],
-  'player-detail.js': ['js/html.js', 'js/format.js', 'js/tags.js', 'js/player_data.js', 'js/i18n.js'],
-  'js/ranking_page.js': ['js/data.js', 'ranking-table.js', 'player-detail.js', 'js/i18n.js'],
-  'js/vote.js': ['js/player_data.js', 'js/fighter_number.js', 'js/auth.js', 'js/oauth_state.js', 'js/post_config.js', 'js/i18n.js'],
+  'js/player_data.js': ['js/views.js'],
+  'player-detail.js': ['js/html.js', 'js/format.js', 'js/tags.js', 'js/views.js', 'js/player_data.js', 'js/i18n.js'],
+  'js/ranking_page.js': ['js/data.js', 'js/views.js', 'ranking-table.js', 'player-detail.js', 'js/i18n.js'],
+  'js/vote.js': ['js/views.js', 'js/player_data.js', 'js/fighter_number.js', 'js/auth.js', 'js/oauth_state.js', 'js/post_config.js', 'js/i18n.js'],
   'js/post.js': ['js/oauth_state.js', 'js/post_config.js', 'js/i18n.js'],
   'js/callback.js': ['js/auth.js', 'js/oauth_state.js', 'js/post_config.js', 'js/i18n.js'],
   'js/auth.js': ['js/post_config.js'],
@@ -26,13 +27,13 @@ const DEPS = {
   ...(() => {
     const parts = ['00_state.js', '10_skeleton.js', '20_help.js', '30_core.js', '40_startgg.js', '50_events.js', '60_upcoming.js', '70_players_cache.js',
       '75_series_rematch.js', '80_csv_source.js', '85_waves.js', '90_spec.js', '99_bootstrap.js'].map((f) => 'seeding/app/' + f);
-    const base = ['js/html.js', 'js/i18n.js', 'js/data.js', 'js/player_data.js', 'ranking-table.js', 'player-detail.js',
+    const base = ['js/html.js', 'js/i18n.js', 'js/data.js', 'js/views.js', 'js/player_data.js', 'ranking-table.js', 'player-detail.js',
       'seeding/seed_optimizer.js', 'seeding/seed_data.js', 'seeding/seed_share.js'];
     const out = {};
     parts.forEach((f, i) => { out[f] = base.concat(parts.slice(0, i)); });
     return out;
   })(),
-  'bracket/bracket_app.js': ['js/html.js', 'js/player_data.js', 'seeding/seed_data.js', 'seeding/seed_share.js', 'bracket/bracket_core.js', 'js/i18n.js'],
+  'bracket/bracket_app.js': ['js/html.js', 'js/views.js', 'js/player_data.js', 'seeding/seed_data.js', 'seeding/seed_share.js', 'bracket/bracket_core.js', 'js/i18n.js'],
 };
 
 const { pageIds, pageImports, PAGE_ID } = require('../helpers/pages.cjs');

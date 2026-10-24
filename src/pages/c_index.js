@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPListPage from '../../site/js/list_page.js';
 import '../../site/nav.js';
 import '../../site/share.js';
@@ -187,14 +188,17 @@ async function init() {
   setupEvents();
   readUrl();
   try {
-    const [idxRes, jsonlRes, overseasRes, emojiRes] = await Promise.all([
+    // 1 位の名前と総合順位: data/views/ があれば players_index.json (js/views.js)、無ければ latest_tjpr_full.jsonl
+    const views = await SPSPViews.manifest();
+    const [idxRes, jsonlRes, overseasRes, emojiRes, vIndex] = await Promise.all([
       fetch(SPSP.data + 'data/character_index.json'),
-      fetch(SPSP.data + 'latest_tjpr_full.jsonl'),
+      views ? null : fetch(SPSP.data + 'latest_tjpr_full.jsonl'),
       fetch(SPSP.data + 'data/overseas.json').catch(() => null),
       fetch(SPSPCharEmoji.url()).catch(() => null),
+      views ? SPSPViews.index() : null,
     ]);
     if (!idxRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'character_index.json' }));
-    if (!jsonlRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'latest_tjpr_full.jsonl' }));
+    if (!vIndex && (!jsonlRes || !jsonlRes.ok)) throw new Error(i18n('common.fetch_failed', { file: views ? 'players_index.json' : 'latest_tjpr_full.jsonl' }));
     const index = /** @type {SpspCharacterIndex} */ (await idxRes.json());
     STATE.index = index;
     STATE.characters = index.characters.map((c) => Object.assign({}, c, { name: charName(c.id, c.name) }));   // 表示言語の名前
@@ -226,7 +230,14 @@ async function init() {
     // Map uid -> display for top player display.
     // 全 jsonl line 読まず、必要な uid set を組み立てて一気に scan する.
     const neededUids = new Set(charTopUid.values());
-    for (const rec of /** @type {SpspRankRecord[]} */ (SPSPData.parseJsonl(await jsonlRes.text()))) {   // ../js/data.js
+    if (vIndex) {
+      for (const uid of neededUids) {
+        const r = vIndex.get(uid);
+        if (!r) continue;
+        STATE.uid_to_display.set(uid, r.name);
+        STATE.uid_to_ens_rank.set(uid, r.ens || null);
+      }
+    } else for (const rec of /** @type {SpspRankRecord[]} */ (SPSPData.parseJsonl(await /** @type {Response} */ (jsonlRes).text()))) {   // ../js/data.js
       if (neededUids.has(rec.user_id)) {
         STATE.uid_to_display.set(rec.user_id, rec.display);
         STATE.uid_to_ens_rank.set(rec.user_id, (rec.ranks && rec.ranks.ensemble) || null);

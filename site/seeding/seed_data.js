@@ -159,6 +159,10 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     prefix = prefix || ((typeof SPSP !== 'undefined' && SPSP.data != null) ? SPSP.data : '../');   // JSON の置き場 (config.dataRoot があれば別ホスト)
     return {
       fetchPlayer: async (uid) => {
+        // data/views/bundle/ にまとめてある選手 (参加の少ない人) はそちら。個別の players/<uid>.json は更新されない (js/views.js)
+        const V = global.SPSPViews ? global.SPSPViews.at(prefix) : null;
+        const b = V ? await V.bundledPlayer(uid).catch(() => null) : null;
+        if (b && b.p) return b.p;
         const res = await fetch(`${prefix}players/${uid}.json`);
         if (res.status === 404) return { __missing: true };
         if (!res.ok) throw new Error(`players/${uid}.json HTTP ${res.status}`);

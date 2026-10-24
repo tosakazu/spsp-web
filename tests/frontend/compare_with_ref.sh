@@ -5,7 +5,7 @@
 #   tests/frontend/compare_with_ref.sh <git ref> [--data <deployed dir>] [--only <scenario 名の部分一致>] [--out <dir>] [--computed]
 #
 #   <git ref>   比べる相手 (例: main、コミット、タグ)。その時点の木を git archive で取り出す (src/pages があればビルドして dist を開く)
-#   --data      ビルド出力 (deployed 相当)。既定は gh-pages の checkout (~/spsp-state/tosakazu.github.io/spsp)
+#   --data      ビルド出力 (deployed 相当: players/ data/ meta.json … のあるディレクトリ)。既定は環境変数 SPSP_DATA_DIR
 #   --out       作業用ディレクトリ (既定 $SPSP_TMP_DIR または /tmp の下)。base/ after/ frozen/ compare.diff を置く
 #   --computed  CSS の cascade (要素ごとに勝つ宣言) も比べる。CSS の構成を変える変更で使う (遅い: 数十分)
 #
@@ -14,7 +14,7 @@
 set -u
 REF=${1:-}; shift || true
 [ -n "$REF" ] || { echo "usage: $0 <git ref> [--data dir] [--only regex] [--out dir] [--computed] [--ignore selector] [--after-site dir]" >&2; exit 2; }
-DATA=${SPSP_STATE_ROOT:-$HOME/spsp-state}/tosakazu.github.io/spsp
+DATA=${SPSP_DATA_DIR:-}
 ONLY=""; OUT=""; COMPUTED=""; IGNORE=""; AFTER_SITE=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
 done
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT" || exit 2
-[ -d "$DATA" ] || { echo "data dir が無い: $DATA" >&2; exit 2; }
+[ -n "$DATA" ] && [ -d "$DATA" ] || { echo "data dir が無い: ${DATA:-(--data か SPSP_DATA_DIR を指定)}" >&2; exit 2; }
 if [ -d node_modules/jsdom ]; then NP="$ROOT/node_modules"
 elif [ -d "${JSDOM_DIR:-/tmp/jsdom_inst}/node_modules/jsdom" ]; then NP="${JSDOM_DIR:-/tmp/jsdom_inst}/node_modules"
 else echo "jsdom が無い (npm install か JSDOM_DIR)" >&2; exit 2; fi

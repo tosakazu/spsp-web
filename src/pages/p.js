@@ -7,6 +7,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPager from '../../site/js/pager.js';
@@ -223,8 +224,8 @@ async function buildRivalsSection() {
   const docs = (await Promise.allSettled(tours.map(t =>
     fetch(SPSP.data + `tournaments/${t.event_id}.json`).then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); })
   ))).filter(r => r.status === 'fulfilled').map(r => r.value);
-  // 現在の全国順位は大会 JSON には無い (players_current.json から引く。読み込み済みなので即時)
-  const CUR = await SPSPPlayerData.loadCurrent(SPSP.data).catch(() => null);
+  // 現在の全国順位は大会 JSON には無い (全選手の現在順位から引く。data/views/ があれば players_index.json、無ければ players_current.json)
+  const CUR = await SPSPPlayerData.loadRanks(SPSP.data).catch(() => null);
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const info = new Map();   // uid -> {display, rank} (新しい大会優先)
   /** @type {Map<number, number>} */
@@ -293,11 +294,18 @@ async function buildRivalsSection() {
       href: mySub && mySub.pref ? SPSPLinks.prefRankingHref(SPSP.langRoot, mySub.pref.name) : null,
       items: take(pickBySubrank('pref', used)) },
   ];
-  // subrank 系の 名前 + 全国順位 は players/<uid>.json から取得 (最大8件)
-  const needFetch = cats[2].items.concat(cats[3].items).map(c => c.uid);
-  const fetched = await Promise.allSettled(needFetch.map(uid => SPSPPlayerData.load(SPSP.data, uid, { history: false })));
+  // subrank 系の 名前 + 全国順位: data/views/ があれば players_index.json、無ければ players/<uid>.json から取得 (最大8件)
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const fmap = new Map();
+  const vIndex = await SPSPViews.index().catch(() => null);
+  if (vIndex) {
+    for (const c of cats[2].items.concat(cats[3].items)) {
+      const r = vIndex.get(c.uid);
+      if (r) fmap.set(c.uid, { display: r.name, rank: r.ens });
+    }
+  }
+  const needFetch = cats[2].items.concat(cats[3].items).map(c => c.uid).filter(uid => !fmap.has(uid));
+  const fetched = await Promise.allSettled(needFetch.map(uid => SPSPPlayerData.load(SPSP.data, uid, { history: false })));
   fetched.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value) fmap.set(needFetch[i], { display: r.value.display, rank: (r.value.ranks || {}).ensemble });
   });
@@ -451,6 +459,7 @@ async function loadData() {
   }
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
   CARD_SETTINGS = fetchAppliedCard(UID).catch(() => null);
+  const MERGED_TO = mergedTarget(UID);   // ほかのデータと並べて読む (旧 uid の古い選手ファイルが R2 に残っていても飛ばす)
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
     // SPSPPlayerData.load が以前の 1 ファイルと同じ形に組み立てる (../js/player_data.js)
@@ -482,6 +491,7 @@ async function loadData() {
     if (charIdxRes && charIdxRes.ok) {
       try { CHAR_IDX = await charIdxRes.json(); } catch (e) {}
     }
+    if (await redirectMerged(await MERGED_TO)) return;
     if (!playerRec) {
       showNotFound(i18n('player.not_in_db', { uid: UID }));
       return;
@@ -493,10 +503,14 @@ async function loadData() {
     if (PLAYER.display && PLAYER.ranks) {
       MAIN_REC = /** @type {MainRec} */ (PLAYER);
     } else {
-      // 後方互換: JSONL から探す
-      const jsonlRes = await fetch(SPSP.data + 'latest_tjpr_full.jsonl');
-      for (const r of SPSPData.parseJsonl(await jsonlRes.text())) {   // ../js/data.js
-        if (r.user_id === UID) { MAIN_REC = r; break; }
+      // 後方互換: JSONL から探す (data/views/ があればその人の行だけ取る)
+      if (await SPSPViews.manifest()) {
+        MAIN_REC = (await SPSPViews.rowsByUids([UID], { plain: true }))[0] || null;
+      } else {
+        const jsonlRes = await fetch(SPSP.data + 'latest_tjpr_full.jsonl');
+        for (const r of SPSPData.parseJsonl(await jsonlRes.text())) {   // ../js/data.js
+          if (r.user_id === UID) { MAIN_REC = r; break; }
+        }
       }
       if (!MAIN_REC) {
         showNotFound(i18n('player.not_in_db', { uid: UID }));
@@ -507,6 +521,37 @@ async function loadData() {
   } catch (e) {
     console.error(e);
     showNotFound(i18n('common.load_error', { message: /** @type {any} */ (e).message }));
+  }
+}
+
+/** 統合した旧アカウント (data/user_merges.json: 旧 uid → 新 uid、連鎖は解決済み) なら新しい方の uid。違えば・読めなければ null。
+ * 旧アカウントの ?d= は discriminators.json に旧 uid として載っている (新しい方が収録者のとき)。
+ * 選手ファイルがあっても見る: まとめる回 (SPSP_BUNDLE_SMALL) は R2 の players/ を消さないので、旧 uid の古いファイルが残る
+ * @param {number} uid @returns {Promise<number | null>} */
+async function mergedTarget(uid) {
+  try {
+    const r = await fetch(SPSP.data + 'data/user_merges.json');
+    if (!r.ok) return null;
+    const to = Number((await r.json())[String(uid)]);
+    return to && to !== uid ? to : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 新しい方のページへ置き換える (lang などほかのクエリは残す) @param {number | null} to @returns {Promise<boolean>} 飛ばしたら true */
+async function redirectMerged(to) {
+  if (!to) return false;
+  try {
+    await SPSPLinks.loadDiscriminators(SPSP.data);
+    const q = new URLSearchParams(location.search);
+    q.delete('d');
+    q.delete('uid');
+    const rest = q.toString();
+    location.replace(SPSPLinks.playerHref(SPSPLinks.SELF, to) + (rest ? '&' + rest : ''));
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -1170,7 +1215,7 @@ function render() {
     else if (classFilter === 'main') ms = ms.filter(m => m.is_class !== true);
     if (!ms.length) return `<div style="padding:8px 12px;color:#9ca3af;font-size:11px">${i18n('common.no_match_data')}</div>`;
     const sorted = sortMatches(ms);
-    const pName = (typeof t === 'object' && t !== null) ? (/** @type {MainRec} */ (MAIN_REC).display || '') : '';
+    const pName = (typeof t === 'object' && t !== null) ? SPSPFormat.shortName(/** @type {MainRec} */ (MAIN_REC).display || '') : '';
     const pSeed = (typeof t === 'object' && t !== null) ? t.seed : null;
     // ランダムシード大会 (シードが強さ順でない) は UF を出さない (ビルドも集計から外している)
     const noUf = typeof t === 'object' && t !== null && !!t.is_random_seed;
@@ -1202,9 +1247,9 @@ function render() {
     const pSeedHtml = pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : '';
     const oSeedHtml = m.opp_seed != null ? `<div class="m-seed">#${m.opp_seed}</div>` : '';
     const oppEmoji = charEmojiOf(m.opp_uid);  // 対戦相手のメイン使用キャラ絵文字 (名前の前に付与)
-    const oppLink = m.opp_uid
-      ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, escapeHtml(m.opp_display || ''))
-      : escapeHtml(m.opp_display || '');
+    // 直対の行はチームタグ (「FENNEL | 」など) と区切り (「れの/Reno」の「/Reno」など) の後ろを落とす
+    const oppName = escapeHtml(SPSPFormat.shortName(m.opp_display || ''));
+    const oppLink = m.opp_uid ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, oppName) : oppName;
     // UF: ページ表示中のプレイヤーが自分より高シードを倒した場合のみ表記.
     let ufHtml = '';
     if (!noUf && m.won && pSeed != null && m.opp_seed != null && pSeed > m.opp_seed) {

@@ -1,5 +1,5 @@
 # spsp-web — Cloudflare Worker (static assets + /api/*  = gas/*.gs の移植)。
-# 設計: docs/refactor/07_cloudflare_plan.md。使い方: worker/README.md。
+# 設計: docs/archive/refactor/07_cloudflare_plan.md。使い方: worker/README.md。
 #
 # 秘密 (wrangler secret put <NAME> [--env preview|na]) — コードにも [vars] にも書かない:
 #   STARTGG_CLIENT_SECRET  start.gg アプリの client secret (code 交換 + エクスポート鍵の導出元)

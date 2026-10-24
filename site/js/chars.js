@@ -25,6 +25,10 @@ export const CHAR_MERGE_CANONICAL = {
   1317: 1317, 1277: 1317,   // ピーチ / デイジー
 };
 
+// 表示しないキャラ (start.gg の「Random Character」= おまかせ)。使い手ランキングでもビルド (spsp/char_index.py _EXCLUDED_IDS) が外している
+/** @type {ReadonlySet<number>} */
+export const HIDDEN_CHAR_IDS = new Set([1746]);
+
 /** @param {number | string} id @returns {number} */
 export function canonicalCharId(id) {
   const n = Number(id);
@@ -33,6 +37,7 @@ export function canonicalCharId(id) {
 
 /**
  * 使用キャラの並び (players の characters、先頭 = メイン) を使い手ランキングと同じ組でまとめる。
+ *   - おまかせ (HIDDEN_CHAR_IDS) は外す
  *   - 同じ組のキャラは 1 つにし、id は代表 id、pct は合計 (どれも pct が無い本人申告だけなら pct 無し)
  *   - 先頭 (メイン) の組が先頭。残りは合計 pct の高い順 (同じなら元の並び、pct 無しは後ろ)
  *   - name は charName(代表 id) (表示言語のまとめた名前)。ids は元の id の並び
@@ -44,6 +49,7 @@ export function mergeCharUses(chars) {
   /** @type {Map<number, T & { ids: number[] }>} */
   const groups = new Map();
   for (const c of chars || []) {
+    if (HIDDEN_CHAR_IDS.has(Number(c.id))) continue;   // おまかせは出さない (メインなら次のキャラがメイン扱い)
     const cid = canonicalCharId(c.id);
     const g = groups.get(cid);
     if (!g) {
@@ -61,7 +67,7 @@ export function mergeCharUses(chars) {
   return main ? [main, ...rest] : [];
 }
 
-var api = { charName: charName, mergeCharUses: mergeCharUses, canonicalCharId: canonicalCharId, CHAR_MERGE_CANONICAL: CHAR_MERGE_CANONICAL };
+var api = { charName: charName, mergeCharUses: mergeCharUses, canonicalCharId: canonicalCharId, HIDDEN_CHAR_IDS: HIDDEN_CHAR_IDS, CHAR_MERGE_CANONICAL: CHAR_MERGE_CANONICAL };
 var global = typeof window !== 'undefined' ? window : globalThis;
 global.SPSPChars = api;   // 公開面 (テストの built() もこれを見る)
 global.charName = charName;   // named import { charName } を built() で受けるため (escapeHtml と同じ)

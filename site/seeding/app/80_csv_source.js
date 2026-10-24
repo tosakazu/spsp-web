@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, _csvNormDisc, _disc2uid, canonicalUserId, ensureTable, loadMasterData, manualMovedSet, renderManualUI, saveManual } from './30_core.js';
+import { DATA, _csvNormDisc, _disc2uid, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualMovedSet, renderManualUI, saveManual } from './30_core.js';
 import { filterAndRerank, render, setParticipantsUiVisible } from './40_startgg.js';
 import { dropAppliedOrder, resetSeedOptResultPanel } from './75_series_rematch.js';
 import { _applyCsvSettingColumns } from './90_spec.js';
@@ -216,6 +216,16 @@ function _masterNameIdx() {
   if (_MASTER_NAME_IDX) return _MASTER_NAME_IDX;
   /** @type {Map<string, number | null>} */
   const idx = new Map();
+  if (S.MASTER_INDEX) {   // data/views/ 読み: 全選手の名前は players_index.json (MASTER_MAP は要る人の行だけ)
+    const I = S.MASTER_INDEX, iu = I.col.uid, inm = I.col.name;
+    for (const r of I.rows) {
+      const n = _csvNormName(r[inm] || '');
+      if (!n) continue;
+      idx.set(n, idx.has(n) ? null : r[iu]);
+    }
+    _MASTER_NAME_IDX = idx;
+    return idx;
+  }
   if (!S.MASTER_MAP) return idx;   // loadMasterData 後にしか呼ばれない
   for (const [uid, rec] of S.MASTER_MAP.entries()) {
     const n = _csvNormName(rec.display || '');
@@ -237,6 +247,23 @@ async function buildParticipantsFromCsv() {
     return;
   }
   const nameIdx = _masterNameIdx();
+  // data/views/ 読み: 下の照合 (MASTER.has) の前に、CSV の uid / discriminator / 名前で当たりうる人の行を取っておく
+  if (S.MASTER_INDEX) {
+    /** @type {(number | null)[]} */
+    const cand = [];
+    for (const row of CSV.rows) {
+      const uidV = _csvPick(row, ['uid', 'user_id', 'userid']);
+      if (uidV != null) cand.push(canonicalUserId(Number(uidV)) ?? null);
+      const dV = _csvPick(row, CSV_DISC_COLS);
+      const dm = (dV != null && S.DISCRIMINATORS) ? _disc2uid() : null;
+      const du = dm && dV != null ? dm.get(_csvNormDisc(dV)) : null;
+      if (du != null) cand.push(canonicalUserId(du) ?? null);
+      const nameV = _csvPick(row, ['player', 'name', 'display', 'tag', 'プレイヤー', '名前']);
+      const nu = nameV != null ? nameIdx.get(_csvNormName(nameV)) : null;
+      if (nu != null) cand.push(nu);
+    }
+    await ensureMasterRecs(cand);
+  }
   const seedInfos = [];
   const seen = new Set();
   let sampleRows = 0;   // テンプレートの記入例が残っていた行 (無視 + 警告)

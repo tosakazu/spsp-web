@@ -58,10 +58,8 @@ function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
     // 数字だけの並び (「691」「1」) には pc-num も付ける (実績の札では数字だけの並びと英字を含む並びで下げ幅が違う。player_card.css)
-    // 数字だけの並びには pc-num、そのうち後ろが空白か終わり (「1 試合以上」「から 691 日」) には pc-num-sp も付ける (画像にしたときの高さが違う。player_card.css)
     const num = /^[0-9][0-9,]*$/.test(m);
-    const sp = num && /^(\s|$)/.test(s.slice(off + m.length));
-    out += escapeHtml(s.slice(last, off)) + `<span class="${cls}${num ? ' pc-num' : ''}${sp ? ' pc-num-sp' : ''}">${escapeHtml(m)}</span>`;
+    out += escapeHtml(s.slice(last, off)) + `<span class="${cls}${num ? ' pc-num' : ''}">${escapeHtml(m)}</span>`;
     last = off + m.length;
     return m;
   });
@@ -824,6 +822,36 @@ export async function capture(el) {
   return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
+/** html2canvas の字の基準線を正確に測らせる。
+ * html2canvas はフォントと大きさごとに、ページ末尾に置いた見えない箱で「1×1 の画像の offsetTop − 文字の offsetTop + 2」を基準線にする。
+ * offsetTop は整数に丸めた値で、箱の位置 (= ページの長さ) で端数が変わるので、和文と英数字で基準線が別々に最大 1px ずれる
+ * (選手ごと・端末ごとに、実績の札の英数字が上や下にずれて見えた)。撮る間だけ、その箱の中の要素には端数つきの位置を返す。
+ * 画像は下端が基準線なので、上端より 1 上を返すと「+ 2」と合わせてちょうど基準線になる
+ * @template T @param {() => Promise<T>} run @returns {Promise<T>} */
+async function withExactFontMetrics(run) {
+  const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop');
+  if (!desc || !desc.get || !desc.configurable) return run();
+  const orig = desc.get;
+  /** @param {HTMLElement} n html2canvas の測る箱 (body 直下の visibility: hidden・white-space: nowrap の div) か、その子 */
+  const inProbe = n => {
+    const box = n.parentElement === document.body ? n : n.parentElement;
+    return !!box && box.parentElement === document.body && box.style.visibility === 'hidden' && box.style.whiteSpace === 'nowrap';
+  };
+  Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+    configurable: true,
+    get() {
+      if (!inProbe(this)) return orig.call(this);
+      const top = this.getBoundingClientRect().top;
+      return this.tagName === 'IMG' ? top - 1 : top;
+    },
+  });
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', desc);
+  }
+}
+
 /** capture の元 (原寸 3 倍の canvas) @param {HTMLElement} el @returns {Promise<HTMLCanvasElement | null>} */
 async function captureCanvas(el) {
   const src = el.querySelector('.pc-in');
@@ -893,7 +921,7 @@ async function captureCanvas(el) {
   // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
   const sx = window.scrollX, sy = window.scrollY;
   try {
-    return await w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 });
+    return await withExactFontMetrics(() => w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 }));
   } finally {
     box.remove();
     if (window.scrollX !== sx || window.scrollY !== sy) window.scrollTo(sx, sy);

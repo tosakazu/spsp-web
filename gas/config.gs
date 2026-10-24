@@ -58,7 +58,7 @@ var DATA_BASE_URL = 'https://data.spsp.games/jp';
  * ダブルメイン圏の判定閾値。players/<uid>.json の characters[].pct (使用率, 0..1) で、
  * トップとの差がこの値以内のキャラが 2 体以上いれば「どちらがメインか僅差」とみなし、
  * その候補の中からの投票を許す。
- * ビルド側の採用規則 (docs/post_feature_design.md §12): 後の大会でのキャラ使用の結果、
+ * ビルド側の採用規則 (docs/archive/post_feature_design.md §12): 後の大会でのキャラ使用の結果、
  * この圏を超えて明確なメインが出たら、投票ではなく使用実績を採用する。
  * クライアント (site/js/post_config.js) と同じ値にすること (テストが検査する)。
  */

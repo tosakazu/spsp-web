@@ -32,6 +32,9 @@ window.SPSP_I18N.en = {
   'notice.me.lv': 'Level up: Lv {from} → {to}',
   'notice.me.titles': '{n, plural, one{1 new title unlocked} other{{n} new titles unlocked}}',
   'notice.me.close': 'Hide your notices',
+  'notice.me.titles_none': 'No new titles',
+  'notice.me.titles_failed': 'Could not load your titles',
+  'notice.me.titles_edit': 'Set a title on your card →',
   'nav.user_aria': 'Player menu',
   'nav.user.vote': 'Character vote',
   'nav.user.login': 'Log in with start.gg',
@@ -162,6 +165,8 @@ window.SPSP_I18N.en = {
   'ranking.tab.bt': 'Head-to-head',
   'ranking.tab.bt_desc': 'Ranking based on head-to-head results',
   'ranking.search_placeholder': 'Search by player name / UID / discriminator…',
+  'ranking.show_overseas': 'Show overseas players',
+  'ranking.show_provisional': 'Show provisional players',
   'ranking.loading_data': 'Loading data…',
   'ranking.scroll_top_aria': 'Back to top',
   'ranking.scroll_top_title': 'Top',
@@ -190,9 +195,9 @@ window.SPSP_I18N.en = {
   'table.main_char_title': 'Main character',
   'table.global_rank_badge': 'National #{rank}',
   'table.overseas': 'Overseas',
-  'table.zenichi.1': '#1 {chars}',
-  'table.zenichi.2': '#2 {chars}',
-  'table.zenichi.3': '#3 {chars}',
+  'table.zenichi.1': '1st {emoji}',   // 順位 + キャラ絵文字 (表が未読込・無いキャラは名前)。名前は title に出る
+  'table.zenichi.2': '2nd {emoji}',
+  'table.zenichi.3': '3rd {emoji}',
   'table.zenichi.title.1': 'Best {chars} player in Japan',
   'table.zenichi.title.2': '2nd best {chars} player in Japan',
   'table.zenichi.title.3': '3rd best {chars} player in Japan',
@@ -200,6 +205,7 @@ window.SPSP_I18N.en = {
   'table.local.n': '{n} entries',
   'table.local.last': 'Last {date}',
   'table.load_more': 'Scroll down for more ({n} remaining)',
+  'table.load_more_unknown': 'Scroll down for more',
   'table.none': 'No players',
 
   // ── Expanded row (player-detail.js) ──
@@ -273,6 +279,9 @@ window.SPSP_I18N.en = {
   // ── Character ranking (c/ranking.html) ──
   'char_ranking.col.pct': 'Usage',
   'char_ranking.self_declared': 'self-declared',
+  'char_ranking.show_sub': 'Include secondaries',
+  'char_ranking.sub_tag': 'secondary',
+  'char_ranking.status.people': '{n} players',
   'char_ranking.self_declared_title': 'No tournament usage data; registered by the player',
   'char_ranking.no_char': 'No character specified',
   'char_ranking.back_to_list': 'Back to the character list',
@@ -547,6 +556,7 @@ window.SPSP_I18N.en = {
   'tournament.sec.rank_gain_tjpr': '⬆️ Biggest rank climbs (placement)',
   'tournament.sec.rank_gain_bt': '⬆️ Biggest rank climbs (head-to-head)',
   'tournament.sec.standings': '📋 Full standings',
+  'tournament.standings_note': 'National ranks, points and names are as of the tournament.',
   'tournament.search_placeholder': 'Search players…',
   'tournament.render_failed': 'Failed to render: {message}',
   'tournament.place_spaced': '{place, selectordinal, one{{place}st} two{{place}nd} few{{place}rd} other{{place}th}}',
@@ -557,7 +567,6 @@ window.SPSP_I18N.en = {
   'tournament.empty.bt_gain': 'No head-to-head gains',
   'tournament.empty.losers_run': 'No losers runs',
   'tournament.empty.rank_gain': 'No rank climbs',
-  'tournament.now_rank': '· now #{rank}',
   'tournament.share.text': '{name} ({n} entrants) — SPSP',
 
   // ── Common (4) ──

@@ -11,6 +11,7 @@ import { applyCsvOrderIfReady } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
 import { _pruneSeedSpec, applySeedLockChoice, enforceSeedLocks, renderSpecStatus } from './90_spec.js';
 import SPSPData from '../../js/data.js';
+import SPSPViews from '../../js/views.js';
 import SPSPRankingTable from '../../ranking-table.js';
 import SeedOptimizer from '../seed_optimizer.js';
 'use strict';
@@ -664,20 +665,28 @@ export function _csvNormDisc(v) {
   return String(v).trim().replace(/^=/, '').replace(/^"|"$/g, '').replace(/^#/, '').toLowerCase();
 }
 
+/** data/views/ の読み込み口 (js/views.js)。テストが import を外して連結したソースでは無いことがある */
+function viewsApi() { return (typeof SPSPViews !== 'undefined' && SPSPViews) ? SPSPViews : null; }
+
+// 全選手の表 (MASTER_MAP)。data/views/ があれば全選手の行は読まず、MASTER_MAP は空から始めて
+// ensureMasterRecs(uids) で要る人 (参加者・CSV の行) の分だけ ranking/ensemble/ から足す。名前の照合は MASTER_INDEX (players_index.json)
 export async function loadMasterData() {
   if (S.MASTER_MAP) return S.MASTER_MAP;
   const status = /** @type {HTMLElement} */ (document.getElementById('status'));   // 骨格 (10_skeleton.js) に必ずある
   status.textContent = i18n('seed.core.s16');
   const t0 = performance.now();
+  const V = viewsApi();
+  const views = V ? await V.manifest() : null;
   // no-cache: デプロイ直後に新 meta と旧 jsonl の混在キャッシュを掴まないよう再検証させる
   // （upcoming.json と同方針。304 で済むので実コストは小さい）。
-  const [metaRes, jsonlRes, mergesRes] = await Promise.all([
+  const [metaRes, jsonlRes, mergesRes, vIndex] = await Promise.all([
     fetch(SPSP.data + 'meta.json', { cache: 'no-cache' }),
-    fetch(SPSP.data + 'latest_tjpr_full.jsonl', { cache: 'no-cache' }),
+    views ? null : fetch(SPSP.data + 'latest_tjpr_full.jsonl', { cache: 'no-cache' }),
     fetch(SPSP.data + 'data/user_merges.json', { cache: 'no-cache' }),
+    views && V ? V.index() : null,
   ]);
   if (!metaRes.ok) throw new Error(i18n('seed.core.s17'));
-  if (!jsonlRes.ok) throw new Error(i18n('seed.core.s18'));
+  if (!vIndex && (!jsonlRes || !jsonlRes.ok)) throw new Error(i18n('seed.core.s18'));
   if (!mergesRes.ok) throw new Error(i18n('seed.core.s19'));
   const mergesRaw = await mergesRes.json();
   USER_MERGES_MAP = new Map(
@@ -689,12 +698,28 @@ export async function loadMasterData() {
     `master generated ${S.META.eval_date} · ${S.META.n_players}${i18n('seed.core.t36')} ${S.META.lookback_days}${i18n('seed.core.t37')} ` +
     `<a href="${SPSP.root}${SPSP.pageHref('overview.html')}" style="color:#dc2626">${i18n('seed.core.t38')}</a> · ` +
     `<a href="${SPSP.root}${SPSP.pageHref('details.html')}" style="color:#dc2626">${i18n('seed.core.t39')}</a>`;
-  const recs = SPSPData.parseJsonl(await jsonlRes.text());   // ../js/data.js
-  status.textContent = `${recs.length}${i18n('seed.core.t40')}`;
   S.MASTER_MAP = new Map();
-  for (const rec of recs) S.MASTER_MAP.set(rec.user_id, rec);
+  if (vIndex) {
+    S.MASTER_INDEX = vIndex;
+    status.textContent = `${vIndex.n}${i18n('seed.core.t40')}`;
+  } else {
+    const recs = SPSPData.parseJsonl(await /** @type {Response} */ (jsonlRes).text());   // ../js/data.js
+    status.textContent = `${recs.length}${i18n('seed.core.t40')}`;
+    for (const rec of recs) S.MASTER_MAP.set(rec.user_id, rec);
+  }
   // discriminator 索引 (照合の任意ソース)。失敗しても続行 (照合時に fail-loud)。
   await loadDiscriminators();
-  status.textContent = `${i18n('seed.core.t41')}${S.MASTER_MAP.size} ${i18n('seed.core.t42')}${(performance.now()-t0).toFixed(0)}ms)`;
+  status.textContent = `${i18n('seed.core.t41')}${S.MASTER_INDEX ? S.MASTER_INDEX.n : S.MASTER_MAP.size} ${i18n('seed.core.t42')}${(performance.now()-t0).toFixed(0)}ms)`;
   return S.MASTER_MAP;
+}
+
+/** data/views/ 読みのとき、uids のうち SPSP に居る人の行を MASTER_MAP に足す (従来どおり全選手を読んだときは何もしない)
+ * @param {(number | null | undefined)[]} uids */
+export async function ensureMasterRecs(uids) {
+  const V = viewsApi();
+  const I = S.MASTER_INDEX, M = S.MASTER_MAP;
+  if (!V || !I || !M) return;
+  const need = [...new Set(uids)].filter((u) => u != null && u > 0 && !M.has(u) && I.pos(u) >= 0);
+  if (!need.length) return;
+  for (const rec of await V.rowsByUids(need, { plain: true })) M.set(rec.user_id, rec);
 }

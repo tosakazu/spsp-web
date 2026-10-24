@@ -34,6 +34,9 @@ window.SPSP_I18N.ja = {
   'notice.me.lv': 'Lv が {from} → {to} に上がりました',
   'notice.me.titles': '二つ名を新しく {n} 件入手しました',
   'notice.me.close': 'お知らせを閉じる',
+  'notice.me.titles_none': '新しい二つ名はありません',
+  'notice.me.titles_failed': '二つ名を読み込めませんでした',
+  'notice.me.titles_edit': 'カード編集で二つ名を付ける →',
   'nav.user_aria': '選手向けメニュー',
   'nav.user.vote': 'キャラ投票',
   'nav.user.login': 'start.gg でログイン',
@@ -164,6 +167,8 @@ window.SPSP_I18N.ja = {
   'ranking.tab.bt': '直対評価',
   'ranking.tab.bt_desc': '直接対決ベースのランキング',
   'ranking.search_placeholder': 'プレイヤー名 / UID / discriminator で検索…',
+  'ranking.show_overseas': '海外プレイヤーを表示',
+  'ranking.show_provisional': '計測中プレイヤーを表示',
   'ranking.loading_data': 'データ読み込み中…',
   'ranking.scroll_top_aria': 'ページの一番上へ戻る',
   'ranking.scroll_top_title': '一番上へ',
@@ -203,6 +208,7 @@ window.SPSP_I18N.ja = {
   'table.local.n': '参加 {n}',
   'table.local.last': '最終 {date}',
   'table.load_more': '下までスクロールでさらに表示 (残り {n} 名)',
+  'table.load_more_unknown': '下までスクロールでさらに表示',
   'table.none': '該当者なし',
 
   // ── 展開行 (player-detail.js) ──
@@ -276,6 +282,9 @@ window.SPSP_I18N.ja = {
   // ── 使い手ランキング (c/ranking.html) ──
   'char_ranking.col.pct': '使用率',
   'char_ranking.self_declared': '自己申告',
+  'char_ranking.show_sub': 'サブ使用も表示',
+  'char_ranking.sub_tag': 'サブ',
+  'char_ranking.status.people': '{n} 人',
   'char_ranking.self_declared_title': '大会での使用データが無く、本人の申告で登録されたキャラです',
   'char_ranking.no_char': 'キャラが指定されていません',
   'char_ranking.back_to_list': 'キャラ一覧に戻る',
@@ -550,6 +559,7 @@ window.SPSP_I18N.ja = {
   'tournament.sec.rank_gain_tjpr': '⬆️ 順位上昇ランキング (順位評価)',
   'tournament.sec.rank_gain_bt': '⬆️ 順位上昇ランキング (直対評価)',
   'tournament.sec.standings': '📋 全順位表',
+  'tournament.standings_note': '全国順位・ポイント・表示名は大会当時のものです',
   'tournament.search_placeholder': 'プレイヤー名で検索…',
   'tournament.render_failed': '表示に失敗しました: {message}',
   'tournament.place_spaced': '{place} 位',
@@ -560,7 +570,6 @@ window.SPSP_I18N.ja = {
   'tournament.empty.bt_gain': 'BT 上昇なし',
   'tournament.empty.losers_run': 'ルーザーズランなし',
   'tournament.empty.rank_gain': '順位上昇なし',
-  'tournament.now_rank': '・現在 #{rank}',
   'tournament.share.text': '{name} ({n} 名) — SPSP',
 
   // ── 共通 (4) ──

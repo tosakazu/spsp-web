@@ -1,5 +1,5 @@
 {
-  // TypeScript の設定 (docs/frontend_stack_review.md の A → B)。
+  // TypeScript の設定 (docs/archive/frontend_stack_review.md の A → B)。
   // いまは JS のまま型検査 (checkJs) を段階的に入れる: `// @ts-check` を付けたファイルだけ検査される。
   // 新しく書くものは .ts で。src/pages/*.ts と site/**/*.ts はビルド (esbuild) がそのまま扱う。
   "compilerOptions": {

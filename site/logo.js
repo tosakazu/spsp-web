@@ -163,7 +163,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   // 表の空行や本文の読み込み枠だけ。行を開いたときの小さな
   // 「詳細情報を取得中…」(.loading-msg) は対象外 — ロゴを出すには小さすぎる。
   var LOADING_SEL = '.empty-msg, #loading';
-  var LOADING_RE = /読み込み中|ロード中|loading/i;   // 英語ページ (Loading…) でも同じ枠を差し替える (docs/frontend_i18n_review.md §2-10)
+  var LOADING_RE = /読み込み中|ロード中|loading/i;   // 英語ページ (Loading…) でも同じ枠を差し替える (docs/archive/frontend_i18n_review.md §2-10)
 
   function autoInline(root) {
     var scope = root || document;

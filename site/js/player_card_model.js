@@ -146,6 +146,8 @@ export function perfInfoOf(t) {
 function zenichiOf(data) {
   /** @type {Record<number, string[]>} */
   const zen = {};
+  /** @type {Record<number, string[]>} */
+  const emo = {};   // 同じ順のキャラ絵文字 (北米の札「1st ☁️」。表に無ければキャラ名)
   const idx = data.charIdx;
   if (idx && idx.characters && idx.main_by_char) {
     for (const c of idx.characters) {
@@ -154,12 +156,18 @@ function zenichiOf(data) {
       for (const u of uids) {
         if (data.overseas && data.overseas.has(u)) continue;
         rank += 1;
-        if (u === data.uid) { (zen[rank] = zen[rank] || []).push(charName(c.id, c.name)); break; }   // 表示言語のキャラ名
+        if (u === data.uid) {
+          const nm = charName(c.id, c.name);   // 表示言語のキャラ名
+          const ce = data.charEmoji && data.charEmoji[String(c.id)];
+          (zen[rank] = zen[rank] || []).push(nm);
+          (emo[rank] = emo[rank] || []).push((ce && ce.emoji) || nm);
+          break;
+        }
         if (rank >= 3) break;
       }
     }
   }
-  return [1, 2, 3].filter(r => zen[r] && zen[r].length).map(r => ({ rank: r, chars: zen[r].join(i18n('common.list_sep')) }));
+  return [1, 2, 3].filter(r => zen[r] && zen[r].length).map(r => ({ rank: r, chars: zen[r].join(i18n('common.list_sep')), emoji: emo[r].join(' ') }));
 }
 
 /** 下位クラスの大会の印 (「 (Cクラス)」)。本戦なら '' @param {any} t */
@@ -191,14 +199,22 @@ export function buildCardModel(data, settings, titleText) {
   /** @type {{ text: string, href?: string, rank?: number | null } | null} */
   let loc = null;
   const pref = data.prefs && data.prefs[String(uid)];
+  const cat = SPSPGeo.geoCatalog();
+  const homeRegion = (cat && cat.region) || 'Japan';
   if (pref) {
-    const cat = SPSPGeo.geoCatalog();
     const unit = cat && (cat.units || []).find((/** @type {any} */ x) => x.id === pref);
     const prefEn = (unit && unit.name && unit.name.en) || SPSPGeo.unitName(pref);
-    loc = { text: `${(cat && cat.region) || 'Japan'}, ${prefEn}`, href: SPSPLinks.prefRankingHref(S.langRoot, pref),
+    // 前は国。北米は州の属する group (United States / Canada)。日本の group は地方 (関東など) で国ではないので「Japan」
+    const group = homeRegion !== 'Japan' && unit && unit.group && ((cat && cat.groups) || []).find((/** @type {any} */ g) => g.id === unit.group);
+    const head = (group && group.name && group.name.en) || homeRegion.replace(/_/g, ' ');
+    loc = { text: `${head}, ${prefEn}`, href: SPSPLinks.prefRankingHref(S.langRoot, pref),
             rank: SUB && SUB.pref ? SUB.pref.rank : null };
   } else if (player.country && player.country !== 'Japan' && data.overseas && data.overseas.has(uid)) {
     loc = { text: player.country };   // 日本勢扱い (jp_uids / 住んでそう勢) は国登録があっても出さない
+  } else if (player.country && homeRegion === 'Japan') {
+    loc = { text: 'Japan' };   // 日本勢扱い (国登録が日本、または jp_uids / 住んでそう勢) で県の分からない人
+  } else if (player.country && homeRegion !== 'Japan') {
+    loc = { text: player.country };   // 北米は州の取れない人が多い (2026-10-17 で 8 割) ので国だけでも出す
   }
   // サムス / ダークサムス などは使い手ランキングと同じくまとめて 1 つにする (js/chars.js mergeCharUses、id は代表 id)
   const chars = mergeCharUses(player.characters || []).slice(0, 2).map((c, i) => {
@@ -213,7 +229,7 @@ export function buildCardModel(data, settings, titleText) {
   const pills = [];
   if (data.overseas && data.overseas.has(uid)) pills.push({ text: i18n('table.overseas') });
   if (rec.metadata && rec.metadata.provisional) pills.push({ text: i18n('table.provisional') });   // 2 年で集計対象大会 3 未満
-  for (const z of zenichiOf(data)) pills.push({ text: i18n('table.zenichi.' + z.rank, { chars: z.chars }), title: i18n('table.zenichi.title.' + z.rank, { chars: z.chars }) });
+  for (const z of zenichiOf(data)) pills.push({ text: i18n('table.zenichi.' + z.rank, { chars: z.chars, emoji: z.emoji }), title: i18n('table.zenichi.title.' + z.rank, { chars: z.chars }) });
   pills.push({ text: lvNow ? `Lv${lvNow}${SPSPFormat.lvSuffix(lvNow, rankNow)}` : i18n('player.lv_none') });
 
   const tours = /** @type {any[]} */ (player.tournaments || []);

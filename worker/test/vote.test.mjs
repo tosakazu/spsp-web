@@ -300,3 +300,28 @@ test('tester: 僅差の候補外を選んでも debug で保存', async () => {
   assert.strictEqual(res.test, true);
   assert.strictEqual(env.store.votes[0].status, 'debug');
 });
+
+test('vote: data/views/bundle/ にまとめてある選手は個別の players/<uid>.json ではなくまとめの中身で判定する', async () => {
+  // 個別のファイルは古い (メインが明確) が、まとめ (bundle/4242 % 8 = 2) の方は使用実績なし → 投票できる
+  // まとめてあるかは current/<uid % current_shards>.json の bundled (4242 % 4 = 2)
+  const views = {
+    '/data/views/manifest.json': { status: 200, body: { format: 1, bundle_shards: 8, bundled: 1, current_shards: 4 } },
+    '/data/views/current/2.json': { status: 200, body: { format: 1, columns: [], bundled: [4242], players: {} } },
+    '/data/views/bundle/2.json': { status: 200, body: { format: 1, shards: 8, players: { 4242: { p: { user_id: 4242, characters: [] }, h: null } } } },
+  };
+  const stale = { status: 200, body: { user_id: 4242, characters: [{ id: 1305, name: 'ロックマン', pct: 0.9 }] } };
+  const env = makeEnv({ token: OK_TOKEN, user: OK_USER, player: stale, views });
+  const token = await loginToken(env);
+  const res = await post(env, { action: 'vote', token, charId: '1305' });
+  assert.strictEqual(res.ok, true);
+  assert.ok(env.fetches.some((f) => f.url === 'data:/data/views/bundle/2.json'));
+  assert.ok(!env.fetches.some((f) => f.url === 'data:/players/4242.json'));
+  // まとめていない人 (current の bundled に居ない / bundled が無い) は bundle/ を読まずに個別のファイル (従来どおり)
+  for (const cur of [{ format: 1, columns: [], bundled: [7], players: {} }, { format: 1, columns: [], players: {} }]) {
+    const env2 = makeEnv({ token: OK_TOKEN, user: OK_USER, player: stale, views: { ...views, '/data/views/current/2.json': { status: 200, body: cur } } });
+    const res2 = await post(env2, { action: 'vote', token: await loginToken(env2), charId: '1305' });
+    assert.strictEqual(res2.error.code, 'char_exists');
+    assert.ok(env2.fetches.some((f) => f.url === 'data:/players/4242.json'));
+    assert.ok(!env2.fetches.some((f) => /bundle\//.test(f.url)), 'まとめていない人の分は bundle/ を読まない');
+  }
+});

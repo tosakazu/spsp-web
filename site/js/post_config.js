@@ -3,13 +3,13 @@
 //
 // ここに秘匿値は置かない。client secret は GAS のスクリプトプロパティ / Worker の secrets のみ (INV-3)。
 //
-// 反映手順は docs/DEPLOY.md 参照。
+// 反映手順は docs/archive/DEPLOY.md 参照。
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
 
   // 従来 (GitHub Pages + GAS) の値。region/config.js に auth が無い配信 (旧 gh-pages) はこれ
   var LEGACY = {
     CLIENT_ID: '582',
-    // GAS Web アプリの /exec URL。デプロイ ID を固定して使う (docs/DEPLOY.md)。
+    // GAS Web アプリの /exec URL。デプロイ ID を固定して使う (docs/archive/DEPLOY.md)。
     GAS_ENDPOINT: 'https://script.google.com/macros/s/AKfycbzipXG5iAMHR7YwV-p9RALpxlAGWJcPizpfMbxX58nSNAm_H5CNkdN-diGN1QaBVwRzNQ/exec',
     // start.gg アプリに登録した redirect URI と **完全一致**していること。
     REDIRECT_URI: 'https://tosakazu.github.io/spsp/callback.html',

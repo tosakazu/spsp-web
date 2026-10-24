@@ -5,6 +5,7 @@ import SPSPHtml from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPSuggest from '../../site/js/suggest.js';
@@ -115,6 +116,39 @@ window.SPSPCalc = calcApi;
     });
   }
 
+  // data/views/ があれば 全選手の数値は sim_pop.json、名前は players_index.json (js/views.js)。無ければ latest_tjpr_full.jsonl
+  /** @param {any} pop sim_pop.json @param {any} I 復号済みの players_index */
+  function loadSimPop(pop, I) {
+    var cols = /** @type {string[]} */ (pop.columns || []);
+    /** @type {Record<string, number>} */
+    var c = {};
+    cols.forEach(function (k, i) { c[k] = i; });
+    (pop.rows || []).forEach(function (/** @type {any[]} */ r) {
+      var uid = r[c.uid];
+      var ir = I ? I.get(uid) : null;
+      MASTER.set(uid, {
+        display: ir ? ir.name : ('uid:' + uid),
+        tjpr_score: r[c.tjpr_score] || 0,
+        bt_gated_elo: r[c.bt_gated_elo] || 0,
+        bt_internal_elo: r[c.bt_internal_elo] || 0,
+        lv: r[c.lv] || 0,
+        gray: !!r[c.gray],   // 計測中 or 海外 (ビルドが付ける。従来は下で overseas.json から足していた)
+        tjpr_rank: r[c.tjpr],
+        bt_rank: r[c.bt],
+        ens_rank: r[c.ens],
+      });
+    });
+  }
+  function loadPopulation() {
+    return SPSPViews.manifest().then(function (m) {
+      if (!m) return loadJsonl(DATA_BASE + 'latest_tjpr_full.jsonl');
+      return Promise.all([SPSPViews.simPop(), SPSPViews.index()]).then(function (res) {
+        if (!res[0]) return loadJsonl(DATA_BASE + 'latest_tjpr_full.jsonl');
+        loadSimPop(res[0], res[1]);
+      });
+    });
+  }
+
   Promise.all([
     // overseas は表示のグレー化にしか使わないので、取得失敗しても degrade して続行
     fetch(DATA_BASE + 'data/overseas.json')
@@ -127,7 +161,7 @@ window.SPSPCalc = calcApi;
     // 選手 JSON は分割されている (安定部分 + players_current.json + 履歴)。組み立ては ../js/player_data.js
     UID ? SPSPPlayerData.load(DATA_BASE, UID).catch(function () { return null; })
         : Promise.resolve(null),
-    loadJsonl(DATA_BASE + 'latest_tjpr_full.jsonl'),
+    loadPopulation(),
     // 集計対象の実効フィルタ (meta.json params.LV_FILTERS_EFFECTIVE) で calc.js の定数を上書き
     fetch(DATA_BASE + 'meta.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
   ]).then(function (res) {

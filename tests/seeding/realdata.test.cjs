@@ -10,7 +10,7 @@ const D = ((m) => m.default || m)(require('../../site/seeding/seed_data.js'));
 const O = ((m) => m.default || m)(require('../../site/seeding/seed_optimizer.js'));
 
 const REPO = path.resolve(__dirname, '../..');
-const PLAYERS_DIR = path.join(process.env.SPSP_STATE_ROOT || path.join(require('os').homedir(), 'spsp-state'), 'tosakazu.github.io/spsp/players');   // deploy/paths.sh と同じ置き場
+const PLAYERS_DIR = path.join(process.env.SPSP_DATA_DIR || '/nonexistent', 'players');   // ビルド出力のディレクトリ (SPSP_DATA_DIR)。無ければ skip
 const PREFS = path.join(REPO, 'site/data/player_prefectures.json');
 const RANK_SRC = path.join(REPO, 'site/latest_tjpr_full.jsonl');
 

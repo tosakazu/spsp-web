@@ -4,6 +4,7 @@
 import '../../site/js/html.js';
 import '../../site/js/i18n.js';
 import '../../site/js/data.js';
+import '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/nav.js';
 import '../../site/js/post_config.js';

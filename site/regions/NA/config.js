@@ -1,11 +1,11 @@
 // regions/NA/config.js — 北米版のサイト設定。キーの集合は regions/JP/config.js と同じでなければならない (tests/meta/regions.test.cjs)。
-// TODO の値は北米版のホスティング・GA・OAuth が決まってから (docs/frontend_i18n_review.md §6)。
+// TODO の値は北米版のホスティング・GA・OAuth が決まってから (docs/archive/frontend_i18n_review.md §6)。
 //   window.SPSP.site (= window.SPSPSite)
 (function (global) {
   'use strict';
   var site = {
     region: 'NA',
-    langs: ['en', 'ja'],           // 用意している UI 言語 (site/i18n/<lang>.js)。en.js はまだ無い
+    langs: ['en', 'ja'],           // 用意している UI 言語 (site/i18n/<lang>.js)
     defaultLang: 'en',
     timeZone: 'America/New_York',  // 表示用の既定。データの暦日は大会の place.timezone で決まる (smash_database scripts/North_America/classify.py)
     utcOffset: '-05:00',           // TODO: 表示用の既定オフセット。夏時間 (-04:00) の扱いは timeZone + Intl に寄せて廃止予定
@@ -20,7 +20,7 @@
     features: { blog: false, vote: false, seeding: true, prefRanking: true, sim: true, titles: false, cardBack: false },   // vote は北米用 OAuth/GAS ができてから。titles (二つ名) は英語の一覧ができてから。cardBack (カードの裏面: 英字名・大会シール) は北米の大会シールのデータができてから
     geo: { unitKey: 'state' },
     titleLang: 'en',          // プレイヤーカードの二つ名の一覧 (js/titles.js TITLES のキー)。表示の言語を切り替えても変えない
-    titleDefault: { pre: '', post: '' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない
+    titleDefault: { pre: 'SSBU', post: 'Player' },   // 二つ名を選んでいない (前半・後半とも「なし」) ときにカードに出す二つ名 (文字。一覧の id ではない)。両方空 = 出さない。二つ名の一覧ができるまで北米は全員これ
     calendar: { weekendRealLabel: false },   // 「実質休日 / 実質平日」に相当する概念は北米では未定義
   };
   global.SPSPSite = site;

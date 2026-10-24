@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import '../../site/js/links.js';
 import '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import '../../site/js/tags.js';
@@ -25,7 +26,7 @@ SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
 
 /** @type {{ charId: number | null, charName: string | null, index: SpspCharacterIndex | null, masterMap: Map<number, SpspRankRecord>,
  *            masterMeta: SpspRankMeta | null, data: SpspRankRecord[], method: string, sortKey: string, sortDir: string, searchText: string,
- *            overseasUids?: Set<number> | null }} */
+ *            overseasUids?: Set<number> | null, showSub: boolean, subRecs: SpspRankRecord[] | null, views: any }} */
 const STATE = {
   charId: null,
   charName: null,
@@ -37,6 +38,9 @@ const STATE = {
   sortKey: 'rank',
   sortDir: 'asc',
   searchText: '',
+  showSub: false,              // 「サブ使用も表示」(既定はメインの人だけ)
+  subRecs: null,               // サブで使う人の行 (初めてチェックしたときに取る)
+  views: null,                 // data/views/ の manifest (null = 全選手を読んだ)
 };
 
 // escapeHtml は ../js/html.js (サイト共通)。表の骨格 (列・配線・行の展開・読み込み) は ../js/ranking_page.js
@@ -46,19 +50,27 @@ function buildData() {
   const uids = (STATE.index && STATE.index.main_by_char[String(STATE.charId)]) || [];
   /** @type {SpspRankRecord[]} */
   const ranked = [];
-  for (const uid of uids) {
+  /** @param {number} uid @param {SpspRankRecord | undefined} src @param {boolean} isSub */
+  const add = (uid, src, isSub) => {
     // 海外タグ勢 (= site/data/overseas.json) は使い手ランキングから除外.
-    if (STATE.overseasUids && STATE.overseasUids.has(uid)) continue;
-    const src = STATE.masterMap.get(uid);
-    if (!src) continue;
-    ranked.push(RP.cloneWithGlobalRanks(src));
+    if (!src || (STATE.overseasUids && STATE.overseasUids.has(uid))) return;
+    const rec = RP.cloneWithGlobalRanks(src);
+    if (isSub) /** @type {any} */ (rec)._is_sub = true;
+    ranked.push(rec);
+  };
+  for (const uid of uids) add(uid, STATE.masterMap.get(uid), false);
+  if (STATE.showSub && STATE.subRecs) {
+    const mains = new Set(uids);
+    for (const r of STATE.subRecs) if (!mains.has(r.user_id)) add(r.user_id, r, true);
   }
   // ensemble は global ensemble の昇順で local rank 再付番.
   return RP.rerankByGlobalEnsemble(ranked);
 }
 
 // キャラ投票 (本人申告) で決まったメインは pct を持たない (= 使用実績が無い).
-// docs/post_feature_design.md §12 / v3/v4/char_vote.py.
+// docs/archive/post_feature_design.md §12 / v3/v4/char_vote.py.
+// 使用率は行の characters[0] (このキャラの使用実績)。data/views/char/<id>.json の行にはビルドが入れる (投票由来のメインには無い)。
+// 従来の読み方 (latest_tjpr_full.jsonl) の行には characters が無いので、views が無いデータではこの列は「–」のまま。
 /** @param {SpspRankRecord & { characters?: SpspCharacterUse[] }} rec @returns {number | null} */
 const _mainPct = (rec) => {
   const c = (rec.characters || [])[0];
@@ -76,12 +88,14 @@ const CHAR_EXTRA_COLUMNS = [
     /** @param {SpspRankRecord & { characters?: SpspCharacterUse[] }} rec */
     cell: (rec) => {
       const c = (rec.characters || [])[0];
-      if (!c) return '–';
+      // サブで使う人 (「サブ使用も表示」で混ぜた行) には印を付ける
+      const subTag = /** @type {any} */ (rec)._is_sub ? `<span class="sub-tag">${i18n('char_ranking.sub_tag')}</span>` : '';
+      if (!c) return subTag || '–';
       const p = _mainPct(rec);
       if (p === null) {
         return `<span style="color:#9ca3af" title="${i18n('char_ranking.self_declared_title')}">${i18n('char_ranking.self_declared')}</span>`;
       }
-      return `${(p * 100).toFixed(0)}%`;
+      return `${(p * 100).toFixed(0)}%${subTag ? ' ' + subTag : ''}`;
     },
   },
 ];
@@ -128,6 +142,37 @@ function setupEvents() {
     STATE.method = method;
     if (TABLE) TABLE.setMethod(STATE.method);
   });
+  const subCb = /** @type {HTMLInputElement | null} */ (document.getElementById('show-sub'));
+  if (subCb) {
+    subCb.checked = false;   // 戻るで来たときにブラウザが前の状態を残すことがある。表は既定 (メインだけ) で描くので合わせる
+    subCb.addEventListener('change', async () => {
+      STATE.showSub = subCb.checked;
+      if (STATE.showSub && !STATE.subRecs) {
+        try { STATE.subRecs = await loadSubRecs(); } catch (e) { console.error(e); STATE.subRecs = []; }
+        if (!STATE.showSub) return;   // 取っている間に外された
+      }
+      rebuild();
+    });
+  }
+}
+
+/** そのキャラをサブで使う人の行。views があれば char_sub/<id>.json、無ければ全選手の行から character_index の sub_by_char で引く
+ * @returns {Promise<SpspRankRecord[]>} */
+async function loadSubRecs() {
+  if (STATE.views) return SPSPViews.charSubRows(/** @type {number} */ (STATE.charId));
+  const uids = (STATE.index && STATE.index.sub_by_char && STATE.index.sub_by_char[String(STATE.charId)]) || [];
+  return uids.map(u => STATE.masterMap.get(u)).filter(/** @returns {r is SpspRankRecord} */ r => !!r);
+}
+
+/** 表の行を作り直す (サブの表示を切り替えたとき) */
+function rebuild() {
+  STATE.data = buildData();
+  if (STATE.index && SPSPRankingTable && SPSPRankingTable.attachZenichi) {
+    SPSPRankingTable.attachZenichi(STATE.data, STATE.index, STATE.overseasUids);
+  }
+  if (TABLE) TABLE.setRows(STATE.data);
+  const status = document.getElementById('status');
+  if (status) status.textContent = i18n('char_ranking.status.people', { n: STATE.data.length });
 }
 
 async function init() {
@@ -147,11 +192,13 @@ async function init() {
     const t0 = performance.now();
     const [idxRes, master, emojiRes] = await Promise.all([
       fetch(SPSP.data + 'data/character_index.json'),
-      RP.loadMaster(SPSP.data, { overseas: true }),
+      // data/views/ があれば このキャラの使い手の行 (char/<id>.json。使用率の characters 入り) だけ。無ければ全選手 (latest_tjpr_full.jsonl)
+      RP.loadMaster(SPSP.data, { overseas: true, views: (V) => V.charRows(STATE.charId) }),
       fetch(SPSPCharEmoji.url()).catch(() => null),
     ]);
     if (!idxRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'character_index.json' }));
     STATE.overseasUids = master.overseasUids;
+    STATE.views = master.views;
     const index = /** @type {SpspCharacterIndex} */ (await idxRes.json());
     STATE.index = index;
     STATE.masterMeta = /** @type {SpspRankMeta} */ (master.meta);

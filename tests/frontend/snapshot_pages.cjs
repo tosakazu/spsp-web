@@ -9,6 +9,9 @@
 //       --data <deployed dir> --out <snapshot dir> [--freeze <dir>] [--only <scenario 名の正規表現>] [--site <site dir>] [--region <REGION>]
 //
 //   --freeze <dir>: 読んだデータファイルをそこへ写し、以後はそちらを優先して読む (nightly でデータが変わっても同じ入力で比べられる)。
+//   --block <正規表現>: データの相対パスがこれに当たる要求は 404 にする (例 '^(latest_tjpr_full\.jsonl|players_current\.json)$':
+//                      data/views/ があるデータで、ページが全選手の大きいファイルを読まずに描けるかを見る。当たった要求は errors.txt にも書く。
+//                      '@<file>' でファイルから読む)
 //
 // 書き出すもの (scenario ごとのディレクトリ):
 //   NN_<step>.html  … document.documentElement.outerHTML から <script> / <style> / <link rel=stylesheet> を除いたもの
@@ -42,6 +45,9 @@ const SITE = path.resolve(opt('--site', path.join(__dirname, '../../site')));   
 const REGION = opt('--region', null);
 const BASE = opt('--base', '/');
 const IGNORE_SEL = opt('--ignore', null);
+// '@<file>' ならファイルの中身を正規表現として読む (長すぎてコマンド行に載らないとき。例: まとめた選手 1 万人の uid)
+const BLOCK_SRC = opt('--block', null);
+const BLOCK_RE = BLOCK_SRC ? new RegExp(BLOCK_SRC.startsWith('@') ? fs.readFileSync(BLOCK_SRC.slice(1), 'utf8').trim() : BLOCK_SRC) : null;
 const LANG_DIR = opt('--lang', null);   // 表示言語: scenario の URL に ?lang=<lang> を足して開く (2026-09-28 から言語は ?lang。以前は dist/<lang>/ の木)   // この selector に当たる要素 (と子孫) を DOM と cascade の記録から外す (例 --ignore .nav-lang: 新設 UI を無視して他が不変か見る)   // サイトをこのパス接頭辞の下に置いて走らせる (例 /jp/)。接頭辞の外への要求 (絶対パスの直書き) は errors に出す   // 地域を差し替えて走らせる: region/* を regions/<REGION>/* から配る (既定は site/region の symlink 先 = 配信中の地域)
 const ORIGIN = 'https://spsp.games';
 const FIXED_NOW = Date.parse('2026-09-13T21:30:00+09:00');
@@ -114,6 +120,7 @@ function serve(url, state) {
     return new Response('', { status: 404 });
   }
   state.hits.push(rel);
+  if (BLOCK_RE && BLOCK_RE.test(rel)) { state.errors.push('blocked request: ' + rel); return new Response('', { status: 404 }); }
   const buf = resolveLocal(rel);
   if (buf === null) return new Response('', { status: 404 });
   return new Response(buf, { status: 200, headers: { 'Content-Type': contentType(rel) } });
@@ -516,6 +523,7 @@ async function runScenario(sc) {
 const click = (sel, i = 0) => async (w) => { const els = w.document.querySelectorAll(sel); if (!els[i]) throw new Error('無い: ' + sel + '[' + i + ']'); els[i].click(); };
 const clickIf = (sel, i = 0) => async (w) => { const els = w.document.querySelectorAll(sel); if (els[i]) els[i].click(); };
 const type = (sel, text) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.value = text; el.dispatchEvent(new w.Event('input', { bubbles: true })); el.dispatchEvent(new w.Event('change', { bubbles: true })); el.dispatchEvent(new w.KeyboardEvent('keyup', { bubbles: true })); };
+const toggle = (sel) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.checked = !el.checked; el.dispatchEvent(new w.Event('change', { bubbles: true })); };
 const select = (sel, value) => async (w) => { const el = w.document.querySelector(sel); if (!el) throw new Error('無い: ' + sel); el.value = value; el.dispatchEvent(new w.Event('change', { bubbles: true })); };
 const seq = (...fns) => async (w) => { for (const f of fns) await f(w); };
 
@@ -572,9 +580,13 @@ function tournamentSteps() {
 }
 
 const SCENARIOS = [
-  { name: 'index', page: 'index.html', steps: rankingSteps() },
+  // 海外・計測中を表示 (既定は隠す)。views 読みでは隠した分だけ先の分割を取りに行く
+  { name: 'index', page: 'index.html', steps: [...rankingSteps(),
+    { name: 'show_overseas', run: toggle('#show-overseas') }, { name: 'show_provisional', run: toggle('#show-provisional') },
+    { name: 'hide_overseas', run: toggle('#show-overseas') }, { name: 'hide_provisional', run: toggle('#show-provisional') }] },
   { name: 'c_index', page: 'c/index.html', steps: listSteps('th.sortable') },
-  { name: 'c_ranking_1323', page: 'c/ranking.html', query: '?char=1323', steps: rankingSteps() },
+  { name: 'c_ranking_1323', page: 'c/ranking.html', query: '?char=1323', steps: [...rankingSteps(),
+    { name: 'show_sub', run: toggle('#show-sub') }, { name: 'hide_sub', run: toggle('#show-sub') }] },
   { name: 'local_index', page: 'local/index.html', steps: [...listSteps('th.sortable'), { name: 'chip_big', run: click('#filter-chips .chip[data-filter="big"]') }, { name: 'chip_uchi', run: click('#filter-chips .chip[data-filter="uchi"]') }, { name: 'chip_all', run: click('#filter-chips .chip[data-filter="all"]') }] },
   { name: 'local_ranking_higoburaSP', page: 'local/ranking.html', query: '?series=' + encodeURIComponent('肥後ブラSP'), steps: [...rankingSteps(), { name: 'period', run: select('#period-sel', '1y') }, { name: 'min_n', run: type('#min-n', '3') }] },
   { name: 'pref_index', page: 'pref/index.html', steps: listSteps('th.sortable') },

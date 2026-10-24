@@ -17,6 +17,7 @@
 import SpspAuth from './auth.js';
 import './html.js';   // SPSP.pageHref (ページ間リンクの形)。読めない環境 (テストの vm) では .html のまま
 import SPSPData from './data.js';
+import SPSPViews from './views.js';
 import SPSPCharEmoji from './char_emoji.js';
 import FIGHTER_NUMBER from './fighter_number.js';
 import SPSPI18n from './i18n.js';
@@ -127,19 +128,29 @@ import SPSP_POST_CONFIG from './post_config.js';
     }
   }
 
-  // ── 選手検索 (未ログイン時のみ読む。優先枠ページと同じ jsonl) ──
+  // ── 選手検索 (未ログイン時のみ読む。data/views/players_index.json、無ければ優先枠ページと同じ jsonl) ──
+
+  function loadSearchRecs() {
+    var vIndexP = SPSPViews ? SPSPViews.index().catch(function () { return null; }) : Promise.resolve(null);
+    return vIndexP.then(function (I) {
+      if (I) {
+        return I.list().map(function (r) { return { user_id: r.uid, display: r.name, ranks: { ensemble: r.ens } }; });
+      }
+      return fetch(SPSP.data + 'latest_tjpr_full.jsonl')
+        .then(function (res) {
+          if (!res.ok) throw new Error('http ' + res.status);
+          return res.text();
+        })
+        .then(function (text) { return SPSPData.parseJsonl(text); });   // js/data.js
+    });
+  }
 
   function ensureIndex() {
     if (playersIndex) return;
     els.idxStatus.textContent = i18n('vote.s1');
-    fetch(SPSP.data + 'latest_tjpr_full.jsonl')
-      .then(function (res) {
-        if (!res.ok) throw new Error('http ' + res.status);
-        return res.text();
-      })
-      .then(function (text) {
+    loadSearchRecs()
+      .then(function (recs) {
         var out = [];
-        var recs = SPSPData.parseJsonl(text);   // js/data.js
         for (var i = 0; i < recs.length; i++) {
           var rec = recs[i];
           if (!rec || rec.user_id === undefined || !rec.display) continue;
@@ -232,8 +243,8 @@ import SPSP_POST_CONFIG from './post_config.js';
   }
 
   function fetchEligibility(uid) {
-    // 選手 JSON は分割されている (js/player_data.js)。characters は安定部分、ranks は players_current.json
-    return SPSPPlayerData.load(SPSP.data, uid, { history: false }).then(function (rec) {
+    // 選手 JSON は分割されている (js/player_data.js)。使うのは安定部分の characters だけなので揮発部分 (順位など) は読まない
+    return SPSPPlayerData.load(SPSP.data, uid, { history: false, current: false }).then(function (rec) {
       if (!rec) return { state: 'not_player' };
       var chars = rec && rec.characters;
       var candidates = voteCandidates(chars);

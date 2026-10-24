@@ -72,7 +72,7 @@ import SPSP_POST_CONFIG from './post_config.js';
       return;
     }
 
-    // state は GAS に署名してもらう (投票側と同じ理由。docs/post_feature_design.md)。
+    // state は GAS に署名してもらう (投票側と同じ理由。docs/archive/post_feature_design.md)。
     els.submit.disabled = true;
     setStatus('', i18n('post.s5'));
     fetch(CFG.GAS_ENDPOINT, {

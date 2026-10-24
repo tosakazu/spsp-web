@@ -6,6 +6,9 @@
 //   render(el, uid, opts)      お知らせの帯を el に描く (無ければ隠す)。× で閉じる
 //   showForSelf(el, recOf, o)  ログイン中なら recOf(本人の uid) の記録 (ranks / scores) を observe して帯を描く。
 //                              recOf が undefined を返したら何もしない (他人のプレイヤーページ)
+//   itemHTML(it) / bindTitles(el, uid, editHref)
+//                              1 件の HTML。二つ名は「N 件入手 ▼」のボタンにして、押すと新しく入手した二つ名を下に並べる
+//                              (一覧 js/titles_ja.js は押したときだけ読む。全ページのヘッダーには束ねない)
 // 比べる相手は「前に閉じたときの順位・Lv」。下がったときは黙ってその値に合わせる (次に上がった分だけ出す)。
 // 初めて見るときは何も出さない (今の値を基準にする)。記録はこのブラウザだけ (二つ名の NEW と同じ)。
 // 順位と Lv はトップ (latest_tjpr_full.jsonl) と自分のプレイヤーページ (players_current.json) で読んだときだけ更新する。
@@ -13,6 +16,7 @@
 import SPSPI18n from './i18n.js';
 import SpspTitleNotice from './title_notice.js';
 import SpspLogin from './login.js';
+import { bitsNumbers } from './title_bits.js';
 
 const KEY = 'spsp_my_notice_v1';   // { uid: { base: {rank, lv}, now: {rank, lv}, titlesHid } }
 
@@ -101,10 +105,77 @@ export function text(it) {
   return t('notice.me.titles', { n: it.n });
 }
 
+/** 1 件の HTML。二つ名は押すと一覧が開くボタン (bindTitles で動かす)。それ以外は text のまま @param {{kind: string, from?: number, to?: number, n?: number}} it */
+export function itemHTML(it) {
+  if (it.kind !== 'titles') return text(it);
+  return `<span class="my-notice-titles"><button type="button" class="my-notice-titles-toggle" aria-expanded="false">${text(it)}<span class="caret" aria-hidden="true">▼</span></button>` +
+    `<span class="my-notice-titles-list" hidden></span></span>`;
+}
+
+/** 二つ名の一覧 (日本語だけ、北米は二つ名が無い)。押したときに 1 回だけ読む
+ * @type {Promise<Map<number, {part: string, text: string}>> | null} */
+let rowsP = null;
+function loadRows() {
+  if (!rowsP) {
+    const url = new URL((site().root || './') + 'js/titles_ja.js', document.baseURI).href;
+    rowsP = import(url).then((/** @type {any} */ m) => new Map((m.JA_ROWS || []).map((/** @type {any[]} */ r) => [Number(r[0]), { part: String(r[1]), text: String(r[3]) }])));
+    rowsP.catch(() => { rowsP = null; });   // 読めなければ次に押したときにもう一度
+  }
+  return rowsP;
+}
+
+/** 新しく入手した二つ名 (前に編集ページで見たときに無かったもの)。記録が読めなければ null
+ * @param {number | string} uid @returns {Promise<Array<{part: string, text: string}> | null>} */
+export async function newTitles(uid) {
+  if ((site().site && site().site.titleLang || 'ja') !== 'ja') return [];
+  const owned = await SpspTitleNotice.fetchOwned(uid);
+  if (!owned) return null;
+  const nums = bitsNumbers(SpspTitleNotice.newSince(owned.bits, uid));
+  if (!nums.length) return [];
+  const rows = await loadRows();
+  return nums.map(n => rows.get(n)).filter(r => r != null).map(r => /** @type {{part: string, text: string}} */ (r));
+}
+
+/** @param {{part: string, text: string}} r */
+function titleLi(r) {
+  const tag = r.part === 'pre' ? t('card_edit.title_pre') : r.part === 'post' ? t('card_edit.title_post') : '';
+  return `<li>${esc(r.text)}${tag ? ` <span class="part">${esc(tag)}</span>` : ''}</li>`;
+}
+
+/**
+ * el の中の「二つ名を N 件入手 ▼」を動かす: 押すと開閉し、初めて開いたときに一覧を読んで並べる (下にカード編集へのリンク)
+ * @param {Element} el @param {number | string} uid @param {string} editHref
+ * @param {Array<{part: string, text: string}>} [demoList] 見た目の確認用 (記録を読まない)
+ */
+export function bindTitles(el, uid, editHref, demoList) {
+  el.querySelectorAll('.my-notice-titles-toggle').forEach(b => {
+    const btn = /** @type {HTMLButtonElement} */ (b);
+    const box = /** @type {HTMLElement | null} */ (btn.parentElement && btn.parentElement.querySelector('.my-notice-titles-list'));
+    if (!box) return;
+    let loaded = false;
+    btn.addEventListener('click', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      box.hidden = !open;
+      if (!open || loaded) return;
+      loaded = true;
+      box.innerHTML = `<span class="empty">${esc(t('common.loading'))}</span>`;
+      (demoList ? Promise.resolve(demoList) : newTitles(uid)).then(list => {
+        if (list == null) { loaded = false; box.innerHTML = `<span class="empty">${esc(t('notice.me.titles_failed'))}</span>`; return; }
+        box.innerHTML = (list.length ? `<ul>${list.map(titleLi).join('')}</ul>` : `<span class="empty">${esc(t('notice.me.titles_none'))}</span>`) +
+          `<a class="my-notice-titles-edit" href="${esc(editHref)}">${esc(t('notice.me.titles_edit'))}</a>`;
+      }).catch(() => { loaded = false; box.innerHTML = `<span class="empty">${esc(t('notice.me.titles_failed'))}</span>`; });
+    });
+  });
+}
+
 /** 見た目の確認用 (?mynotice=demo): ログインも記録も見ずに 3 種類を出す。× は隠すだけ。リンクは押しても移らない @param {HTMLElement} el @param {boolean} selfPage */
 function renderDemo(el, selfPage) {
   const list = [{ kind: 'rank', from: 50, to: 35 }, { kind: 'lv', from: 3, to: 4 }, { kind: 'titles', n: 2 }];
-  el.innerHTML = `<div class="my-notice-items">${list.map(it => (selfPage && it.kind !== 'titles') ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>` : `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
+  el.innerHTML = `<div class="my-notice-items">${list.map(it => it.kind === 'titles' ? `<span class="my-notice-item titles">${itemHTML(it)}</span>` : selfPage ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>` : `<a class="my-notice-item ${it.kind}" href="#">${text(it)}</a>`).join('')}</div><button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}">×</button>`;
+  bindTitles(el, 0, '#', [{ part: 'pre', text: '択を拒む' }, { part: 'post', text: 'カメラに抜かれた' }]);
   el.style.display = '';
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', () => { el.style.display = 'none'; });
@@ -124,13 +195,16 @@ export function render(el, uid, opts) {
   const root = o.root != null ? o.root : (S.root || '');
   const page = (/** @type {string} */ p) => root + (S.pageHref ? S.pageHref(p) : p);
   const id = encodeURIComponent(String(uid));
-  const href = (/** @type {any} */ it) => it.kind === 'titles' ? page('p/edit.html') + '?uid=' + id : page('p/index.html') + '?uid=' + id;
+  const editHref = page('p/edit.html') + '?uid=' + id;
   el.innerHTML =
-    `<div class="my-notice-items">${list.map(it => (o.selfPage && it.kind !== 'titles')
-      ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>`
-      : `<a class="my-notice-item ${it.kind}" href="${href(it)}">${text(it)}</a>`).join('')}</div>` +
+    `<div class="my-notice-items">${list.map(it => it.kind === 'titles'
+      ? `<span class="my-notice-item titles">${itemHTML(it)}</span>`   // 押すと新しい二つ名の一覧が開く (下にカード編集へのリンク)
+      : o.selfPage
+        ? `<span class="my-notice-item ${it.kind}">${text(it)}</span>`
+        : `<a class="my-notice-item ${it.kind}" href="${page('p/index.html') + '?uid=' + id}">${text(it)}</a>`).join('')}</div>` +
     `<button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}" title="${esc(t('common.close'))}">×</button>`;
   el.style.display = '';
+  bindTitles(el, uid, editHref);
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', ev => {
     ev.stopPropagation();
@@ -158,7 +232,7 @@ export async function showForSelf(el, recOf, opts) {
   const sess = SpspLogin.session();
   if (!sess) return;
   const uid = String(sess.user.id);
-  const rec = recOf(Number(uid));
+  const rec = await recOf(Number(uid));   // 同期でも Promise でもよい (トップは表に無い本人の行を取りに行く)
   if (rec === undefined) return;
   observeRec(uid, rec);   // 一覧に居ない (圏外) なら null: 基準も null にして、次に載ったときは出さない
   const n = await titlesNew(uid);
@@ -166,7 +240,7 @@ export async function showForSelf(el, recOf, opts) {
   navChanged();
 }
 
-const API = { observe, observeRec, items, dismiss, titlesNew, text, render, showForSelf };
+const API = { observe, observeRec, items, dismiss, titlesNew, text, itemHTML, newTitles, bindTitles, render, showForSelf };
 // ほかの共通モジュールと同じく window にも置く
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspMyNotice = API;
 export default API;

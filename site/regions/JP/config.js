@@ -1,4 +1,4 @@
-// regions/JP/config.js — 日本版のサイト設定 (地域・言語・配信先)。docs/frontend_i18n_review.md §4.2 の契約。
+// regions/JP/config.js — 日本版のサイト設定 (地域・言語・配信先)。docs/archive/frontend_i18n_review.md §4.2 の契約。
 // 地域 (どのランキングか) はデプロイ単位、言語 (UI 文言) は閲覧者が切り替えられる、という分け方。
 // ページは region/config.js (= 配信する地域の regions/<REGION>/ への symlink) として読む。キーの集合は全地域で同じ (tests/meta/regions.test.cjs)。
 //   window.SPSP.site (= window.SPSPSite)

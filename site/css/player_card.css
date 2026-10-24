@@ -80,13 +80,13 @@
 }
 .pc-ach-emoji { font-size: 1.3em; color: #000; position: relative; top: .04em; }   /* 絵文字は字面が上に寄って見えるので少しだけ下げる (文字の大きさに比例 = 0.04em、13px で 0.5px) */
 /* 実績の札の英数字 (Zalando Sans) は、字の上下の真ん中を漢字・かなにそろえる (2026-10-15 スマホのスクリーンショットで測った値)。
-   ブラウザが描くとき: 英字を含む並びは下げない、数字だけの並び (.pc-num、「691」「3」) は 0.1em 下げる (position の top)。
-   画像にするとき (保存・Samsung Internet などで画面に重ねる画像。html2canvas、.pc-offscreen): 基本は下げない。数字だけの並びで後ろが空白か終わりのもの
-   (.pc-num-sp、「1 試合以上」「から 691 日」) だけは画像で約 1.15px 上に描かれるので 0.1em 下げる (html2canvas は top が効かないので vertical-align) */
+   英字を含む並びは下げない、数字だけの並び (.pc-num、「691」「3」) は 0.1em 下げる (position の top)。
+   画像にするとき (保存・Samsung Internet などで画面に重ねる画像。html2canvas、.pc-offscreen) は、英字も数字も 0.05em 下げる
+   (2026-10-23 スマホで測った値: 画像では英字が約 0.6px 上、0.1em 下げた数字は約 0.75px 下だった)。
+   以前の画像用の値が選手ごとに合わなかったのは html2canvas の基準線の丸めのせい (js/player_card.js withExactFontMetrics で直した) */
 .pc-ach-text .pc-lat { font-weight: 600; font-size: 1.1em; }
 .pc-ach-text .pc-num { position: relative; top: .1em; }
-.pc-offscreen .pc-ach-text .pc-num { top: 0; }
-.pc-offscreen .pc-ach-text .pc-num-sp { vertical-align: -.1em; }
+.pc-offscreen .pc-ach-text .pc-lat { position: relative; top: .05em; }
 .pc-ach-none { color: #9ca3af; font-size: 10px; margin-top: 4px; }
 
 /* ── 最新の大会結果 (左下) ── */

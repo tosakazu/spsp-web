@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, canonicalUserId, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
@@ -812,6 +812,7 @@ async function performSeedFetch(token, ev, phaseId) {
   });
   const seedInfos = seedNodes.map(seedNodeToInfo);
   status.textContent = `${seedInfos.length} ${i18n('seed.startgg.t26')}`;
+  await ensureMasterRecs(seedInfos.map(si => si.userId));   // data/views/ 読みなら参加者の行だけ取る
   const { records, rankedCount, missingCount } = filterAndRerank(seedInfos);
   const _phase = (ev.phases || []).find(p => String(p.id) === String(phaseId));
   // ウェーブ (プール名 A1,B2,… の先頭文字) の自動取得。失敗は黙殺せず error として保持し
@@ -865,6 +866,7 @@ async function performEntrantsFetch(token, ev) {
   }
   const seedInfos = nodes.map(entrantNodeToInfo);
   status.textContent = `${seedInfos.length} ${i18n('seed.startgg.t26')}`;
+  await ensureMasterRecs(seedInfos.map(si => si.userId));   // data/views/ 読みなら参加者の行だけ取る
   const { records, rankedCount, missingCount } = filterAndRerank(seedInfos);
   S.EVENT_CONTEXT = {
     phaseId: null, eventName: ev.name,

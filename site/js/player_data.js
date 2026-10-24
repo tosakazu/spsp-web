@@ -13,7 +13,13 @@
 //       ctx = {eval_ts, eval_date, decay_r}  (players_current.json の eval_ts / eval_date と meta.json の decay_r。無ければ既定)
 //   SPSPPlayerData.load(prefix, uid, opts)  → Promise<旧 detail record | null>
 //       prefix = '../' 等 (サイトルートまでの相対)。players_current.json は 1 度だけ取得して共有する。
-//   SPSPPlayerData.loadCurrent(prefix)      → Promise<players_current.json の中身> (共有キャッシュ)
+//       opts.history === false で履歴を読まない、opts.current === false で揮発部分を読まない (安定部分だけ要るページ)。
+//       揮発部分は data/views/current/<uid % N>.json (js/views.js) があればそこから (その分割だけ取る)、
+//       無ければ players_current.json 全体 (従来どおり)。
+//   SPSPPlayerData.loadCurrent(prefix)      → Promise<players_current.json の中身> (共有キャッシュ。全選手分。ページからは使わない)
+//   SPSPPlayerData.loadRanks(prefix)        → Promise<全選手の現在順位だけの players_current.json と同じ形のもの>
+//       currentRank(file, uid, key) で引ける。views があれば players_index.json から (ranks.ensemble / tjpr / bt_gated だけ)、
+//       無ければ loadCurrent と同じもの
 //   SPSPPlayerData.currentOf(cur, uid)      → uid の揮発部分 (ranks / scores / peak_ranks …) を入れ子 dict で
 //   SPSPPlayerData.currentRank(cur, uid, key='ensemble') → 現在の全国順位 (無ければ null)
 //   SPSPPlayerData.tjprWeight(entry, ctx)   → {age, w}
@@ -22,6 +28,7 @@
 // 分割の定義は spsp/split_output.py。両者は鏡なので片方を変えたらもう片方も変える
 // (tests/split/test_assemble.mjs が旧形式との一致を確かめる)。
 import SPSPI18n from './i18n.js';
+import SPSPViews from './views.js';
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
 
   var DEFAULT_DECAY_R = 0.96;
@@ -222,20 +229,61 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     return _currentPromise[prefix];
   }
 
+  // 1 人分の揮発部分が入ったファイル: views があればその uid の分割 (current/<uid % N>.json)、無ければ全体
+  function loadCurrentFor(prefix, uid) {
+    var V = SPSPViews && SPSPViews.at(prefix);
+    if (!V) return loadCurrent(prefix);
+    return V.manifest().then(function (m) {
+      if (!m) return loadCurrent(prefix);
+      return V.currentFile(uid).then(function (f) { return f || EMPTY_CURRENT; });
+    });
+  }
+
+  // 全選手の現在順位だけ (大会ページの参加者・ライバル欄・下位クラスなど、決まった選手の順位を引くページ用)
+  var RANK_COLUMNS = ['ranks.ensemble', 'ranks.tjpr', 'ranks.bt_gated'];
+  var _ranksPromise = {};
+  function loadRanks(prefix) {
+    prefix = prefix || '';
+    if (!_ranksPromise[prefix]) {
+      var V = SPSPViews && SPSPViews.at(prefix);
+      _ranksPromise[prefix] = (V ? V.manifest() : Promise.resolve(null)).then(function (m) {
+        if (!m || !V) return loadCurrent(prefix);
+        return V.index().then(function (I) {
+          if (!I) return loadCurrent(prefix);
+          var players = {}, c = I.col, rows = I.rows;
+          for (var i = 0; i < rows.length; i++) players[String(rows[i][c.uid])] = [rows[i][c.ens], rows[i][c.tjpr], rows[i][c.bt]];
+          return { eval_date: m.eval_date || null, eval_ts: null, columns: RANK_COLUMNS, players: players };
+        });
+      });
+      _ranksPromise[prefix].catch(function () { delete _ranksPromise[prefix]; });
+    }
+    return _ranksPromise[prefix];
+  }
+
   function load(prefix, uid, opts) {
     prefix = prefix || '';
     opts = opts || {};
     // 404 = DB 未登録 (null で返す)。それ以外の失敗 (5xx / 通信) は throw (呼び出し側が再試行できるように区別する)
     // players/ と history/ は 1 日キャッシュで配信している (出場したときしか変わらない前提)。ビルドの中身を変えたときに
     // 古い版がブラウザに最大 1 日残らないよう、毎回サーバに「変わったか」だけ確かめる (変わっていなければ 304 で中身は来ない)
-    var stableP = fetch(prefix + 'players/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) {
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error('players/' + uid + '.json HTTP ' + r.status);
-      return r.json();
+    // 参加の少ない選手は data/views/bundle/ にまとめてあり、個別の players/ と history/ は更新されない (js/views.js bundledPlayer)。
+    // まとめてあればそちらを、無ければ (views が無い・まとめていない選手) 個別のファイルを読む
+    var V = SPSPViews && SPSPViews.at(prefix);
+    var bundleP = V ? V.bundledPlayer(uid).catch(function () { return null; }) : Promise.resolve(null);
+    var stableP = bundleP.then(function (b) {
+      if (b) return b.p || null;
+      return fetch(prefix + 'players/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) {
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error('players/' + uid + '.json HTTP ' + r.status);
+        return r.json();
+      });
     });
     var histP = opts.history === false ? Promise.resolve([])
-      : fetch(prefix + 'history/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
-    var curP = loadCurrent(prefix);
+      : bundleP.then(function (b) {
+        if (b) return b.h || [];
+        return fetch(prefix + 'history/' + encodeURIComponent(uid) + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+      });
+    var curP = opts.current === false ? Promise.resolve(EMPTY_CURRENT) : loadCurrentFor(prefix, uid);
     return Promise.all([stableP, histP, curP]).then(function (res) {
       var stable = res[0], hist = res[1], cur = res[2];
       if (!stable) return null;
@@ -247,11 +295,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   var api = {
     assemble: assemble, tjprWeight: tjprWeight, daysAgoLabel: daysAgoLabel,
     historyWithDays: historyWithDays, currentRank: currentRank, currentOf: currentOf, decodeCurrentRow: decodeCurrentRow,
-    load: load, loadCurrent: loadCurrent,
+    load: load, loadCurrent: loadCurrent, loadRanks: loadRanks,
     SCORE_ORDER: SCORE_ORDER, META_ORDER: META_ORDER, RADAR_ORDER: RADAR_ORDER,
   };
   global.SPSPPlayerData = api;
   (global.SPSP = global.SPSP || {}).PlayerData = api;   // window.SPSP.PlayerData (名前空間。旧名 SPSPPlayerData も残す)
 
 export default api;
-export { assemble, tjprWeight, daysAgoLabel, historyWithDays, currentRank, currentOf, decodeCurrentRow, load, loadCurrent, SCORE_ORDER, META_ORDER, RADAR_ORDER };
+export { assemble, tjprWeight, daysAgoLabel, historyWithDays, currentRank, currentOf, decodeCurrentRow, load, loadCurrent, loadRanks, SCORE_ORDER, META_ORDER, RADAR_ORDER };

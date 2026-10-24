@@ -6,6 +6,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPData from '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import SPSPListPage from '../../site/js/list_page.js';
 import '../../site/nav.js';
 
@@ -121,16 +122,28 @@ function setupEvents() {
 async function init() {
   setupEvents();
   try {
+    // data/views/ があれば 単位ごとの人数と 1 位をまとめた pref_summary.json だけ (js/views.js)。
+    // 無ければ全選手 (latest_tjpr_full.jsonl) と player_prefectures.json から数える
+    const summary = await SPSPViews.prefSummary().catch(() => null);
     const [prefRes, jsonlRes, overseasRes, geoRes] = await Promise.all([
-      fetch(SPSP.data + 'data/player_prefectures.json'),
-      fetch(SPSP.data + 'latest_tjpr_full.jsonl'),
-      fetch(SPSP.data + 'data/overseas.json').catch(() => null),
+      summary ? null : fetch(SPSP.data + 'data/player_prefectures.json'),
+      summary ? null : fetch(SPSP.data + 'latest_tjpr_full.jsonl'),
+      summary ? null : fetch(SPSP.data + 'data/overseas.json').catch(() => null),
       fetch(SPSP.data + 'data/geo.json'),
     ]);
-    if (!prefRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'player_prefectures.json' }));
     if (!geoRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'geo.json' }));
     setGeoCatalog(await geoRes.json());
-    if (!jsonlRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'latest_tjpr_full.jsonl' }));
+    if (summary) {
+      // 並びは geo.json の順 (従来は jsonl で最初に出てきた順。人数が同じ単位どうしの順だけが違う)
+      STATE.prefs = (summary.units || []).map((/** @type {{ id: string, n: number, top: { uid: number, name: string, ens: number } | null }} */ u) => {
+        if (u.top) STATE.uid_to_display.set(u.top.uid, u.top.name);
+        return { name: u.id, n: u.n, top_uid: u.top ? u.top.uid : null, top_rank: u.top ? u.top.ens : null };
+      });
+      finish();
+      return;
+    }
+    if (!prefRes || !prefRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'player_prefectures.json' }));
+    if (!jsonlRes || !jsonlRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'latest_tjpr_full.jsonl' }));
     const prefMap = await prefRes.json();
     /** @type {Set<number> | null} */
     let overseasUids = null;
@@ -154,13 +167,7 @@ async function init() {
       }
     }
     STATE.prefs = Object.keys(agg).map(name => ({ name, ...agg[name] }));
-    assignFixedRanks();
-    applyFilters(); render();
-    const total = STATE.prefs.reduce((s, p) => s + p.n, 0);
-    const footer = document.getElementById('footer-info');
-    if (footer) footer.innerHTML =
-      i18n('pref_list.footer', { n: STATE.prefs.length, total }) + '<br>' +
-      `<a href="${SPSP.langRoot}">${i18n('common.back_to_national')}</a>`;
+    finish();
   } catch (e) {
     const tbody = document.getElementById('tbody');
     if (tbody) tbody.innerHTML =
@@ -168,5 +175,14 @@ async function init() {
     const status = document.getElementById('status');
     if (status) status.textContent = '';
   }
+}
+function finish() {
+  assignFixedRanks();
+  applyFilters(); render();
+  const total = STATE.prefs.reduce((s, p) => s + p.n, 0);
+  const footer = document.getElementById('footer-info');
+  if (footer) footer.innerHTML =
+    i18n('pref_list.footer', { n: STATE.prefs.length, total }) + '<br>' +
+    `<a href="${SPSP.langRoot}">${i18n('common.back_to_national')}</a>`;
 }
 init();

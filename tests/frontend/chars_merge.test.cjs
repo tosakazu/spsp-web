@@ -45,3 +45,10 @@ test('組に入らないキャラ・本人申告 (pct 無し) はそのまま。
   assert.deepStrictEqual(plain(C.mergeCharUses([])), []);
   assert.deepStrictEqual(plain(C.mergeCharUses(undefined)), []);
 });
+
+test('おまかせ (Random Character, 1746) は出さない。メインだったら次のキャラが先頭', () => {
+  const C = load();
+  const out = C.mergeCharUses([{ id: 1746, name: 'Random Character', pct: 0.6 }, { id: 1453, name: 'ジョーカー', pct: 0.3 }, { id: 1293, name: 'フォックス', pct: 0.1 }]);
+  assert.deepStrictEqual(plain(out.map((c) => c.id)), [1453, 1293]);
+  assert.deepStrictEqual(plain(C.mergeCharUses([{ id: 1746, name: 'Random Character', pct: 1 }])), []);
+});

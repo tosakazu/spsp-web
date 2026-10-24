@@ -3,7 +3,7 @@
 //   fetchOwned(uid)         持っている二つ名の記録 { bits, updated } (GET /api/titles。記録が無ければ bits "" / updated null)。API が無い・読めなければ null
 //   newSince(bits, uid)     持っているもの (ビット列) のうち、前に見たときに無かったもの (ビット列)
 //   markSeen(uid, bits)     編集ページで見たら既読にする (今の持ち物を、このブラウザに保存)
-//   checkNew(uid)           ログイン中の本人について、新しい二つ名の数 (ヘッダー用。記録は 6 時間ごとにだけ読み直す)
+//   checkNew(uid)           ログイン中の本人について、新しい二つ名の数 (ヘッダー用。記録は 5 分ごとに読み直す)
 // 持ち物の正本は記録 (D1 title_owned、docs/card_titles_design.md)。ここでは二つ名の一覧 (js/titles.js) を読まない
 // (ビット列どうしの比較で足りる。一覧は大きいので、全ページのヘッダーには入れない)。
 // 前に見た持ち物はこのブラウザだけに持つ。初めて見るときは何も NEW にしない (今の持ち物を既読にする)
@@ -12,8 +12,9 @@ import SPSP_POST_CONFIG from './post_config.js';
 import SpspLogin from './login.js';
 
 const SEEN_KEY = 'spsp_titles_seen_v3';     // { uid: ビット列 } 前に見たときの持ち物
-const CACHE_KEY = 'spsp_titles_new_v3';     // { uid, n, checked } ヘッダー用の数 (6 時間)
-const CACHE_MS = 6 * 3600 * 1000;
+const CACHE_KEY = 'spsp_titles_new_v3';     // { uid, n, checked } ヘッダー用の数 (5 分)
+// 配られてから印が出るまでのずれを小さくする (記録の読み出しは D1 の 1 行で軽い。ページを続けて移る間の重複だけ省く)
+const CACHE_MS = 5 * 60 * 1000;
 
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
 const titleLang = () => (S.site && S.site.titleLang) || 'ja';

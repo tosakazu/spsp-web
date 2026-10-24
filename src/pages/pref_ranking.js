@@ -5,6 +5,7 @@ import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/js/links.js';
 import '../../site/js/data.js';
+import SPSPViews from '../../site/js/views.js';
 import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import '../../site/js/tags.js';
@@ -42,9 +43,9 @@ const RP = SPSPRankingPage;
 function buildData() {
   /** @type {SpspRankRecord[]} */
   const ranked = [];
-  const prefMap = /** @type {Record<string, string>} */ (STATE.prefMap);   // init で読んでから呼ばれる
+  const prefMap = STATE.prefMap;   // init で読んでから呼ばれる。data/views/ 読みのとき (null) は masterMap がこの都道府県の行だけ
   for (const [uid, src] of STATE.masterMap) {
-    if (prefMap[String(uid)] !== STATE.pref) continue;
+    if (prefMap && prefMap[String(uid)] !== STATE.pref) continue;
     ranked.push(RP.cloneWithGlobalRanks(src));
   }
   return RP.rerankByGlobalEnsemble(ranked);
@@ -108,10 +109,18 @@ async function init() {
   }
   try {
     const t0 = performance.now();
+    // data/views/ があれば この都道府県の行 (pref/<geo.json の order>.json) だけ読む (js/views.js)。無ければ全選手 + player_prefectures.json
+    const views = await SPSPViews.manifest();
+    const geoP = SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null);   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
     const [prefRes, master] = await Promise.all([
-      fetch(SPSP.data + 'data/player_prefectures.json'),
-      RP.loadMaster(SPSP.data),
-      SPSPGeo.loadGeo(/** @type {string} */ (SPSP.data)).catch(() => null),   // 都道府県の表示名 (英語ページでは Tokyo)。無くても id で出す
+      views ? null : fetch(SPSP.data + 'data/player_prefectures.json'),
+      RP.loadMaster(SPSP.data, { views: async (V) => {
+        const geo = await geoP;
+        const id = SPSPGeo.unitFromUrlKey(/** @type {string} */ (STATE.pref)) || STATE.pref;
+        const unit = geo && (geo.units || []).find((/** @type {SpspGeoUnit} */ u) => u.id === id);
+        return unit && unit.order != null ? V.prefRows(unit.order) : [];
+      } }),
+      geoP,
     ]);
     // ?pref= は URL キー ('tokyo' / 北米 'CA')。旧 URL の '東京都' も引ける。読めたら URL を新しいキーに書き換える
     const prefId = SPSPGeo.unitFromUrlKey(STATE.pref);
@@ -120,8 +129,10 @@ async function init() {
       SPSPUrlKey.canonicalizeParam('pref', SPSPGeo.unitUrlKey(prefId));
     }
     const prefName = SPSPGeo.unitName(STATE.pref);
-    if (!prefRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'player_prefectures.json' }));
-    STATE.prefMap = await prefRes.json();
+    if (!master.views) {
+      if (!prefRes || !prefRes.ok) throw new Error(i18n('common.fetch_failed', { file: 'player_prefectures.json' }));
+      STATE.prefMap = await prefRes.json();
+    }
     STATE.masterMeta = /** @type {SpspRankMeta} */ (master.meta);
 
     for (const rec of master.recs) STATE.masterMap.set(rec.user_id, rec);

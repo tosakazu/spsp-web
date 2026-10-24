@@ -10,6 +10,7 @@
  *   EVENT_CONTEXT: SpspSeedEventContext | null,
  *   MANUAL: SpspSeedManual | null,
  *   MASTER_MAP: Map<number, SpspRankRecord> | null,
+ *   MASTER_INDEX: any,
  *   META: SpspRankMeta | null,
  *   PRE_OPT: SpspSeedPreOpt | null,
  *   SEEDOPT_RESULT: SpspSeedOptResult | null,
@@ -32,6 +33,7 @@ export const S = {
   EVENT_CONTEXT: null,   // 30_core.js
   MANUAL: null,   // {base:[uid], ops:[{uid,to}], hpos, committed, editing, sel}   // 30_core.js
   MASTER_MAP: null,   // 30_core.js
+  MASTER_INDEX: null,   // data/views/players_index.json の復号 (js/views.js)。views 読みのときだけ (MASTER_MAP は要る人の行だけになる)   // 30_core.js
   META: null,   // 30_core.js
   PRE_OPT: null,   // { order: [uid], manual: MANUAL の複製 | null }   // 30_core.js
   SEEDOPT_RESULT: null,   // 99_bootstrap.js
