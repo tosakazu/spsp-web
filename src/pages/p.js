@@ -451,6 +451,7 @@ async function loadData() {
   }
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
   CARD_SETTINGS = fetchAppliedCard(UID).catch(() => null);
+  const MERGED_TO = mergedTarget(UID);   // ほかのデータと並べて読む (旧 uid の古い選手ファイルが R2 に残っていても飛ばす)
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
     // SPSPPlayerData.load が以前の 1 ファイルと同じ形に組み立てる (../js/player_data.js)
@@ -482,8 +483,8 @@ async function loadData() {
     if (charIdxRes && charIdxRes.ok) {
       try { CHAR_IDX = await charIdxRes.json(); } catch (e) {}
     }
+    if (await redirectMerged(await MERGED_TO)) return;
     if (!playerRec) {
-      if (await redirectMerged(UID)) return;
       showNotFound(i18n('player.not_in_db', { uid: UID }));
       return;
     }
@@ -515,15 +516,25 @@ async function loadData() {
   }
 }
 
-/** 統合した旧アカウント (data/user_merges.json: 旧 uid → 新 uid、連鎖は解決済み) なら新しい方のページへ置き換える。
- * 旧アカウントの ?d= は discriminators.json に旧 uid として載っている (新しい方が収録者のとき)。lang などほかのクエリは残す
- * @param {number} uid @returns {Promise<boolean>} 飛ばしたら true */
-async function redirectMerged(uid) {
+/** 統合した旧アカウント (data/user_merges.json: 旧 uid → 新 uid、連鎖は解決済み) なら新しい方の uid。違えば・読めなければ null。
+ * 旧アカウントの ?d= は discriminators.json に旧 uid として載っている (新しい方が収録者のとき)。
+ * 選手ファイルがあっても見る: まとめる回 (SPSP_BUNDLE_SMALL) は R2 の players/ を消さないので、旧 uid の古いファイルが残る
+ * @param {number} uid @returns {Promise<number | null>} */
+async function mergedTarget(uid) {
   try {
     const r = await fetch(SPSP.data + 'data/user_merges.json');
-    if (!r.ok) return false;
+    if (!r.ok) return null;
     const to = Number((await r.json())[String(uid)]);
-    if (!to || to === uid) return false;
+    return to && to !== uid ? to : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 新しい方のページへ置き換える (lang などほかのクエリは残す) @param {number | null} to @returns {Promise<boolean>} 飛ばしたら true */
+async function redirectMerged(to) {
+  if (!to) return false;
+  try {
     await SPSPLinks.loadDiscriminators(SPSP.data);
     const q = new URLSearchParams(location.search);
     q.delete('d');
