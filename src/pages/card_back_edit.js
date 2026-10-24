@@ -9,7 +9,7 @@
 //   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・素 の 4 枚。素 = ホロなし)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
 //   操作の欄は選んでいてもいなくても同じ高さ (一覧がずれない)。大きさ・回転・切り取りは 1 本のスライダーを切り替える。元に戻す・やり直すあり
-//   一覧は大会ごと。大会を押すといちばん上の色、色の丸を押すとその色を貼る。一覧はページごとスクロールし、押すとカードの所へ戻る
+//   一覧は大会ごと。大会を押すといちばん上の色を貼る (貼ってあれば、貼ってある中でいちばん上の色を選ぶ)、色の丸を押すとその色を貼る。一覧はページごとスクロールし、押すとカードの所へ戻る
 //   透過なしのシールは形 (四角・角丸・丸・六角形・ひし形) と切り取り (絵の何割を見せるか) を選べる。切り取りは絵の縮尺を保ったまま
 //   シールを小さくする (はさみで外側を切る)。ホロは見えている形いっぱいに縮む (js/holo_badge.js の shape / crop)
 //   カードの土台は js/player_card.js renderBack (シールなし)。シールは 1 枚ずつ実際の大きさで描く (層ごと縮めると粗く見えるブラウザがある)
@@ -943,10 +943,12 @@ export async function mountBackEditor(o) {
       it.className = 'bz-ev' + (g.tiers.some(b => b.e === sel) ? ' on' : '');
       it.innerHTML = `<button type="button" class="bz-thumb"><span class="bz-tb"></span></button>
         <div class="bz-tiers"></div><span class="bz-iname"></span><span class="bz-imeta"></span>`;
-      // 大会を押す: まだ貼っていない色のうちいちばん上を貼る (全部貼ってあれば、いちばん上を選ぶ)。見本の絵もその色
-      const next = g.tiers.find(b => !on.has(b.e)) || g.tiers[0];
+      // 大会を押す: その大会のシールを貼ってあれば、貼ってある中でいちばん上の色を選ぶ (新しく貼らない)。まだ 1 枚も無ければいちばん上の色を貼る。
+      // 下の色を貼りたいときは色の丸を押す (2026-10-25 ユーザー指定)。見本の絵もその色
+      const placed = g.tiers.find(b => on.has(b.e));
+      const next = placed || g.tiers[0];
       const thumb = /** @type {HTMLButtonElement} */ (it.querySelector('.bz-thumb'));
-      thumb.title = `${g.name} — ${HOLO_NAMES[next.variant]}を貼る`;
+      thumb.title = `${g.name} — ${HOLO_NAMES[next.variant]}を${placed ? '選ぶ' : '貼る'}`;
       thumb.addEventListener('click', () => addOrSelect(next));
       const tb = /** @type {HTMLElement} */ (it.querySelector('.bz-tb'));
       tb.dataset.src = IMG_BASE + g.file;
