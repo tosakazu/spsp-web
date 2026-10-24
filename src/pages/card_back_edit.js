@@ -24,7 +24,11 @@ const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.get
 /** 貼ったときの大きさ (一辺、カードの px)。カードの高さの 3 分の 1 強 */
 const S_DEF = 120;
 const PAGE = 60;
-const HOLO_NAMES = ['虹', '金', '銀', '素'];
+/** 文言 (site/i18n の card_back.*) @param {string} k @param {Record<string, string | number>} [p] */
+const i18n = (k, p) => SPSPI18n.t(k, p);
+const TIERS_I18N = ['r', 'g', 's', 'n'];
+/** 色の名前 (虹・金・銀・素) @param {number} v */
+const tierName = v => { const k = TIERS_I18N[v]; return i18n('card_back.tier.' + k); };
 
 /** @typedef {import('../../site/js/card_stickers.js').Sticker} Sticker */
 /** @typedef {import('../../site/js/card_stickers.js').CardBack} CardBack */
@@ -68,7 +72,7 @@ function badgesOf(tours, icons, got) {
 }
 
 /** 順位の表示 @param {Badge} b */
-const placeText = b => (b.place == null ? '' : b.place === 1 ? '優勝' : `${b.place}位`) + (b.nent ? ` / ${b.nent}人` : '');
+const placeText = b => (b.place == null ? '' : b.place === 1 ? i18n('card_back.win') : i18n('card_back.place', { n: b.place })) + (b.nent ? ' / ' + i18n('card_back.nent', { n: b.nent }) : '');
 
 /** 大会ごとにまとめた一覧の 1 つ (色は持っているものだけ、上の色から)。pts = 順位評価ポイント (大会記録の tjpr_raw)、series はあとから
  * @typedef {{ key: string, name: string, date: string, place: number | null, nent: number | null, file: string, cls: string | null,
@@ -123,7 +127,7 @@ export async function mountBackEditor(o) {
   const tframe = document.createElement('div');
   tframe.className = 'bz-frame bz-tframe';
   tframe.style.display = 'none';
-  tframe.innerHTML = '<span class="bz-h bz-h-rot" title="回転・大きさ">↻</span>';
+  tframe.innerHTML = `<span class="bz-h bz-h-rot" title="${i18n('card_back.handle_rot')}">↻</span>`;
   $('bz-over').appendChild(tframe);
   /** 文字の箱 (白フチならその絵) をまとめた画面の四角。無ければ null */
   const textRect = () => {
@@ -153,7 +157,7 @@ export async function mountBackEditor(o) {
   textTopBtn.addEventListener('click', () => {
     textTop = !textTop;
     paintTextTop(); renderBase(); emit();
-    toast(textTop ? '名前・二つ名・順位をシールの上に出しました' : '名前・二つ名・順位をシールの下にしました');
+    toast(textTop ? i18n('card_back.toast.text_top_on') : i18n('card_back.toast.text_top_off'));
   });
 
 
@@ -163,7 +167,7 @@ export async function mountBackEditor(o) {
   sxBtn.addEventListener('click', () => {
     stickerText = !stickerText;
     paintSx(); renderBase(); emit();
-    toast(stickerText ? '名前・二つ名・順位を白フチのシールにしました' : '名前・二つ名・順位を元の文字に戻しました');
+    toast(stickerText ? i18n('card_back.toast.sticker_text_on') : i18n('card_back.toast.sticker_text_off'));
   });
   paintTextTop(); paintSx(); renderBase();
 
@@ -279,7 +283,7 @@ export async function mountBackEditor(o) {
     pose = { x: 0, y: 0, r: 0, s: 1 };
     showTextPos(); paintTools(); commit(true);
     /** @type {HTMLDetailsElement} */ ($('bz-menu')).open = false;
-    toast('名前の表示を元に戻しました', '元に戻す', undo);
+    toast(i18n('card_back.toast.text_reset'), i18n('card_back.undo'), undo);
   });
   // 名前・二つ名・順位の表示を編集する (その他のメニューから選ぶ。カードを押しただけでは選ばない: シールを触るとき邪魔なので)
   $('bz-text-edit').addEventListener('click', () => {
@@ -398,7 +402,7 @@ export async function mountBackEditor(o) {
   const slider = /** @type {HTMLInputElement} */ ($('bz-slider'));
   /** @type {'size' | 'rot' | 'crop'} */
   let tab = 'size';
-  const TAB_LABEL = { size: '大きさ', rot: '回転', crop: '切り取り' };
+  const TAB_LABEL = { size: i18n('card_back.tab.size'), rot: i18n('card_back.tab.rot'), crop: i18n('card_back.tab.crop') };
   /** スライダーの範囲と今の値 @param {Sticker} s */
   const sliderOf = s => tab === 'size' ? { min: 0, max: 1000, v: sizeToSlider(s.s), text: Math.round(s.s / S_DEF * 100) + '%' }
     : tab === 'rot' ? { min: -180, max: 180, v: Math.round(s.r), text: Math.round(s.r) + '°' }
@@ -412,7 +416,7 @@ export async function mountBackEditor(o) {
     if (!s && textSel) {
       // 名前・二つ名・順位: 大きさと回転だけ (形・切り取り・重なり順・剥がすは無い)
       name.classList.remove('bz-hint');
-      name.textContent = '名前・二つ名・順位';
+      name.textContent = i18n('card_back.text_label');
       for (const x of $('bz-shapes').querySelectorAll('button')) { x.classList.remove('on'); /** @type {HTMLButtonElement} */ (x).disabled = true; }
       btn('bz-up').disabled = btn('bz-front').disabled = btn('bz-down').disabled = btn('bz-backmost').disabled = btn('bz-del').disabled = true;
       /** @type {HTMLButtonElement} */ ($('bz-tabs').querySelector('[data-t="crop"]')).disabled = true;
@@ -424,22 +428,22 @@ export async function mountBackEditor(o) {
       if (document.activeElement !== slider) slider.value = String(sv.v);
       slider.setAttribute('aria-label', TAB_LABEL[tab]);
       $('bz-val').textContent = sv.text;
-      $('bz-val').title = tab === 'size' ? '元の大きさに戻す' : '元の傾きに戻す';
+      $('bz-val').title = tab === 'size' ? i18n('card_back.val.text_size') : i18n('card_back.val.text_rot');
       return;
     }
     btn('bz-del').disabled = false;
     if (!s) {
-      name.textContent = stickers.length ? '' : '下の一覧から押すとカードに貼れます';   // 貼ってあれば何も出さない (高さは保つ)
+      name.textContent = stickers.length ? '' : i18n('card_back.hint_empty');   // 貼ってあれば何も出さない (高さは保つ)
       return;
     }
     const b = /** @type {Badge} */ (byE.get(s.e));
-    name.textContent = `${b.name}${b.cls ? ` ${b.cls}クラス` : ''} · ${HOLO_NAMES[b.variant]}${b.place != null ? ' · ' + placeText(b) : ''}`;
+    name.textContent = `${b.name}${b.cls ? ' ' + i18n('card_back.cls', { c: b.cls }) : ''} · ${tierName(b.variant)}${b.place != null ? ' · ' + placeText(b) : ''}`;
     const tr = trans.has(s.e);
     for (const x of $('bz-shapes').querySelectorAll('button')) {
       const btn = /** @type {HTMLButtonElement} */ (x);
       btn.classList.toggle('on', !tr && btn.dataset.k === s.k);
       btn.disabled = tr;
-      btn.title = tr ? '透過のアイコンは形を変えられません' : String(btn.dataset.title || btn.title);
+      btn.title = tr ? i18n('card_back.shape_locked') : String(btn.dataset.title || btn.title);
     }
     const cropBtn = /** @type {HTMLButtonElement} */ ($('bz-tabs').querySelector('[data-t="crop"]'));
     cropBtn.disabled = tr;
@@ -450,7 +454,7 @@ export async function mountBackEditor(o) {
     if (document.activeElement !== slider) slider.value = String(sv.v);
     slider.setAttribute('aria-label', TAB_LABEL[tab]);
     $('bz-val').textContent = sv.text;
-    $('bz-val').title = tab === 'size' ? '標準の大きさに戻す' : tab === 'rot' ? 'まっすぐに戻す' : '切り取らない (100%) に戻す';
+    $('bz-val').title = i18n('card_back.val.' + tab);
     const i = stickers.indexOf(s);
     /** @type {HTMLButtonElement} */ ($('bz-up')).disabled = /** @type {HTMLButtonElement} */ ($('bz-front')).disabled = i === stickers.length - 1;
     /** @type {HTMLButtonElement} */ ($('bz-down')).disabled = /** @type {HTMLButtonElement} */ ($('bz-backmost')).disabled = i === 0;
@@ -512,7 +516,7 @@ export async function mountBackEditor(o) {
     stickers = stickers.filter(s => s.e !== e);
     if (sel === e) sel = null;
     changed(true); paintTray();
-    toast('剥がしました', '元に戻す', undo);
+    toast(i18n('card_back.toast.removed'), i18n('card_back.undo'), undo);
   };
   $('bz-del').addEventListener('click', () => { if (sel != null) remove(sel); });
 
@@ -532,7 +536,7 @@ export async function mountBackEditor(o) {
   $('bz-rand').addEventListener('click', async () => {
     menu.open = false;
     const room = MAX_STICKERS - stickers.length;
-    if (room <= 0) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+    if (room <= 0) { toast(i18n('card_back.toast.max', { n: MAX_STICKERS })); return; }
     // ランダムに選ぶのは大会 (下位クラスも同じ大会)。その大会のシールは、まだ貼っていないものの中で一番上のもの:
     // 色 (虹 > 金 > 銀 > 素)、同じ色なら本戦 > 下位クラス (B > C > …)
     const rank = (/** @type {Badge} */ b) => b.variant * 10 + (b.cls ? ' ABCDE'.indexOf(b.cls) : 0);
@@ -546,7 +550,7 @@ export async function mountBackEditor(o) {
       if (l) l.push(b); else byTour.set(t, [b]);
     }
     const lists = [...byTour.values()].map(l => l.sort((x, y) => rank(x) - rank(y)));
-    if (!lists.length) { toast('まだ貼っていないシールがありません'); return; }
+    if (!lists.length) { toast(i18n('card_back.toast.none_left')); return; }
     /** 混ぜる (Fisher–Yates) @template T @param {T[]} a */
     const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     // 1 周目は大会ごとに 1 枚 (一番上)。k に足りなければ、2 周目は残っている大会から次のものを、… (周ごとに大会の順を混ぜ直す)
@@ -569,14 +573,14 @@ export async function mountBackEditor(o) {
     sel = null;
     changed(true);
     paintTray();
-    const why = n >= randK ? '' : stickers.length >= MAX_STICKERS ? ' (貼れるのはここまで)' : ' (まだ貼っていないシールはこれで全部)';
-    toast(`${n} 枚貼りました${why}`, '元に戻す', undo);
+    const why = n >= randK ? 'placed' : stickers.length >= MAX_STICKERS ? 'placed_max' : 'placed_all';
+    toast(i18n('card_back.toast.' + why, { n }), i18n('card_back.undo'), undo);
   });
   $('bz-clear').addEventListener('click', () => {
     menu.open = false;
     if (!stickers.length) return;
     stickers = []; sel = null; changed(true); paintTray();
-    toast('全部剥がしました', '元に戻す', undo);
+    toast(i18n('card_back.toast.cleared'), i18n('card_back.undo'), undo);
   });
 
   // ── 一時的なお知らせ (取り消しのボタン付き) ──
@@ -858,7 +862,7 @@ export async function mountBackEditor(o) {
   };
   const norm = (/** @type {string} */ x) => x.normalize('NFKC').toLowerCase();
   const matches = (/** @type {EventGroup} */ g) => (!seriesSel || g.series === seriesSel)
-    && (!query || norm(`${g.name} ${g.series} ${g.cls ? g.cls + 'クラス' : ''}`).includes(query));
+    && (!query || norm(`${g.name} ${g.series} ${g.cls ? g.cls + 'クラス class ' + g.cls : ''}`).includes(query));
   const listOf = (/** @type {string} */ f) => {
     const base = (f === 'placed' ? groups.filter(isPlaced) : real).filter(g => g.sample || matches(g));
     const l = f === 'all' || f === 'placed' ? base : base.filter(g => topV(g) === TIERS.indexOf(/** @type {any} */ (f)));
@@ -913,7 +917,8 @@ export async function mountBackEditor(o) {
       if (es.some(x => x.isIntersecting) && $('bz-more').style.display !== 'none') { shown += PAGE; paintTray(); }
     }, { rootMargin: '400px' }).observe($('bz-more'));
   }
-  const TIER_SHORT = ['虹', '金', '銀', '素'];
+  // 色の丸の中の 1 文字 (虹 金 銀 素 / R G S P)
+  const TIER_SHORT = TIERS_I18N.map(t => i18n('card_back.tier_short.' + t));
   // 一覧の絵は本物のシール (ホロ・クラスの文字) で描く。重いので、一覧の箱の中で見える近くに来たものだけ
   /** @param {HTMLElement} tb */
   const paintThumb = tb => {
@@ -943,7 +948,7 @@ export async function mountBackEditor(o) {
     const list = listOf(filter);
     tray.innerHTML = '';
     if (!list.length) {
-      tray.innerHTML = `<div class="bz-empty">${query || seriesSel ? '見つかりません' : filter === 'placed' ? 'まだ貼っていません' : 'ありません'}</div>`;
+      tray.innerHTML = `<div class="bz-empty">${query || seriesSel ? i18n('card_back.empty.found') : filter === 'placed' ? i18n('card_back.empty.placed') : i18n('card_back.empty.none')}</div>`;
     }
     for (const g of list.slice(0, shown)) {
       const it = document.createElement('div');
@@ -955,7 +960,8 @@ export async function mountBackEditor(o) {
       const placed = g.tiers.find(b => on.has(b.e));
       const next = placed || g.tiers[0];
       const thumb = /** @type {HTMLButtonElement} */ (it.querySelector('.bz-thumb'));
-      thumb.title = `${g.name} — ${HOLO_NAMES[next.variant]}を${placed ? '選ぶ' : '貼る'}`;
+      const tp = { name: g.name, tier: tierName(next.variant) };
+      thumb.title = placed ? i18n('card_back.thumb.select', tp) : i18n('card_back.thumb.place', tp);
       thumb.addEventListener('click', () => addOrSelect(next));
       const tb = /** @type {HTMLElement} */ (it.querySelector('.bz-tb'));
       tb.dataset.src = IMG_BASE + g.file;
@@ -968,7 +974,7 @@ export async function mountBackEditor(o) {
         d.type = 'button';
         d.className = `bz-tier t${b.variant}` + (on.has(b.e) ? ' on' : '');
         d.textContent = TIER_SHORT[b.variant];
-        d.title = `${HOLO_NAMES[b.variant]}${on.has(b.e) ? ' (貼っています。押すと選ぶ)' : 'を貼る'}`;
+        d.title = on.has(b.e) ? i18n('card_back.dot.on', { tier: tierName(b.variant) }) : i18n('card_back.dot.place', { tier: tierName(b.variant) });
         d.addEventListener('click', () => addOrSelect(b));
         tiers.appendChild(d);
       }
@@ -976,9 +982,9 @@ export async function mountBackEditor(o) {
       // 下の行: 日付・順位、並べ替えに使っている値 (ポイント・人数) は太く
       const meta = /** @type {HTMLElement} */ (it.querySelector('.bz-imeta'));
       if (g.date) {
-        const placeT = g.place == null ? '' : g.place === 1 ? '優勝' : g.place + '位';
-        const extra = sortKey === 'pts' ? `${(g.pts * PTS_SCALE).toFixed(1)}pt` : sortKey === 'nent' && g.nent ? `${g.nent}人` : '';
-        meta.textContent = `${g.date.replace(/-/g, '/')} ${placeT}${g.nent && sortKey === 'place' ? `/${g.nent}人` : ''}`;
+        const placeT = g.place == null ? '' : g.place === 1 ? i18n('card_back.win') : i18n('card_back.place', { n: g.place });
+        const extra = sortKey === 'pts' ? i18n('card_back.pts', { v: (g.pts * PTS_SCALE).toFixed(1) }) : sortKey === 'nent' && g.nent ? i18n('card_back.nent', { n: g.nent }) : '';
+        meta.textContent = `${g.date.replace(/-/g, '/')} ${placeT}${g.nent && sortKey === 'place' ? '/' + i18n('card_back.nent', { n: g.nent }) : ''}`;
         if (extra) { const b = document.createElement('b'); b.textContent = ' ' + extra; meta.appendChild(b); }
       }
       tray.appendChild(it);
@@ -1008,11 +1014,11 @@ export async function mountBackEditor(o) {
     const top = root.getBoundingClientRect().top + window.scrollY - 8;
     if (window.scrollY > top) window.scrollTo({ top, behavior: 'smooth' });
     if (!stickers.some(s => s.e === b.e)) {
-      if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+      if (stickers.length >= MAX_STICKERS) { toast(i18n('card_back.toast.max', { n: MAX_STICKERS })); return; }
       // 透過かどうか (形を選べるか)。一覧の絵を描いたときに調べてあるので、たいていすぐ分かる
       const tr = await isTransparent(IMG_BASE + b.file);
       if (stickers.some(s => s.e === b.e)) { select(b.e); return; }   // 待つ間に 2 回押した
-      if (stickers.length >= MAX_STICKERS) { toast(`貼れるのは ${MAX_STICKERS} 枚までです`); return; }
+      if (stickers.length >= MAX_STICKERS) { toast(i18n('card_back.toast.max', { n: MAX_STICKERS })); return; }
       stickers.push(randomSticker(b.e, tr));
       sel = b.e;
       place();

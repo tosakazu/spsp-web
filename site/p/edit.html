@@ -35,8 +35,8 @@
 
     <!-- 表と裏の編集の切り替え (本人と確認できたら出す) -->
     <div class="ce-tabs" id="ce-tabs" role="tablist" style="display:none">
-      <button type="button" role="tab" data-tab="front" class="on" aria-selected="true">表</button>
-      <button type="button" role="tab" data-tab="back" aria-selected="false">裏</button>
+      <button type="button" role="tab" data-tab="front" class="on" aria-selected="true" data-i18n="card_edit.tab_front">表</button>
+      <button type="button" role="tab" data-tab="back" aria-selected="false" data-i18n="card_edit.tab_back">裏</button>
     </div>
 
     <!-- 表の道具の行 (裏の道具の行と同じ高さ。カードの位置をそろえて、裏返しのときにずれないように) -->
@@ -110,31 +110,31 @@
         <!-- 道具の行: 裏面の名前 (英字名、カードの設定 latin。最初から今の名前 = 未設定なら名前から自動で作ったものが入っている) と、
              元に戻す・文字を前に・白フチ・その他 (やり直すはその他の中) -->
         <div class="bz-head">
-          <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done" aria-label="裏面の名前" title="裏面の名前">
+          <input type="text" class="bz-latin" id="bz-latin" maxlength="45" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="latin" enterkeyhint="done" aria-label="裏面の名前" title="裏面の名前" data-i18n-attr="aria-label:card_back.latin_label,title:card_back.latin_label">
           <div class="bz-head-btns">
-        <button type="button" class="bz-ib" id="bz-undo" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button type="button" class="bz-ib" id="bz-undo" title="元に戻す (Ctrl+Z)" aria-label="元に戻す" data-i18n-attr="title:card_back.undo_title,aria-label:card_back.undo" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
         <!-- 名前・二つ名・順位をシールの上に (絵: シールの四角の手前に A) -->
-        <button type="button" class="bz-ib bz-tt" id="bz-text-top" aria-pressed="false" title="名前・二つ名・順位をシールの上に出す" aria-label="名前・二つ名・順位をシールの上に出す">
+        <button type="button" class="bz-ib bz-tt" id="bz-text-top" aria-pressed="false" title="名前・二つ名・順位をシールの上に出す" aria-label="名前・二つ名・順位をシールの上に出す" data-i18n-attr="title:card_back.text_top,aria-label:card_back.text_top">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect class="bz-tt-st" x="9" y="3" width="12" height="12" rx="2.5"/><path class="bz-tt-a" d="M3.5 21L8.5 8.5h1.6L15 21M5.4 16.6h7.8"/><rect class="bz-tt-st bz-tt-over" x="9" y="3" width="12" height="12" rx="2.5"/></svg>
         </button>
         <!-- 名前・二つ名・順位を白フチのシールに (絵: 白い太い縁の A) -->
-        <button type="button" class="bz-ib bz-tt bz-sx" id="bz-sticker-text" aria-pressed="false" title="名前・二つ名・順位を白フチのシールにする" aria-label="名前・二つ名・順位を白フチのシールにする">
+        <button type="button" class="bz-ib bz-tt bz-sx" id="bz-sticker-text" aria-pressed="false" title="名前・二つ名・順位を白フチのシールにする" aria-label="名前・二つ名・順位を白フチのシールにする" data-i18n-attr="title:card_back.sticker_text,aria-label:card_back.sticker_text">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path class="bz-sx-out" d="M4.5 20.5L10.6 5h2.8l6.1 15.5M7 15.2h10"/><path class="bz-sx-in" d="M4.5 20.5L10.6 5h2.8l6.1 15.5M7 15.2h10"/></svg>
         </button>
             <details class="bz-menu" id="bz-menu">
-              <summary class="bz-ib" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
+              <summary class="bz-ib" title="その他" aria-label="その他" data-i18n-attr="title:card_back.more,aria-label:card_back.more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
               <div class="bz-menu-pop">
-                <button type="button" class="bz-menu-redo" id="bz-redo" title="Ctrl+Shift+Z" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>やり直す</button>
+                <button type="button" class="bz-menu-redo" id="bz-redo" title="Ctrl+Shift+Z" data-i18n="card_back.redo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>やり直す</button>
                 <!-- 名前・二つ名・順位の表示: 編集 (選んで、ドラッグ・つまみ・スライダーで動かす) と元に戻す (真ん中・まっすぐ・元の大きさ) -->
-                <button type="button" class="bz-menu-redo" id="bz-text-edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>名前の表示を編集</button>
-                <button type="button" class="bz-menu-redo" id="bz-text-center" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>名前の表示を元に戻す</button>
+                <button type="button" class="bz-menu-redo" id="bz-text-edit" data-i18n="card_back.text_edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>名前の表示を編集</button>
+                <button type="button" class="bz-menu-redo" id="bz-text-center" data-i18n="card_back.text_reset" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>名前の表示を元に戻す</button>
                 <!-- まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会を選び (その大会で残っている一番上のもの)、ランダムな大きさ・場所・角度・形で貼る (k は − / + で) -->
                 <div class="bz-rand">
-                  <button type="button" class="bz-rand-go" id="bz-rand">ランダムに <b id="bz-rand-k">5</b> 枚貼る</button>
-                  <button type="button" class="bz-rand-step" id="bz-rand-minus" aria-label="1 枚減らす">−</button>
-                  <button type="button" class="bz-rand-step" id="bz-rand-plus" aria-label="1 枚増やす">+</button>
+                  <button type="button" class="bz-rand-go" id="bz-rand"><span data-i18n="card_back.rand_pre">ランダムに </span><b id="bz-rand-k">5</b><span data-i18n="card_back.rand_post"> 枚貼る</span></button>
+                  <button type="button" class="bz-rand-step" id="bz-rand-minus" aria-label="1 枚減らす" data-i18n-attr="aria-label:card_back.rand_minus">−</button>
+                  <button type="button" class="bz-rand-step" id="bz-rand-plus" aria-label="1 枚増やす" data-i18n-attr="aria-label:card_back.rand_plus">+</button>
                 </div>
-                <button type="button" class="bz-danger" id="bz-clear">シールを全部剥がす</button>
+                <button type="button" class="bz-danger" id="bz-clear" data-i18n="card_back.clear">シールを全部剥がす</button>
               </div>
             </details>
           </div>
@@ -148,64 +148,64 @@
         <div class="bz-layer" id="bz-layer"></div>
         <!-- 名前・二つ名・順位をシールの上に出すとき: 裏面をもう 1 枚描き、文字の所だけ見せる -->
         <div class="pcard pcard-back bz-text" id="bz-text" aria-hidden="true" style="display:none"></div>
-        <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ">↻</span><span class="bz-h bz-h-del" title="剥がす">×</span></div></div>
+        <div class="bz-over" id="bz-over"><div class="bz-frame" id="bz-frame" style="display:none"><span class="bz-h bz-h-rot" title="回転・大きさ" data-i18n-attr="title:card_back.handle_rot">↻</span><span class="bz-h bz-h-del" title="剥がす" data-i18n-attr="title:card_back.remove">×</span></div></div>
       </div>
 
       <div class="bz-tools" id="bz-tools">
         <div class="bz-sel-name" id="bz-sel-name"></div>
         <div class="bz-row">
-          <div class="bz-seg bz-shapes" id="bz-shapes" role="group" aria-label="形">
-            <button type="button" data-k="square" title="四角"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14"/></svg></button>
-            <button type="button" data-k="round" title="角丸"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="3.5"/></svg></button>
-            <button type="button" data-k="circle" title="丸"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></button>
-            <button type="button" data-k="hex" title="六角形"><svg viewBox="0 0 20 20"><polygon points="10,2.5 16.5,6.25 16.5,13.75 10,17.5 3.5,13.75 3.5,6.25"/></svg></button>
-            <button type="button" data-k="diamond" title="ひし形"><svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg></button>
+          <div class="bz-seg bz-shapes" id="bz-shapes" role="group" aria-label="形" data-i18n-attr="aria-label:card_back.shape">
+            <button type="button" data-k="square" title="四角" data-i18n-attr="title:card_back.shape.square"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14"/></svg></button>
+            <button type="button" data-k="round" title="角丸" data-i18n-attr="title:card_back.shape.round"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="3.5"/></svg></button>
+            <button type="button" data-k="circle" title="丸" data-i18n-attr="title:card_back.shape.circle"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></button>
+            <button type="button" data-k="hex" title="六角形" data-i18n-attr="title:card_back.shape.hex"><svg viewBox="0 0 20 20"><polygon points="10,2.5 16.5,6.25 16.5,13.75 10,17.5 3.5,13.75 3.5,6.25"/></svg></button>
+            <button type="button" data-k="diamond" title="ひし形" data-i18n-attr="title:card_back.shape.diamond"><svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg></button>
           </div>
-          <div class="bz-seg bz-order" role="group" aria-label="重なり順">
-            <button type="button" id="bz-backmost" title="いちばん下へ"><svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg></button>
-            <button type="button" id="bz-down" title="1 つ下へ"><svg viewBox="0 0 24 24"><path d="M12 5v14M7 14l5 5 5-5"/></svg></button>
-            <button type="button" id="bz-up" title="1 つ上へ"><svg viewBox="0 0 24 24"><path d="M12 19V5M7 10l5-5 5 5"/></svg></button>
-            <button type="button" id="bz-front" title="いちばん上へ"><svg viewBox="0 0 24 24"><path d="M12 20V8M7 13l5-5 5 5M5 4h14"/></svg></button>
+          <div class="bz-seg bz-order" role="group" aria-label="重なり順" data-i18n-attr="aria-label:card_back.order">
+            <button type="button" id="bz-backmost" title="いちばん下へ" data-i18n-attr="title:card_back.order.backmost"><svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg></button>
+            <button type="button" id="bz-down" title="1 つ下へ" data-i18n-attr="title:card_back.order.down"><svg viewBox="0 0 24 24"><path d="M12 5v14M7 14l5 5 5-5"/></svg></button>
+            <button type="button" id="bz-up" title="1 つ上へ" data-i18n-attr="title:card_back.order.up"><svg viewBox="0 0 24 24"><path d="M12 19V5M7 10l5-5 5 5"/></svg></button>
+            <button type="button" id="bz-front" title="いちばん上へ" data-i18n-attr="title:card_back.order.front"><svg viewBox="0 0 24 24"><path d="M12 20V8M7 13l5-5 5 5M5 4h14"/></svg></button>
           </div>
-          <button type="button" class="bz-ib bz-del" id="bz-del" title="剥がす (Delete)" aria-label="剥がす"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+          <button type="button" class="bz-ib bz-del" id="bz-del" title="剥がす (Delete)" aria-label="剥がす" data-i18n-attr="title:card_back.remove_title,aria-label:card_back.remove"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
         </div>
         <div class="bz-row">
           <div class="bz-seg bz-tabs" id="bz-tabs" role="tablist">
-            <button type="button" data-t="size" class="on">大きさ</button>
-            <button type="button" data-t="rot">回転</button>
-            <button type="button" data-t="crop">切り取り</button>
+            <button type="button" data-t="size" class="on" data-i18n="card_back.tab.size">大きさ</button>
+            <button type="button" data-t="rot" data-i18n="card_back.tab.rot">回転</button>
+            <button type="button" data-t="crop" data-i18n="card_back.tab.crop">切り取り</button>
           </div>
-          <input type="range" class="bz-slider" id="bz-slider" aria-label="大きさ">
-          <button type="button" class="bz-val" id="bz-val" title="元に戻す"></button>
+          <input type="range" class="bz-slider" id="bz-slider" aria-label="大きさ" data-i18n-attr="aria-label:card_back.tab.size">
+          <button type="button" class="bz-val" id="bz-val" title="元に戻す" data-i18n-attr="title:card_back.undo"></button>
         </div>
       </div>
     </div>
     <section class="bz-sec">
       <div class="bz-find">
         <label class="bz-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-          <input type="search" id="bz-q" placeholder="大会名・シリーズで探す" autocomplete="off" enterkeyhint="search"></label>
-        <select id="bz-series" aria-label="シリーズ" disabled><option value="">シリーズ: すべて</option></select>
-        <select id="bz-sort" aria-label="並べ替え">
-          <option value="new">新しい順</option>
-          <option value="old">古い順</option>
-          <option value="pts">順位評価ポイント順</option>
-          <option value="place">順位順</option>
-          <option value="nent">参加人数順</option>
+          <input type="search" id="bz-q" placeholder="大会名・シリーズで探す" data-i18n-attr="placeholder:card_back.search" autocomplete="off" enterkeyhint="search"></label>
+        <select id="bz-series" aria-label="シリーズ" data-i18n-attr="aria-label:card_back.series" disabled><option value="" data-i18n="card_back.series_all">シリーズ: すべて</option></select>
+        <select id="bz-sort" aria-label="並べ替え" data-i18n-attr="aria-label:card_back.sort">
+          <option value="new" data-i18n="card_back.sort.new">新しい順</option>
+          <option value="old" data-i18n="card_back.sort.old">古い順</option>
+          <option value="pts" data-i18n="card_back.sort.pts">順位評価ポイント順</option>
+          <option value="place" data-i18n="card_back.sort.place">順位順</option>
+          <option value="nent" data-i18n="card_back.sort.nent">参加人数順</option>
         </select>
       </div>
       <div class="bz-filters" id="bz-filters">
-        <button type="button" data-f="all" class="on">全部</button>
-        <button type="button" data-f="r">虹</button>
-        <button type="button" data-f="g">金</button>
-        <button type="button" data-f="s">銀</button>
-        <button type="button" data-f="n">素</button>
-        <button type="button" data-f="placed">貼付中</button>
+        <button type="button" data-f="all" class="on" data-i18n="card_back.filter.all">全部</button>
+        <button type="button" data-f="r" data-i18n="card_back.tier.r">虹</button>
+        <button type="button" data-f="g" data-i18n="card_back.tier.g">金</button>
+        <button type="button" data-f="s" data-i18n="card_back.tier.s">銀</button>
+        <button type="button" data-f="n" data-i18n="card_back.tier.n">素</button>
+        <button type="button" data-f="placed" data-i18n="card_back.filter.placed">貼付中</button>
       </div>
       <!-- 一覧はページごとスクロールする (カード・操作・絞り込みも流れて隠れる。シールを押すと上へ戻る) -->
       <div class="bz-scroll" id="bz-scroll">
         <div class="bz-tray" id="bz-tray"></div>
-        <button type="button" class="bz-more" id="bz-more" style="display:none">もっと見る</button>
-        <div class="bz-note">1 つの大会につき、取った色から下の色まで全部持っています (虹 = 優勝、金・銀 = 上位、素 = 参加。素はホロなし)。大会を押すといちばん上の色を、色の丸を押すとその色を貼ります。アイコンのある大会だけ出ます。</div>
+        <button type="button" class="bz-more" id="bz-more" style="display:none" data-i18n="card_back.show_more">もっと見る</button>
+        <div class="bz-note" data-i18n="card_back.note">1 つの大会につき、取った色から下の色まで全部持っています (虹 = 優勝、金・銀 = 上位、素 = 参加。素はホロなし)。大会を押すといちばん上の色を、色の丸を押すとその色を貼ります。アイコンのある大会だけ出ます。</div>
       </div>
     </section>
       </div>
