@@ -791,11 +791,13 @@ export async function mountBackEditor(o) {
     } else if (!ptrs.size) drag = null;
   };
   stage.addEventListener('pointerup', end);
-  // カードの外の、押しても何も起きない所 (余白・見出しなど) を押したら選択を外す (操作の欄・ボタン・一覧は外さない)
+  // カードの外を押したら選択を外す (何も無い所・名前の欄・シールの検索や一覧も)。選んでいるものを変える操作 (操作の欄のボタンとスライダー・
+  // 元に戻す・文字を前に・白フチ・その他のメニュー) だけは外さない
   document.addEventListener('pointerdown', e => {
     if (!root.offsetParent || (sel == null && !textSel)) return;
     const t = /** @type {HTMLElement} */ (e.target);
-    if (!t || !t.closest || stage.contains(t) || t.closest('button, input, select, textarea, a, label, summary, details, .bz-tools')) return;
+    if (!t || !t.closest || stage.contains(t)
+        || t.closest('.bz-tools button, .bz-tools input, #bz-menu, #bz-undo, #bz-text-top, #bz-sticker-text, #ce-apply')) return;
     select(null); selectText(false);
   });
   stage.addEventListener('pointercancel', end);
