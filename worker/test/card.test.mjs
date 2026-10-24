@@ -354,7 +354,10 @@ test('card_put: preview (cardOpenEdit) だけ、ログインなしで uid を指
   e.cfg.cardOpenEdit = true;
   const put = await post(e, { action: 'card_put', uid: '777', settings: GOOD });
   assert.strictEqual(put.ok, true, JSON.stringify(put));
-  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '777' })).settings, GOOD);
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '777' })).settings, GOOD);  // 持っていない二つ名でも通す (preview の確認用)
+  e.nowMs += 60_000;
+  const t = await post(e, { action: 'card_put', uid: '777', settings: { ...GOOD, title: { pre: 'ja-0003', post: null } } });
+  assert.strictEqual(t.ok, true, JSON.stringify(t));
 });
 
 test('card_put: シールは持っているものだけ (選手のデータの sticker = 一番上の色、下の色は全部持っている)', async () => {

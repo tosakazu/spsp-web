@@ -275,7 +275,8 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
     const lang = cfg.titleLang || 'ja';
     if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
     const ids = [settings.title.pre, settings.title.post].filter((id): id is string => id !== null && id !== TITLE_DEFAULT);
-    if (ids.length) {   //「なし」と既定だけなら記録は読まない
+    // preview の誰でも編集 (openUid) では持っているかは見ない (確認用。preview の記録は本番と揃っていないことがある)
+    if (ids.length && !openUid) {   //「なし」と既定だけなら記録は読まない
       const row = await store.getTitleOwned(uid, lang);
       for (const id of ids) if (!titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
     }
