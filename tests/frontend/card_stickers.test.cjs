@@ -24,6 +24,9 @@ test('normBack: 形が違うシールは外し、範囲に丸め、何も無け�
   assert.strictEqual(normBack({ text_xy: { x: 0, y: 0 } }), null);
   assert.deepStrictEqual(normBack({ text_xy: { x: 12.34, y: -999 } }).text_xy, { x: 12.3, y: -167 });
   assert.strictEqual(normBack({ text_top: true, text_xy: { x: 'a', y: 1 } }).text_xy, undefined);
+  // 回転・大きさ: 既定 (0°・1 倍) は書かない、幅の外は端に
+  assert.strictEqual(normBack({ text_r: 0, text_s: 1 }), null);
+  assert.deepStrictEqual(normBack({ text_r: 370.04, text_s: 9 }), { stickers: [], text_top: false, outline: false, sticker_text: false, text_r: 10, text_s: 2 });
   assert.deepStrictEqual(normBack({ sticker_text: true }), { stickers: [], text_top: false, outline: false, sticker_text: true });
   const b = normBack({ stickers: [
     { e: '1700000:r', x: 600, y: -5, s: 9999, r: 190.04, k: 'star', c: 0.1 },   // 範囲外 → 丸め、知らない形 → 四角

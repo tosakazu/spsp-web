@@ -3,7 +3,7 @@
 // 編集 (src/pages/card_back_edit.js) で使う。サーバの検査 (worker/src/api/card.ts validateCardBack) と同じ規則
 //   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま),
 //          sticker_text: その文字を白フチのシールにするか (Figma「work」Frame 52) } | null
-//          text_xy: その文字の位置 (真ん中からのずれ {x, y}、カードの px。無ければ真ん中)
+//          text_xy: その文字の位置 (真ん中からのずれ {x, y}、カードの px。無ければ真ん中)、text_r: 回転 (度、カードの真ん中が軸)、text_s: 大きさ (倍)
 //   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
@@ -18,13 +18,15 @@ export const S_MIN = 22, S_MAX = 520;
 export const MAX_STICKERS = 50;
 /** 名前・二つ名・順位をずらせる幅 (真ん中から、カードの px) */
 export const TEXT_DX = 257, TEXT_DY = 167;
+/** 名前・二つ名・順位の大きさ (倍) の幅 */
+export const TEXT_S_MIN = 0.5, TEXT_S_MAX = 2;
 /** 色の記号 → holo_badge.js の variant (0 虹・1 金・2 銀・3 素) */
 export const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
 export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
 export const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 
 /** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
-/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean, sticker_text: boolean, text_xy?: { x: number, y: number } }} CardBack */
+/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean, sticker_text: boolean, text_xy?: { x: number, y: number }, text_r?: number, text_s?: number }} CardBack */
 
 const r1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
 const clamp = (/** @type {number} */ v, /** @type {number} */ lo, /** @type {number} */ hi) => Math.max(lo, Math.min(hi, v));
@@ -58,7 +60,10 @@ export function normBack(b) {
     const x = r1(clamp(p.x, -TEXT_DX, TEXT_DX)), y = r1(clamp(p.y, -TEXT_DY, TEXT_DY));
     if (x || y) back.text_xy = { x, y };   // 真ん中なら書かない
   }
-  return stickers.length || back.text_top || back.sticker_text || back.text_xy ? back : null;
+  // 回転・大きさも既定 (0°・1 倍) なら書かない
+  if (n(b.text_r)) { const r = r1(normRot(b.text_r)); if (r) back.text_r = r; }
+  if (n(b.text_s)) { const sc = Math.round(clamp(b.text_s, TEXT_S_MIN, TEXT_S_MAX) * 100) / 100; if (sc !== 1) back.text_s = sc; }
+  return stickers.length || back.text_top || back.sticker_text || back.text_xy || back.text_r || back.text_s ? back : null;
 }
 
 /** シールのキー → { 大会の event_id (下位クラスは親), クラスの文字, variant } @param {string} e */

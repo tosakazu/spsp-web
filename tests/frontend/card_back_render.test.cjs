@@ -89,8 +89,12 @@ test('名前・二つ名・順位の位置 (text_xy) は文字の列ごとずら
   assert.strictEqual(col.style.right, '20px');
   assert.strictEqual(col.style.top, '15px');
   assert.strictEqual(col.style.transform, '');
+  // 回転・大きさ: 白フチでない文字は列ごと transform
+  PC.setTextPos(el, { x: 0, y: 0, r: -10, s: 1.5 });
+  assert.strictEqual(col.style.transform, 'rotate(-10deg) scale(1.5)');
   PC.setTextPos(el, null);
-  assert.strictEqual(col.style.left, '');
+  assert.strictEqual(col.style.left, '0px');
+  assert.strictEqual(col.style.transform, '');
 });
 
 test('シールが無ければ層も光も作らない', async () => {

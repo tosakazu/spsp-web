@@ -198,7 +198,7 @@ function backHtml(m) {
   const b = m.back;
   const st = b && b.stickers.length ? `<div class="pcb-st">${b.stickers.map((s, i) =>
     `<div class="pcb-sk" data-i="${i}" data-x="${s.x}" data-y="${s.y}" data-s="${s.s}" data-r="${s.r}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
-  const col = `<div class="pcb-col"${b && b.text_xy ? ` style="${textPosCss(b.text_xy)}"` : ''}>
+  const col = `<div class="pcb-col">
       ${title}
       <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
       <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
@@ -209,13 +209,31 @@ function backHtml(m) {
   </div>`;
 }
 
-/** 名前・二つ名・順位の位置 (設定 back.text_xy = 真ん中からのずれ、カードの px)。列ごと上下左右にずらす
- * (transform は使わない: html2canvas が変形した要素の中の、回したシールの絵の位置を誤る) @param {{ x: number, y: number } | null | undefined} p */
-const textPosCss = p => p ? `left:${p.x}px;right:${-p.x}px;top:${p.y}px;bottom:${-p.y}px` : '';
-/** 描いてある裏面の、名前・二つ名・順位だけを動かす (編集中のドラッグ。描き直さない) @param {HTMLElement} el renderBack した箱 @param {{ x: number, y: number } | null} p */
+/** 名前・二つ名・順位の置き方 (設定 back.text_xy = 真ん中からのずれ (カードの px)・text_r = 回転 (度)・text_s = 大きさ (倍))
+ * @typedef {{ x: number, y: number, r: number, s: number }} TextPose */
+/** @param {import('./card_stickers.js').CardBack | null | undefined} b @returns {TextPose} */
+export const textPoseOf = b => ({ x: b && b.text_xy ? b.text_xy.x : 0, y: b && b.text_xy ? b.text_xy.y : 0,
+  r: (b && b.text_r) || 0, s: (b && b.text_s) || 1 });
+/** 名前・二つ名・順位を置き方どおりに置く。列 (.pcb-col) ごと上下左右にずらし、
+ *  白フチ (キャンバス) は 1 枚ずつ、カードの真ん中を軸に回して大きさを変えた所へ置き直す (列を transform で回すと、
+ *  html2canvas が変形した要素の中の回した絵の位置を誤る)。白フチでない文字は列を transform で回す
+ * @param {HTMLElement} col @param {TextPose} p */
+function applyTextPose(col, p) {
+  col.style.left = p.x + 'px'; col.style.right = -p.x + 'px';
+  col.style.top = p.y + 'px'; col.style.bottom = -p.y + 'px';
+  const cvs = /** @type {HTMLElement[]} */ (Array.from(col.querySelectorAll('.pcb-sx-l')));
+  col.style.transform = !cvs.length && (p.r || p.s !== 1) ? `rotate(${p.r}deg) scale(${p.s})` : '';
+  const rad = p.r * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), cx = W / 2, cy = 333 / 2;
+  for (const cv of cvs) {
+    const d = cv.dataset, x = Number(d.x) - cx, y = Number(d.y) - cy, hw = Number(d.hw) * p.s, hh = Number(d.hh) * p.s;
+    const X = cx + p.s * (x * cs - y * sn), Y = cy + p.s * (x * sn + y * cs);
+    cv.style.cssText = `left:${(X - hw).toFixed(2)}px;top:${(Y - hh).toFixed(2)}px;width:${(hw * 2).toFixed(2)}px;height:${(hh * 2).toFixed(2)}px;transform:rotate(${(Number(d.rot) + p.r).toFixed(2)}deg)`;
+  }
+}
+/** 描いてある裏面の、名前・二つ名・順位だけを置き直す (編集中のドラッグ。描き直さない) @param {HTMLElement} el renderBack した箱 @param {TextPose | null} p */
 export function setTextPos(el, p) {
   const col = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-col'));
-  if (col) col.style.cssText = textPosCss(p);
+  if (col) applyTextPose(col, p || { x: 0, y: 0, r: 0, s: 1 });
 }
 
 // ── 文字サイズの自動調整 (スケール前の 514×333 座標で測る。transform は scrollWidth に影響しない) ──
@@ -499,6 +517,8 @@ export function renderBack(el, model, opts = {}) {
   mount(el, () => backHtml(model), root => {
     fitBack(root);
     if (model.back && model.back.sticker_text) paintNameStickers(root, model);
+    const col = /** @type {HTMLElement | null} */ (root.querySelector('.pcb-col'));
+    if (col) applyTextPose(col, textPoseOf(model.back));
     if (want) paintBackStickers(root, model);
   }, !!opts.live);
   // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
@@ -634,7 +654,8 @@ function paintNameStickers(root, m) {
   const put = (cv, hw, hh, x, y, rot) => {
     cv.className = 'pcb-sx-l';
     cv.setAttribute('aria-hidden', 'true');
-    cv.style.cssText = `left:${(x - hw).toFixed(2)}px;top:${(y - hh).toFixed(2)}px;width:${hw * 2}px;height:${hh * 2}px;transform:rotate(${rot}deg)`;
+    // 置き方 (回転・大きさ) をかける前の場所を持っておき、applyTextPose が置く
+    Object.assign(cv.dataset, { x: String(x), y: String(y), hw: String(hw), hh: String(hh), rot: String(rot) });
     col.appendChild(cv);
   };
   // 名前: 50px で 1 行に入らなければ 40px まで詰め、それでも入らなければ 2 行 (44px から)。区切れなければ 1 行のまま小さく
@@ -685,7 +706,7 @@ function paintNameStickers(root, m) {
   if (F && F.check && !root.dataset.sxWait && fonts.some(f => { try { return !F.check(f, text); } catch (e) { return false; } })) {
     root.dataset.sxWait = '1';
     Promise.all(fonts.map(f => F.load(f, text + parts.join('') + '#0123456789').catch(() => {})))
-      .then(() => { if (root.isConnected) paintNameStickers(root, m); });
+      .then(() => { if (root.isConnected) { paintNameStickers(root, m); applyTextPose(/** @type {HTMLElement} */ (col), textPoseOf(m.back)); } });
   }
 }
 
@@ -873,4 +894,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, renderBack, setTextPos, ready, ensureGlow, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, renderBack, setTextPos, textPoseOf, ready, ensureGlow, capture, makeAchFitTester, COLORS, TEMPLATES };

@@ -18,7 +18,7 @@ import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
 import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
-import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
+import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, TEXT_S_MIN, TEXT_S_MAX, normRot, normBack, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** 貼ったときの大きさ (一辺、カードの px)。カードの高さの 3 分の 1 強 */
@@ -36,6 +36,9 @@ const clampCrop = (/** @type {number} */ c) => Math.max(CROP_MIN, Math.min(1, Nu
 // スライダー (0〜1000) ⇔ 大きさ (対数。小さい所も細かく選べるように)
 const sizeToSlider = (/** @type {number} */ s) => Math.round(1000 * Math.log(s / S_MIN) / Math.log(S_MAX / S_MIN));
 const sliderToSize = (/** @type {number} */ v) => S_MIN * Math.pow(S_MAX / S_MIN, v / 1000);
+// 名前・二つ名・順位の大きさ (倍) も同じく対数で。真ん中 (500) が 1 倍
+const textSizeToSlider = (/** @type {number} */ s) => Math.round(1000 * Math.log(s / TEXT_S_MIN) / Math.log(TEXT_S_MAX / TEXT_S_MIN));
+const textSliderToSize = (/** @type {number} */ v) => { const s = TEXT_S_MIN * Math.pow(TEXT_S_MAX / TEXT_S_MIN, v / 1000); return Math.abs(s - 1) < 0.03 ? 1 : Math.round(s * 100) / 100; };
 
 
 /** 出場大会 → 持っているシール (アイコンのある大会だけ。新しい大会から、同じ大会は上の色から)
@@ -97,10 +100,11 @@ export async function mountBackEditor(o) {
   let latin = o.latin;
   let textTop = !!(o.back && o.back.text_top);
   let stickerText = !!(o.back && o.back.sticker_text);
-  /** 名前・二つ名・順位の位置 (真ん中からのずれ。null = 真ん中) @type {{ x: number, y: number } | null} */
-  let txt = o.back && o.back.text_xy ? { ...o.back.text_xy } : null;
+  /** 名前・二つ名・順位の置き方 (真ん中からのずれ x・y、回転 r (度)、大きさ s (倍)) */
+  let pose = SPSPPlayerCard.textPoseOf(o.back);
+  const backPose = () => ({ text_xy: { x: pose.x, y: pose.y }, text_r: pose.r, text_s: pose.s });
   // 文字の影は、前に出していて白フチでないときだけ (js/card_stickers.js normBack と同じ。前に出した文字は裏面の複製 bz-text に描く)
-  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline: textTop && !stickerText, sticker_text: stickerText, text_xy: txt || undefined });
+  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline: textTop && !stickerText, sticker_text: stickerText, ...backPose() });
   const renderBase = () => {
     const m = baseModel();
     SPSPPlayerCard.renderBack($('bz-card'), m);
@@ -109,8 +113,8 @@ export async function mountBackEditor(o) {
   };
   /** 名前・二つ名・順位の位置だけを描いてある裏面に写す (ドラッグ中は描き直さない) */
   const showTextPos = () => {
-    SPSPPlayerCard.setTextPos($('bz-card'), txt);
-    SPSPPlayerCard.setTextPos($('bz-text'), txt);
+    SPSPPlayerCard.setTextPos($('bz-card'), pose);
+    SPSPPlayerCard.setTextPos($('bz-text'), pose);
     paintTextSel();
   };
   // 名前・二つ名・順位を選んでいるか (タップで選び、点線の枠を出す。シールを選ぶと外れる)
@@ -118,6 +122,7 @@ export async function mountBackEditor(o) {
   const tframe = document.createElement('div');
   tframe.className = 'bz-frame bz-tframe';
   tframe.style.display = 'none';
+  tframe.innerHTML = '<span class="bz-h bz-h-rot" title="回転・大きさ">↻</span>';
   $('bz-over').appendChild(tframe);
   /** 文字の箱 (白フチならその絵) をまとめた画面の四角。無ければ null */
   const textRect = () => {
@@ -209,10 +214,10 @@ export async function mountBackEditor(o) {
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
   /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
-  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, sticker_text: stickerText, text_xy: txt }) }); }
+  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, sticker_text: stickerText, ...backPose() }) }); }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
-  const snap = () => JSON.stringify({ stickers, txt });
+  const snap = () => JSON.stringify({ stickers, pose });
   /** @type {string[]} */
   const past = [snap()];
   /** @type {string[]} */
@@ -233,7 +238,7 @@ export async function mountBackEditor(o) {
   const paintHistory = () => {
     /** @type {HTMLButtonElement} */ ($('bz-undo')).disabled = past.length < 2 && snap() === past[0];
     /** @type {HTMLButtonElement} */ ($('bz-redo')).disabled = !future.length;
-    /** @type {HTMLButtonElement} */ ($('bz-text-center')).disabled = !txt;
+    /** @type {HTMLButtonElement} */ ($('bz-text-center')).disabled = !pose.x && !pose.y;
   };
   /** 変えたものを履歴に積み、カードの設定に返す。続けて動かすもの (スライダー・ドラッグ・矢印) は手が止まってから 1 回に、
    * 押すだけの操作 (貼る・剥がす・形・重なり順・既定に戻す) はすぐ 1 回に @param {boolean} [now] */
@@ -246,7 +251,7 @@ export async function mountBackEditor(o) {
   const restore = json => {
     const j = JSON.parse(json);
     stickers = j.stickers;
-    txt = j.txt;
+    pose = j.pose;
     showTextPos();
     if (sel != null && !stickers.some(s => s.e === sel)) sel = null;
     emit();
@@ -269,8 +274,8 @@ export async function mountBackEditor(o) {
   $('bz-redo').addEventListener('click', redo);
   // 名前・二つ名・順位を真ん中に戻す (その他のメニュー)
   $('bz-text-center').addEventListener('click', () => {
-    if (!txt) return;
-    txt = null;
+    if (!pose.x && !pose.y) return;
+    pose = { ...pose, x: 0, y: 0 };
     showTextPos(); commit(true);
     /** @type {HTMLDetailsElement} */ ($('bz-menu')).open = false;
     toast('名前・二つ名・順位を真ん中に戻しました', '元に戻す', undo);
@@ -394,14 +399,29 @@ export async function mountBackEditor(o) {
     : { min: Math.round(CROP_MIN * 100), max: 100, v: Math.round(s.c * 100), text: Math.round(s.c * 100) + '%' };
   function paintTools() {
     const s = cur();
-    tools.classList.toggle('bz-none', !s);
+    tools.classList.toggle('bz-none', !s && !textSel);
     const name = $('bz-sel-name');
     name.classList.toggle('bz-hint', !s);
+    const btn = (/** @type {string} */ id) => /** @type {HTMLButtonElement} */ ($(id));
     if (!s && textSel) {
+      // 名前・二つ名・順位: 大きさと回転だけ (形・切り取り・重なり順・剥がすは無い)
       name.classList.remove('bz-hint');
-      name.textContent = '名前・二つ名・順位 · ドラッグで動かせます (「…」から真ん中に戻せます)';
+      name.textContent = '名前・二つ名・順位';
+      for (const x of $('bz-shapes').querySelectorAll('button')) { x.classList.remove('on'); /** @type {HTMLButtonElement} */ (x).disabled = true; }
+      btn('bz-up').disabled = btn('bz-front').disabled = btn('bz-down').disabled = btn('bz-backmost').disabled = btn('bz-del').disabled = true;
+      /** @type {HTMLButtonElement} */ ($('bz-tabs').querySelector('[data-t="crop"]')).disabled = true;
+      if (tab === 'crop') tab = 'size';
+      for (const x of $('bz-tabs').querySelectorAll('button')) x.classList.toggle('on', /** @type {HTMLElement} */ (x).dataset.t === tab);
+      const sv = tab === 'size' ? { min: 0, max: 1000, v: textSizeToSlider(pose.s), text: Math.round(pose.s * 100) + '%' }
+        : { min: -180, max: 180, v: Math.round(pose.r), text: Math.round(pose.r) + '°' };
+      slider.min = String(sv.min); slider.max = String(sv.max);
+      if (document.activeElement !== slider) slider.value = String(sv.v);
+      slider.setAttribute('aria-label', TAB_LABEL[tab]);
+      $('bz-val').textContent = sv.text;
+      $('bz-val').title = tab === 'size' ? '元の大きさに戻す' : '元の傾きに戻す';
       return;
     }
+    btn('bz-del').disabled = false;
     if (!s) {
       name.textContent = stickers.length ? '' : '下の一覧から押すとカードに貼れます';   // 貼ってあれば何も出さない (高さは保つ)
       return;
@@ -436,8 +456,13 @@ export async function mountBackEditor(o) {
     btn.addEventListener('click', () => { tab = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.t); paintTools(); });
   }
   slider.addEventListener('input', () => {
-    const s = cur(); if (!s) return;
     const v = Number(slider.value);
+    if (!cur() && textSel) {
+      pose = tab === 'size' ? { ...pose, s: textSliderToSize(v) } : { ...pose, r: snapRot(v) };
+      showTextPos(); paintTools(); commit();
+      return;
+    }
+    const s = cur(); if (!s) return;
     if (tab === 'size') s.s = clampSize(sliderToSize(v));
     else if (tab === 'rot') s.r = snapRot(v);
     else {
@@ -450,6 +475,11 @@ export async function mountBackEditor(o) {
   });
   // 値を押すと既定に戻す
   $('bz-val').addEventListener('click', () => {
+    if (!cur() && textSel) {
+      pose = tab === 'size' ? { ...pose, s: 1 } : { ...pose, r: 0 };
+      showTextPos(); paintTools(); commit(true);
+      return;
+    }
     const s = cur(); if (!s) return;
     if (tab === 'size') s.s = S_DEF;
     else if (tab === 'rot') s.r = 0;
@@ -590,6 +620,8 @@ export async function mountBackEditor(o) {
     paintTextSel(); paintTools();
   };
   /** @type {null | { kind: 'text', x0: number, y0: number, px: number, py: number, sx: number, sy: number, moved: boolean, slop: number }
+   *          | { kind: 'trot', a0: number, d0: number, r0: number, s0: number, sx: number, sy: number, moved: boolean, slop: number }
+   *          | { kind: 'tpinch', a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number, moved: boolean }
    *          | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean, slop: number }
    *          | { kind: 'rot', s: Sticker, a0: number, d0: number, r0: number, s0: number, sx: number, sy: number, moved: boolean, slop: number }
    *          | { kind: 'pinch', s: Sticker, a0: number, d0: number, r0: number, s0: number, c0: { x: number, y: number }, x0: number, y0: number, moved: boolean }} */
@@ -602,9 +634,16 @@ export async function mountBackEditor(o) {
     for (const a of SNAP_ANGLES) if (Math.abs(n - a) < SNAP_DEG) return normRot(a);
     return n;
   }
+  /** 名前・二つ名・順位の回転・大きさの軸 (カードの座標) */
+  const pivot = () => ({ x: W / 2 + pose.x, y: H / 2 + pose.y });
+  const clampTS = (/** @type {number} */ v) => Math.max(TEXT_S_MIN, Math.min(TEXT_S_MAX, Math.round(v * 100) / 100));
   const startPinch = () => {
     const s = cur();
     const [p, q] = [...ptrs.values()];
+    if (!s && textSel && p && q) {
+      drag = { kind: 'tpinch', a0: angle(p, q), d0: Math.max(1, dist(p, q)), r0: pose.r, s0: pose.s, c0: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, x0: pose.x, y0: pose.y, moved: false };
+      return;
+    }
     if (!s || !p || !q) return;
     drag = { kind: 'pinch', s, a0: angle(p, q), d0: Math.max(1, dist(p, q)), r0: s.r, s0: s.s, c0: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, x0: s.x, y0: s.y, moved: false };
   };
@@ -613,6 +652,15 @@ export async function mountBackEditor(o) {
     const t = /** @type {HTMLElement} */ (e.target);
     if (t.closest('.bz-h-del')) { e.preventDefault(); if (sel != null) remove(sel); return; }
     const onRot = !!t.closest('.bz-h-rot');
+    if (onRot && t.closest('.bz-tframe')) {
+      // 名前・二つ名・順位のつまみ: 軸 (カードの真ん中 + ずれ) のまわりで回し、軸からの距離で大きさ
+      ptrs.set(e.pointerId, pt);
+      try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
+      e.preventDefault();
+      const c = pivot();
+      drag = { kind: 'trot', a0: angle(c, pt), d0: Math.max(1, dist(c, pt)), r0: pose.r, s0: pose.s, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
+      return;
+    }
     const stEl = /** @type {HTMLElement | null} */ (t.closest('.bz-st'));
     ptrs.set(e.pointerId, pt);
     try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
@@ -621,7 +669,7 @@ export async function mountBackEditor(o) {
     // 名前・二つ名・順位: 前に出しているときはシールより先に、シールの下にあるときはシールの無い所で掴める
     if (!onRot && (textTop || !stEl) && textHit(e.clientX, e.clientY)) {
       e.preventDefault();
-      drag = { kind: 'text', x0: txt ? txt.x : 0, y0: txt ? txt.y : 0, px: pt.x, py: pt.y, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
+      drag = { kind: 'text', x0: pose.x, y0: pose.y, px: pt.x, py: pt.y, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
       selectText(true);
       return;
     }
@@ -641,6 +689,34 @@ export async function mountBackEditor(o) {
     const pt = toCard(e.clientX, e.clientY);
     ptrs.set(e.pointerId, pt);
     if (!drag) return;
+    if (drag.kind === 'trot') {
+      const c = pivot();
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+        drag.moved = true;
+        drag.a0 = angle(c, pt); drag.d0 = Math.max(1, dist(c, pt));
+        return;
+      }
+      pose = { ...pose, r: snapRot(drag.r0 + angle(c, pt) - drag.a0), s: clampTS(drag.s0 * dist(c, pt) / drag.d0) };
+      showTextPos(); paintTools();
+      return;
+    }
+    if (drag.kind === 'tpinch') {
+      const [p, q] = [...ptrs.values()];
+      if (!p || !q) return;
+      const c = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+      if (!drag.moved) {
+        if (Math.abs(dist(p, q) / drag.d0 - 1) < 0.06 && Math.abs(normRot(angle(p, q) - drag.a0)) < 4 && dist(c, drag.c0) * scale < 10) return;
+        drag.moved = true;
+        drag.a0 = angle(p, q); drag.d0 = Math.max(1, dist(p, q)); drag.c0 = c;
+        return;
+      }
+      pose = { x: Math.max(-TEXT_DX, Math.min(TEXT_DX, Math.round((drag.x0 + c.x - drag.c0.x) * 10) / 10)),
+               y: Math.max(-TEXT_DY, Math.min(TEXT_DY, Math.round((drag.y0 + c.y - drag.c0.y) * 10) / 10)),
+               r: snapRot(drag.r0 + angle(p, q) - drag.a0), s: clampTS(drag.s0 * dist(p, q) / drag.d0) };
+      showTextPos(); paintTools();
+      return;
+    }
     if (drag.kind === 'text') {
       if (!drag.moved) {
         if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
@@ -652,7 +728,7 @@ export async function mountBackEditor(o) {
       const snap0 = (/** @type {number} */ v) => (Math.abs(v) < 4 ? 0 : Math.round(v * 10) / 10);
       const x = snap0(Math.max(-TEXT_DX, Math.min(TEXT_DX, drag.x0 + pt.x - drag.px)));
       const y = snap0(Math.max(-TEXT_DY, Math.min(TEXT_DY, drag.y0 + pt.y - drag.py)));
-      txt = x || y ? { x, y } : null;
+      pose = { ...pose, x, y };
       showTextPos();
       return;
     }
@@ -703,9 +779,19 @@ export async function mountBackEditor(o) {
     if (ptrs.size === 1 && drag && drag.kind === 'pinch' && drag.s) {
       const [p] = [...ptrs.values()];
       drag = { kind: 'move', s: drag.s, dx: p.x - drag.s.x, dy: p.y - drag.s.y, sx: 0, sy: 0, moved: true, slop: 0 };
+    } else if (ptrs.size === 1 && drag && drag.kind === 'tpinch') {
+      const [p] = [...ptrs.values()];
+      drag = { kind: 'text', x0: pose.x, y0: pose.y, px: p.x, py: p.y, sx: 0, sy: 0, moved: true, slop: 0 };
     } else if (!ptrs.size) drag = null;
   };
   stage.addEventListener('pointerup', end);
+  // カードの外の、押しても何も起きない所 (余白・見出しなど) を押したら選択を外す (操作の欄・ボタン・一覧は外さない)
+  document.addEventListener('pointerdown', e => {
+    if (!root.offsetParent || (sel == null && !textSel)) return;
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (!t || !t.closest || stage.contains(t) || t.closest('button, input, select, textarea, a, label, summary, details, .bz-tools')) return;
+    select(null); selectText(false);
+  });
   stage.addEventListener('pointercancel', end);
 
   // ── キーボード (パソコン): 矢印で 1px (Shift で 10px)、Delete で剥がす、Esc で外す、Ctrl+Z / Ctrl+Shift+Z ──
@@ -723,8 +809,8 @@ export async function mountBackEditor(o) {
       const mv = /** @type {Record<string, [number, number]>} */ ({ ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] })[e.key];
       if (!mv) return;
       e.preventDefault();
-      const x = Math.max(-TEXT_DX, Math.min(TEXT_DX, (txt ? txt.x : 0) + mv[0])), y = Math.max(-TEXT_DY, Math.min(TEXT_DY, (txt ? txt.y : 0) + mv[1]));
-      txt = x || y ? { x, y } : null;
+      const x = Math.max(-TEXT_DX, Math.min(TEXT_DX, pose.x + mv[0])), y = Math.max(-TEXT_DY, Math.min(TEXT_DY, pose.y + mv[1]));
+      pose = { ...pose, x, y };
       showTextPos(); commit();
       return;
     }
