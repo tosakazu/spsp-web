@@ -1,7 +1,8 @@
 // @ts-check
 // site/js/card_stickers.js — カードの裏面に貼る大会シールの設定 (カードの設定 back、2026-10-20〜)。表示 (js/player_card.js renderBack) と
 // 編集 (src/pages/card_back_edit.js) で使う。サーバの検査 (worker/src/api/card.ts validateCardBack) と同じ規則
-//   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま) } | null
+//   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま),
+//          sticker_text: その文字を白フチのシールにするか (Figma「work」Frame 52) } | null
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
@@ -19,7 +20,7 @@ export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
 export const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 
 /** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
-/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean }} CardBack */
+/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean, sticker_text: boolean }} CardBack */
 
 const r1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
 const clamp = (/** @type {number} */ v, /** @type {number} */ lo, /** @type {number} */ hi) => Math.max(lo, Math.min(hi, v));
@@ -45,8 +46,8 @@ export function normBack(b) {
     const t = normSticker(s);
     if (t && !seen.has(t.e) && stickers.length < MAX_STICKERS) { seen.add(t.e); stickers.push(t); }
   }
-  const back = { stickers, text_top: b.text_top === true, outline: b.outline === true };
-  return stickers.length || back.text_top || back.outline ? back : null;
+  const back = { stickers, text_top: b.text_top === true, outline: b.outline === true, sticker_text: b.sticker_text === true };
+  return stickers.length || back.text_top || back.outline || back.sticker_text ? back : null;
 }
 
 /** シールのキー → { 大会の event_id (下位クラスは親), クラスの文字, variant } @param {string} e */

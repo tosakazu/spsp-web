@@ -36,8 +36,8 @@ export interface CardSettings {
   back?: CardBack;        // 裏面のシール (無ければ欄ごと無し = 貼っていない・既定)
 }
 
-/** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・縁取りを付けるか (フロントの js/card_stickers.js と同じ規則) */
-export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean }
+/** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・影を付けるか・白フチのシールにするか (フロントの js/card_stickers.js と同じ規則) */
+export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean; sticker_text: boolean }
 /** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
 export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
 /** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
@@ -49,9 +49,10 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
   if (v === undefined || v === null) return null;
   if (typeof v !== 'object' || Array.isArray(v)) return undefined;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline') return undefined;
+  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline' && k !== 'sticker_text') return undefined;
   if (o.text_top !== undefined && typeof o.text_top !== 'boolean') return undefined;
   if (o.outline !== undefined && typeof o.outline !== 'boolean') return undefined;
+  if (o.sticker_text !== undefined && typeof o.sticker_text !== 'boolean') return undefined;
   const list = o.stickers === undefined ? [] : o.stickers;
   if (!Array.isArray(list) || list.length > CARD_STICKER_MAX) return undefined;
   const num = (x: unknown, lo: number, hi: number): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi ? x : null);
@@ -71,8 +72,8 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
     seen.add(s.e);
     stickers.push({ e: s.e, x: r1(x), y: r1(y), s: r1(size), r: r1(rot), k: shape, c: Math.round(crop * 100) / 100 });
   }
-  const back = { stickers, text_top: o.text_top === true, outline: o.outline === true };
-  return stickers.length || back.text_top || back.outline ? back : null;
+  const back = { stickers, text_top: o.text_top === true, outline: o.outline === true, sticker_text: o.sticker_text === true };
+  return stickers.length || back.text_top || back.outline || back.sticker_text ? back : null;
 }
 
 /** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜45 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */

@@ -203,7 +203,7 @@ function backHtml(m) {
       <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
       <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
     </div>`;
-  return `<div class="pc-in pc-back${b && b.outline ? ' pcb-outline' : ''}" style="--pc-red:${colorHex(m.color)}">
+  return `<div class="pc-in pc-back${b && b.outline ? ' pcb-outline' : ''}${b && b.sticker_text ? ' pcb-sx' : ''}" style="--pc-red:${colorHex(m.color)}">
     <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
     ${b && b.text_top ? st + col : col + st}
   </div>`;
@@ -487,7 +487,11 @@ export function renderBack(el, model, opts = {}) {
   const want = !!(model.back && model.back.stickers.length);
   // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る (ensureGlow)。描き直したら作り直す
   glowModel.set(el, model);
-  mount(el, () => backHtml(model), root => { fitBack(root); if (want) paintBackStickers(root, model); }, !!opts.live);
+  mount(el, () => backHtml(model), root => {
+    fitBack(root);
+    if (model.back && model.back.sticker_text) paintNameStickers(root, model);
+    if (want) paintBackStickers(root, model);
+  }, !!opts.live);
   // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
   if (want && !iconsNow()) {
     const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); return !!t; });
@@ -536,6 +540,144 @@ function paintGlow(el, m) {
   el.appendChild(glow);
   const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
   if (inner) glow.style.transform = inner.style.transform;
+}
+
+// ── 名前・二つ名・順位を白フチのシールにする (設定 back.sticker_text、Figma「work」Frame 52、2026-10-23) ──
+// 黒い字に白い縁 (字の外側に付け、角は丸い)、その形に影 (右下へ 1px・ぼかし 1px・黒 65%)。名前は 7.5° 右下がり、
+// 順位は名前の上・二つ名は名前の右下で、どちらも左上がり。縁と影を画面と画像で同じにするためキャンバスに描く
+// (CSS の縁取りは字の線の両側に付き、角も尖る)。文字の DOM (.pcb-col) は見えないまま残す (フォントの読み込みと読み上げ用)
+const SX_K = 3;   // キャンバスの細かさ (カードの px の 3 倍 = 画像と同じ)
+const SX_SHADOW = { dx: 1, dy: 1, blur: 1, color: 'rgba(0, 0, 0, .65)' };
+/** 名前: 中心・回転・縁は Figma の値。名前の箱 (行の高さ 1.214em) の上下の端から順位・二つ名の真ん中までの距離も Figma から
+ * (順位は真上 24.7px、二つ名は下 16.9px で右へ 51px。右へのずれは Figma の名前の幅 225px より短い名前では縮める) */
+const SX_NAME = { x: 239.7, y: 168.4, rot: 7.5, edge: 10, maxW: 400, refW: 225, rankGap: 24.7, titleGap: 16.9, titleDx: 51 };
+const SX_TITLE = { rot: -6.7, edge: 6, maxW: 420, gap: 4 };
+const SX_RANK = { rot: -4.8, edge: 6 };
+const SX_NAME_FONT = '"Zalando Sans Expanded", "IBM Plex Sans JP", sans-serif';
+const SX_TITLE_FONT = '"SPSP Title", "IBM Plex Sans JP", sans-serif';
+const SX_RANK_FONT = '"Zalando Sans", sans-serif';
+
+/** 白フチの文字を 1 枚描く。lines = 行ごとの文字の並び ({ t: 文字, font: CSS の font, gap: 前との間 px })、lh = 行送り (px)。
+ * 基準 (行の箱の真ん中) がキャンバスの真ん中に来るように描く (回転はその点まわり)
+ * @param {{ t: string, font: string, gap?: number }[][]} lines @param {number} lh @param {number} edge
+ * @returns {{ cv: HTMLCanvasElement, hw: number, hh: number, w: number, h: number }} hw・hh = キャンバスの半分の幅・高さ、w・h = 文字の箱 (カードの px) */
+function sxCanvas(lines, lh, edge) {
+  const mc = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  let asc = 0, desc = 0;
+  const ms = lines.map(runs => {
+    let w = 0;
+    /** @type {number[]} */
+    const xs = [];
+    runs.forEach((r, i) => {
+      mc.font = r.font;
+      const t = mc.measureText(r.t);
+      if (i) w += r.gap || 0;
+      xs.push(w);
+      w += t.width;
+      asc = Math.max(asc, t.fontBoundingBoxAscent ?? t.actualBoundingBoxAscent);
+      desc = Math.max(desc, t.fontBoundingBoxDescent ?? t.actualBoundingBoxDescent);
+    });
+    return { w, xs };
+  });
+  const w = Math.max(...ms.map(m => m.w)), h = lh * lines.length;
+  const pad = edge + 4;   // 縁と影の分
+  const hw = Math.ceil(w / 2 + pad), hh = Math.ceil(Math.max(h / 2, asc + desc) + pad);
+  const cv = document.createElement('canvas');
+  cv.width = hw * 2 * SX_K; cv.height = hh * 2 * SX_K;
+  const lab = document.createElement('canvas');
+  lab.width = cv.width; lab.height = cv.height;
+  const c = /** @type {CanvasRenderingContext2D} */ (lab.getContext('2d'));
+  c.scale(SX_K, SX_K);
+  c.translate(hw, hh);
+  c.textBaseline = 'alphabetic';
+  /** @param {(r: { t: string, font: string }, x: number, y: number) => void} each */
+  const walk = each => lines.forEach((runs, li) => {
+    const y = -h / 2 + li * lh + lh / 2 + (asc - desc) / 2;   // 行の箱の上下の真ん中に、字の上下 (フォントの高さ) の真ん中を合わせる
+    const x0 = -ms[li].w / 2;
+    runs.forEach((r, i) => { c.font = r.font; each(r, x0 + ms[li].xs[i], y); });
+  });
+  // 縁 (線の太さ 2 倍 = 外側に edge) を全部描いてから字を塗る (隣の字の縁が字にかぶらないように)
+  c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = edge * 2; c.strokeStyle = '#fff';
+  walk((r, x, y) => c.strokeText(r.t, x, y));
+  c.fillStyle = '#000';
+  walk((r, x, y) => c.fillText(r.t, x, y));
+  const o = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+  o.shadowColor = SX_SHADOW.color;
+  o.shadowOffsetX = SX_SHADOW.dx * SX_K; o.shadowOffsetY = SX_SHADOW.dy * SX_K; o.shadowBlur = SX_SHADOW.blur * SX_K;
+  o.drawImage(lab, 0, 0);
+  return { cv, hw, hh, w, h };
+}
+
+/** 文字の並びの幅 (px) @param {{ t: string, font: string, gap?: number }[]} runs */
+function sxWidth(runs) {
+  const mc = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  return runs.reduce((w, r, i) => { mc.font = r.font; return w + mc.measureText(r.t).width + (i ? r.gap || 0 : 0); }, 0);
+}
+
+/** 白フチの名前・二つ名・順位を描く (描き直すときは前のを外す)。フォントがまだなら読んでから描き直す
+ * @param {HTMLElement} root .pc-in @param {PCardModel} m */
+function paintNameStickers(root, m) {
+  const col = root.querySelector('.pcb-col');
+  if (!col) return;
+  for (const old of Array.from(col.querySelectorAll('.pcb-sx-l'))) old.remove();
+  const fonts = [];
+  /** @param {HTMLCanvasElement} cv @param {number} hw @param {number} hh @param {number} x @param {number} y @param {number} rot */
+  const put = (cv, hw, hh, x, y, rot) => {
+    cv.className = 'pcb-sx-l';
+    cv.setAttribute('aria-hidden', 'true');
+    cv.style.cssText = `left:${(x - hw).toFixed(2)}px;top:${(y - hh).toFixed(2)}px;width:${hw * 2}px;height:${hh * 2}px;transform:rotate(${rot}deg)`;
+    col.appendChild(cv);
+  };
+  // 名前: 50px で 1 行に入らなければ 40px まで詰め、それでも入らなければ 2 行 (44px から)。区切れなければ 1 行のまま小さく
+  const text = m.nameLatin || m.name;
+  const nf = (/** @type {number} */ px) => `700 ${px}px ${SX_NAME_FONT}`;
+  /** @param {string[]} ls @param {number} from @param {number} to */
+  const fit = (ls, from, to) => {
+    let px = from;
+    while (px > to && Math.max(...ls.map(t => sxWidth([{ t, font: nf(px) }]))) > SX_NAME.maxW) px--;
+    return px;
+  };
+  let lines = [text], px = fit(lines, 50, 40), lhK = 1.214;
+  if (sxWidth([{ t: text, font: nf(px) }]) > SX_NAME.maxW) {
+    const parts = splitTwo(text);
+    if (parts) { lines = parts; px = fit(lines, 44, 7); lhK = 1.1026; } else px = fit(lines, 40, 7);
+  }
+  fonts.push(nf(px));
+  const name = sxCanvas(lines.map(t => [{ t, font: nf(px) }]), px * lhK, SX_NAME.edge);
+  const rad = SX_NAME.rot * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad);
+  /** 名前の向きでのずれ (右へ dx・下へ dy) → カードの座標 @param {number} dx @param {number} dy */
+  const at = (dx, dy) => [SX_NAME.x + dx * cs - dy * sn, SX_NAME.y + dx * sn + dy * cs];
+  put(name.cv, name.hw, name.hh, SX_NAME.x, SX_NAME.y, SX_NAME.rot);
+  // 順位: 「#」(24px Black) と数字 (34px Bold) を同じ基準線に
+  const rank = sxCanvas([[{ t: '#', font: `900 24px ${SX_RANK_FONT}` }, { t: m.rank != null ? String(m.rank) : '—', font: `700 34px ${SX_RANK_FONT}` }]], 34 * 1.214, SX_RANK.edge);
+  // 名前と順位は傾きが逆なので、順位の左端が名前に寄る。長い順位でも Figma の左端と同じだけ (名前の箱の上端から 5.5px 内側まで) しか重ねない
+  const tanR = Math.tan((SX_NAME.rot - SX_RANK.rot) * Math.PI / 180);
+  const rh = 34 * 1.214, rl = Math.min(rank.w / 2, name.w / 2);
+  const [rx, ry] = at(0, Math.min(-(name.h / 2 + SX_NAME.rankGap), -name.h / 2 + 5.5 - rh / 2 - rl * tanR));
+  put(rank.cv, rank.hw, rank.hh, rx, ry, SX_RANK.rot);
+  fonts.push(`900 24px ${SX_RANK_FONT}`, `700 34px ${SX_RANK_FONT}`);
+  // 二つ名 (「//」・前半・後半を 4px あけて。21px、長ければ 11px まで詰める)
+  const parts = Array.from(root.querySelectorAll('.pcb-title > span')).map(s => s.textContent || '').filter(Boolean);
+  if (parts.length) {
+    let tp = 21;
+    const runs = (/** @type {number} */ p) => parts.map(t => ({ t, font: `700 ${p}px ${SX_TITLE_FONT}`, gap: SX_TITLE.gap }));
+    while (tp > 11 && sxWidth(runs(tp)) > SX_TITLE.maxW) tp--;
+    const title = sxCanvas([runs(tp)], tp, SX_TITLE.edge);
+    // 二つ名の右端は名前に寄る (傾きが逆)。名前の右端の下で、Figma と同じだけ (名前の箱の下端から 6px 内側まで) しか重ねない
+    const tdx = SX_NAME.titleDx * Math.min(1, name.w / SX_NAME.refW);
+    const tanT = Math.tan((SX_NAME.rot - SX_TITLE.rot) * Math.PI / 180);
+    const xr = Math.min(name.w / 2, tdx + title.w / 2);
+    const [tx, ty] = at(tdx, Math.max(name.h / 2 + SX_NAME.titleGap, name.h / 2 - 6 + title.h / 2 + (xr - tdx) * tanT));
+    put(title.cv, title.hw, title.hh, tx, ty, SX_TITLE.rot);
+    fonts.push(`700 ${tp}px ${SX_TITLE_FONT}`);
+  }
+  // フォントが来ていなければ、読んでから描き直す (1 回だけ)
+  const F = /** @type {any} */ (document).fonts;
+  if (F && F.check && !root.dataset.sxWait && fonts.some(f => { try { return !F.check(f, text); } catch (e) { return false; } })) {
+    root.dataset.sxWait = '1';
+    Promise.all(fonts.map(f => F.load(f, text + parts.join('') + '#0123456789').catch(() => {})))
+      .then(() => { if (root.isConnected) paintNameStickers(root, m); });
+  }
 }
 
 /** シールの影 (player_card.css .pcb-sk の drop-shadow と同じ値。カードを画像にするときに絵に入れる) */
@@ -697,6 +839,18 @@ async function captureCanvas(el) {
       await img.decode().catch(() => {});
       ck.replaceWith(img);
     } catch (e) { ck.remove(); }
+  }));
+  // 白フチの名前・二つ名・順位 (キャンバス) は複製すると空になるので、絵にして差し替える
+  const sls = [...src.querySelectorAll('.pcb-sx-l')], cls = [...clone.querySelectorAll('.pcb-sx-l')];
+  await Promise.all(sls.map(async (c, i) => {
+    const ck = /** @type {HTMLElement | undefined} */ (cls[i]);
+    if (!ck) return;
+    const img = document.createElement('img');
+    img.className = ck.className;
+    img.style.cssText = ck.style.cssText;
+    img.src = /** @type {HTMLCanvasElement} */ (c).toDataURL('image/png');
+    await img.decode().catch(() => {});
+    ck.replaceWith(img);
   }));
   box.appendChild(clone);
   document.body.appendChild(box);

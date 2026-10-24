@@ -247,3 +247,6 @@
 /* 名前・二つ名・順位の影 (設定 back.outline。前は縁取りだったので設定の名前はそのまま)。縁取りは違和感が出やすいので、字の周りに濃いめの影を敷く
    (Figma の見本 142:173: ずらし 0・ぼかし 4px・黒 60%、2026-10-20 デザイナー指定) */
 .pcb-outline .pcb-name-t, .pcb-outline .pcb-rank, .pcb-outline .pcb-title { text-shadow: 0 0 4px rgb(0 0 0 / .6); }
+/* 白フチの名前・二つ名・順位 (設定 back.sticker_text、js/player_card.js paintNameStickers が描くキャンバス)。文字の DOM は見えないまま (フォントの読み込みと読み上げ用) */
+.pcb-sx .pcb-col > :not(.pcb-sx-l) { visibility: hidden; }
+.pcb-sx-l { position: absolute; display: block; max-width: none; }

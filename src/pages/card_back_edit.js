@@ -97,7 +97,8 @@ export async function mountBackEditor(o) {
   let latin = o.latin;
   let textTop = !!(o.back && o.back.text_top);
   let outline = !!(o.back && o.back.outline);
-  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline });
+  let stickerText = !!(o.back && o.back.sticker_text);
+  const baseModel = () => o.model(latin, { stickers: [], text_top: false, outline, sticker_text: stickerText });
   const renderBase = () => {
     const m = baseModel();
     SPSPPlayerCard.renderBack($('bz-card'), m);
@@ -124,7 +125,16 @@ export async function mountBackEditor(o) {
     paintOutline(); renderBase(); emit();
     toast(outline ? '名前・二つ名・順位に影を付けました' : '文字の影を外しました');
   });
-  paintTextTop(); paintOutline(); renderBase();
+
+  // ── 名前・二つ名・順位を白フチのシールにする (Figma「work」Frame 52) ──
+  const sxBtn = $('bz-sticker-text');
+  const paintSx = () => sxBtn.setAttribute('aria-pressed', String(stickerText));
+  sxBtn.addEventListener('click', () => {
+    stickerText = !stickerText;
+    paintSx(); renderBase(); emit();
+    toast(stickerText ? '名前・二つ名・順位を白フチのシールにしました' : '名前・二つ名・順位を元の文字に戻しました');
+  });
+  paintTextTop(); paintOutline(); paintSx(); renderBase();
 
   // ── 裏面の名前 (英字名、カードの設定 latin)。欄には最初から今の名前 (未設定なら名前から自動で作ったもの、js/latin_name.js)。
   //    自動と同じ・空なら設定なし (= 自動)。正しい形のときだけカードと設定に、使えない文字のときは理由を出す ──
@@ -174,7 +184,7 @@ export async function mountBackEditor(o) {
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
   /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
-  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, outline }) }); }
+  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, outline, sticker_text: stickerText }) }); }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
   const snap = () => JSON.stringify(stickers);
