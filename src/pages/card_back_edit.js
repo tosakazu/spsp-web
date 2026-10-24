@@ -239,7 +239,7 @@ export async function mountBackEditor(o) {
   const paintHistory = () => {
     /** @type {HTMLButtonElement} */ ($('bz-undo')).disabled = past.length < 2 && snap() === past[0];
     /** @type {HTMLButtonElement} */ ($('bz-redo')).disabled = !future.length;
-    /** @type {HTMLButtonElement} */ ($('bz-text-center')).disabled = !pose.x && !pose.y;
+    /** @type {HTMLButtonElement} */ ($('bz-text-center')).disabled = !pose.x && !pose.y && !pose.r && pose.s === 1;
   };
   /** 変えたものを履歴に積み、カードの設定に返す。続けて動かすもの (スライダー・ドラッグ・矢印) は手が止まってから 1 回に、
    * 押すだけの操作 (貼る・剥がす・形・重なり順・既定に戻す) はすぐ 1 回に @param {boolean} [now] */
@@ -273,13 +273,18 @@ export async function mountBackEditor(o) {
   };
   $('bz-undo').addEventListener('click', undo);
   $('bz-redo').addEventListener('click', redo);
-  // 名前・二つ名・順位を真ん中に戻す (その他のメニュー)
+  // 名前・二つ名・順位の表示を元に戻す (真ん中・まっすぐ・元の大きさ。その他のメニュー)
   $('bz-text-center').addEventListener('click', () => {
-    if (!pose.x && !pose.y) return;
-    pose = { ...pose, x: 0, y: 0 };
-    showTextPos(); commit(true);
+    if (!pose.x && !pose.y && !pose.r && pose.s === 1) return;
+    pose = { x: 0, y: 0, r: 0, s: 1 };
+    showTextPos(); paintTools(); commit(true);
     /** @type {HTMLDetailsElement} */ ($('bz-menu')).open = false;
-    toast('名前・二つ名・順位を真ん中に戻しました', '元に戻す', undo);
+    toast('名前の表示を元に戻しました', '元に戻す', undo);
+  });
+  // 名前・二つ名・順位の表示を編集する (その他のメニューから選ぶ。カードを押しただけでは選ばない: シールを触るとき邪魔なので)
+  $('bz-text-edit').addEventListener('click', () => {
+    /** @type {HTMLDetailsElement} */ ($('bz-menu')).open = false;
+    selectText(true);
   });
 
   // ── 貼る層: 位置・大きさはカードの座標 (514×333) で持ち、画面には表示幅に合わせた px で置く
@@ -667,8 +672,8 @@ export async function mountBackEditor(o) {
     try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
     if (ptrs.size === 2) { startPinch(); return; }
     if (ptrs.size > 2) return;
-    // 名前・二つ名・順位: 前に出しているときはシールより先に、シールの下にあるときはシールの無い所で掴める
-    if (!onRot && (textTop || !stEl) && textHit(e.clientX, e.clientY)) {
+    // 名前・二つ名・順位: 「名前の表示を編集」で選んでいる間だけ、シールより先に掴める
+    if (!onRot && textSel && textHit(e.clientX, e.clientY)) {
       e.preventDefault();
       drag = { kind: 'text', x0: pose.x, y0: pose.y, px: pt.x, py: pt.y, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
       selectText(true);
