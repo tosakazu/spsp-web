@@ -2105,7 +2105,47 @@ function onCardImage(btn, fn) {
     }
   });
 }
-// 保存・共有は今見えている面 (表か裏) を画像にする
+/** 共有用: 表と裏の両方の PNG (今見えている面を先に)。裏面の無い地域・裏を描けなかったときは見えている面だけ
+ * @returns {Promise<Blob[]>} */
+async function captureBothFaces() {
+  const shown = shownCard();
+  if (!shown) return [];
+  const first = await SPSPPlayerCard.capture(shown);
+  if (!first) throw new Error('empty');
+  const otherId = shown.id === 'pcard' ? 'pcard-back' : 'pcard';
+  const other = CARD_BACK_ON ? document.getElementById(otherId) : null;
+  if (!other || !other.querySelector('.pc-in')) return [first];
+  try {
+    await SPSPPlayerCard.ready(other);   // 裏のシールの絵を読み終えてから
+    const second = await SPSPPlayerCard.capture(other);
+    return second ? [first, second] : [first];
+  } catch (e) { return [first]; }
+}
+/** 共有のボタン: 押している間は「生成中…」。表と裏の画像 (File) を fn に渡す
+ * @param {HTMLElement | null} btn @param {(files: File[]) => Promise<void>} fn */
+function onCardImages(btn, fn) {
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!shownCard() || !MAIN_REC) return;
+    const label = btn.querySelector('span');
+    const orig = label ? label.textContent : '';
+    btn.setAttribute('disabled', ''); if (label) label.textContent = i18n('share.s2');
+    try {
+      const blobs = await captureBothFaces();
+      const base = cardFileName();
+      let files = blobs.map((b, i) => new File([b], base + (blobs.length > 1 && i ? '_2' : '') + '.png', { type: 'image/png' }));
+      // 2 枚を渡せない共有シートなら 1 枚 (今見えている面) だけ
+      const nav = /** @type {any} */ (navigator);
+      if (files.length > 1 && nav.canShare && !nav.canShare({ files })) files = files.slice(0, 1);
+      await fn(files);
+    } catch (err) {
+      if (/** @type {any} */ (err).name !== 'AbortError') alert(i18n('player.card.capture_failed') + /** @type {Error} */ (err).message);
+    } finally {
+      btn.removeAttribute('disabled'); if (label) label.textContent = orig;
+    }
+  });
+}
+// 保存は今見えている面 (表か裏)、共有は表と裏の両方 (今見えている面が先) を画像にする
 const shownCard = () => document.getElementById(
   document.getElementById('pcard-wrap')?.classList.contains('flipped') ? 'pcard-back' : 'pcard');
 // 保存はカードをタップして出るボタン
@@ -2152,10 +2192,9 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   if (shareBtn && !canShareImage()) {
     SPSPShare.setup(shareBtn, shareData);
   } else {
-    onCardImage(shareBtn, async blob => {
+    onCardImages(shareBtn, async files => {
       const d = shareData();
-      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-      await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
+      await /** @type {any} */ (navigator).share({ files, title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
     });
   }
 }
@@ -2165,9 +2204,8 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 {
   const btn = document.getElementById('lr-share-btn');
   if (btn && canShareImage()) {
-    onCardImage(btn, async blob => {
-      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-      await /** @type {any} */ (navigator).share({ files: [file], title: shareData().title, text: `${latestShareText()}\n\n${location.href}` });
+    onCardImages(btn, async files => {
+      await /** @type {any} */ (navigator).share({ files, title: shareData().title, text: `${latestShareText()}\n\n${location.href}` });
     });
   } else if (btn) {
     btn.addEventListener('click', async () => {
