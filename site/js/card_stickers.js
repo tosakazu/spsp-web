@@ -3,6 +3,7 @@
 // 編集 (src/pages/card_back_edit.js) で使う。サーバの検査 (worker/src/api/card.ts validateCardBack) と同じ規則
 //   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま),
 //          sticker_text: その文字を白フチのシールにするか (Figma「work」Frame 52) } | null
+//   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
@@ -46,8 +47,9 @@ export function normBack(b) {
     const t = normSticker(s);
     if (t && !seen.has(t.e) && stickers.length < MAX_STICKERS) { seen.add(t.e); stickers.push(t); }
   }
-  const back = { stickers, text_top: b.text_top === true, outline: b.outline === true, sticker_text: b.sticker_text === true };
-  return stickers.length || back.text_top || back.outline || back.sticker_text ? back : null;
+  const textTop = b.text_top === true, sx = b.sticker_text === true;
+  const back = { stickers, text_top: textTop, outline: textTop && !sx, sticker_text: sx };
+  return stickers.length || back.text_top || back.sticker_text ? back : null;
 }
 
 /** シールのキー → { 大会の event_id (下位クラスは親), クラスの文字, variant } @param {string} e */

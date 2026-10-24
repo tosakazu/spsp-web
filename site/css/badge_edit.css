@@ -29,11 +29,6 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bz-tt[aria-pressed="true"]:hover { background: #1f2937; }
 .bz-tt[aria-pressed="true"] .bz-tt-st { fill: #6b7280; }
 .bz-tt[aria-pressed="true"] .bz-tt-over { display: none; }
-/* 文字の影: ぼかした太い線 (影) の上に細い線 (字)。オフは影なし */
-.bz-ol .bz-ol-out { stroke: transparent; stroke-width: 6; filter: blur(1.2px); }
-.bz-ol .bz-ol-in { stroke: #9ca3af; stroke-width: 2; }
-.bz-ol[aria-pressed="true"] .bz-ol-out { stroke: rgb(255 255 255 / .75); }
-.bz-ol[aria-pressed="true"] .bz-ol-in { stroke: #fff; }
 
 /* 白フチのシール: 太い線 (縁) の上に細い線 (字)。オフは縁が薄い灰色 */
 .bz-sx .bz-sx-out { stroke: #e5e7eb; stroke-width: 7; }

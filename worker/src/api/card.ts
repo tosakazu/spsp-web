@@ -72,8 +72,10 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
     seen.add(s.e);
     stickers.push({ e: s.e, x: r1(x), y: r1(y), s: r1(size), r: r1(rot), k: shape, c: Math.round(crop * 100) / 100 });
   }
-  const back = { stickers, text_top: o.text_top === true, outline: o.outline === true, sticker_text: o.sticker_text === true };
-  return stickers.length || back.text_top || back.outline || back.sticker_text ? back : null;
+  // 文字の影 (outline) は選ばせず、前に出していて白フチでないときだけ (送られてきた値は見ない。前の画面が送っても通す)
+  const textTop = o.text_top === true, sx = o.sticker_text === true;
+  const back = { stickers, text_top: textTop, outline: textTop && !sx, sticker_text: sx };
+  return stickers.length || back.text_top || back.sticker_text ? back : null;
 }
 
 /** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜45 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */

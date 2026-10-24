@@ -333,7 +333,7 @@ test('card_put: 裏面のシール (back) を確かめて保存。形が違え�
   const put = await post(e, { action: 'card_put', token, settings: { ...GOOD, back } });
   assert.strictEqual(put.ok, true, JSON.stringify(put));
   assert.deepStrictEqual(put.settings.back, { stickers: [{ e: '1724470B:g', x: 100, y: 50, s: 120, r: -10.3, k: 'circle', c: 0.6 },
-    { e: '1700000:r', x: 0, y: 333, s: 22, r: 180, k: 'square', c: 1 }], text_top: true, outline: false, sticker_text: false });
+    { e: '1700000:r', x: 0, y: 333, s: 22, r: 180, k: 'square', c: 1 }], text_top: true, outline: true, sticker_text: false });
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.back, put.settings.back);
   const bad = async (b) => (await post(e, { action: 'card_put', token, settings: { ...GOOD, back: b } })).error?.code;
   for (const b of [{ stickers: [{ e: 'sample1:r', x: 1, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:x', x: 1, y: 1, s: 30, r: 0 }] },

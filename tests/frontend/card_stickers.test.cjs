@@ -17,7 +17,9 @@ test('normBack: 形が違うシールは外し、範囲に丸め、何も無け�
   const { normBack } = await load();
   assert.strictEqual(normBack(null), null);
   assert.strictEqual(normBack({ stickers: [] }), null);
-  assert.deepStrictEqual(normBack({ stickers: [], text_top: true }), { stickers: [], text_top: true, outline: false, sticker_text: false });
+  assert.deepStrictEqual(normBack({ stickers: [], text_top: true }), { stickers: [], text_top: true, outline: true, sticker_text: false });
+  assert.strictEqual(normBack({ text_top: true, sticker_text: true }).outline, false);   // 白フチなら影なし
+  assert.strictEqual(normBack({ text_top: false, outline: true }), null);   // 前の設定の outline は見ない
   assert.deepStrictEqual(normBack({ sticker_text: true }), { stickers: [], text_top: false, outline: false, sticker_text: true });
   const b = normBack({ stickers: [
     { e: '1700000:r', x: 600, y: -5, s: 9999, r: 190.04, k: 'star', c: 0.1 },   // 範囲外 → 丸め、知らない形 → 四角
