@@ -105,12 +105,38 @@ export async function mountBackEditor(o) {
     const m = baseModel();
     SPSPPlayerCard.renderBack($('bz-card'), m);
     if (textTop) SPSPPlayerCard.renderBack($('bz-text'), m);
+    if (textSel) paintTextSel();
   };
   /** 名前・二つ名・順位の位置だけを描いてある裏面に写す (ドラッグ中は描き直さない) */
   const showTextPos = () => {
     SPSPPlayerCard.setTextPos($('bz-card'), txt);
     SPSPPlayerCard.setTextPos($('bz-text'), txt);
+    paintTextSel();
   };
+  // 名前・二つ名・順位を選んでいるか (タップで選び、点線の枠を出す。シールを選ぶと外れる)
+  let textSel = false;
+  const tframe = document.createElement('div');
+  tframe.className = 'bz-frame bz-tframe';
+  tframe.style.display = 'none';
+  $('bz-over').appendChild(tframe);
+  /** 文字の箱 (白フチならその絵) をまとめた画面の四角。無ければ null */
+  const textRect = () => {
+    const card = $('bz-card');
+    const q = card.querySelector('.pcb-sx') ? '.pcb-sx-l' : '.pcb-title, .pcb-name-t, .pcb-rank';
+    const rs = Array.from(card.querySelectorAll(q)).map(n => n.getBoundingClientRect()).filter(r => r.width && r.height);
+    if (!rs.length) return null;
+    return { left: Math.min(...rs.map(r => r.left)), top: Math.min(...rs.map(r => r.top)), right: Math.max(...rs.map(r => r.right)), bottom: Math.max(...rs.map(r => r.bottom)) };
+  };
+  function paintTextSel() {
+    const r = textSel ? textRect() : null;
+    tframe.style.display = r ? '' : 'none';
+    if (!r) return;
+    const o = $('bz-over').getBoundingClientRect(), m = 3;
+    tframe.style.left = r.left - o.left - m + 'px';
+    tframe.style.top = r.top - o.top - m + 'px';
+    tframe.style.width = r.right - r.left + 2 * m + 'px';
+    tframe.style.height = r.bottom - r.top + 2 * m + 'px';
+  }
 
   // ── 名前・二つ名・順位をシールの上に出す (裏面の複製の文字だけを、シールの層の上に重ねる) ──
   const textTopBtn = $('bz-text-top');
@@ -343,11 +369,13 @@ export async function mountBackEditor(o) {
       frame.style.transform = `translate(-50%, -50%) rotate(${s.r}deg)`;
     }
     stage.classList.toggle('bz-has-sel', !!s);
+    paintTextSel();
     paintTools();
     scheduleReflatten();
   }
   /** 選ぶ (null = 外す)。一覧の印も変わる @param {string | null} e */
   const select = e => {
+    if (e != null && textSel) { textSel = false; paintTextSel(); }
     if (sel === e) return;
     sel = e;
     place();
@@ -369,6 +397,11 @@ export async function mountBackEditor(o) {
     tools.classList.toggle('bz-none', !s);
     const name = $('bz-sel-name');
     name.classList.toggle('bz-hint', !s);
+    if (!s && textSel) {
+      name.classList.remove('bz-hint');
+      name.textContent = '名前・二つ名・順位 · ドラッグで動かせます (「…」から真ん中に戻せます)';
+      return;
+    }
     if (!s) {
       name.textContent = stickers.length ? '' : '下の一覧から押すとカードに貼れます';   // 貼ってあれば何も出さない (高さは保つ)
       return;
@@ -544,11 +577,17 @@ export async function mountBackEditor(o) {
   /** 名前・二つ名・順位の所か (描いてある裏面の文字の箱。白フチならその絵、少し広め) @param {number} cx @param {number} cy */
   const textHit = (cx, cy) => {
     const card = $('bz-card');
-    const sel0 = card.querySelector('.pcb-sx') ? '.pcb-sx-l' : '.pcb-title, .pcb-name-t, .pcb-rank';
-    return Array.from(card.querySelectorAll(sel0)).some(n => {
+    const q = card.querySelector('.pcb-sx') ? '.pcb-sx-l' : '.pcb-title, .pcb-name-t, .pcb-rank';
+    return Array.from(card.querySelectorAll(q)).some(n => {
       const r = n.getBoundingClientRect(), m = 4;
       return cx >= r.left - m && cx <= r.right + m && cy >= r.top - m && cy <= r.bottom + m;
     });
+  };
+  /** 名前・二つ名・順位を選ぶ / 外す @param {boolean} on */
+  const selectText = on => {
+    if (on) select(null);
+    textSel = on;
+    paintTextSel(); paintTools();
   };
   /** @type {null | { kind: 'text', x0: number, y0: number, px: number, py: number, sx: number, sy: number, moved: boolean, slop: number }
    *          | { kind: 'move', s: Sticker, dx: number, dy: number, sx: number, sy: number, moved: boolean, slop: number }
@@ -583,11 +622,11 @@ export async function mountBackEditor(o) {
     if (!onRot && (textTop || !stEl) && textHit(e.clientX, e.clientY)) {
       e.preventDefault();
       drag = { kind: 'text', x0: txt ? txt.x : 0, y0: txt ? txt.y : 0, px: pt.x, py: pt.y, sx: e.clientX, sy: e.clientY, moved: false, slop: slopOf(e.pointerType, true) };
-      select(null);
+      selectText(true);
       return;
     }
     const s = onRot ? cur() : stEl ? stickers.find(x => x.e === stEl.dataset.e) : null;
-    if (!s) { drag = null; select(null); return; }
+    if (!s) { drag = null; select(null); selectText(false); return; }
     e.preventDefault();
     const slop = slopOf(e.pointerType, sel === s.e);
     if (onRot) {
@@ -678,6 +717,17 @@ export async function mountBackEditor(o) {
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
     const s = cur();
+    if (!s && textSel && !(t && t.tagName === 'INPUT')) {
+      if (e.key === 'Escape') { selectText(false); return; }
+      const d = e.shiftKey ? 10 : 1;
+      const mv = /** @type {Record<string, [number, number]>} */ ({ ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] })[e.key];
+      if (!mv) return;
+      e.preventDefault();
+      const x = Math.max(-TEXT_DX, Math.min(TEXT_DX, (txt ? txt.x : 0) + mv[0])), y = Math.max(-TEXT_DY, Math.min(TEXT_DY, (txt ? txt.y : 0) + mv[1]));
+      txt = x || y ? { x, y } : null;
+      showTextPos(); commit();
+      return;
+    }
     if (!s) return;
     if (t && t.tagName === 'INPUT') return;   // スライダーの矢印はスライダーに
     if (e.key === 'Escape') { select(null); return; }
