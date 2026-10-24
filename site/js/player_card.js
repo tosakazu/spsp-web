@@ -234,6 +234,12 @@ function applyTextPose(col, p) {
 export function setTextPos(el, p) {
   const col = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-col'));
   if (col) applyTextPose(col, p || { x: 0, y: 0, r: 0, s: 1 });
+  // 強制ダークモード用に重ねた画像は前の置き方のままなので外し、手が止まってから撮り直す (編集中の描き直しと同じ。
+  // 外さないと、動かす前の名前が画像に残って二重に見えた)
+  if (needsImage()) {
+    el.querySelector('.pc-img')?.remove();
+    scheduleImage(el, 1500);
+  }
 }
 
 // ── 文字サイズの自動調整 (スケール前の 514×333 座標で測る。transform は scrollWidth に影響しない) ──
@@ -610,7 +616,7 @@ function sxCanvas(lines, lh, edge) {
   });
   const w = Math.max(...ms.map(m => m.w)), h = lh * lines.length;
   const pad = edge + 4;   // 縁と影の分
-  const hw = Math.ceil(w / 2 + pad), hh = Math.ceil(Math.max(h / 2, asc + desc) + pad);
+  const hw = Math.ceil(w / 2 + pad), hh = Math.ceil(Math.max(h / 2, (asc + desc) / 2) + pad);
   const cv = document.createElement('canvas');
   cv.width = hw * 2 * SX_K; cv.height = hh * 2 * SX_K;
   const lab = document.createElement('canvas');
