@@ -32,7 +32,7 @@ test('CSP_MODE: report-only は HTML に Report-Only、enforce は Content-Secur
 });
 
 test('SITE_CSP: 依頼どおりの指定と report-uri', () => {
-  for (const s of ["default-src 'self'", "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com",
+  for (const s of ["default-src 'self'", "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com", 'https://cloudflareinsights.com;',
     "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'", 'report-uri /api/csp-report', "worker-src 'self' blob:",
     'https://*.google-analytics.com', 'https://data.spsp.games']) {
     assert.ok(SITE_CSP.includes(s), s);
