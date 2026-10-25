@@ -37,7 +37,9 @@ export interface CardSettings {
 }
 
 /** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・影を付けるか・白フチのシールにするか (フロントの js/card_stickers.js と同じ規則) */
-export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean; sticker_text: boolean; text_xy?: { x: number; y: number }; text_r?: number; text_s?: number }
+export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean; sticker_text: boolean; text_xy?: { x: number; y: number }; text_r?: number; text_s?: number; text_parts?: CardTextParts }
+/** 白フチの名前・二つ名・順位を 1 つずつずらす分 (フロントの js/card_stickers.js normParts と同じ規則) */
+export type CardTextParts = Partial<Record<'name' | 'title' | 'rank', { x?: number; y?: number; r?: number; s?: number }>>;
 /** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
 export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
 /** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
@@ -49,7 +51,7 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
   if (v === undefined || v === null) return null;
   if (typeof v !== 'object' || Array.isArray(v)) return undefined;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline' && k !== 'sticker_text' && k !== 'text_xy' && k !== 'text_r' && k !== 'text_s') return undefined;
+  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline' && k !== 'sticker_text' && k !== 'text_xy' && k !== 'text_r' && k !== 'text_s' && k !== 'text_parts') return undefined;
   if (o.text_top !== undefined && typeof o.text_top !== 'boolean') return undefined;
   if (o.outline !== undefined && typeof o.outline !== 'boolean') return undefined;
   if (o.sticker_text !== undefined && typeof o.sticker_text !== 'boolean') return undefined;
@@ -93,6 +95,28 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
     const sc = num(o.text_s, 0.5, 2);
     if (sc === null) return undefined;
     if (Math.round(sc * 100) !== 100) back.text_s = Math.round(sc * 100) / 100;
+  }
+  // 部品ごとのずれ (白フチのときだけ使う。普通の文字なら捨てる)。既定の値・部品は書かない
+  if (o.text_parts !== undefined && o.text_parts !== null) {
+    const tp = o.text_parts as Record<string, unknown>;
+    if (typeof tp !== 'object' || Array.isArray(tp)) return undefined;
+    const parts: CardTextParts = {};
+    const lim = { x: [-257, 257], y: [-167, 167], r: [-180, 180], s: [0.5, 2] } as const;
+    for (const [k, v] of Object.entries(tp)) {
+      if (k !== 'name' && k !== 'title' && k !== 'rank') return undefined;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+      const q = v as Record<string, unknown>;
+      if (Object.keys(q).some(f => f !== 'x' && f !== 'y' && f !== 'r' && f !== 's')) return undefined;
+      const t: { x?: number; y?: number; r?: number; s?: number } = {};
+      for (const f of ['x', 'y', 'r', 's'] as const) {
+        if (q[f] === undefined) continue;
+        const val = num(q[f], lim[f][0], lim[f][1]);
+        if (val === null) return undefined;
+        if (f === 's') { if (Math.round(val * 100) !== 100) t.s = Math.round(val * 100) / 100; } else if (r1(val)) t[f] = r1(val);
+      }
+      if (Object.keys(t).length) parts[k] = t;
+    }
+    if (sx && Object.keys(parts).length) back.text_parts = parts;
   }
   return stickers.length || back.text_top || back.sticker_text || back.text_xy || back.text_r || back.text_s ? back : null;
 }

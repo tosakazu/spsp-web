@@ -340,12 +340,19 @@ test('card_put: 裏面のシール (back) を確かめて保存。形が違え�
     { stickers: [{ e: '1:r', x: 600, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0, k: 'star' }] },
     { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0 }, { e: '1:r', x: 2, y: 2, s: 30, r: 0 }] }, { foo: 1 },
     { text_xy: { x: 300, y: 0 } }, { text_r: 200 }, { text_s: 3 }, { text_s: '1' }, { text_xy: { x: 1 } }, { text_xy: { x: 1, y: 1, z: 1 } },
+    { text_parts: { foo: { x: 1 } } }, { text_parts: { name: { z: 1 } } }, { text_parts: { name: { s: 3 } } }, { text_parts: { name: 1 } }, { text_parts: [] },
     { stickers: Array.from({ length: 51 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) }]) {
     assert.strictEqual(await bad(b), 'bad_settings', JSON.stringify(b).slice(0, 80));
   }
   e.nowMs = now += 60_000;
   const moved = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_xy: { x: -20.04, y: 15 }, text_r: -12.34, text_s: 1.234 } } });
   assert.deepStrictEqual(moved.settings.back, { stickers: [], text_top: false, outline: false, sticker_text: false, text_xy: { x: -20, y: 15 }, text_r: -12.3, text_s: 1.23 });
+  e.nowMs = now += 60_000;
+  const parts = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], sticker_text: true, text_parts: { name: { x: 3.04, r: 0 }, title: { s: 1 }, rank: { r: -5, s: 0.8 } } } } });
+  assert.deepStrictEqual(parts.settings.back.text_parts, { name: { x: 3 }, rank: { r: -5, s: 0.8 } });
+  e.nowMs = now += 60_000;
+  const plain = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: true, text_parts: { name: { x: 3 } } } } });
+  assert.strictEqual(plain.settings.back.text_parts, undefined);   // 白フチでなければ捨てる
   e.nowMs = now += 60_000;   // 書き込み間隔
   const empty = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: false, outline: false } } });
   assert.strictEqual('back' in empty.settings, false);

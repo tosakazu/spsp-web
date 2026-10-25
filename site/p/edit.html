@@ -126,8 +126,12 @@
               <div class="bz-menu-pop">
                 <button type="button" class="bz-menu-redo" id="bz-redo" title="Ctrl+Shift+Z" data-i18n="card_back.redo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>やり直す</button>
                 <!-- 名前・二つ名・順位の表示: 編集 (選んで、ドラッグ・つまみ・スライダーで動かす) と元に戻す (真ん中・まっすぐ・元の大きさ) -->
-                <button type="button" class="bz-menu-redo" id="bz-text-edit" data-i18n="card_back.text_edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>名前の表示を編集</button>
-                <button type="button" class="bz-menu-redo" id="bz-text-center" data-i18n="card_back.text_reset" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>名前の表示を元に戻す</button>
+                <button type="button" class="bz-menu-redo" id="bz-text-edit" data-i18n="card_back.text_edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>名前シールの配置を編集</button>
+                <!-- 白フチのときだけ: 名前・二つ名・順位を 1 つずつ -->
+                <button type="button" class="bz-menu-redo bz-menu-sub" id="bz-text-name" data-i18n="card_back.text_edit_name" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>名前だけを編集</button>
+                <button type="button" class="bz-menu-redo bz-menu-sub" id="bz-text-title" data-i18n="card_back.text_edit_title" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>二つ名だけを編集</button>
+                <button type="button" class="bz-menu-redo bz-menu-sub" id="bz-text-rank" data-i18n="card_back.text_edit_rank" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>順位だけを編集</button>
+                <button type="button" class="bz-menu-redo" id="bz-text-center" data-i18n="card_back.text_reset" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>名前シールの配置を元に戻す</button>
                 <!-- まだ貼っていないシールのある大会 (下位クラスも同じ大会) から k 大会を選び (その大会で残っている一番上のもの)、ランダムな大きさ・場所・角度・形で貼る (k は − / + で) -->
                 <div class="bz-rand">
                   <button type="button" class="bz-rand-go" id="bz-rand"><span data-i18n="card_back.rand_pre">ランダムに </span><b id="bz-rand-k">5</b><span data-i18n="card_back.rand_post"> 枚貼る</span></button>

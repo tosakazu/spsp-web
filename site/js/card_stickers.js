@@ -4,6 +4,8 @@
 //   back = { stickers: Sticker[], text_top: 名前・二つ名・順位をシールの上に出すか, outline: その文字に影を付けるか (前は縁取り。設定の名前はそのまま),
 //          sticker_text: その文字を白フチのシールにするか (Figma「work」Frame 52) } | null
 //          text_xy: その文字の位置 (真ん中からのずれ {x, y}、カードの px。無ければ真ん中)、text_r: 回転 (度、カードの真ん中が軸)、text_s: 大きさ (倍)
+//          text_parts: 白フチのときだけ、名前・二つ名・順位を 1 つずつずらす分 ({ name|title|rank: { x, y, r, s } }。全体の置き方をかけた後に、
+//          その部品の真ん中を軸に。既定 (0・0・0°・1 倍) の値と部品は書かない)
 //   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
@@ -20,13 +22,17 @@ export const MAX_STICKERS = 50;
 export const TEXT_DX = 257, TEXT_DY = 167;
 /** 名前・二つ名・順位の大きさ (倍) の幅 */
 export const TEXT_S_MIN = 0.5, TEXT_S_MAX = 2;
+/** 1 つずつ動かせる部品 */
+export const TEXT_PARTS = /** @type {const} */ (['name', 'title', 'rank']);
 /** 色の記号 → holo_badge.js の variant (0 虹・1 金・2 銀・3 素) */
 export const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
 export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
 export const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 
 /** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
-/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean, sticker_text: boolean, text_xy?: { x: number, y: number }, text_r?: number, text_s?: number }} CardBack */
+/** @typedef {{ stickers: Sticker[], text_top: boolean, outline: boolean, sticker_text: boolean, text_xy?: { x: number, y: number }, text_r?: number, text_s?: number, text_parts?: TextParts }} CardBack */
+/** @typedef {{ x?: number, y?: number, r?: number, s?: number }} TextPart */
+/** @typedef {{ name?: TextPart, title?: TextPart, rank?: TextPart }} TextParts */
 
 const r1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
 const clamp = (/** @type {number} */ v, /** @type {number} */ lo, /** @type {number} */ hi) => Math.max(lo, Math.min(hi, v));
@@ -63,7 +69,29 @@ export function normBack(b) {
   // 回転・大きさも既定 (0°・1 倍) なら書かない
   if (n(b.text_r)) { const r = r1(normRot(b.text_r)); if (r) back.text_r = r; }
   if (n(b.text_s)) { const sc = Math.round(clamp(b.text_s, TEXT_S_MIN, TEXT_S_MAX) * 100) / 100; if (sc !== 1) back.text_s = sc; }
+  const parts = sx ? normParts(b.text_parts) : null;
+  if (parts) back.text_parts = parts;
   return stickers.length || back.text_top || back.sticker_text || back.text_xy || back.text_r || back.text_s ? back : null;
+}
+
+/** 部品ごとのずれを正規化 (既定の値・部品は書かない)。何も無ければ null @param {any} v @returns {TextParts | null} */
+export function normParts(v) {
+  if (!v || typeof v !== 'object') return null;
+  const n = (/** @type {any} */ x) => typeof x === 'number' && Number.isFinite(x);
+  /** @type {TextParts} */
+  const out = {};
+  for (const k of TEXT_PARTS) {
+    const q = v[k];
+    if (!q || typeof q !== 'object') continue;
+    /** @type {TextPart} */
+    const t = {};
+    if (n(q.x)) { const x = r1(clamp(q.x, -TEXT_DX, TEXT_DX)); if (x) t.x = x; }
+    if (n(q.y)) { const y = r1(clamp(q.y, -TEXT_DY, TEXT_DY)); if (y) t.y = y; }
+    if (n(q.r)) { const r = r1(normRot(q.r)); if (r) t.r = r; }
+    if (n(q.s)) { const sc = Math.round(clamp(q.s, TEXT_S_MIN, TEXT_S_MAX) * 100) / 100; if (sc !== 1) t.s = sc; }
+    if (Object.keys(t).length) out[k] = t;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** シールのキー → { 大会の event_id (下位クラスは親), クラスの文字, variant } @param {string} e */

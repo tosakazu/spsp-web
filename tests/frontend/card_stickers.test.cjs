@@ -28,6 +28,11 @@ test('normBack: 形が違うシールは外し、範囲に丸め、何も無け�
   assert.strictEqual(normBack({ text_r: 0, text_s: 1 }), null);
   assert.deepStrictEqual(normBack({ text_r: 370.04, text_s: 9 }), { stickers: [], text_top: false, outline: false, sticker_text: false, text_r: 10, text_s: 2 });
   assert.deepStrictEqual(normBack({ sticker_text: true }), { stickers: [], text_top: false, outline: false, sticker_text: true });
+  // 部品ごとのずれ: 白フチのときだけ、既定の値・部品・知らない部品は書かない、幅の外は端に
+  assert.deepStrictEqual(normBack({ sticker_text: true, text_parts: { name: { x: 10.04, y: 0, r: 0, s: 1 }, rank: { s: 9 }, title: { x: 0 }, foo: { x: 1 } } }).text_parts,
+    { name: { x: 10 }, rank: { s: 2 } });
+  assert.strictEqual(normBack({ sticker_text: true, text_parts: { name: { x: 0 } } }).text_parts, undefined);
+  assert.strictEqual(normBack({ text_top: true, text_parts: { name: { x: 5 } } }).text_parts, undefined);   // 普通の文字なら捨てる
   const b = normBack({ stickers: [
     { e: '1700000:r', x: 600, y: -5, s: 9999, r: 190.04, k: 'star', c: 0.1 },   // 範囲外 → 丸め、知らない形 → 四角
     { e: '1724470B:g', x: 10.04, y: 20, s: 50, r: -45, k: 'circle', c: 0.555 },

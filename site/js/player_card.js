@@ -210,10 +210,11 @@ function backHtml(m) {
 }
 
 /** 名前・二つ名・順位の置き方 (設定 back.text_xy = 真ん中からのずれ (カードの px)・text_r = 回転 (度)・text_s = 大きさ (倍))
- * @typedef {{ x: number, y: number, r: number, s: number }} TextPose */
+ * parts = 白フチのとき、部品 (name・title・rank) ごとに足すずれ (back.text_parts。全体の置き方の後に、その部品の真ん中を軸に)
+ * @typedef {{ x: number, y: number, r: number, s: number, parts?: import('./card_stickers.js').TextParts }} TextPose */
 /** @param {import('./card_stickers.js').CardBack | null | undefined} b @returns {TextPose} */
 export const textPoseOf = b => ({ x: b && b.text_xy ? b.text_xy.x : 0, y: b && b.text_xy ? b.text_xy.y : 0,
-  r: (b && b.text_r) || 0, s: (b && b.text_s) || 1 });
+  r: (b && b.text_r) || 0, s: (b && b.text_s) || 1, ...(b && b.text_parts ? { parts: b.text_parts } : {}) });
 /** 名前・二つ名・順位を置き方どおりに置く。列 (.pcb-col) ごと上下左右にずらし、
  *  白フチ (キャンバス) は 1 枚ずつ、カードの真ん中を軸に回して大きさを変えた所へ置き直す (列を transform で回すと、
  *  html2canvas が変形した要素の中の回した絵の位置を誤る)。白フチでない文字は列を transform で回す
@@ -226,8 +227,9 @@ function applyTextPose(col, p) {
   const rad = p.r * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), cx = W / 2, cy = 333 / 2;
   for (const cv of cvs) {
     const d = cv.dataset, x = Number(d.x) - cx, y = Number(d.y) - cy, hw = Number(d.hw) * p.s, hh = Number(d.hh) * p.s;
-    const X = cx + p.s * (x * cs - y * sn), Y = cy + p.s * (x * sn + y * cs);
-    cv.style.cssText = `left:${(X - hw).toFixed(2)}px;top:${(Y - hh).toFixed(2)}px;width:${(hw * 2).toFixed(2)}px;height:${(hh * 2).toFixed(2)}px;transform:rotate(${(Number(d.rot) + p.r).toFixed(2)}deg)`;
+    const q = (p.parts && d.part && p.parts[/** @type {'name' | 'title' | 'rank'} */ (d.part)]) || {}, k = q.s || 1;
+    const X = cx + p.s * (x * cs - y * sn) + (q.x || 0), Y = cy + p.s * (x * sn + y * cs) + (q.y || 0);
+    cv.style.cssText = `left:${(X - hw * k).toFixed(2)}px;top:${(Y - hh * k).toFixed(2)}px;width:${(hw * k * 2).toFixed(2)}px;height:${(hh * k * 2).toFixed(2)}px;transform:rotate(${(Number(d.rot) + p.r + (q.r || 0)).toFixed(2)}deg)`;
   }
 }
 /** 描いてある裏面の、名前・二つ名・順位だけを置き直す (編集中のドラッグ。描き直さない) @param {HTMLElement} el renderBack した箱 @param {TextPose | null} p */
@@ -656,9 +658,10 @@ function paintNameStickers(root, m) {
   if (!col) return;
   for (const old of Array.from(col.querySelectorAll('.pcb-sx-l'))) old.remove();
   const fonts = [];
-  /** @param {HTMLCanvasElement} cv @param {number} hw @param {number} hh @param {number} x @param {number} y @param {number} rot */
-  const put = (cv, hw, hh, x, y, rot) => {
+  /** @param {HTMLCanvasElement} cv @param {number} hw @param {number} hh @param {number} x @param {number} y @param {number} rot @param {string} part */
+  const put = (cv, hw, hh, x, y, rot, part) => {
     cv.className = 'pcb-sx-l';
+    cv.dataset.part = part;
     cv.setAttribute('aria-hidden', 'true');
     // 置き方 (回転・大きさ) をかける前の場所を持っておき、applyTextPose が置く
     Object.assign(cv.dataset, { x: String(x), y: String(y), hw: String(hw), hh: String(hh), rot: String(rot) });
@@ -683,14 +686,14 @@ function paintNameStickers(root, m) {
   const rad = SX_NAME.rot * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad);
   /** 名前の向きでのずれ (右へ dx・下へ dy) → カードの座標 @param {number} dx @param {number} dy */
   const at = (dx, dy) => [SX_NAME.x + dx * cs - dy * sn, SX_NAME.y + dx * sn + dy * cs];
-  put(name.cv, name.hw, name.hh, SX_NAME.x, SX_NAME.y, SX_NAME.rot);
+  put(name.cv, name.hw, name.hh, SX_NAME.x, SX_NAME.y, SX_NAME.rot, 'name');
   // 順位: 「#」(24px Black) と数字 (34px Bold) を同じ基準線に
   const rank = sxCanvas([[{ t: '#', font: `900 24px ${SX_RANK_FONT}` }, { t: m.rank != null ? String(m.rank) : '—', font: `700 34px ${SX_RANK_FONT}` }]], 34 * 1.214, SX_RANK.edge);
   // 名前と順位は傾きが逆なので、順位の左端が名前に寄る。長い順位でも Figma の左端と同じだけ (名前の箱の上端から 5.5px 内側まで) しか重ねない
   const tanR = Math.tan((SX_NAME.rot - SX_RANK.rot) * Math.PI / 180);
   const rh = 34 * 1.214, rl = Math.min(rank.w / 2, name.w / 2);
   const [rx, ry] = at(0, Math.min(-(name.h / 2 + SX_NAME.rankGap), -name.h / 2 + 5.5 - rh / 2 - rl * tanR));
-  put(rank.cv, rank.hw, rank.hh, rx, ry, SX_RANK.rot);
+  put(rank.cv, rank.hw, rank.hh, rx, ry, SX_RANK.rot, 'rank');
   fonts.push(`900 24px ${SX_RANK_FONT}`, `700 34px ${SX_RANK_FONT}`);
   // 二つ名 (「//」・前半・後半を 4px あけて。21px、長ければ 11px まで詰める)
   const parts = Array.from(root.querySelectorAll('.pcb-title > span')).map(s => s.textContent || '').filter(Boolean);
@@ -704,7 +707,7 @@ function paintNameStickers(root, m) {
     const tanT = Math.tan((SX_NAME.rot - SX_TITLE.rot) * Math.PI / 180);
     const xr = Math.min(name.w / 2, tdx + title.w / 2);
     const [tx, ty] = at(tdx, Math.max(name.h / 2 + SX_NAME.titleGap, name.h / 2 - 6 + title.h / 2 + (xr - tdx) * tanT));
-    put(title.cv, title.hw, title.hh, tx, ty, SX_TITLE.rot);
+    put(title.cv, title.hw, title.hh, tx, ty, SX_TITLE.rot, 'title');
     fonts.push(`700 ${tp}px ${SX_TITLE_FONT}`);
   }
   // フォントが来ていなければ、読んでから描き直す (1 回だけ)
