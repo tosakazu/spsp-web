@@ -9,6 +9,7 @@
  *   POST /api/<action>   body に action が無ければパスから補う
  *   GET  /api/export/votes?key=&since=   = action export_votes
  *   GET  /api/export/errors?key=&limit=  = action export_errors
+ *   POST /api/csp-report                 CSP の違反報告 (ブラウザ。body は csp-report / reports+json、応答 204)
  *   GET  /api/card?uid=                  = action card_get (だれでも読める。60 秒キャッシュ可)
  *   GET  /api/titles?uid=&lang=          = action title_get (持っている二つ名の記録。だれでも読める。60 秒キャッシュ可)
  *   GET  /api/class_waitlist             = action class_waitlist (下位クラスの取得待ち。だれでも読める)
@@ -21,6 +22,7 @@ import { handleCardGet, handleCardPut, handleMe } from './card.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
+import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin } from './login.ts';
@@ -105,6 +107,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'export_votes':
         // ビルドサーバーの定期取得。失敗しても人手の出番は無いので記録しない。
         return (await handleExportVotes(ctx.cfg, ctx.store, r)).body;
+      case 'csp_export':
+        return (await handleCspExport(ctx.cfg, ctx.store, r)).body;
       case 'export_errors':
         return (await handleExportErrors(ctx.cfg, ctx.store, r)).body;
       case 'client_error':
@@ -206,6 +210,19 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
 
   if (request.method !== 'POST') {
     return jsonResponse(getOnlyPostBody());
+  }
+
+  // CSP の違反報告 (ブラウザが送る。action は無い)。中身は返さない (204)
+  if (sub === 'csp-report') {
+    const n = Number(request.headers.get('content-length') || 0);
+    if (n <= MAX_BODY_BYTES) {
+      let t = '';
+      try { t = await request.text(); } catch (_) { t = ''; }
+      if (t && t.length <= MAX_BODY_BYTES) {
+        await recordCspReport(ctx.cfg, ctx.store, t, request.headers.get('cf-connecting-ip') || '', ctx.now());
+      }
+    }
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   const maxBody = sub === 'title_sync' ? TITLE_SYNC_MAX_BODY_BYTES : MAX_BODY_BYTES;

@@ -5,6 +5,7 @@ export class MemStore {
     this.posts = [];
     this.errors = [];
     this.used = new Map();   // key → expires_ms
+    this.csp = new Map();    // key → { directive, blocked, path, hits, first_seen, last_seen }
     this.cards = new Map();  // uid → { settings, updated_at }
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
@@ -161,5 +162,16 @@ export class MemStore {
     this.classActions.push({ user_id: g.userId, action, ts_ms: g.nowMs, day: g.dayKey });
     this.classActions = this.classActions.filter((r) => r.ts_ms >= g.nowMs - 2 * 24 * 3600 * 1000);
     return true;
+  }
+
+  async recordCsp(key, e, ts, maxKeys) {
+    const cur = this.csp.get(key);
+    if (cur) { cur.hits += 1; cur.last_seen = ts; return; }
+    if (this.csp.size >= maxKeys) return;
+    this.csp.set(key, { directive: e.directive, blocked: e.blocked, path: e.path, hits: 1, first_seen: ts, last_seen: ts });
+  }
+
+  async listCsp() {
+    return [...this.csp.entries()].sort((a, b) => b[1].hits - a[1].hits || (a[0] < b[0] ? -1 : 1)).map(([, v]) => ({ ...v }));
   }
 }

@@ -59,7 +59,8 @@ export function items(uid, titlesN) {
   /** @type {Array<{kind: 'rank' | 'lv' | 'titles', from?: number, to?: number, n?: number}>} */
   const out = [];
   if (st && st.base && st.now) {
-    const b = st.base, n = st.now;
+    // 文字列で innerHTML に入るので、保存値 (localStorage) は数に直してから使う
+    const b = { rank: num(st.base.rank), lv: num(st.base.lv) }, n = { rank: num(st.now.rank), lv: num(st.now.lv) };
     if (b.rank != null && n.rank != null && n.rank < b.rank) out.push({ kind: 'rank', from: b.rank, to: n.rank });
     if (b.lv != null && n.lv != null && n.lv > b.lv) out.push({ kind: 'lv', from: b.lv, to: n.lv });
   }

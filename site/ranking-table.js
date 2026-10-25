@@ -205,7 +205,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         const shown = displayName(rec.display);
         const nameHtml = rec.unranked
           ? `<span class="player-name">${escapeHtml(shown)}</span>`
-          : SPSPLinks.playerLink(ctx.playerHrefPrefix, rec.user_id, escapeHtml(shown), ' class="player-name" onclick="event.stopPropagation()"');
+          : SPSPLinks.playerLink(ctx.playerHrefPrefix, rec.user_id, escapeHtml(shown), ' class="player-name"');
         // メイン使用キャラの絵文字 (= 名前の左)。
         const mainEmoji = SPSPCharEmoji ? SPSPCharEmoji.rowEmoji(rec) : '';   // main_char_id を表 (フロントが持つ) で引く
         const charEmoji = mainEmoji
@@ -401,6 +401,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
       // tbody click → row click
       this.table.addEventListener('click', (e) => {
+        if (e.target.closest('a')) return;   // 行の中のリンクは開くだけ (CSP のため onclick 属性は使わない)
         const tr = e.target.closest('tr.main-row');
         if (!tr || !this.table.contains(tr)) return;
         const uid = parseInt(tr.dataset.uid, 10);

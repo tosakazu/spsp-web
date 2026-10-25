@@ -38,6 +38,8 @@ const DEPS = {
 
 const { pageIds, pageImports, PAGE_ID } = require('../helpers/pages.cjs');
 const DATA_SCRIPTS = ['region/config.js', 'i18n/ja.js', 'region/i18n.js'];   // HTML に残る (地域・言語ごとのデータ)。ビルドが言語ごとに差し替える
+// MathJax (CDN、async) より前に要る設定。CSP のためインラインに書けないので、データ script の前に置いてよい
+const PRE_SCRIPTS = ['js/mathjax_dollar.js'];
 
 // ページ HTML: 残る <script src> は データ script 3 本 + assets/<id>.js だけ (CDN は除く)。ビルドが assets/<id>.js を src/pages/<id>.js から作る
 for (const [rel, id] of Object.entries(PAGE_ID)) {
@@ -46,6 +48,7 @@ for (const [rel, id] of Object.entries(PAGE_ID)) {
     const dir = path.dirname(rel) === '.' ? '' : path.dirname(rel);
     const order = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]).filter((src) => !/^https?:/.test(src))
       .map((src) => path.posix.normalize(path.posix.join(dir, src)));
+    while (order.length && PRE_SCRIPTS.includes(order[0])) order.shift();
     assert.deepStrictEqual(order, [...DATA_SCRIPTS, `assets/${id}.js`], `${rel} の <script src> の並び`);
     assert.ok(fs.existsSync(path.resolve(__dirname, '../../src/pages', id + '.js')) || fs.existsSync(path.resolve(__dirname, '../../src/pages', id + '.ts')), `src/pages/${id}.js が無い`);
   });

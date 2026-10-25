@@ -262,7 +262,7 @@ async function init() {
        <a href="${SPSP.langRoot}">${i18n('common.back_to_national')}</a></p>`;
   } catch (e) {
     const tbody = document.getElementById('tbody');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="empty-msg">${i18n('common.load_error', { message: /** @type {Error} */ (e).message })}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="empty-msg">${i18n('common.load_error', { message: escapeHtml(/** @type {Error} */ (e).message) })}</td></tr>`;
     const status = document.getElementById('status');
     if (status) status.textContent = '';
   }
