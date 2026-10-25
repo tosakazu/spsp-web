@@ -166,7 +166,10 @@ export async function mountBackEditor(o) {
   const paintSx = () => sxBtn.setAttribute('aria-pressed', String(stickerText));
   sxBtn.addEventListener('click', () => {
     stickerText = !stickerText;
+    // 普通の文字に戻したら、名前の位置・回転・大きさも既定に戻す (白フチ用に傾けたままだと崩れて見えた。戻したあとも編集はできる)
+    if (!stickerText) pose = { x: 0, y: 0, r: 0, s: 1 };
     paintSx(); renderBase(); emit();
+    commit(true); paintTools();
     toast(stickerText ? i18n('card_back.toast.sticker_text_on') : i18n('card_back.toast.sticker_text_off'));
   });
   paintTextTop(); paintSx(); renderBase();
