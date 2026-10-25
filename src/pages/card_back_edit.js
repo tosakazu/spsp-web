@@ -120,6 +120,13 @@ export async function mountBackEditor(o) {
     const q = (pose.parts && pose.parts[target]) || {};
     return { x: q.x || 0, y: q.y || 0, r: q.r || 0, s: q.s || 1 };
   };
+  /** 画面 (カードの座標) での動き → 編集している所のずれの動き。部品のずれには全体の回転・大きさがかかるので戻す
+   * @param {number} dx @param {number} dy */
+  const toLocal = (dx, dy) => {
+    if (target === 'all') return [dx, dy];
+    const a = -pose.r * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [(dx * c - dy * s) / pose.s, (dx * s + dy * c) / pose.s];
+  };
   /** 編集している所の置き方を変える @param {{ x: number, y: number, r: number, s: number }} p */
   const setTP = p => {
     if (target === 'all') pose = { ...pose, x: p.x, y: p.y, r: p.r, s: p.s };
@@ -759,8 +766,9 @@ export async function mountBackEditor(o) {
         drag.a0 = angle(p, q); drag.d0 = Math.max(1, dist(p, q)); drag.c0 = c;
         return;
       }
-      setTP({ x: Math.max(-TEXT_DX, Math.min(TEXT_DX, Math.round((drag.x0 + c.x - drag.c0.x) * 10) / 10)),
-              y: Math.max(-TEXT_DY, Math.min(TEXT_DY, Math.round((drag.y0 + c.y - drag.c0.y) * 10) / 10)),
+      const [ldx, ldy] = toLocal(c.x - drag.c0.x, c.y - drag.c0.y);
+      setTP({ x: Math.max(-TEXT_DX, Math.min(TEXT_DX, Math.round((drag.x0 + ldx) * 10) / 10)),
+              y: Math.max(-TEXT_DY, Math.min(TEXT_DY, Math.round((drag.y0 + ldy) * 10) / 10)),
               r: snapRot(drag.r0 + angle(p, q) - drag.a0), s: clampTS(drag.s0 * dist(p, q) / drag.d0) });
       showTextPos(); paintTools();
       return;
@@ -774,8 +782,9 @@ export async function mountBackEditor(o) {
       }
       // 真ん中の近く (4px) は真ん中に吸い付ける (戻しやすく)
       const snap0 = (/** @type {number} */ v) => (Math.abs(v) < 4 ? 0 : Math.round(v * 10) / 10);
-      const x = snap0(Math.max(-TEXT_DX, Math.min(TEXT_DX, drag.x0 + pt.x - drag.px)));
-      const y = snap0(Math.max(-TEXT_DY, Math.min(TEXT_DY, drag.y0 + pt.y - drag.py)));
+      const [ldx, ldy] = toLocal(pt.x - drag.px, pt.y - drag.py);
+      const x = snap0(Math.max(-TEXT_DX, Math.min(TEXT_DX, drag.x0 + ldx)));
+      const y = snap0(Math.max(-TEXT_DY, Math.min(TEXT_DY, drag.y0 + ldy)));
       setTP({ ...tp(), x, y });
       showTextPos();
       return;
@@ -860,7 +869,8 @@ export async function mountBackEditor(o) {
       if (!mv) return;
       e.preventDefault();
       const t0 = tp();
-      const x = Math.max(-TEXT_DX, Math.min(TEXT_DX, t0.x + mv[0])), y = Math.max(-TEXT_DY, Math.min(TEXT_DY, t0.y + mv[1]));
+      const [ldx, ldy] = toLocal(mv[0], mv[1]);
+      const x = Math.max(-TEXT_DX, Math.min(TEXT_DX, t0.x + ldx)), y = Math.max(-TEXT_DY, Math.min(TEXT_DY, t0.y + ldy));
       setTP({ ...t0, x, y });
       showTextPos(); commit();
       return;

@@ -210,7 +210,7 @@ function backHtml(m) {
 }
 
 /** 名前・二つ名・順位の置き方 (設定 back.text_xy = 真ん中からのずれ (カードの px)・text_r = 回転 (度)・text_s = 大きさ (倍))
- * parts = 白フチのとき、部品 (name・title・rank) ごとに足すずれ (back.text_parts。全体の置き方の後に、その部品の真ん中を軸に)
+ * parts = 白フチのとき、部品 (name・title・rank) ごとのずれ (back.text_parts。部品の真ん中を軸に動かしてから、全体の置き方をまとめてかける)
  * @typedef {{ x: number, y: number, r: number, s: number, parts?: import('./card_stickers.js').TextParts }} TextPose */
 /** @param {import('./card_stickers.js').CardBack | null | undefined} b @returns {TextPose} */
 export const textPoseOf = b => ({ x: b && b.text_xy ? b.text_xy.x : 0, y: b && b.text_xy ? b.text_xy.y : 0,
@@ -226,9 +226,9 @@ function applyTextPose(col, p) {
   col.style.transform = !cvs.length && (p.r || p.s !== 1) ? `rotate(${p.r}deg) scale(${p.s})` : '';
   const rad = p.r * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), cx = W / 2, cy = 333 / 2;
   for (const cv of cvs) {
-    const d = cv.dataset, x = Number(d.x) - cx, y = Number(d.y) - cy, hw = Number(d.hw) * p.s, hh = Number(d.hh) * p.s;
-    const q = (p.parts && d.part && p.parts[/** @type {'name' | 'title' | 'rank'} */ (d.part)]) || {}, k = q.s || 1;
-    const X = cx + p.s * (x * cs - y * sn) + (q.x || 0), Y = cy + p.s * (x * sn + y * cs) + (q.y || 0);
+    const d = cv.dataset, q = (p.parts && d.part && p.parts[/** @type {'name' | 'title' | 'rank'} */ (d.part)]) || {}, k = q.s || 1;
+    const x = Number(d.x) + (q.x || 0) - cx, y = Number(d.y) + (q.y || 0) - cy, hw = Number(d.hw) * p.s, hh = Number(d.hh) * p.s;
+    const X = cx + p.s * (x * cs - y * sn), Y = cy + p.s * (x * sn + y * cs);
     cv.style.cssText = `left:${(X - hw * k).toFixed(2)}px;top:${(Y - hh * k).toFixed(2)}px;width:${(hw * k * 2).toFixed(2)}px;height:${(hh * k * 2).toFixed(2)}px;transform:rotate(${(Number(d.rot) + p.r + (q.r || 0)).toFixed(2)}deg)`;
   }
 }
