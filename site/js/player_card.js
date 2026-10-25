@@ -12,6 +12,8 @@ import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten } fr
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
+/** 画像にするときの倍率 (原寸の 3 倍 = 1542×999) */
+const CAPTURE_SCALE = 3;
 
 /** カードの色 (Figma「work」ページの色違い Frame 18〜21・34・36・41 と「submit」の赤)。変えるのはアクセント色 (--pc-red) だけ */
 export const COLORS = [
@@ -904,6 +906,11 @@ async function captureCanvas(el) {
       ck.replaceWith(img);
     } catch (e) { ck.remove(); }
   }));
+  // 名前・二つ名・順位の影 (.pcb-outline、player_card.css): html2canvas は文字の影のずらしは倍率 (3 倍) を掛けるのに、ぼかしは掛けない
+  // (1.4.1 の renderTextNode)。そのままだとぼかしが 3 分の 1 になって影がほとんど見えないので、複製だけぼかしを 3 倍にしておく
+  for (const n of /** @type {NodeListOf<HTMLElement>} */ (clone.querySelectorAll('.pcb-outline .pcb-name-t, .pcb-outline .pcb-rank, .pcb-outline .pcb-title'))) {
+    n.style.textShadow = `0 0 ${4 * CAPTURE_SCALE}px rgb(0 0 0 / .6)`;
+  }
   // 白フチの名前・二つ名・順位 (キャンバス) は複製すると空になるので、絵にして差し替える
   const sls = [...src.querySelectorAll('.pcb-sx-l')], cls = [...clone.querySelectorAll('.pcb-sx-l')];
   await Promise.all(sls.map(async (c, i) => {
@@ -921,7 +928,7 @@ async function captureCanvas(el) {
   // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
   const sx = window.scrollX, sy = window.scrollY;
   try {
-    return await withExactFontMetrics(() => w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 }));
+    return await withExactFontMetrics(() => w.html2canvas(clone, { backgroundColor: null, scale: CAPTURE_SCALE, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 }));
   } finally {
     box.remove();
     if (window.scrollX !== sx || window.scrollY !== sy) window.scrollTo(sx, sy);
