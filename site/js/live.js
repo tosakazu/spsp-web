@@ -123,12 +123,12 @@ function setsHtml(doc, myId, opts, hasPage) {
     return pb - pa || order(b) - order(a) || (b.round || 0) - (a.round || 0);
   });
   /** @type {Record<string, any>} */
-  const typeOf = {};
-  for (const p of doc.phases || []) for (const g of p.groups || []) typeOf[String(g.id)] = p.type;
+  const phaseOf = {};
+  for (const p of doc.phases || []) for (const g of p.groups || []) phaseOf[String(g.id)] = p;
   const ents = doc.entrants || {};
   const me = ents[myId] || {};
   const pSeed = me.seed;
-  const rows = mine.map((/** @type {any} */ s) => {
+  const row = (/** @type {any} */ s) => {
     const i = (s.e || []).map(String).indexOf(myId);
     const oppId = s.e[1 - i];
     const opp = oppId != null ? ents[String(oppId)] : null;
@@ -156,13 +156,35 @@ function setsHtml(doc, myId, opts, hasPage) {
       oppHtml = `${emoji ? emoji + ' ' : ''}${link}`;
     }
     return `<div class="match-row">` +
-      `<span class="m-bracket">${escapeHtml(compactBracketLabel(s.label, s.round_text, typeOf[String(s.pg)]) || '')}</span>` +
+      `<span class="m-bracket">${escapeHtml(compactBracketLabel(s.label, s.round_text, (phaseOf[String(s.pg)] || {}).type) || '')}</span>` +
       `<span class="m-content">` +
         `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
         `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
       `</span><span class="m-delta"></span></div>`;
-  });
+  };
+  // フェーズが 2 つ以上なら横線で区切る (新しいフェーズが上)。本戦のフェーズで、その後の本戦のフェーズに進んでいれば「突破！」
+  // (下位クラスに回ったときは本戦のフェーズを突破とは書かない)
+  /** @type {Map<any, any[]>} */
+  const groups = new Map();
+  for (const s of mine) {
+    const p = phaseOf[String(s.pg)] || null;
+    if (!groups.has(p)) groups.set(p, []);
+    /** @type {any[]} */ (groups.get(p)).push(s);
+  }
+  let rows;
+  if (groups.size < 2) rows = mine.map(row);
+  else {
+    rows = [];
+    let laterMain = false;
+    for (const [p, ss] of groups) {
+      const name = escapeHtml((p && p.name) || '');
+      const cleared = laterMain && !!p && !p.cls;
+      rows.push(`<div class="match-phase${cleared ? ' cleared' : ''}"><span>${cleared ? t('match.phase_cleared', { name }) : name}</span></div>`);
+      rows.push(...ss.map(row));
+      if (p && !p.cls) laterMain = true;
+    }
+  }
   const header = (opts.name || pSeed != null)
     ? `<div class="match-header">${escapeHtml(opts.name || '')}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>` : '';
   return `<div class="tour-matches live-sets">${header}${rows.join('')}</div>`;
@@ -193,9 +215,9 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
     cards.push(
       `<div class="tour-group live-group">` +
         `<div class="tour-item tour-item-nohover latestres-card" style="border-bottom:none">` +
-          `<div class="lr-top">${img}<a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
-            `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
-          `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
+          `<div class="lr-top">${img}<div class="lr-title"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
+            `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span>` +
+            `<div class="live-event">${escapeHtml(doc.event_name || '')}</div></div></div>` +
           `<div class="perf-hero">${hero}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +

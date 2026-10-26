@@ -100,3 +100,21 @@ test('トップの帯: ログインしていなければ出さない・本人が
   await load('?live=sample&live_as=11', 'spsp.games', { fetch, SPSPLinks }).showNotice(el2);
   assert.strictEqual(el2.style.display, 'none');
 });
+
+test('フェーズが 2 つ以上なら横線で区切り、次の本戦のフェーズに進んだフェーズは「突破！」(下位クラスに回ったときは書かない)', () => {
+  const L = load();
+  const d = doc();
+  d.phases.splice(1, 0, { name: 'TOP8', groups: [{ id: 20, ident: '1' }] });
+  d.sets.push({ id: 4, pg: 20, round_text: 'WR1', e: [1, 3], score: [null, null], winner: null, state: 1 });
+  d.sets = d.sets.filter((s) => s.id !== 2);
+  const e = el();
+  L.render(e, 11, [{ summary: {}, doc: d }]);
+  const h = e.innerHTML;
+  assert.match(h, /<div class="match-phase"><span>TOP8<\/span><\/div>/);
+  assert.match(h, /<div class="match-phase cleared"><span>match\.phase_cleared\{"name":"Main"\}<\/span><\/div>/);
+  assert.ok(h.indexOf('TOP8') < h.indexOf('phase_cleared'));
+  const e2 = el();
+  L.render(e2, 22, [{ summary: {}, doc: doc() }]);
+  assert.match(e2.innerHTML, /<span>Bクラス<\/span>.*<span>Main<\/span>/);
+  assert.doesNotMatch(e2.innerHTML, /phase_cleared/);
+});

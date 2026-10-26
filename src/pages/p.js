@@ -177,7 +177,7 @@ function buildLatestResultSection() {
   if (lrBody) lrBody.innerHTML =
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
-        <div class="lr-top">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
+        <div class="lr-top">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}<div class="lr-title">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div></div>
         <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
@@ -586,14 +586,14 @@ function tournamentItem(t, valueHtml, withIcon) {
     <div class="tour-item">
       <span class="date-top">${t.date}</span>
       <span class="place">${placeHtml}</span>
-      <div class="meta">
-        ${withIcon ? SpspTourIcons.html(eid != null ? eid : t.parent_event_id) : ''}${link}${resTag}${lcTag}${rsTag}${stTag}
+      <div class="meta${withIcon ? ' with-icon' : ''}">${withIcon ? SpspTourIcons.html(eid != null ? eid : t.parent_event_id) + '<div class="meta-txt">' : ''}
+        ${link}${resTag}${lcTag}${rsTag}${stTag}
         ${t.event ? `<span style="color:#9ca3af">/ ${escapeHtml(t.event)}</span>` : ''}
         <br><span class="date date-inline">${t.date}</span>${
           (t.pretour_ranks && t.pretour_ranks.ensemble != null)
             ? ` <span style="color:#9ca3af;font-size:10px">${i18n('player.national_then')} #${t.pretour_ranks.ensemble}${
                 t.rank_delta_ensemble != null ? ' → #' + (t.pretour_ranks.ensemble - t.rank_delta_ensemble) : ''}</span>`
-            : ''}
+            : ''}${withIcon ? '</div>' : ''}
       </div>
       <div class="v">${valueHtml}</div>
     </div>
@@ -1120,7 +1120,30 @@ function render() {
     const header = (pName || pSeed != null)
       ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
       : '';
-    return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    // フェーズが 2 つ以上なら、フェーズごとに横線で区切る (新しいフェーズが上)。抜けたフェーズには「突破！」。
+    // フェーズの順 = フェーズの大きさが小さいほど後。大きさは名前の「TOP N」、無ければそのフェーズの試合の global_top_x の最大
+    // (総当たりなどで無ければ一番前)。start.gg の phaseOrder は進む順とは限らず、それを使う global_top_x もずれることがあるので名前を先に見る
+    /** @type {Map<string, PMatch[]>} */
+    const byPhase = new Map();
+    for (const m of sorted) {
+      const k = m.phase_name || '';
+      if (!byPhase.has(k)) byPhase.set(k, []);
+      /** @type {PMatch[]} */ (byPhase.get(k)).push(m);
+    }
+    if (byPhase.size < 2) return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    /** @param {string} name @param {PMatch[]} g */
+    const size = (name, g) => {
+      const n = name.match(/TOP\s*(\d+)/i);
+      return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
+    };
+    const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
+    return header + groups.map(([name, g], i) =>
+      phaseSeparator(name, i > 0) + g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('')).join('');
+  }
+  /** フェーズの区切り (横線の真ん中にフェーズ名。抜けたフェーズは「◯◯ 突破！」) @param {string} name @param {boolean} cleared */
+  function phaseSeparator(name, cleared) {
+    const txt = cleared ? i18n('match.phase_cleared', { name: escapeHtml(name) }) : escapeHtml(name);
+    return `<div class="match-phase${cleared ? ' cleared' : ''}"><span>${txt}</span></div>`;
   }
   /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @param {boolean} [noUf] @returns {string} */
   function _renderMatchRow(m, pName, pSeed, noUf) {
