@@ -180,7 +180,9 @@
   #latestres-section h2 { margin-bottom: 0; }
   .latestres-card .lr-top { margin-top: -1px; }
   .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
-  .latestres-card .lr-chev { display: inline-block; align-self: center; margin-left: 4px; }
+  /* ▶ は順位などの列とは別に右端 (幅が足りなくても ▶ だけ次の行に落ちないように) */
+  .latestres-card .perf-hero { position: relative; padding: 0 16px; }
+  .latestres-card .lr-chev { position: absolute; right: 2px; top: 0; bottom: 0; height: 1em; margin: auto 0; line-height: 1; }
   .perf-hero .ph-perf-sub { font-size: 9px; color: #9ca3af; }
   .latestres-card .lr-top { font-size: 13px; }
   .lr-date { font-size: 11px; color: #9ca3af; font-weight: 400; margin-left: 6px; }
@@ -208,7 +210,6 @@
   .match-phase { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; font-size: 10px; color: #9ca3af; font-weight: 600; }
   .match-phase::before, .match-phase::after { content: ''; flex: 1 1 0; border-top: 1px solid #e5e7eb; }
   .match-phase.advanced { color: #16a34a; }
-  .live-sets.tour-matches { display: block; }   /* 最新の大会結果の試合一覧は開いたときだけ。参加中の大会はいつも出す */
   .lr-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
   .lr-badge.ok { background: #dcfce7; color: #15803d; }
   .lr-badge.ng { background: #fee2e2; color: #b91c1c; }

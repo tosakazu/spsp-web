@@ -117,3 +117,12 @@ test('フェーズが 2 つ以上なら境目に横線と「(進んだ先) 進�
   assert.match(e2.innerHTML, /<div class="match-phase"><span>Bクラス<\/span><\/div>/);
   assert.doesNotMatch(e2.innerHTML, /phase_advanced/);
 });
+
+test('試合の一覧は最初は畳んである (カードを押すと開く ▶ 付き)', () => {
+  const L = load();
+  const e = el();
+  L.render(e, 11, [{ summary: {}, doc: doc() }]);
+  assert.match(e.innerHTML, /<div class="tour-group live-group" data-eid="">/);
+  assert.match(e.innerHTML, /tour-clickable latestres-card/);
+  assert.match(e.innerHTML, /<span class="chevron lr-chev">▶<\/span><\/div>/);
+});

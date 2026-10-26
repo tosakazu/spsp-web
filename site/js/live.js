@@ -19,6 +19,8 @@ import SpspLogin from './login.js';
 import SPSPLinks from './links.js';
 
 const REFRESH_MS = 60 * 1000;
+/** 試合の一覧を開いている部門 (event_id)。最初は全部閉じている */
+const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
 const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
@@ -212,16 +214,18 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
       hero += `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('live.seed_label')}</span>` +
         `<span class="ph-rank">${e.seed}</span></span>`;
     }
+    const sets = setsHtml(doc, String(myId), opts, hasPage);
+    const eid = escapeHtml(String(doc.event_id ?? ''));
     cards.push(
-      `<div class="tour-group live-group">` +
-        `<div class="tour-item tour-item-nohover latestres-card" style="border-bottom:none">` +
+      `<div class="tour-group live-group${sets && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
+        `<div class="tour-item tour-item-nohover${sets ? ' tour-clickable' : ''} latestres-card" style="border-bottom:none">` +
           `<div class="lr-top"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
-          `<div class="perf-hero">${img}${hero}</div>` +
+          `<div class="perf-hero">${img}${hero}${sets ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +
-        setsHtml(doc, String(myId), opts, hasPage) +
+        sets +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
@@ -234,6 +238,16 @@ export function start(section, uid, opts = {}) {
   const body = /** @type {HTMLElement | null} */ (section.querySelector('.live-body'));
   if (!body || !liveRoot() || !uid) return;
   let timer = 0;
+  // カードを押すと試合の一覧を開く・閉じる (最新の大会結果と同じ。開いた部門は読み直しても開いたまま)
+  body.addEventListener('click', (e) => {
+    const target = /** @type {Element} */ (e.target);
+    if (target.closest('a')) return;
+    const card = target.closest('.live-group .tour-clickable');
+    const g = /** @type {HTMLElement | null} */ (card && card.closest('.live-group'));
+    if (!g) return;
+    const eid = g.dataset.eid || '';
+    if (g.classList.toggle('expanded')) opened.add(eid); else opened.delete(eid);
+  });
   const tick = async () => {
     const items = await load(uid);
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
