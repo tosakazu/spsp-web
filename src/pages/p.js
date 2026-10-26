@@ -1237,7 +1237,7 @@ function render() {
       const btChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.bt')}</span>${btValHtml}${btSubHtml}</div>`;
       const vHtml = `<div class="v-stats">${sprChip}${tjprChip}${btChip}<span class="chevron">▶</span></div>`;
       const itemHtml = tournamentItem(t, vHtml, true)
-        .replace('class="tour-item"', 'class="tour-item tour-item-nohover tour-clickable" style="border-bottom:none"');
+        .replace(/class="tour-item([^"]*)"/, 'class="tour-item$1 tour-item-nohover tour-clickable" style="border-bottom:none"');   // has-icon などが付いていても
       // 展開部の先頭にパフォーマンス (perf_rank があれば)
       const pf = perfInfoOf(t);
       const perfHtml = pf
