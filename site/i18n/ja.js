@@ -1872,7 +1872,7 @@ window.SPSP_I18N.ja = {
   'vote.merge_contact': '{contact}でご連絡いただければ統合します。\n',
   // ── match.bracket.<start.gg phase bracket type 小文字>: ブラケット構造の無いフェーズの表示名 (js/match.js。ビルドの日本語カテゴリ名と同じ) ──
   'match.bracket.round_robin': '総当たり',
-  'match.phase_cleared': '{name} 突破！',
+  'match.phase_advanced': '{name} 進出！',
   'match.bracket.swiss': 'スイスドロー',
   'match.bracket.matchmaking': 'レート戦',
   'lang.short.ja': 'JA',

@@ -1818,7 +1818,7 @@ window.SPSP_I18N.en = {
   'vote.own_account_only': 'Character votes can only be cast from your own account. Check whether one of these applies:\n',
   'vote.wrong_person': '• You selected a different player → press “Log out” above and choose again.\n',
   'vote.merge_contact': 'Contact us via {contact} and we will merge them.\n',
-  'match.phase_cleared': '{name} cleared!',
+  'match.phase_advanced': 'Advanced to {name}!',
   'match.bracket.round_robin': 'Round robin',
   'match.bracket.swiss': 'Swiss',
   'match.bracket.matchmaking': 'Matchmaking',

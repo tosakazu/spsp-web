@@ -101,7 +101,7 @@ test('トップの帯: ログインしていなければ出さない・本人が
   assert.strictEqual(el2.style.display, 'none');
 });
 
-test('フェーズが 2 つ以上なら横線で区切り、次の本戦のフェーズに進んだフェーズは「突破！」(下位クラスに回ったときは書かない)', () => {
+test('フェーズが 2 つ以上なら境目に横線と「(進んだ先) 進出！」(下位クラスはクラス名だけ)', () => {
   const L = load();
   const d = doc();
   d.phases.splice(1, 0, { name: 'TOP8', groups: [{ id: 20, ident: '1' }] });
@@ -110,11 +110,10 @@ test('フェーズが 2 つ以上なら横線で区切り、次の本戦のフ�
   const e = el();
   L.render(e, 11, [{ summary: {}, doc: d }]);
   const h = e.innerHTML;
-  assert.match(h, /<div class="match-phase"><span>TOP8<\/span><\/div>/);
-  assert.match(h, /<div class="match-phase cleared"><span>match\.phase_cleared\{"name":"Main"\}<\/span><\/div>/);
-  assert.ok(h.indexOf('TOP8') < h.indexOf('phase_cleared'));
+  assert.match(h, /<div class="match-phase advanced"><span>match\.phase_advanced\{"name":"TOP8"\}<\/span><\/div>/);
+  assert.strictEqual((h.match(/match-phase/g) || []).length, 1);   // 境目は 1 本、一番下 (最初のフェーズ) の下には無い
   const e2 = el();
   L.render(e2, 22, [{ summary: {}, doc: doc() }]);
-  assert.match(e2.innerHTML, /<span>Bクラス<\/span>.*<span>Main<\/span>/);
-  assert.doesNotMatch(e2.innerHTML, /phase_cleared/);
+  assert.match(e2.innerHTML, /<div class="match-phase"><span>Bクラス<\/span><\/div>/);
+  assert.doesNotMatch(e2.innerHTML, /phase_advanced/);
 });

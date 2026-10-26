@@ -205,10 +205,11 @@
   .lr-title .live-event { text-align: left; margin-top: 0; }
   .tour-item .meta.with-icon { display: flex; align-items: flex-start; gap: 8px; }
   .tour-item .meta.with-icon .meta-txt { flex: 1 1 auto; min-width: 0; }
-  /* 試合一覧のフェーズの区切り (横線の真ん中にフェーズ名、抜けたフェーズは「◯◯ 突破！」) */
+  /* 試合一覧のフェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) */
   .match-phase { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; font-size: 10px; color: #9ca3af; font-weight: 600; }
   .match-phase::before, .match-phase::after { content: ''; flex: 1 1 0; border-top: 1px solid #e5e7eb; }
-  .match-phase.cleared { color: #16a34a; }
+  .match-phase.advanced { color: #16a34a; }
+  .live-sets.tour-matches { display: block; }   /* 最新の大会結果の試合一覧は開いたときだけ。参加中の大会はいつも出す */
   .lr-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
   .lr-badge.ok { background: #dcfce7; color: #15803d; }
   .lr-badge.ng { background: #fee2e2; color: #b91c1c; }

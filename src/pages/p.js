@@ -1120,7 +1120,7 @@ function render() {
     const header = (pName || pSeed != null)
       ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
       : '';
-    // フェーズが 2 つ以上なら、フェーズごとに横線で区切る (新しいフェーズが上)。抜けたフェーズには「突破！」。
+    // フェーズが 2 つ以上なら、フェーズの境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」。
     // フェーズの順 = フェーズの大きさが小さいほど後。大きさは名前の「TOP N」、無ければそのフェーズの試合の global_top_x の最大
     // (総当たりなどで無ければ一番前)。start.gg の phaseOrder は進む順とは限らず、それを使う global_top_x もずれることがあるので名前を先に見る
     /** @type {Map<string, PMatch[]>} */
@@ -1138,12 +1138,11 @@ function render() {
     };
     const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
     return header + groups.map(([name, g], i) =>
-      phaseSeparator(name, i > 0) + g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('')).join('');
+      g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('') + (i < groups.length - 1 ? phaseSeparator(name) : '')).join('');
   }
-  /** フェーズの区切り (横線の真ん中にフェーズ名。抜けたフェーズは「◯◯ 突破！」) @param {string} name @param {boolean} cleared */
-  function phaseSeparator(name, cleared) {
-    const txt = cleared ? i18n('match.phase_cleared', { name: escapeHtml(name) }) : escapeHtml(name);
-    return `<div class="match-phase${cleared ? ' cleared' : ''}"><span>${txt}</span></div>`;
+  /** フェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) @param {string} name */
+  function phaseSeparator(name) {
+    return `<div class="match-phase advanced"><span>${i18n('match.phase_advanced', { name: escapeHtml(name) })}</span></div>`;
   }
   /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @param {boolean} [noUf] @returns {string} */
   function _renderMatchRow(m, pName, pSeed, noUf) {

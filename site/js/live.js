@@ -163,8 +163,8 @@ function setsHtml(doc, myId, opts, hasPage) {
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
       `</span><span class="m-delta"></span></div>`;
   };
-  // フェーズが 2 つ以上なら横線で区切る (新しいフェーズが上)。本戦のフェーズで、その後の本戦のフェーズに進んでいれば「突破！」
-  // (下位クラスに回ったときは本戦のフェーズを突破とは書かない)
+  // フェーズが 2 つ以上なら境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」
+  // (下位クラスに回ったときは「Bクラス」のように名前だけ)
   /** @type {Map<any, any[]>} */
   const groups = new Map();
   for (const s of mine) {
@@ -176,14 +176,14 @@ function setsHtml(doc, myId, opts, hasPage) {
   if (groups.size < 2) rows = mine.map(row);
   else {
     rows = [];
-    let laterMain = false;
-    for (const [p, ss] of groups) {
-      const name = escapeHtml((p && p.name) || '');
-      const cleared = laterMain && !!p && !p.cls;
-      rows.push(`<div class="match-phase${cleared ? ' cleared' : ''}"><span>${cleared ? t('match.phase_cleared', { name }) : name}</span></div>`);
+    const list = [...groups];
+    list.forEach(([p, ss], i) => {
       rows.push(...ss.map(row));
-      if (p && !p.cls) laterMain = true;
-    }
+      if (i === list.length - 1) return;
+      const name = escapeHtml((p && p.name) || '');
+      const adv = !!p && !p.cls;
+      rows.push(`<div class="match-phase${adv ? ' advanced' : ''}"><span>${adv ? t('match.phase_advanced', { name }) : name}</span></div>`);
+    });
   }
   const header = (opts.name || pSeed != null)
     ? `<div class="match-header">${escapeHtml(opts.name || '')}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>` : '';
