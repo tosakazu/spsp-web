@@ -197,14 +197,13 @@
   .live-next { font-size: 11px; font-weight: 700; }
   .live-foot { font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
   /* 大会アイコンの縮小版 (js/tour_icons.js)。読めるまでは枠だけ、表に無い大会は外す */
-  /* 最新の大会結果・参加中の大会は名前の左に 44px、出場履歴は名前と部門の 2 行の左に 36px */
+  /* 最新の大会結果・参加中の大会は順位の左に 44px、出場履歴は順位の上に 36px */
   img.tour-icon { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 6px; object-fit: cover; background: #f3f4f6; }
   img.tour-icon.lr-icon { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 8px; }
-  .latestres-card .lr-top { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
-  .latestres-card .lr-title { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
-  .lr-title .live-event { text-align: left; margin-top: 0; }
-  .tour-item .meta.with-icon { display: flex; align-items: flex-start; gap: 8px; }
-  .tour-item .meta.with-icon .meta-txt { flex: 1 1 auto; min-width: 0; }
+  .perf-hero img.lr-icon { margin-right: 8px; }
+  .tour-group .tour-item.has-icon .tour-ico { grid-column: 1; grid-row: 2; justify-self: center; line-height: 0; }
+  .tour-group .tour-item.has-icon .tour-ico:empty { display: none; }
+  .tour-group .tour-item.has-icon .place { grid-row: 3; }   /* 日付 → アイコン → 順位 (順位は成績の行の高さ) */
   /* 試合一覧のフェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) */
   .match-phase { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; font-size: 10px; color: #9ca3af; font-weight: 600; }
   .match-phase::before, .match-phase::after { content: ''; flex: 1 1 0; border-top: 1px solid #e5e7eb; }

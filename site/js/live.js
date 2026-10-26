@@ -215,10 +215,10 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
     cards.push(
       `<div class="tour-group live-group">` +
         `<div class="tour-item tour-item-nohover latestres-card" style="border-bottom:none">` +
-          `<div class="lr-top">${img}<div class="lr-title"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
-            `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span>` +
-            `<div class="live-event">${escapeHtml(doc.event_name || '')}</div></div></div>` +
-          `<div class="perf-hero">${hero}</div>` +
+          `<div class="lr-top"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
+            `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
+          `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
+          `<div class="perf-hero">${img}${hero}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +
         setsHtml(doc, String(myId), opts, hasPage) +

@@ -177,8 +177,8 @@ function buildLatestResultSection() {
   if (lrBody) lrBody.innerHTML =
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
-        <div class="lr-top">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}<div class="lr-title">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div></div>
-        <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
+        <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
+        <div class="perf-hero">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
       </div>
@@ -583,17 +583,18 @@ function tournamentItem(t, valueHtml, withIcon) {
   const stTag = playerTourTag(t, 'status');
   const rsTag = playerTourTag(t, 'rs');
   return `
-    <div class="tour-item">
+    <div class="tour-item${withIcon ? ' has-icon' : ''}">
       <span class="date-top">${t.date}</span>
+      ${withIcon ? `<span class="tour-ico">${SpspTourIcons.html(eid != null ? eid : t.parent_event_id)}</span>` : ''}
       <span class="place">${placeHtml}</span>
-      <div class="meta${withIcon ? ' with-icon' : ''}">${withIcon ? SpspTourIcons.html(eid != null ? eid : t.parent_event_id) + '<div class="meta-txt">' : ''}
+      <div class="meta">
         ${link}${resTag}${lcTag}${rsTag}${stTag}
         ${t.event ? `<span style="color:#9ca3af">/ ${escapeHtml(t.event)}</span>` : ''}
         <br><span class="date date-inline">${t.date}</span>${
           (t.pretour_ranks && t.pretour_ranks.ensemble != null)
             ? ` <span style="color:#9ca3af;font-size:10px">${i18n('player.national_then')} #${t.pretour_ranks.ensemble}${
                 t.rank_delta_ensemble != null ? ' → #' + (t.pretour_ranks.ensemble - t.rank_delta_ensemble) : ''}</span>`
-            : ''}${withIcon ? '</div>' : ''}
+            : ''}
       </div>
       <div class="v">${valueHtml}</div>
     </div>
