@@ -1305,8 +1305,30 @@ function render() {
       }
     }
   });
+  // 出場履歴の検索: 大会名・部門名・日付・その大会の対戦相手の名前 (recent_matches にあるもの)。
+  // 空白で区切ると全部を含むもの (AND)。全角半角・大文字小文字・ひらがなカタカナは区別しない
+  /** @param {string} s */
+  const normQ = s => String(s || '').normalize('NFKC').toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  /** @type {Map<PTour, string>} */
+  const recentText = new Map();
+  /** @param {PTour} t */
+  function recentHaystack(t) {
+    let s = recentText.get(t);
+    if (s == null) {
+      const eid = t.parent_event_id != null ? t.parent_event_id : t.event_id;
+      const opps = (eid != null ? matchesByEvent[eid] || [] : []).map(m => m.opp_display || '');
+      s = normQ([t.name, t.event, t.date, ...opps].join('\n'));
+      recentText.set(t, s);
+    }
+    return s;
+  }
+  const recentQ = /** @type {HTMLInputElement | null} */ (document.getElementById('recent-q'));
   function renderRecentSection() {
-    const allTours = allToursAll.filter(t => passesFilter(t));
+    const terms = normQ(recentQ ? recentQ.value : '').split(/\s+/).filter(Boolean);
+    const allTours = allToursAll.filter(t => passesFilter(t) && terms.every(w => recentHaystack(t).includes(w)));
+    const countEl = document.getElementById('recent-count');
+    if (countEl) countEl.textContent = terms.length ? i18n('player.recent.count', { n: allTours.length }) : '';
     setupPaginated(allTours, 'recent', 'recent-pager',
       arr => { queueMicrotask(() => SpspTourIcons.fill(document.getElementById('recent'))); return renderRecent(arr); },
       i18n('player.empty.filtered'));
@@ -1321,6 +1343,10 @@ function render() {
     renderRecentSection();
   }
   applyFilter();
+  if (recentQ) {
+    let qTimer = 0;
+    recentQ.addEventListener('input', () => { clearTimeout(qTimer); qTimer = window.setTimeout(renderRecentSection, 200); });
+  }
   // フィルタボタン (期間 + 大会). 期間変更時はチャートも再描画して時間軸を更新する.
   /** @param {string} attr @param {'period' | 'kind'} stateKey */
   function bindFilterGroup(attr, stateKey) {

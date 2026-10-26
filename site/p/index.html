@@ -409,6 +409,10 @@
     padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
     font-family: inherit; margin-right: 4px;
   }
+  .recent-search { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+  .recent-search input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; color: #111827; }
+  .recent-search input:focus { outline: none; border-color: #dc2626; }
+  .recent-count { font-size: 11px; color: #9ca3af; white-space: nowrap; }
   .filter-btn:hover { background: #f3f4f6; color: #111827; }
   .filter-btn.active { background: #dc2626; color: #fff; border-color: #dc2626; }
   /* チャート直下の期間フィルタは chart-tab と同じサイズに揃える */
@@ -644,6 +648,10 @@
 
     <div class="section">
       <h2 data-i18n="player.sec.recent">📅 出場履歴</h2>
+      <div class="recent-search">
+        <input type="search" id="recent-q" autocomplete="off" placeholder="大会名・部門・日付・対戦相手で絞り込み" aria-label="大会名・部門・日付・対戦相手で絞り込み" data-i18n-attr="placeholder:player.recent.search,aria-label:player.recent.search">
+        <span class="recent-count" id="recent-count"></span>
+      </div>
       <div class="pager" id="recent-pager" data-target="recent" style="display:none"></div>
       <div id="recent"></div>
     </div>

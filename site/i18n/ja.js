@@ -532,6 +532,8 @@ window.SPSP_I18N.ja = {
   'player.empty.top_spr': 'シード超え (SPR) 大会がありません',
   'player.empty.top_uf': 'アップセット (UF) 試合がありません',
   'player.empty.filtered': 'フィルタ条件に該当する大会がありません',
+  'player.recent.search': '大会名・部門・日付・対戦相手で絞り込み',
+  'player.recent.count': '{n} 件',
   'player.radar.upside': '上振れ',
   'player.radar.giant_killing': '格上喰い',
   'player.radar.defense': '防衛力',

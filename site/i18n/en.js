@@ -529,6 +529,8 @@ window.SPSP_I18N.en = {
   'player.empty.top_spr': 'No tournament with a seed outperformance (SPR)',
   'player.empty.top_uf': 'No upset (UF) matches',
   'player.empty.filtered': 'No tournaments match the filter',
+  'player.recent.search': 'Filter by tournament, event, date or opponent',
+  'player.recent.count': '{n} found',
   'player.radar.upside': 'Upside',
   'player.radar.giant_killing': 'Giant killing',
   'player.radar.defense': 'Defense',
