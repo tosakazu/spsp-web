@@ -1326,7 +1326,13 @@ function render() {
   buildYosouSection();
   buildLatestResultSection();
   const liveSec = document.getElementById('live-section');
-  if (liveSec) SpspLive.start(liveSec, UID);   // 参加中の大会 (開催中だけ。js/live.js)
+  if (liveSec) {   // 参加中の大会 (開催中だけ。js/live.js)。試合の行は最新の大会結果と同じ (相手は SPSP にページがあればリンク)
+    SpspLive.start(liveSec, UID, {
+      name: SPSPFormat.shortName((MAIN_REC && MAIN_REC.display) || ''),
+      emojiOf: charEmojiOf,
+      hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
+    });
+  }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();

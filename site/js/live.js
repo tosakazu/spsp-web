@@ -4,8 +4,8 @@
 // ランキングのビルドとは別の経路で、start.gg が ACTIVE と言っている部門だけが載る (終わってしばらくすると消える)。
 // ランキングの対象外になる大会 (オンライン・身内など) も載る。
 //   load(uid)                 その選手が出ている部門の一覧 [{summary, doc}] (無ければ [])。index.json は 1 回だけ読む
-//   render(el, uid, items)    セクションの中身を描く
-//   start(sectionEl, uid)     読んで描く。載っていればセクションを出し、REFRESH_MS ごとに読み直す (タブが裏のときは止める)
+//   render(el, uid, items, opts?, hasPage?)  セクションの中身を描く (opts は LiveOpts)
+//   start(sectionEl, uid, opts?)  読んで描く。載っていればセクションを出し、REFRESH_MS ごとに読み直す (タブが裏のときは止める)
 //   showNotice(el)            トップの帯: ログイン中の本人が出ている開催中の部門 (大会名と順位、自分のプレイヤーページへ)。
 //                             ログインしていなければ何もしない。プレビューでは ?live=sample&live_as=<uid> で本人の代わりにできる
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
@@ -13,11 +13,17 @@
 // プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
 import SPSPI18n from './i18n.js';
 import { escapeHtml } from './html.js';
-import { charName } from './chars.js';
+import SPSPMatch from './match.js';
+import SPSPFormat from './format.js';
 import SpspLogin from './login.js';
 import SPSPLinks from './links.js';
 
 const REFRESH_MS = 60 * 1000;
+const { compactBracketLabel, placementToW2W } = SPSPMatch;
+const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
+/** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
+ * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)
+ * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null> }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
@@ -106,8 +112,9 @@ function classOut(/** @type {any} */ doc, /** @type {string} */ myId) {
   return !!last && String(last.winner) !== myId;
 }
 
-/** その選手のセット (新しいものが上)。行 = ラウンド・相手・スコア・キャラ */
-function setsHtml(/** @type {any} */ doc, /** @type {string} */ myId) {
+/** その選手のセット (終わっていない試合 → 新しい順)。行は「最新の大会結果」の試合と同じ形 (ラウンドの位置・スコア・相手・シード・UF)
+ * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage */
+function setsHtml(doc, myId, opts, hasPage) {
   const mine = (doc.sets || []).filter((/** @type {any} */ s) => (s.e || []).map(String).includes(myId));
   if (!mine.length) return '';
   const order = (/** @type {any} */ s) => s.completed_at || s.started_at || (s.state === 2 ? 4e9 : 0) || 0;
@@ -115,37 +122,56 @@ function setsHtml(/** @type {any} */ doc, /** @type {string} */ myId) {
     const pa = a.winner == null ? 1 : 0, pb = b.winner == null ? 1 : 0;   // 終わっていない試合を上に
     return pb - pa || order(b) - order(a) || (b.round || 0) - (a.round || 0);
   });
+  /** @type {Record<string, any>} */
+  const typeOf = {};
+  for (const p of doc.phases || []) for (const g of p.groups || []) typeOf[String(g.id)] = p.type;
+  const ents = doc.entrants || {};
+  const me = ents[myId] || {};
+  const pSeed = me.seed;
   const rows = mine.map((/** @type {any} */ s) => {
     const i = (s.e || []).map(String).indexOf(myId);
     const oppId = s.e[1 - i];
-    const opp = oppId != null ? (doc.entrants || {})[String(oppId)] : null;
-    const oppName = opp ? escapeHtml(opp.tag || opp.name || '') : `<span class="dim">${t('live.tbd')}</span>`;
-    const oppSeed = opp && opp.seed != null ? `<span class="live-seed">${t('live.seed_short', { n: opp.seed })}</span>` : '';
-    let res = '';
+    const opp = oppId != null ? ents[String(oppId)] : null;
+    let score, color;
     if (s.winner != null) {
-      const win = String(s.winner) === myId;
+      const won = String(s.winner) === myId;
       const my = s.score && s.score[i], their = s.score && s.score[1 - i];
-      const sc = (my != null && their != null && my >= 0 && their >= 0) ? `${my}-${their}` : (my === -1 || their === -1 ? 'DQ' : '');
-      res = `<span class="live-res ${win ? 'win' : 'lose'}">${win ? 'W' : 'L'}</span><span class="live-score">${sc}</span>`;
+      score = (my === -1 || their === -1) ? 'DQ' : (my != null && their != null ? `${my}-${their}` : '—');
+      color = won ? '#16a34a' : '#2563eb';
     } else {
-      res = `<span class="live-res next">${s.state === 2 ? t('live.playing') : t('live.next')}</span>`;
+      score = `<span class="live-next">${s.state === 2 ? t('live.playing') : t('live.next')}</span>`;
+      color = '#dc2626';
     }
-    // キャラ (自分の使ったもの、重複なし)
-    const chars = [];
-    for (const g of s.games || []) {
-      const c = g.c && g.c[myId];
-      if (c != null && !chars.includes(c)) chars.push(c);
+    // UF: 自分より高いシードに勝ったときだけ
+    let ufHtml = '';
+    if (s.winner != null && String(s.winner) === myId && pSeed != null && opp && opp.seed != null && pSeed > opp.seed) {
+      const uf = placementToW2W(pSeed) - placementToW2W(opp.seed);
+      if (uf > 0) ufHtml = `<div style="font-size:10px;line-height:1.1;margin-top:1px"><span style="color:#16a34a;font-weight:600">+${uf}</span> <span style="color:#9ca3af">UF</span></div>`;
     }
-    const charTxt = chars.length ? `<span class="live-chars">${chars.map(c => escapeHtml(charName(c, ''))).filter(Boolean).join(' / ')}</span>` : '';
-    return `<div class="live-set">${res}<span class="live-round">${escapeHtml(s.round_text || '')}</span>` +
-      `<span class="live-opp">vs ${oppName}${oppSeed}</span>${charTxt}</div>`;
+    let oppHtml = `<span class="dim">${t('live.tbd')}</span>`;
+    if (opp) {
+      const name = escapeHtml(shortName(opp.tag || opp.name || ''));
+      const emoji = opp.uid != null && opts.emojiOf ? opts.emojiOf(opp.uid) : '';
+      const link = opp.uid != null && hasPage && hasPage(opp.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, opp.uid, name) : name;
+      oppHtml = `${emoji ? emoji + ' ' : ''}${link}`;
+    }
+    return `<div class="match-row">` +
+      `<span class="m-bracket">${escapeHtml(compactBracketLabel(s.label, s.round_text, typeOf[String(s.pg)]) || '')}</span>` +
+      `<span class="m-content">` +
+        `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
+        `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
+        `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
+      `</span><span class="m-delta"></span></div>`;
   });
-  return `<div class="live-sets">${rows.join('')}</div>`;
+  const header = (opts.name || pSeed != null)
+    ? `<div class="match-header">${escapeHtml(opts.name || '')}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>` : '';
+  return `<div class="tour-matches live-sets">${header}${rows.join('')}</div>`;
 }
 
 /** カードは「最新の大会結果」と同じ形 (大会アイコンは start.gg の画像をそのまま)
- * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items */
-export function render(el, uid, items) {
+ * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items
+ * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] */
+export function render(el, uid, items, opts = {}, hasPage = null) {
   const cards = [];
   for (const { summary, doc } of items) {
     const [myId, e] = entrantOf(doc, uid);
@@ -173,7 +199,7 @@ export function render(el, uid, items) {
           `<div class="perf-hero">${hero}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +
-        setsHtml(doc, String(myId)) +
+        setsHtml(doc, String(myId), opts, hasPage) +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
@@ -181,14 +207,15 @@ export function render(el, uid, items) {
   return cards.length;
 }
 
-/** @param {HTMLElement} section @param {number | string} uid */
-export function start(section, uid) {
+/** @param {HTMLElement} section @param {number | string} uid @param {LiveOpts} [opts] */
+export function start(section, uid, opts = {}) {
   const body = /** @type {HTMLElement | null} */ (section.querySelector('.live-body'));
   if (!body || !liveRoot() || !uid) return;
   let timer = 0;
   const tick = async () => {
     const items = await load(uid);
-    const n = render(body, uid, items);
+    const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
+    const n = render(body, uid, items, opts, hasPage);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
     if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, REFRESH_MS);

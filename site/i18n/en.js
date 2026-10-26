@@ -402,7 +402,6 @@ window.SPSP_I18N.en = {
   'live.ended': 'Ended',
   'live.place': '{n, selectordinal, one{{n}st} two{{n}nd} few{{n}rd} other{{n}th}}',
   'live.place_or_better': '{n, selectordinal, one{{n}st} two{{n}nd} few{{n}rd} other{{n}th}} or better',
-  'live.seed_short': '(seed {n})',
   'live.seed_label': 'Seed',
   'live.or_better_unit': '{n, selectordinal, one{st} two{nd} few{rd} other{th}} or better',
   'live.unreflected': 'Not in the ranking yet',

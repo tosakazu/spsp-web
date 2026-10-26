@@ -405,7 +405,6 @@ window.SPSP_I18N.ja = {
   'live.ended': '終了',
   'live.place': '{n} 位',
   'live.place_or_better': '{n} 位以上',
-  'live.seed_short': '(シード {n})',
   'live.seed_label': 'シード',
   'live.or_better_unit': '位以上',
   'live.unreflected': 'ランキング未反映',

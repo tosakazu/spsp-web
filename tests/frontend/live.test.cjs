@@ -16,7 +16,7 @@ function load(search = '', hostname = 'spsp.games', extra = {}) {
   };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
-  vm.runInContext(built('js/live.js'), ctx);
+  for (const m of ['js/match.js', 'js/format.js', 'js/links.js', 'js/live.js']) vm.runInContext(built(m), ctx);
   return ctx.SpspLive;
 }
 
@@ -30,7 +30,7 @@ const doc = () => ({
     2: { tag: 'B', uid: 22, seed: 2, placement: 3, final: true, place_min: null, pg: 30, in_class: true },
     3: { tag: 'C', uid: 33, seed: 3, placement: 1, final: true, place_min: null, pg: 10 },
   },
-  sets: [{ id: 1, pg: 10, round_text: 'WR1', e: [1, 2], score: [2, 1], winner: 1, completed_at: 100, games: [{ c: { 1: 1302 } }] },
+  sets: [{ id: 1, pg: 10, label: 'Winners TOP 4', round_text: 'WR1', e: [1, 2], score: [2, 1], winner: 1, completed_at: 100, games: [{ c: { 1: 1302 } }] },
          { id: 2, pg: 10, round_text: 'WF', e: [1, 3], score: [null, null], winner: null, state: 2, started_at: 200 },
          { id: 3, pg: 30, round_text: 'R1', e: [2, null], score: [null, null], winner: null }],
 });
@@ -46,8 +46,18 @@ test('残っている人は「N 位以上」、対戦中のセットが上、い
   assert.match(e.innerHTML, /<img class="tour-icon lr-icon" src="https:\/\/images\.start\.gg\/i\.png"/);
   assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10"/);
   assert.match(e.innerHTML, /T&lt;1&gt;/);
-  assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('live-res win'));
-  assert.match(e.innerHTML, /c1302/);
+  assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('2-1'));
+});
+
+test('試合の行は最新の大会結果と同じ形 (ラウンドの位置・スコア・相手の絵文字とリンク・シード)', () => {
+  const L = load();
+  const e = el();
+  L.render(e, 11, [{ summary: {}, doc: doc() }], { name: 'A', emojiOf: (u) => (u === 22 ? '🍄' : '') }, (u) => u === 22);
+  assert.match(e.innerHTML, /<div class="match-header">A<span class="seed">#1<\/span><\/div>/);
+  assert.match(e.innerHTML, /<span class="m-bracket">W\.Top4<\/span>/);
+  assert.match(e.innerHTML, /color:#16a34a[^>]*><div>2-1<\/div>/);
+  assert.match(e.innerHTML, /🍄 <a [^>]*>B<\/a><\/div><div class="m-seed">#2<\/div>/);
+  assert.match(e.innerHTML, /<div>C<\/div><div class="m-seed">#3<\/div>/);   // ページの無い相手はリンクにしない
 });
 
 test('確定した順位はそのまま。下位クラスにいる人はクラスのプールと「参加中」', () => {
