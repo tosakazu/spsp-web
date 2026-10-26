@@ -12,6 +12,8 @@
 //   クラスの文字: 六角形・丸・ひし形は Figma の見本の位置 (下の中央寄り、少し小さく、LETTER_PLACE)。角丸は大きさを変えず、
 //   ほぼ形に収まる最小の距離だけ右下から内側へずらす (letterShift。字の輪郭をフォントで測る。多少の見切れは許す)
 // ホロは Figma のレイヤーの画像 (img/holo/l/) を、Figma と同じブレンドモード (LAYERS) で重ねる
+// 回転 (rot、カードに斜めに貼ったシール): ホロの層だけ逆に回して、どの角度のシールも画面に対して同じ向きに光らせる
+// (絵と一緒に回すと、シールごとに筋の向きが変わってギラギラして見えた。2026-10-27)。回した層が形を覆うよう |cos|+|sin| 倍に広げる
 // 強制ダークモード (Samsung Internet など) では、重ねた見た目がブラウザに書き換えられるので、裏でキャンバスに 1 枚に描いて差し替える
 // (flatten。プレイヤーカードと同じ考え方。キャンバスの色はブラウザが書き換えない)
 
@@ -95,7 +97,9 @@ function letterShift(shape, b) {
 /** impl: 'img' (既定、画像版: 740px の AVIF、ラメは前の画像版のまま) | 'css' (画像を使わない) | 'old' (前の画像版、740px)
  * cls: 下位クラスの文字 ('B' など。無ければ出さない)
  * flatten: キャンバスに 1 枚に描いて差し替えるか。'auto' (既定) = Samsung Internet かダークモードのときだけ、'always'、'never'
- * @typedef {{ src: string, variant?: number, transparent?: boolean, impl?: 'img' | 'css' | 'old', cls?: string | null, flatten?: 'auto' | 'always' | 'never', shape?: string, crop?: number }} BadgeOpts */
+ * @typedef {{ src: string, variant?: number, transparent?: boolean, impl?: 'img' | 'css' | 'old', cls?: string | null, flatten?: 'auto' | 'always' | 'never', shape?: string, crop?: number, rot?: number }} BadgeOpts */
+/** ホロの層を逆に回す角度と、形を覆う倍率 @param {number} rot シールの回転 (度) */
+const holoTurn = rot => { const a = Math.abs(rot * Math.PI / 180); return { deg: -rot, k: Math.abs(Math.cos(a)) + Math.abs(Math.sin(a)) }; };
 
 /** @type {Map<string, Promise<boolean>>} */
 const cache = new Map();
@@ -194,6 +198,9 @@ export function renderBadge(el, opts) {
   el.style.setProperty('--hb-cls-dx', String(pl.dx));
   el.style.setProperty('--hb-cls-dy', String(pl.dy));
   el.style.setProperty('--hb-cls-k', String(pl.k));
+  const rot = Number(opts.rot) || 0, ht = holoTurn(rot);
+  el.style.setProperty('--hb-rot', ht.deg + 'deg');
+  el.style.setProperty('--hb-rk', ht.k.toFixed(4));
   // 層: 絵 / (透過なしならクラスの文字) / ホロのレイヤー (下から) / ポインタを乗せたときの光 / (透過ありならクラスの文字)
   const layers = layersFor(!!opts.transparent, v, shape);
   const impl = opts.impl || 'img';
@@ -208,7 +215,7 @@ export function renderBadge(el, opts) {
   for (const d of el.querySelectorAll('.hb-l, .hb-c, .hb-o')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
   const fl = opts.flatten || 'auto';
   // 描き方 (キャンバスに描くとき用)。画像にする (badgeToCanvas、カードの保存) ときにも使うので、いつも覚えておく
-  const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl: impl === 'css' ? 'img' : impl, letter, crop, pl, shape };
+  const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl: impl === 'css' ? 'img' : impl, letter, crop, pl, shape, rot };
   specOf.set(el, fo);
   // 形で切ったもの (角丸・丸・六角形・ひし形) もいつもキャンバスに描く: Windows の Chrome で、切り方 (clip-path でも border-radius でも)
   // とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-21、丸で再発)
@@ -315,12 +322,13 @@ function drawLetter(ctx, W, letter, shape, pl = { dx: 0, dy: 0, k: 1 }) {
 }
 
 /** 重ねた見た目をキャンバスに 1 枚に描いて、上に置く (下の重ねた要素は隠す)
- * @param {HTMLElement} el @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number } }} o */
+ * @param {HTMLElement} el @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, rot?: number }} o */
 async function flattenBadge(el, o) {
   // 幅は回転・傾きを含まない大きさ (offsetWidth)。祖先を transform で縮めている所では getBoundingClientRect の方が実際の大きさ
   const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width) || 160;
   const W = flatWidth(css);
   flatSize.set(el, W);
+  flatRot.set(el, o.rot || 0);
   const cv = await drawBadge(o, W);
   if (!el.isConnected || flatOpts.get(el) !== o) return;   // 描いている間に作り直された
   // 置くのはキャンバスのまま (画像 (img) にすると、ブラウザの強制ダークモードが画像として暗く・色を変えてしまう。2026-10-21)。
@@ -374,11 +382,11 @@ export function preloadAllHolo() {
 }
 
 /** バッジを 1 枚のキャンバスに描く (重ねた見た目と同じ。透過なしは形で切る)
- * @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }} o
+ * @param {{ src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string, rot?: number }} o
  * @param {number} W 一辺 (px) @returns {Promise<HTMLCanvasElement>} */
 async function drawBadge(o, W) {
   // 同じ絵 (同じシール・形・大きさ) は描いたものを写すだけにする (GPU を使わずに描くので 1 枚が重い。カードの裏面は変えるたびに作り直される)
-  const key = JSON.stringify([o.src, o.layers, o.transparent, o.impl, o.letter, o.crop, o.pl, o.shape || '', W]);
+  const key = JSON.stringify([o.src, o.layers, o.transparent, o.impl, o.letter, o.crop, o.pl, o.shape || '', Math.round(o.rot || 0), W]);
   let p = drawn.get(key);
   if (p) { drawn.delete(key); drawn.set(key, p); }   // 最近使った順
   else {
@@ -416,9 +424,14 @@ async function drawBadgeNow(o, W) {
   const dw = iw * s, dh = ih * s, dx = (W - dw) / 2, dy = (W - dh) / 2;
   ctx.drawImage(icon, dx, dy, dw, dh);
   if (o.letter && !o.transparent) drawLetter(ctx, W, o.letter, false, o.pl);
+  const ht = holoTurn(Math.round(o.rot || 0));
   o.layers.forEach(([, mode, sc = 1], i) => {
     ctx.globalCompositeOperation = CANVAS_OP[mode] || 'source-over';
-    ctx.drawImage(imgs[i], -(sc - 1) / 2 * W, -(sc - 1) / 2 * W, W * sc, W * sc);
+    // シールの回転の逆に回す (CSS の --hb-rot / --hb-rk と同じ)
+    ctx.save();
+    ctx.translate(W / 2, W / 2); ctx.rotate(ht.deg * Math.PI / 180); ctx.scale(ht.k, ht.k);
+    ctx.drawImage(imgs[i], -sc * W / 2, -sc * W / 2, W * sc, W * sc);
+    ctx.restore();
   });
   if (o.transparent) {
     // 形の外を消す (CSS の mask と同じ)
@@ -456,16 +469,31 @@ export function reflatten(el) {
   const o = flatOpts.get(el);
   if (!o || !el.isConnected) return false;
   const css = Math.max(el.offsetWidth || 0, el.getBoundingClientRect().width);
-  if (!css || flatWidth(css) <= (flatSize.get(el) || 0) * 1.1) return false;
+  const turned = (flatRot.get(el) ?? 0) !== (o.rot || 0);   // 回転を変えた (ホロの向きを描き直す)
+  if (!css || (!turned && flatWidth(css) <= (flatSize.get(el) || 0) * 1.1)) return false;
   flattenBadge(el, o).catch(() => { /* 前の絵のまま */ });
   return true;
 }
 
+/** 組み立てたバッジのシールの回転を変える (ホロの向きを画面に合わせ直す)。重ねた表示はすぐ、キャンバスに描いたものは reflatten で描き直す
+ * @param {HTMLElement} el @param {number} rot */
+export function setBadgeRot(el, rot) {
+  const ht = holoTurn(Number(rot) || 0);
+  el.style.setProperty('--hb-rot', ht.deg + 'deg');
+  el.style.setProperty('--hb-rk', ht.k.toFixed(4));
+  const sp = specOf.get(el);
+  if (sp) sp.rot = Number(rot) || 0;
+  const fo = flatOpts.get(el);
+  if (fo) fo.rot = Number(rot) || 0;
+}
+/** キャンバスに描いたときの回転 */
+/** @type {WeakMap<HTMLElement, number>} */
+const flatRot = new WeakMap();
 /** 組み立てたバッジの描き方 (renderBadge のたびに。badgeToCanvas 用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string, rot?: number }>} */
 const specOf = new WeakMap();
 /** キャンバスに差し替えたときの描き方 (描き直す用) */
-/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string }>} */
+/** @type {WeakMap<HTMLElement, { src: string, layers: [string, string, number?][], transparent: boolean, impl: 'img' | 'old', letter: string, crop: number, pl: { dx: number, dy: number, k: number }, shape?: string, rot?: number }>} */
 const flatOpts = new WeakMap();
 /** 中身を捨てられたバッジ (表に戻ったら描き直す) */
 /** @type {Set<HTMLElement>} */
@@ -511,7 +539,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas, preloadBadge, preloadAllHolo };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, setBadgeRot, badgeToCanvas, preloadBadge, preloadAllHolo };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

@@ -733,7 +733,7 @@ function paintBackStickers(root, m) {
     if (!s || !p || !src) { el.remove(); continue; }
     const holder = document.createElement('div');
     el.appendChild(holder);
-    const draw = (/** @type {boolean} */ tr) => renderBadge(holder, { src, variant: p.variant, transparent: tr, cls: p.cls, shape: s.k, crop: s.c });
+    const draw = (/** @type {boolean} */ tr) => renderBadge(holder, { src, variant: p.variant, transparent: tr, cls: p.cls, shape: s.k, crop: s.c, rot: s.r });
     draw(false);
     isTransparent(src).then(tr => { if (tr && holder.isConnected) draw(true); });
   }

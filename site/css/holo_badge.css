@@ -22,6 +22,8 @@
 .hb-flattened > .hb-in, .hb-flattened > .hb-cls { display: none; }
 .hb-art { background: var(--hb-img) center / cover no-repeat; }
 .hb-l, .hb-o { background: center / 100% 100% no-repeat; }
+/* ホロの層はシールの回転の逆に回す (画面に対していつも同じ向きに光る。js/holo_badge.js の holoTurn) */
+.hb-l, .hb-o, .hb-c { transform: rotate(var(--hb-rot, 0deg)) scale(var(--hb-rk, 1)); }
 .hb-c { background-repeat: no-repeat; }
 
 /* ポインタを乗せている間 (タッチは触っている間 = .hb-live) だけのキラキラ。デザインには無い。止まっているときはデザインどおり
