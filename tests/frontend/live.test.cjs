@@ -123,6 +123,6 @@ test('試合の一覧は最初は畳んである (カードを押すと開く �
   const e = el();
   L.render(e, 11, [{ summary: {}, doc: doc() }]);
   assert.match(e.innerHTML, /<div class="tour-group live-group" data-eid="">/);
-  assert.match(e.innerHTML, /tour-clickable latestres-card/);
+  assert.match(e.innerHTML, /live-toggle latestres-card/);
   assert.match(e.innerHTML, /<span class="chevron lr-chev">▶<\/span><\/div>/);
 });

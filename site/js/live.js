@@ -218,7 +218,7 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
     const eid = escapeHtml(String(doc.event_id ?? ''));
     cards.push(
       `<div class="tour-group live-group${sets && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
-        `<div class="tour-item tour-item-nohover${sets ? ' tour-clickable' : ''} latestres-card" style="border-bottom:none">` +
+        `<div class="tour-item tour-item-nohover${sets ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
           `<div class="lr-top"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
@@ -242,7 +242,7 @@ export function start(section, uid, opts = {}) {
   body.addEventListener('click', (e) => {
     const target = /** @type {Element} */ (e.target);
     if (target.closest('a')) return;
-    const card = target.closest('.live-group .tour-clickable');
+    const card = target.closest('.live-group .live-toggle');   // tour-clickable はプレイヤーページの別の処理が拾うので使わない
     const g = /** @type {HTMLElement | null} */ (card && card.closest('.live-group'));
     if (!g) return;
     const eid = g.dataset.eid || '';
