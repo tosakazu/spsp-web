@@ -17,7 +17,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
-import { isTransparent, renderBadge, reflatten, setBadgeRot, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
+import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, TEXT_S_MIN, TEXT_S_MAX, normRot, normBack, normParts, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -393,7 +393,7 @@ export async function mountBackEditor(o) {
         holder = fresh;
       }
       el.dataset.kc = `${now.k}|${now.c}`;
-      renderBadge(holder, { src, variant: b.variant, transparent: tr, cls: b.cls, shape: now.k, crop: now.c, rot: now.r });
+      renderBadge(holder, { src, variant: b.variant, transparent: tr, cls: b.cls, shape: now.k, crop: now.c });
     };
     paints.set(s.e, paintBadge);
     paintBadge();
@@ -410,12 +410,6 @@ export async function mountBackEditor(o) {
       el.style.top = s.y * scale + 'px';
       el.style.width = el.style.height = s.s * scale + 'px';
       el.style.transform = `translate(-50%, -50%) rotate(${s.r}deg)`;
-      // ホロの向きは画面に合わせる (回したら層を逆に回す。キャンバスに描いたものは手が止まってから描き直す: scheduleReflatten)
-      if (el.dataset.r !== String(s.r)) {
-        el.dataset.r = String(s.r);
-        const hb = /** @type {HTMLElement | null} */ (el.querySelector('.hb'));
-        if (hb) setBadgeRot(hb, s.r);
-      }
       el.style.zIndex = String(i + 1);
       el.classList.toggle('on', s.e === sel);
       if (layer.children[i] !== el) layer.insertBefore(el, layer.children[i] || null);
