@@ -1,0 +1,68 @@
+// tests/frontend/live.test.cjs — 参加中の大会 (js/live.js): 確定順位・「N 位以上」・シード・いまのプールのリンク・下位クラス。
+const test = require('node:test');
+const assert = require('node:assert');
+const vm = require('vm');
+const { built } = require('../helpers/built.cjs');
+
+function load(search = '', hostname = 'spsp.games') {
+  const ctx = {
+    console,
+    location: { hostname, search },
+    SPSP: { site: { live: 'https://data.spsp.games/live/jp/', timeZone: 'Asia/Tokyo' } },
+    SPSPI18n: { t: (k, p) => k + JSON.stringify(p || {}), lang: 'ja' },
+    escapeHtml: (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+    charName: (id) => 'c' + id,
+  };
+  ctx.window = ctx; ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(built('js/live.js'), ctx);
+  return ctx.SpspLive;
+}
+
+const doc = () => ({
+  tournament_name: 'T<1>', tournament_url: 'https://www.start.gg/tournament/t', event_name: 'SP', url: 'https://www.start.gg/tournament/t/event/sp',
+  num_entrants: 4, updated_at: 1800000000,
+  phases: [{ name: 'Main', groups: [{ id: 10, ident: '1', url: 'https://www.start.gg/x/brackets/1/10' }] },
+           { name: 'Bクラス', cls: true, groups: [{ id: 30, ident: '1', url: 'https://www.start.gg/x/brackets/3/30' }] }],
+  entrants: {
+    1: { tag: 'A', uid: 11, seed: 1, placement: null, final: false, place_min: 2, pg: 10 },
+    2: { tag: 'B', uid: 22, seed: 2, placement: 3, final: true, place_min: null, pg: 30, in_class: true },
+    3: { tag: 'C', uid: 33, seed: 3, placement: 1, final: true, place_min: null, pg: 10 },
+  },
+  sets: [{ id: 1, pg: 10, round_text: 'WR1', e: [1, 2], score: [2, 1], winner: 1, completed_at: 100, games: [{ c: { 1: 1302 } }] },
+         { id: 2, pg: 10, round_text: 'WF', e: [1, 3], score: [null, null], winner: null, state: 2, started_at: 200 },
+         { id: 3, pg: 30, round_text: 'R1', e: [2, null], score: [null, null], winner: null }],
+});
+const el = () => ({ innerHTML: '' });
+
+test('残っている人は「N 位以上」、対戦中のセットが上、いまのプールにリンク', () => {
+  const L = load();
+  const e = el();
+  assert.strictEqual(L.render(e, 11, [{ summary: { image: 'https://images.start.gg/i.png' }, doc: doc() }]), 1);
+  assert.match(e.innerHTML, /live\.place_or_better\{"n":2\}/);
+  assert.match(e.innerHTML, /live\.seed\{"n":1\}/);
+  assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10"/);
+  assert.match(e.innerHTML, /T&lt;1&gt;/);
+  assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('lv-res win'));
+  assert.match(e.innerHTML, /c1302/);
+});
+
+test('確定した順位はそのまま。下位クラスにいる人はクラスのプールと「参加中」', () => {
+  const L = load();
+  const e = el();
+  L.render(e, 33, [{ summary: {}, doc: doc() }]);
+  assert.match(e.innerHTML, /live\.place\{"n":1\}/);
+  const e2 = el();
+  L.render(e2, 22, [{ summary: {}, doc: doc() }]);
+  assert.match(e2.innerHTML, /live\.in_class\{"name":"Bクラス"\}/);
+  assert.match(e2.innerHTML, /brackets\/3\/30/);
+});
+
+test('出ていない部門は描かない', () => {
+  assert.strictEqual(load().render(el(), 99, [{ summary: {}, doc: doc() }]), 0);
+});
+
+test('見本 (?live=sample) は spsp.games 以外だけ', () => {
+  assert.strictEqual(load('?live=sample').liveRoot(), 'https://data.spsp.games/live/jp/');
+  assert.strictEqual(load('?live=sample', 'spsp-web-live-preview.tosakazu.workers.dev').liveRoot(), 'https://data.spsp.games/live/sample/');
+});

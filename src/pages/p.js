@@ -21,6 +21,7 @@ import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
+import SpspLive from '../../site/js/live.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -1322,6 +1323,8 @@ function render() {
 
   buildYosouSection();
   buildLatestResultSection();
+  const liveSec = document.getElementById('live-section');
+  if (liveSec) SpspLive.start(liveSec, UID);   // 参加中の大会 (開催中だけ。js/live.js)
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();

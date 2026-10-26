@@ -14,6 +14,7 @@
     utcOffset: '+09:00',
     cleanUrls: false,              // ページ間リンクの拡張子を落とす ('c/ranking.html' → 'c/ranking')。Cloudflare 配信のビルド (--clean-urls) が true にする (js/html.js pageHref)
     dataRoot: '',                  // ビルド出力の場所 (同じルート)。別ホストに置くなら URL
+    live: 'https://data.spsp.games/live/jp/', // 開催中の大会の速報 (js/live.js、spsp-build の deploy/live-worker が書く)。'' = 出さない
     canonical: { origin: 'https://tosakazu.github.io', base: '/spsp/' },
     regions: { JP: '', NA: '' },   // 各地域版の URL (nav の切替に出す。'' = 未定 / 出さない。例: 'https://spsp.games/na/')
     analytics: { gaId: 'G-TDKBJVDB4S' },
