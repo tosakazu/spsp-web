@@ -564,7 +564,7 @@ function paintGlow(el, m) {
   for (const s of list) {
     const p = parseKey(s.e);
     const src = p ? iconUrl(p.eid) : null;
-    if (!p || !src) continue;
+    if (!p || !src || p.variant === 3) continue;   // 素 (ホロなし) のシールは光らせない
     const g = document.createElement('div');
     g.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)`;
     g.style.setProperty('--hb-img', `url("${src.replace(/"/g, '%22')}")`);

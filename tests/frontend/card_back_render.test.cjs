@@ -57,13 +57,13 @@ test('シールを置く: 場所・大きさ・回転、アイコンの無いシ
   assert.ok(hb.querySelector('.hb-l-sikaku_kin_1'));   // 図形の 1 番は四角の金の 1 番と同じ画像
   assert.ok(/hb-v3/.test(sks[1].querySelector('.hb').className));   // 素
   assert.strictEqual(sks[1].querySelector('.hb-cls')?.textContent, 'B');
-  // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る。カードのいちばん上に、シールと同じ数
+  // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る。カードのいちばん上に、素 (ホロなし) 以外のシールの数
   assert.strictEqual(el.querySelector('.pcb-glow'), null);
   PC.ensureGlow(el);
   PC.ensureGlow(el);   // 2 回呼んでも 1 つ
   assert.strictEqual(el.querySelectorAll('.pcb-glow').length, 1);
   assert.strictEqual(el.lastElementChild.className, 'pcb-glow');
-  assert.strictEqual(el.querySelectorAll('.pcb-glow > .hb').length, 2);
+  assert.strictEqual(el.querySelectorAll('.pcb-glow > .hb').length, 1);   // 2 枚目は素なので光らせない
 });
 
 test('名前を前に (text_top) なら文字の列がシールより後 (上)、縁取りは .pcb-outline', async () => {
