@@ -398,6 +398,7 @@ window.SPSP_I18N.en = {
   'player.sec.latest': '🎮 Latest result',
   'player.sec.live': '🔴 Playing now',
   'live.on': 'Live',
+  'live.notice_label': '🔴 Playing now',
   'live.ended': 'Ended',
   'live.place': '{n, selectordinal, one{{n}st} two{{n}nd} few{{n}rd} other{{n}th}}',
   'live.place_or_better': '{n, selectordinal, one{{n}st} two{{n}nd} few{{n}rd} other{{n}th}} or better',

@@ -6,12 +6,16 @@
 //   load(uid)                 その選手が出ている部門の一覧 [{summary, doc}] (無ければ [])。index.json は 1 回だけ読む
 //   render(el, uid, items)    セクションの中身を描く
 //   start(sectionEl, uid)     読んで描く。載っていればセクションを出し、REFRESH_MS ごとに読み直す (タブが裏のときは止める)
+//   showNotice(el)            トップの帯: ログイン中の本人が出ている開催中の部門 (大会名と順位、自分のプレイヤーページへ)。
+//                             ログインしていなければ何もしない。プレビューでは ?live=sample&live_as=<uid> で本人の代わりにできる
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
 // 同じ部門の下位クラス (Bクラスなど) にいる人 (entrants[].in_class) は本戦の順位に「◯クラス参加中」を添える。
 // プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
 import SPSPI18n from './i18n.js';
 import { escapeHtml } from './html.js';
 import { charName } from './chars.js';
+import SpspLogin from './login.js';
+import SPSPLinks from './links.js';
 
 const REFRESH_MS = 60 * 1000;
 /** @param {string} k @param {any} [p] */
@@ -66,6 +70,13 @@ function poolOf(doc, pgId) {
   const p0 = (doc.phases || [])[0];
   const g0 = p0 && (p0.groups || [])[0];
   return g0 ? { phase: p0, group: g0 } : null;
+}
+
+/** 順位の文字 (確定 N 位 / N 位以上 / —) */
+function placeText(/** @type {any} */ e) {
+  if (e.placement != null && e.final) return t('live.place', { n: e.placement });
+  if (e.place_min != null) return t('live.place_or_better', { n: e.place_min });
+  return '—';
 }
 
 /** @param {any} e */
@@ -186,6 +197,35 @@ export function start(section, uid) {
   tick();
 }
 
-const api = { liveRoot, load, render, start };
+/** プレビューで本人の代わりにする uid (?live=sample&live_as=<uid>、spsp.games では無効) */
+function previewUid() {
+  if (liveRoot().indexOf('/live/sample/') < 0) return null;
+  const m = /[?&]live_as=(\d+)/.exec((W.location && W.location.search) || '');
+  return m ? m[1] : null;
+}
+
+/** @param {HTMLElement | null} el */
+export async function showNotice(el) {
+  if (!el || !liveRoot()) return;
+  let uid = previewUid();
+  if (!uid) {
+    const sess = SpspLogin && SpspLogin.session && SpspLogin.session();
+    if (!sess) return;
+    uid = String(sess.user.id);
+  }
+  const items = await load(uid);
+  const links = [];
+  for (const { doc } of items) {
+    const e = entrantOf(doc, uid)[1];
+    if (!e) continue;
+    const href = SPSPLinks.playerHref((W.SPSP && W.SPSP.langRoot) || '', uid) + '#live-section';
+    links.push(`<a class="my-notice-item" href="${escapeHtml(href)}">${escapeHtml(doc.tournament_name || '')} <span class="d">${placeText(e)}</span></a>`);
+  }
+  if (!links.length) { el.style.display = 'none'; return; }
+  el.innerHTML = `<span class="label">${t('live.notice_label')}</span><span class="my-notice-items">${links.join('')}</span>`;
+  el.style.display = '';
+}
+
+const api = { liveRoot, load, render, start, showNotice };
 export default api;
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLive = api;

@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const vm = require('vm');
 const { built } = require('../helpers/built.cjs');
 
-function load(search = '', hostname = 'spsp.games') {
+function load(search = '', hostname = 'spsp.games', extra = {}) {
   const ctx = {
     console,
     location: { hostname, search },
@@ -12,6 +12,7 @@ function load(search = '', hostname = 'spsp.games') {
     SPSPI18n: { t: (k, p) => k + JSON.stringify(p || {}), lang: 'ja' },
     escapeHtml: (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
     charName: (id) => 'c' + id,
+    ...extra,
   };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
@@ -65,4 +66,25 @@ test('出ていない部門は描かない', () => {
 test('見本 (?live=sample) は spsp.games 以外だけ', () => {
   assert.strictEqual(load('?live=sample').liveRoot(), 'https://data.spsp.games/live/jp/');
   assert.strictEqual(load('?live=sample', 'spsp-web-live-preview.tosakazu.workers.dev').liveRoot(), 'https://data.spsp.games/live/sample/');
+});
+
+test('トップの帯: ログインしていなければ出さない・本人が出ていれば大会名と順位', async () => {
+  const L0 = load();
+  const el0 = { innerHTML: '', style: { display: 'none' } };
+  await L0.showNotice(el0);
+  assert.strictEqual(el0.style.display, 'none');
+
+  const fetch = async (url) => ({ ok: true, json: async () => (/index\.json$/.test(url)
+    ? { events: [{ event_id: 5 }], players: { 11: [5] } } : doc()) });
+  const SPSPLinks = { playerHref: (prefix, uid) => `p/?uid=${uid}` };
+  const L = load('?live=sample&live_as=11', 'spsp-web-live-preview.tosakazu.workers.dev', { fetch, SPSPLinks });
+  const el = { innerHTML: '', style: { display: 'none' } };
+  await L.showNotice(el);
+  assert.strictEqual(el.style.display, '');
+  assert.match(el.innerHTML, /T&lt;1&gt; <span class="d">live\.place_or_better\{"n":2\}<\/span>/);
+  assert.match(el.innerHTML, /href="p\/\?uid=11#live-section"/);
+  // spsp.games では live_as を見ない (ログインしていないので出さない)
+  const el2 = { innerHTML: '', style: { display: 'none' } };
+  await load('?live=sample&live_as=11', 'spsp.games', { fetch, SPSPLinks }).showNotice(el2);
+  assert.strictEqual(el2.style.display, 'none');
 });
