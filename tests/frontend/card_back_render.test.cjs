@@ -63,7 +63,7 @@ test('シールを置く: 場所・大きさ・回転、アイコンの無いシ
   PC.ensureGlow(el);   // 2 回呼んでも 1 つ
   assert.strictEqual(el.querySelectorAll('.pcb-glow').length, 1);
   assert.strictEqual(el.lastElementChild.className, 'pcb-glow');
-  assert.strictEqual(el.querySelectorAll('.pcb-glow > .hb').length, 1);   // 2 枚目は素なので光らせない
+  assert.strictEqual(el.querySelectorAll('.pcb-glow > .pcb-glow-m > .hb').length, 1);   // 2 枚目は素なので光らせない (上に重なった所を除く型の箱の中)
 });
 
 test('名前を前に (text_top) なら文字の列がシールより後 (上)、縁取りは .pcb-outline', async () => {

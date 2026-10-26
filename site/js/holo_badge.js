@@ -337,7 +337,7 @@ async function flattenBadge(el, o) {
 }
 
 /** 形の外形の線 (holo_badge.css の clip-path と同じ) を引く @param {CanvasRenderingContext2D} ctx @param {number} W @param {string} shape */
-function shapePath(ctx, W, shape) {
+export function shapePath(ctx, W, shape) {
   ctx.beginPath();
   if (shape === 'circle') ctx.arc(W / 2, W / 2, W / 2, 0, Math.PI * 2);
   else if (shape === 'round') {
@@ -511,7 +511,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, badgeToCanvas, preloadBadge, preloadAllHolo };
+const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, shapePath, badgeToCanvas, preloadBadge, preloadAllHolo };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

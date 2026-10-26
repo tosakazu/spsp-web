@@ -8,7 +8,7 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
-import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten } from './holo_badge.js';
+import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten, shapePath } from './holo_badge.js';
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
@@ -561,10 +561,18 @@ function paintGlow(el, m) {
   const glow = document.createElement('div');
   glow.className = 'pcb-glow';
   glow.setAttribute('aria-hidden', 'true');
-  for (const s of list) {
+  /** @type {{ i: number, wrap: HTMLElement }[]} */
+  const lit = [];
+  for (const [i, s] of list.entries()) {
     const p = parseKey(s.e);
     const src = p ? iconUrl(p.eid) : null;
     if (!p || !src || p.variant === 3) continue;   // 素 (ホロなし) のシールは光らせない
+    // 上に重なったシール (素も) と前に出した名前の所は光らせない: シールごとに、見えている所だけの型 (mask) をかけた箱に入れる。
+    // 型ができるまでは隠す
+    const wrap = document.createElement('div');
+    wrap.className = 'pcb-glow-m';
+    wrap.style.visibility = 'hidden';
+    lit.push({ i, wrap });
     const g = document.createElement('div');
     g.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)`;
     g.style.setProperty('--hb-img', `url("${src.replace(/"/g, '%22')}")`);
@@ -575,11 +583,77 @@ function paintGlow(el, m) {
     // 回した箱が形を覆うよう |cos|+|sin| 倍に広げる。形で切るのは外側の g)
     const a = Math.abs(s.r * Math.PI / 180), k = Math.abs(Math.cos(a)) + Math.abs(Math.sin(a));
     g.innerHTML = `<div class="hb-turn" style="transform:rotate(${-s.r}deg) scale(${k.toFixed(4)})"><div class="hb-sheen"></div><div class="hb-glare"></div></div>`;
-    glow.appendChild(g);
+    wrap.appendChild(g);
+    glow.appendChild(wrap);
   }
   el.appendChild(glow);
+  glowMasks(el, list, lit, !!(m.back && m.back.text_top)).catch(() => { for (const { wrap } of lit) wrap.style.visibility = ''; });
   const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
   if (inner) glow.style.transform = inner.style.transform;
+}
+
+/** 光の型の細かさ (カードの px の倍) */
+const GLOW_MK = 2;
+/** シールの形を型に塗る (透過ありはアイコンの形。読めなければ四角) @param {CanvasRenderingContext2D} c @param {import('./card_stickers.js').Sticker} s
+ * @param {HTMLImageElement | null} img 透過ありのアイコン */
+function stickerShape(c, s, img) {
+  c.save();
+  c.translate(s.x, s.y); c.rotate(s.r * Math.PI / 180); c.translate(-s.s / 2, -s.s / 2);
+  if (img) {
+    const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1, k = Math.min(s.s / iw, s.s / ih);
+    c.drawImage(img, (s.s - iw * k) / 2, (s.s - ih * k) / 2, iw * k, ih * k);
+  } else { shapePath(c, s.s, s.k || 'square'); c.fill(); }
+  c.restore();
+}
+/** 光の箱ごとに、見えている所 (そのシールの形から、上のシールと前に出した名前を除いた所) の型をかける
+ * @param {HTMLElement} el .pcard @param {import('./card_stickers.js').Sticker[]} list @param {{ i: number, wrap: HTMLElement }[]} lit @param {boolean} textTop */
+async function glowMasks(el, list, lit, textTop) {
+  if (!lit.length) return;
+  // 透過ありのアイコン (形の型に使う。CORS で読めなければ四角)
+  const imgs = await Promise.all(list.map(async s => {
+    const p = parseKey(s.e), src = p ? iconUrl(p.eid) : null;
+    if (!src || !(await isTransparent(src))) return null;
+    return new Promise(res => {
+      const im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = () => res(im); im.onerror = () => res(null);
+      im.src = src + (src.includes('?') ? '&' : '?') + 'cors=1';   // holo_badge.js と同じ URL (キャッシュを使い回す)
+    });
+  }));
+  // 前に出した白フチの名前 (キャンバス)。普通の文字は箱が大きいので除かない
+  const names = textTop ? /** @type {HTMLCanvasElement[]} */ (Array.from(el.querySelectorAll('.pcb-sx-l'))) : [];
+  for (const { i, wrap } of lit) {
+    if (!wrap.isConnected) return;
+    const cv = document.createElement('canvas');
+    cv.width = W * GLOW_MK; cv.height = 333 * GLOW_MK;
+    const c = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+    c.scale(GLOW_MK, GLOW_MK);
+    c.fillStyle = '#000';
+    stickerShape(c, list[i], imgs[i]);
+    c.globalCompositeOperation = 'destination-out';
+    for (let j = i + 1; j < list.length; j++) stickerShape(c, list[j], imgs[j]);
+    for (const n of names) {
+      // 名前の絵の位置は列 (.pcb-col、置き方のずれだけ left/top で動かしてある) の中
+      const col = /** @type {HTMLElement | null} */ (n.parentElement), ox = col ? parseFloat(col.style.left) || 0 : 0, oy = col ? parseFloat(col.style.top) || 0 : 0;
+      const st = n.style, l = ox + (parseFloat(st.left) || 0), t = oy + (parseFloat(st.top) || 0), w = parseFloat(st.width) || 0, h = parseFloat(st.height) || 0;
+      const rot = parseFloat((/rotate\((-?[\d.]+)deg\)/.exec(st.transform) || [])[1] || '0');
+      c.save();
+      c.translate(l + w / 2, t + h / 2); c.rotate(rot * Math.PI / 180);
+      c.drawImage(n, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    // 型は PNG にして (toBlob は描き出しを待たせない。シールが多くても傾け始めで固まらないように) 指す
+    /** @type {Blob | null} */
+    let blob = null;
+    try { blob = await new Promise(res => cv.toBlob(res, 'image/png')); } catch (e) { /* 読めない画像で汚れた: 型なし */ }
+    if (!wrap.isConnected) return;
+    const url = blob ? URL.createObjectURL(blob) : '';
+    if (url) {
+      wrap.style.setProperty('-webkit-mask', `url("${url}") 0 0 / 100% 100% no-repeat`);
+      wrap.style.setProperty('mask', `url("${url}") 0 0 / 100% 100% no-repeat`);
+    }
+    wrap.style.visibility = '';
+  }
 }
 
 // ── 名前・二つ名・順位を白フチのシールにする (設定 back.sticker_text、Figma「work」Frame 52、2026-10-23) ──
