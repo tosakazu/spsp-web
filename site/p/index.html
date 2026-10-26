@@ -180,10 +180,37 @@
   #latestres-section h2 { margin-bottom: 0; }
   .latestres-card .lr-top { margin-top: -1px; }
   .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
-  .latestres-card .lr-chev { display: inline-block; align-self: center; margin-left: 4px; }
+  /* ▶ は順位などの列とは別に右端 (幅が足りなくても ▶ だけ次の行に落ちないように) */
+  .latestres-card .perf-hero { position: relative; padding: 0 12px 0 0; flex-wrap: nowrap; white-space: nowrap; }
+  .live-toggle { cursor: pointer; }
+  .latestres-card .lr-chev { position: absolute; right: 2px; top: 0; bottom: 0; height: 1em; margin: auto 0; line-height: 1; }
   .perf-hero .ph-perf-sub { font-size: 9px; color: #9ca3af; }
   .latestres-card .lr-top { font-size: 13px; }
   .lr-date { font-size: 11px; color: #9ca3af; font-weight: 400; margin-left: 6px; }
+  /* 参加中の大会 (js/live.js)。カードは最新の大会結果 (.latestres-card / .perf-hero) と同じ */
+  .lr-badge.live-on { background: #dc2626; color: #fff; font-weight: 600; }
+  .lr-badge.live-end { background: #e5e7eb; color: #4b5563; }
+  .live-group + .live-group { margin-top: 10px; }
+  .live-event { text-align: center; font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .live-links { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 11px; margin: 2px 0 4px; }
+  .live-link { color: #2563eb; text-decoration: none; }
+  .live-cls { color: #7c3aed; font-weight: 600; }
+  .live-sets { border-top: 1px solid #f3f4f6; margin-top: 4px; }
+  .live-sets .dim { color: #9ca3af; }
+  .live-next { font-size: 11px; font-weight: 700; }
+  .live-foot { font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
+  /* 大会アイコンの縮小版 (js/tour_icons.js)。読めるまでは枠だけ、表に無い大会は外す */
+  /* 最新の大会結果・参加中の大会は順位の左に 44px、出場履歴は順位の上に 36px */
+  img.tour-icon { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 6px; object-fit: cover; background: #f3f4f6; }
+  img.tour-icon.lr-icon { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 8px; }
+  .perf-hero img.lr-icon { margin-right: 5px; }
+  .tour-group .tour-item.has-icon .tour-ico { grid-column: 1; grid-row: 2; justify-self: center; line-height: 0; }
+  .tour-group .tour-item.has-icon .tour-ico:empty { display: none; }
+  .tour-group .tour-item.has-icon .place { grid-row: 3; }   /* 日付 → アイコン → 順位 (順位は成績の行の高さ) */
+  /* 試合一覧のフェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) */
+  .match-phase { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; font-size: 10px; color: #9ca3af; font-weight: 600; }
+  .match-phase::before, .match-phase::after { content: ''; flex: 1 1 0; border-top: 1px solid #e5e7eb; }
+  .match-phase.advanced { color: #16a34a; }
   .lr-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
   .lr-badge.ok { background: #dcfce7; color: #15803d; }
   .lr-badge.ng { background: #fee2e2; color: #b91c1c; }
@@ -217,6 +244,20 @@
     font-size: 9px; font-weight: 700; line-height: 1; cursor: pointer;
   }
   .perf-hero .ph-help:hover { color: #6b7280; border-color: #9ca3af; }
+  /* 狭い画面: 順位・SPR・パフォーマンスが 1 行に収まるように少しずつ詰める */
+  @media (max-width: 420px) {
+    img.tour-icon.lr-icon { width: 36px; height: 36px; flex-basis: 36px; }
+    .perf-hero img.lr-icon { margin-right: 3px; }
+    .perf-hero { gap: 2px; }
+    .perf-hero .ph-place { font-size: 21px; }
+    .perf-hero .ph-place .ph-i { font-size: 12px; }
+    .perf-hero .ph-spr { font-size: 16px; }
+    .perf-hero .ph-rank { font-size: 14px; }
+    .perf-hero .ph-rank .ph-lbl { font-size: 9px; }
+    .perf-hero .ph-perf-val { gap: 3px; }
+    .perf-hero .lv-pill { padding: 1px 4px; }
+    .perf-hero .ph-sep { margin: 0 1px; }
+  }
   .lr-cap {
     font-size: 10px; color: #6b7280; line-height: 1.6;
     background: #f9fafb; border-radius: 8px; padding: 7px 10px; margin: 4px 0 6px;
@@ -368,6 +409,10 @@
     padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
     font-family: inherit; margin-right: 4px;
   }
+  .recent-search { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+  .recent-search input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; color: #111827; }
+  .recent-search input:focus { outline: none; border-color: #dc2626; }
+  .recent-count { font-size: 11px; color: #9ca3af; white-space: nowrap; }
   .filter-btn:hover { background: #f3f4f6; color: #111827; }
   .filter-btn.active { background: #dc2626; color: #fff; border-color: #dc2626; }
   /* チャート直下の期間フィルタは chart-tab と同じサイズに揃える */
@@ -495,6 +540,11 @@
 
     <!-- 最新の大会結果 + パフォーマンス (SPSP シード基準の相当順位/相当Lv)
          (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
+    <div class="section" id="live-section" style="display:none">
+      <h2 data-i18n="player.sec.live">🔴 参加中の大会</h2>
+      <div class="live-body"></div>
+    </div>
+
     <div class="section" id="latestres-section" style="display:none;position:relative">
       <h2 data-i18n="player.sec.latest">🎮 最新の大会結果 <span id="latestres-date" class="lr-date"></span></h2>
       <!-- 最新の大会結果を文章で共有 (名前・全国順位 + この大会の順位・SPR・パフォーマンス・全国順位の変動) -->
@@ -598,6 +648,10 @@
 
     <div class="section">
       <h2 data-i18n="player.sec.recent">📅 出場履歴</h2>
+      <div class="recent-search">
+        <input type="search" id="recent-q" autocomplete="off" placeholder="大会名・部門・日付・対戦相手で絞り込み" aria-label="大会名・部門・日付・対戦相手で絞り込み" data-i18n-attr="placeholder:player.recent.search,aria-label:player.recent.search">
+        <span class="recent-count" id="recent-count"></span>
+      </div>
       <div class="pager" id="recent-pager" data-target="recent" style="display:none"></div>
       <div id="recent"></div>
     </div>

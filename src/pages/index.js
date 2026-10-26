@@ -18,6 +18,7 @@ import '../../site/share.js';
 import SPSPLogo from '../../site/logo.js';
 import SPSPShare from '../../site/share.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
+import SpspLive from '../../site/js/live.js';
 /** 地域の暦日の時差 (region/config.js utcOffset。無ければ止まらないよう空 = UTC ではなく、設定は必ずある前提) */
 const SITE_UTC_OFFSET = /** @type {SpspSiteConfig} */ (window.SPSP.site).utcOffset;
 
@@ -179,6 +180,7 @@ async function loadData() {
     // views 読みでは表に居ない (まだ取っていない) 人の行は ranking/ensemble/ から 1 つだけ取る
     SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) ||
       (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
+    SpspLive.showNotice(document.getElementById('live-notice')).catch(() => {});   // ログイン中の本人が出ている開催中の大会 (js/live.js)
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }

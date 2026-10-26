@@ -21,6 +21,8 @@ import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
+import SpspLive from '../../site/js/live.js';
+import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -176,7 +178,7 @@ function buildLatestResultSection() {
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
         <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
-        <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
+        <div class="perf-hero">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
       </div>
@@ -189,6 +191,7 @@ function buildLatestResultSection() {
   if (lrDate) lrDate.textContent = t.date || '';
   const lrSection = document.getElementById('latestres-section');
   if (lrSection) lrSection.style.display = '';
+  SpspTourIcons.fill(lrBody);
   const helpBtn = document.getElementById('ph-help-btn');
   if (helpBtn) {
     helpBtn.addEventListener('click', e => {
@@ -564,8 +567,8 @@ function fmtPlace(place) {
   return `<span class="place ${cls}">${place}</span>`;
 }
 
-/** @param {PTour} t @param {string} valueHtml @returns {string} */
-function tournamentItem(t, valueHtml) {
+/** @param {PTour} t @param {string} valueHtml @param {boolean} [withIcon] 大会アイコン (出場履歴だけ。js/tour_icons.js) @returns {string} */
+function tournamentItem(t, valueHtml, withIcon) {
   const eid = t.event_id;
   const link = eid ? SPSPLinks.tournamentLink(SPSP.langRoot, eid, escapeHtml(t.name || '')) : escapeHtml(t.name || '');
   // place は「順位/参加人数」表記 (CSS で縦並びに改行)
@@ -580,8 +583,9 @@ function tournamentItem(t, valueHtml) {
   const stTag = playerTourTag(t, 'status');
   const rsTag = playerTourTag(t, 'rs');
   return `
-    <div class="tour-item">
+    <div class="tour-item${withIcon ? ' has-icon' : ''}">
       <span class="date-top">${t.date}</span>
+      ${withIcon ? `<span class="tour-ico">${SpspTourIcons.html(eid != null ? eid : t.parent_event_id)}</span>` : ''}
       <span class="place">${placeHtml}</span>
       <div class="meta">
         ${link}${resTag}${lcTag}${rsTag}${stTag}
@@ -1117,7 +1121,29 @@ function render() {
     const header = (pName || pSeed != null)
       ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
       : '';
-    return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    // フェーズが 2 つ以上なら、フェーズの境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」。
+    // フェーズの順 = フェーズの大きさが小さいほど後。大きさは名前の「TOP N」、無ければそのフェーズの試合の global_top_x の最大
+    // (総当たりなどで無ければ一番前)。start.gg の phaseOrder は進む順とは限らず、それを使う global_top_x もずれることがあるので名前を先に見る
+    /** @type {Map<string, PMatch[]>} */
+    const byPhase = new Map();
+    for (const m of sorted) {
+      const k = m.phase_name || '';
+      if (!byPhase.has(k)) byPhase.set(k, []);
+      /** @type {PMatch[]} */ (byPhase.get(k)).push(m);
+    }
+    if (byPhase.size < 2) return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    /** @param {string} name @param {PMatch[]} g */
+    const size = (name, g) => {
+      const n = name.match(/TOP\s*(\d+)/i);
+      return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
+    };
+    const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
+    return header + groups.map(([name, g], i) =>
+      g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('') + (i < groups.length - 1 ? phaseSeparator(name) : '')).join('');
+  }
+  /** フェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) @param {string} name */
+  function phaseSeparator(name) {
+    return `<div class="match-phase advanced"><span>${i18n('match.phase_advanced', { name: escapeHtml(name) })}</span></div>`;
   }
   /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @param {boolean} [noUf] @returns {string} */
   function _renderMatchRow(m, pName, pSeed, noUf) {
@@ -1210,8 +1236,8 @@ function render() {
         : `<span class="sub">&nbsp;</span>`;
       const btChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.bt')}</span>${btValHtml}${btSubHtml}</div>`;
       const vHtml = `<div class="v-stats">${sprChip}${tjprChip}${btChip}<span class="chevron">▶</span></div>`;
-      const itemHtml = tournamentItem(t, vHtml)
-        .replace('class="tour-item"', 'class="tour-item tour-item-nohover tour-clickable" style="border-bottom:none"');
+      const itemHtml = tournamentItem(t, vHtml, true)
+        .replace(/class="tour-item([^"]*)"/, 'class="tour-item$1 tour-item-nohover tour-clickable" style="border-bottom:none"');   // has-icon などが付いていても
       // 展開部の先頭にパフォーマンス (perf_rank があれば)
       const pf = perfInfoOf(t);
       const perfHtml = pf
@@ -1279,10 +1305,32 @@ function render() {
       }
     }
   });
+  // 出場履歴の検索: 大会名・部門名・日付・その大会の対戦相手の名前 (recent_matches にあるもの)。
+  // 空白で区切ると全部を含むもの (AND)。全角半角・大文字小文字・ひらがなカタカナは区別しない
+  /** @param {string} s */
+  const normQ = s => String(s || '').normalize('NFKC').toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  /** @type {Map<PTour, string>} */
+  const recentText = new Map();
+  /** @param {PTour} t */
+  function recentHaystack(t) {
+    let s = recentText.get(t);
+    if (s == null) {
+      const eid = t.parent_event_id != null ? t.parent_event_id : t.event_id;
+      const opps = (eid != null ? matchesByEvent[eid] || [] : []).map(m => m.opp_display || '');
+      s = normQ([t.name, t.event, t.date, ...opps].join('\n'));
+      recentText.set(t, s);
+    }
+    return s;
+  }
+  const recentQ = /** @type {HTMLInputElement | null} */ (document.getElementById('recent-q'));
   function renderRecentSection() {
-    const allTours = allToursAll.filter(t => passesFilter(t));
+    const terms = normQ(recentQ ? recentQ.value : '').split(/\s+/).filter(Boolean);
+    const allTours = allToursAll.filter(t => passesFilter(t) && terms.every(w => recentHaystack(t).includes(w)));
+    const countEl = document.getElementById('recent-count');
+    if (countEl) countEl.textContent = terms.length ? i18n('player.recent.count', { n: allTours.length }) : '';
     setupPaginated(allTours, 'recent', 'recent-pager',
-      arr => renderRecent(arr),
+      arr => { queueMicrotask(() => SpspTourIcons.fill(document.getElementById('recent'))); return renderRecent(arr); },
       i18n('player.empty.filtered'));
   }
 
@@ -1295,6 +1343,10 @@ function render() {
     renderRecentSection();
   }
   applyFilter();
+  if (recentQ) {
+    let qTimer = 0;
+    recentQ.addEventListener('input', () => { clearTimeout(qTimer); qTimer = window.setTimeout(renderRecentSection, 200); });
+  }
   // フィルタボタン (期間 + 大会). 期間変更時はチャートも再描画して時間軸を更新する.
   /** @param {string} attr @param {'period' | 'kind'} stateKey */
   function bindFilterGroup(attr, stateKey) {
@@ -1322,6 +1374,14 @@ function render() {
 
   buildYosouSection();
   buildLatestResultSection();
+  const liveSec = document.getElementById('live-section');
+  if (liveSec) {   // 参加中の大会 (開催中だけ。js/live.js)。試合の行は最新の大会結果と同じ (相手は SPSP にページがあればリンク)
+    SpspLive.start(liveSec, UID, {
+      name: SPSPFormat.shortName((MAIN_REC && MAIN_REC.display) || ''),
+      emojiOf: charEmojiOf,
+      hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
+    });
+  }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();

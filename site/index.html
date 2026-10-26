@@ -340,6 +340,10 @@
     .method-tab { padding: 5px 6px; font-size: 10px; }
     /* #ranktable 関連の超狭幅オーバーライドは ranking-table.css に集約済. */
   }
+  /* 参加中の大会の帯 (js/live.js、形は .my-notice) */
+  .my-notice.live-notice { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .my-notice.live-notice .label { background: #dc2626; color: #fff; }
+  .my-notice.live-notice a.my-notice-item { color: #991b1b; }
 </style>
 <link rel="stylesheet" href="region/site.css">
 </head>
@@ -366,6 +370,8 @@
 
   <div class="news-stack" id="news-stack">
     <!-- ログイン中の本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js、見た目は nav.js) -->
+    <!-- ログイン中の本人が出ている開催中の大会 (js/live.js showNotice) -->
+    <div class="my-notice live-notice" id="live-notice" style="display:none"></div>
     <div class="my-notice" id="my-notice" style="display:none"></div>
     <div class="news-ticker auto" id="news-ticker-auto" data-filter="auto" style="display:none">
       <a class="label" href="news/?filter=auto" data-i18n="nav.news.auto">📢 速報</a>
