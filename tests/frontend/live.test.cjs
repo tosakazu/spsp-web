@@ -40,11 +40,13 @@ test('残っている人は「N 位以上」、対戦中のセットが上、い
   const L = load();
   const e = el();
   assert.strictEqual(L.render(e, 11, [{ summary: { image: 'https://images.start.gg/i.png' }, doc: doc() }]), 1);
-  assert.match(e.innerHTML, /live\.place_or_better\{"n":2\}/);
-  assert.match(e.innerHTML, /live\.seed\{"n":1\}/);
+  assert.match(e.innerHTML, /<span class="ph-place">2<span class="ph-i">live\.or_better_unit\{"n":2\}<\/span><\/span><span class="ph-n">\/4<\/span>/);
+  assert.match(e.innerHTML, /live\.seed_label\{\}<\/span><span class="ph-rank">1</);
+  assert.match(e.innerHTML, /live\.unreflected/);
+  assert.match(e.innerHTML, /<img class="tour-icon lr-icon" src="https:\/\/images\.start\.gg\/i\.png"/);
   assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10"/);
   assert.match(e.innerHTML, /T&lt;1&gt;/);
-  assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('lv-res win'));
+  assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('live-res win'));
   assert.match(e.innerHTML, /c1302/);
 });
 
@@ -52,7 +54,7 @@ test('確定した順位はそのまま。下位クラスにいる人はクラ�
   const L = load();
   const e = el();
   L.render(e, 33, [{ summary: {}, doc: doc() }]);
-  assert.match(e.innerHTML, /live\.place\{"n":1\}/);
+  assert.match(e.innerHTML, /<span class="ph-place gold">1<span class="ph-i">player\.place_unit\{"n":1\}/);
   const e2 = el();
   L.render(e2, 22, [{ summary: {}, doc: doc() }]);
   assert.match(e2.innerHTML, /live\.in_class\{"name":"Bクラス"\}/);

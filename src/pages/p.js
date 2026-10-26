@@ -22,6 +22,7 @@ import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
+import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -176,7 +177,7 @@ function buildLatestResultSection() {
   if (lrBody) lrBody.innerHTML =
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
-        <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
+        <div class="lr-top">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
         <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
@@ -190,6 +191,7 @@ function buildLatestResultSection() {
   if (lrDate) lrDate.textContent = t.date || '';
   const lrSection = document.getElementById('latestres-section');
   if (lrSection) lrSection.style.display = '';
+  SpspTourIcons.fill(lrBody);
   const helpBtn = document.getElementById('ph-help-btn');
   if (helpBtn) {
     helpBtn.addEventListener('click', e => {
@@ -565,8 +567,8 @@ function fmtPlace(place) {
   return `<span class="place ${cls}">${place}</span>`;
 }
 
-/** @param {PTour} t @param {string} valueHtml @returns {string} */
-function tournamentItem(t, valueHtml) {
+/** @param {PTour} t @param {string} valueHtml @param {boolean} [withIcon] 大会アイコン (出場履歴だけ。js/tour_icons.js) @returns {string} */
+function tournamentItem(t, valueHtml, withIcon) {
   const eid = t.event_id;
   const link = eid ? SPSPLinks.tournamentLink(SPSP.langRoot, eid, escapeHtml(t.name || '')) : escapeHtml(t.name || '');
   // place は「順位/参加人数」表記 (CSS で縦並びに改行)
@@ -585,7 +587,7 @@ function tournamentItem(t, valueHtml) {
       <span class="date-top">${t.date}</span>
       <span class="place">${placeHtml}</span>
       <div class="meta">
-        ${link}${resTag}${lcTag}${rsTag}${stTag}
+        ${withIcon ? SpspTourIcons.html(eid != null ? eid : t.parent_event_id) : ''}${link}${resTag}${lcTag}${rsTag}${stTag}
         ${t.event ? `<span style="color:#9ca3af">/ ${escapeHtml(t.event)}</span>` : ''}
         <br><span class="date date-inline">${t.date}</span>${
           (t.pretour_ranks && t.pretour_ranks.ensemble != null)
@@ -1211,7 +1213,7 @@ function render() {
         : `<span class="sub">&nbsp;</span>`;
       const btChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.bt')}</span>${btValHtml}${btSubHtml}</div>`;
       const vHtml = `<div class="v-stats">${sprChip}${tjprChip}${btChip}<span class="chevron">▶</span></div>`;
-      const itemHtml = tournamentItem(t, vHtml)
+      const itemHtml = tournamentItem(t, vHtml, true)
         .replace('class="tour-item"', 'class="tour-item tour-item-nohover tour-clickable" style="border-bottom:none"');
       // 展開部の先頭にパフォーマンス (perf_rank があれば)
       const pf = perfInfoOf(t);
@@ -1283,7 +1285,7 @@ function render() {
   function renderRecentSection() {
     const allTours = allToursAll.filter(t => passesFilter(t));
     setupPaginated(allTours, 'recent', 'recent-pager',
-      arr => renderRecent(arr),
+      arr => { queueMicrotask(() => SpspTourIcons.fill(document.getElementById('recent'))); return renderRecent(arr); },
       i18n('player.empty.filtered'));
   }
 

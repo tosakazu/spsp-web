@@ -79,15 +79,15 @@ function placeText(/** @type {any} */ e) {
   return '—';
 }
 
-/** @param {any} e */
+/** 順位 (最新の大会結果と同じ形: 大きい数字 + 単位) @param {any} e */
 function placeHtml(e) {
   if (e.placement != null && e.final) {
     const p = e.placement;
     const cls = p === 1 ? 'gold' : p === 2 ? 'silver' : p === 3 ? 'bronze' : p <= 8 ? 'top8' : '';
-    return `<span class="lv-place ${cls}">${t('live.place', { n: p })}</span>`;
+    return `<span class="ph-place ${cls}">${p}<span class="ph-i">${t('player.place_unit', { n: p })}</span></span>`;
   }
-  if (e.place_min != null) return `<span class="lv-place">${t('live.place_or_better', { n: e.place_min })}</span>`;
-  return `<span class="lv-place dim">—</span>`;
+  if (e.place_min != null) return `<span class="ph-place">${e.place_min}<span class="ph-i">${t('live.or_better_unit', { n: e.place_min })}</span></span>`;
+  return '<span class="ph-place">—</span>';
 }
 
 /** @param {number} ts */
@@ -120,15 +120,15 @@ function setsHtml(/** @type {any} */ doc, /** @type {string} */ myId) {
     const oppId = s.e[1 - i];
     const opp = oppId != null ? (doc.entrants || {})[String(oppId)] : null;
     const oppName = opp ? escapeHtml(opp.tag || opp.name || '') : `<span class="dim">${t('live.tbd')}</span>`;
-    const oppSeed = opp && opp.seed != null ? `<span class="lv-seed">${t('live.seed_short', { n: opp.seed })}</span>` : '';
+    const oppSeed = opp && opp.seed != null ? `<span class="live-seed">${t('live.seed_short', { n: opp.seed })}</span>` : '';
     let res = '';
     if (s.winner != null) {
       const win = String(s.winner) === myId;
       const my = s.score && s.score[i], their = s.score && s.score[1 - i];
       const sc = (my != null && their != null && my >= 0 && their >= 0) ? `${my}-${their}` : (my === -1 || their === -1 ? 'DQ' : '');
-      res = `<span class="lv-res ${win ? 'win' : 'lose'}">${win ? 'W' : 'L'}</span><span class="lv-score">${sc}</span>`;
+      res = `<span class="live-res ${win ? 'win' : 'lose'}">${win ? 'W' : 'L'}</span><span class="live-score">${sc}</span>`;
     } else {
-      res = `<span class="lv-res next">${s.state === 2 ? t('live.playing') : t('live.next')}</span>`;
+      res = `<span class="live-res next">${s.state === 2 ? t('live.playing') : t('live.next')}</span>`;
     }
     // キャラ (自分の使ったもの、重複なし)
     const chars = [];
@@ -136,14 +136,15 @@ function setsHtml(/** @type {any} */ doc, /** @type {string} */ myId) {
       const c = g.c && g.c[myId];
       if (c != null && !chars.includes(c)) chars.push(c);
     }
-    const charTxt = chars.length ? `<span class="lv-chars">${chars.map(c => escapeHtml(charName(c, ''))).filter(Boolean).join(' / ')}</span>` : '';
-    return `<div class="lv-set">${res}<span class="lv-round">${escapeHtml(s.round_text || '')}</span>` +
-      `<span class="lv-opp">vs ${oppName}${oppSeed}</span>${charTxt}</div>`;
+    const charTxt = chars.length ? `<span class="live-chars">${chars.map(c => escapeHtml(charName(c, ''))).filter(Boolean).join(' / ')}</span>` : '';
+    return `<div class="live-set">${res}<span class="live-round">${escapeHtml(s.round_text || '')}</span>` +
+      `<span class="live-opp">vs ${oppName}${oppSeed}</span>${charTxt}</div>`;
   });
-  return `<div class="lv-sets">${rows.join('')}</div>`;
+  return `<div class="live-sets">${rows.join('')}</div>`;
 }
 
-/** @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items */
+/** カードは「最新の大会結果」と同じ形 (大会アイコンは start.gg の画像をそのまま)
+ * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items */
 export function render(el, uid, items) {
   const cards = [];
   for (const { summary, doc } of items) {
@@ -152,24 +153,28 @@ export function render(el, uid, items) {
     const pool = poolOf(doc, e.pg);
     const poolTxt = pool ? `${pool.phase.name || ''}${pool.group.ident && (pool.phase.groups || []).length > 1 ? ' ' + t('live.pool', { id: pool.group.ident }) : ''}` : '';
     const poolLink = pool && pool.group.url
-      ? `<a class="lv-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${escapeHtml(poolTxt)} ↗</a>` : '';
-    const img = summary.image ? `<img class="lv-img" src="${escapeHtml(summary.image)}" alt="" loading="lazy">` : '';
+      ? `<a class="live-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${escapeHtml(poolTxt)} ↗</a>` : '';
+    const img = summary.image ? `<img class="tour-icon lr-icon" src="${escapeHtml(summary.image)}" alt="" loading="lazy">` : '';
     const ended = !!(summary.ended || doc.ended_at);
-    const badge = ended ? `<span class="lv-badge end">${t('live.ended')}</span>` : `<span class="lv-badge on">${t('live.on')}</span>`;
-    const seed = e.seed != null ? `<span class="lv-meta-i">${t('live.seed', { n: e.seed })}</span>` : '';
+    const badge = ended ? `<span class="lr-badge live-end">${t('live.ended')}</span>` : `<span class="lr-badge live-on">${t('live.on')}</span>`;
     const cls = e.in_class && pool
-      ? `<span class="lv-meta-i lv-cls">${classOut(doc, String(myId)) ? t('live.class_out', { name: escapeHtml(pool.phase.name || '') }) : t('live.in_class', { name: escapeHtml(pool.phase.name || '') })}</span>` : '';
-    const nent = doc.num_entrants != null ? `<span class="lv-meta-i">${t('live.entrants', { n: doc.num_entrants })}</span>` : '';
+      ? `<span class="live-cls">${classOut(doc, String(myId)) ? t('live.class_out', { name: escapeHtml(pool.phase.name || '') }) : t('live.in_class', { name: escapeHtml(pool.phase.name || '') })}</span>` : '';
+    let hero = placeHtml(e) + (doc.num_entrants != null ? `<span class="ph-n">/${doc.num_entrants}</span>` : '');
+    if (e.seed != null) {
+      hero += `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('live.seed_label')}</span>` +
+        `<span class="ph-rank">${e.seed}</span></span>`;
+    }
     cards.push(
-      `<div class="lv-card">` +
-        `<div class="lv-head">${img}<div class="lv-title">` +
-          `<a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>${badge}` +
-          `<div class="lv-event">${escapeHtml(doc.event_name || '')}</div>` +
-        `</div></div>` +
-        `<div class="lv-hero">${placeHtml(e)}${cls}${seed}${nent}</div>` +
-        `<div class="lv-links">${poolLink}<a class="lv-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
+      `<div class="tour-group live-group">` +
+        `<div class="tour-item tour-item-nohover latestres-card" style="border-bottom:none">` +
+          `<div class="lr-top">${img}<a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
+            `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
+          `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
+          `<div class="perf-hero">${hero}</div>` +
+          `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
+        `</div>` +
         setsHtml(doc, String(myId)) +
-        `<div class="lv-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })} · ${t('live.note')}</div>` +
+        `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
   el.innerHTML = cards.join('');
@@ -178,7 +183,7 @@ export function render(el, uid, items) {
 
 /** @param {HTMLElement} section @param {number | string} uid */
 export function start(section, uid) {
-  const body = /** @type {HTMLElement | null} */ (section.querySelector('.lv-body'));
+  const body = /** @type {HTMLElement | null} */ (section.querySelector('.live-body'));
   if (!body || !liveRoot() || !uid) return;
   let timer = 0;
   const tick = async () => {
