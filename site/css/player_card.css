@@ -192,6 +192,9 @@
 .pcb-glow { position: absolute; left: 0; top: 0; width: 514px; height: 333px; transform-origin: 0 0; pointer-events: none; overflow: hidden; z-index: 1; }
 .pcb-glow > .hb { position: absolute; aspect-ratio: auto; --hb-mx: var(--card-mx, .5); --hb-my: var(--card-my, .5); }
 .pcb-glow > .hb, .pcb-glow > .hb:hover { transform-origin: 50% 50%; transition: none; }
+/* 光はシールの回転の逆に回した箱 (.hb-turn) の中。透過ありの形 (アイコンの形) では外側の箱で切る (光と一緒に回さない) */
+.pcb-glow .hb-turn > div { position: absolute; inset: 0; pointer-events: none; }
+.pcb-glow > .hb-shape { -webkit-mask: var(--hb-img) center / contain no-repeat; mask: var(--hb-img) center / contain no-repeat; }
 .pc-tilt .pcb-glow .hb-sheen { opacity: .22; }
 .pc-tilt .pcb-glow .hb-glare { opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .pcard-wrap { transform: none !important; } }

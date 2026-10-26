@@ -571,7 +571,10 @@ function paintGlow(el, m) {
     const shape = (/** @type {boolean} */ tr) => { g.className = tr ? 'hb hb-shape' : `hb hb-square hb-k-${s.k}`; };
     shape(false);
     isTransparent(src).then(tr => { if (tr) shape(true); });
-    g.innerHTML = '<div class="hb-sheen"></div><div class="hb-glare"></div>';
+    // 光はシールの回転の逆に回した箱に入れる (どの角度のシールも、筋の向きと光だまりの位置が画面に対して同じになる。
+    // 回した箱が形を覆うよう |cos|+|sin| 倍に広げる。形で切るのは外側の g)
+    const a = Math.abs(s.r * Math.PI / 180), k = Math.abs(Math.cos(a)) + Math.abs(Math.sin(a));
+    g.innerHTML = `<div class="hb-turn" style="transform:rotate(${-s.r}deg) scale(${k.toFixed(4)})"><div class="hb-sheen"></div><div class="hb-glare"></div></div>`;
     glow.appendChild(g);
   }
   el.appendChild(glow);
