@@ -101,12 +101,12 @@ function buildLatestResultSection() {
   const tours = (PLAYER && PLAYER.tournaments) || [];
   if (!tours.length) return;
   const latest = tours.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
-  // 下位クラスに出た大会は同じ大会の本戦の行もある: 本戦 / クラスをタブで切り替える (本戦が先、最初は最新の行)
+  // 下位クラスに出た大会は同じ大会の本戦の行もある: 本戦 / クラスをタブで切り替える (本戦が先、最初は本戦)
   const pid = latest.parent_event_id != null ? latest.parent_event_id : latest.event_id;
   const sibs = pid == null ? [latest]
     : tours.filter(x => x.event_id === pid || x.parent_event_id === pid)
       .sort((a, b) => (a.parent_event_id != null ? 1 : 0) - (b.parent_event_id != null ? 1 : 0));
-  renderLatestResultCard(latest, sibs.length > 1 ? sibs : []);
+  renderLatestResultCard(sibs.length > 1 ? sibs[0] : latest, sibs.length > 1 ? sibs : []);
 }
 
 /** @param {PTour} t 表示する行 @param {PTour[]} tabs 同じ大会の本戦・クラスの行 (タブが要らなければ空) */
