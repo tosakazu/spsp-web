@@ -18,7 +18,7 @@ import SPSPFormat from './format.js';
 import SpspLogin from './login.js';
 import SPSPLinks from './links.js';
 
-const REFRESH_MS = 60 * 1000;
+const REFRESH_MS = 30 * 1000;
 /** 試合の一覧を開いている部門 (event_id)。最初は全部閉じている */
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
