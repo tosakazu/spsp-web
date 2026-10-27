@@ -183,8 +183,8 @@ function buildLatestResultSection() {
         ${zenHtml}
       </div>
       <div class="lr-detail">
-        <div class="v-stats lr-stats">${tjprChip}${btChip}</div>
         <div class="tour-matches"></div>
+        <div class="v-stats lr-stats">${tjprChip}${btChip}</div>
       </div>
     </div>`;
   const lrDate = document.getElementById('latestres-date');
