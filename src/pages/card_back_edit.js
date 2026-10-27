@@ -437,15 +437,19 @@ export async function mountBackEditor(o) {
     paintTray();
   };
 
-  // ── 操作の欄: 形・重なり順・剥がす、大きさ/回転/切り取りは 1 本のスライダーを切り替えて使う ──
+  // ── 操作の欄: 形・重なり順・剥がす、大きさ/回転/左右/上下/切り取りは 1 本のスライダーを切り替えて使う ──
   const tools = $('bz-tools');
   const slider = /** @type {HTMLInputElement} */ ($('bz-slider'));
-  /** @type {'size' | 'rot' | 'crop'} */
+  /** @type {'size' | 'rot' | 'x' | 'y' | 'crop'} */
   let tab = 'size';
-  const TAB_LABEL = { size: i18n('card_back.tab.size'), rot: i18n('card_back.tab.rot'), crop: i18n('card_back.tab.crop') };
+  const TAB_LABEL = { size: i18n('card_back.tab.size'), rot: i18n('card_back.tab.rot'), x: i18n('card_back.tab.x'), y: i18n('card_back.tab.y'), crop: i18n('card_back.tab.crop') };
+  /** 左右・上下の値の見せ方 (真ん中 / 元の位置からのずれ、右・下が +) @param {number} d */
+  const offText = d => (d > 0 ? '+' : '') + Math.round(d);
   /** スライダーの範囲と今の値 @param {Sticker} s */
   const sliderOf = s => tab === 'size' ? { min: 0, max: 1000, v: sizeToSlider(s.s), text: Math.round(s.s / S_DEF * 100) + '%' }
     : tab === 'rot' ? { min: -180, max: 180, v: Math.round(s.r), text: Math.round(s.r) + '°' }
+    : tab === 'x' ? { min: 0, max: W, v: Math.round(s.x), text: offText(s.x - W / 2) }
+    : tab === 'y' ? { min: 0, max: H, v: Math.round(s.y), text: offText(s.y - H / 2) }
     : { min: Math.round(CROP_MIN * 100), max: 100, v: Math.round(s.c * 100), text: Math.round(s.c * 100) + '%' };
   function paintTools() {
     const s = cur();
@@ -454,7 +458,7 @@ export async function mountBackEditor(o) {
     name.classList.toggle('bz-hint', !s);
     const btn = (/** @type {string} */ id) => /** @type {HTMLButtonElement} */ ($(id));
     if (!s && textSel) {
-      // 名前・二つ名・順位: 大きさと回転だけ (形・切り取り・重なり順・剥がすは無い)
+      // 名前・二つ名・順位: 大きさ・回転・左右・上下だけ (形・切り取り・重なり順・剥がすは無い)
       name.classList.remove('bz-hint');
       name.textContent = i18n('card_back.text_label.' + target);
       for (const x of $('bz-shapes').querySelectorAll('button')) { x.classList.remove('on'); /** @type {HTMLButtonElement} */ (x).disabled = true; }
@@ -464,12 +468,14 @@ export async function mountBackEditor(o) {
       for (const x of $('bz-tabs').querySelectorAll('button')) x.classList.toggle('on', /** @type {HTMLElement} */ (x).dataset.t === tab);
       const p = tp();
       const sv = tab === 'size' ? { min: 0, max: 1000, v: textSizeToSlider(p.s), text: Math.round(p.s * 100) + '%' }
+        : tab === 'x' ? { min: -TEXT_DX, max: TEXT_DX, v: Math.round(p.x), text: offText(p.x) }
+        : tab === 'y' ? { min: -TEXT_DY, max: TEXT_DY, v: Math.round(p.y), text: offText(p.y) }
         : { min: -180, max: 180, v: Math.round(p.r), text: Math.round(p.r) + '°' };
       slider.min = String(sv.min); slider.max = String(sv.max);
       if (document.activeElement !== slider) slider.value = String(sv.v);
       slider.setAttribute('aria-label', TAB_LABEL[tab]);
       $('bz-val').textContent = sv.text;
-      $('bz-val').title = tab === 'size' ? i18n('card_back.val.text_size') : i18n('card_back.val.text_rot');
+      $('bz-val').title = i18n('card_back.val.text_' + tab);
       return;
     }
     btn('bz-del').disabled = false;
@@ -509,13 +515,15 @@ export async function mountBackEditor(o) {
   slider.addEventListener('input', () => {
     const v = Number(slider.value);
     if (!cur() && textSel) {
-      setTP(tab === 'size' ? { ...tp(), s: textSliderToSize(v) } : { ...tp(), r: snapRot(v) });
+      setTP(tab === 'size' ? { ...tp(), s: textSliderToSize(v) } : tab === 'x' ? { ...tp(), x: v } : tab === 'y' ? { ...tp(), y: v } : { ...tp(), r: snapRot(v) });
       showTextPos(); paintTools(); commit();
       return;
     }
     const s = cur(); if (!s) return;
     if (tab === 'size') s.s = clampSize(sliderToSize(v));
     else if (tab === 'rot') s.r = snapRot(v);
+    else if (tab === 'x') s.x = Math.max(0, Math.min(W, v));
+    else if (tab === 'y') s.y = Math.max(0, Math.min(H, v));
     else {
       // 切り取り: 絵の縮尺はそのまま、外側を切った分だけシールが小さくなる
       const c = clampCrop(v / 100);
@@ -527,13 +535,15 @@ export async function mountBackEditor(o) {
   // 値を押すと既定に戻す
   $('bz-val').addEventListener('click', () => {
     if (!cur() && textSel) {
-      setTP(tab === 'size' ? { ...tp(), s: 1 } : { ...tp(), r: 0 });
+      setTP(tab === 'size' ? { ...tp(), s: 1 } : tab === 'x' ? { ...tp(), x: 0 } : tab === 'y' ? { ...tp(), y: 0 } : { ...tp(), r: 0 });
       showTextPos(); paintTools(); commit(true);
       return;
     }
     const s = cur(); if (!s) return;
     if (tab === 'size') s.s = S_DEF;
     else if (tab === 'rot') s.r = 0;
+    else if (tab === 'x') s.x = W / 2;
+    else if (tab === 'y') s.y = H / 2;
     else { s.s = clampSize(s.s / s.c); s.c = 1; }
     changed(true);
   });

@@ -1,5 +1,5 @@
 /* holo_badge.css — 実績バッジ (大会アイコンのホログラム、js/holo_badge.js)。Figma「spsp」の sticker (98:2) をそのまま再現
-   --hb-img = アイコンの画像、--hb-mx / --hb-my = ポインタの位置 (0〜1、ポインタを乗せたときの傾き・光が動く)
+   --hb-img = アイコンの画像、--hb-mask = 透過ありの型 (同じ画像の CORS 用 URL)、--hb-mx / --hb-my = ポインタの位置 (0〜1、ポインタを乗せたときの傾き・光が動く)
    レイヤーの画像 = img/holo/l/ (Figma の画像を 740px の WebP に。名前は Figma のレイヤー名。切り抜きのある 2 枚は切り抜いた後)
    重ね順と重ね方 (mix-blend-mode) は js/holo_badge.js の LAYERS (Figma のレイヤーのブレンドモードそのまま)
    透過ありは形の外を出さない (Figma ではアイコンをマスクにしている)
@@ -53,8 +53,8 @@
 
 /* 透過あり: 形の外は出さない (アイコンの透明部分で切り抜く)。クラスの文字は切り抜かない (形の外にはみ出してよい) */
 .hb-shape .hb-in, .hb-shape > .hb-sheen, .hb-shape > .hb-glare {
-  -webkit-mask: var(--hb-img) center / contain no-repeat;
-  mask: var(--hb-img) center / contain no-repeat;
+  -webkit-mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat;
+  mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat;
 }
 .hb-shape .hb-art { background-size: contain; }
 

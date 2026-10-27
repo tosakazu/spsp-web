@@ -195,7 +195,7 @@
 .pcb-glow-m > .hb, .pcb-glow-m > .hb:hover { transform-origin: 50% 50%; transition: none; }
 /* 光はシールの回転の逆に回した箱 (.hb-turn) の中。透過ありの形 (アイコンの形) では外側の箱で切る (光と一緒に回さない) */
 .pcb-glow .hb-turn > div { position: absolute; inset: 0; pointer-events: none; }
-.pcb-glow-m > .hb-shape { -webkit-mask: var(--hb-img) center / contain no-repeat; mask: var(--hb-img) center / contain no-repeat; }
+.pcb-glow-m > .hb-shape { -webkit-mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat; mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat; }
 .pc-tilt .pcb-glow .hb-sheen { opacity: .22; }
 .pc-tilt .pcb-glow .hb-glare { opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .pcard-wrap { transform: none !important; } }

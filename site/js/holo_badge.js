@@ -108,6 +108,11 @@ function corsUrl(src) {
   return src + (src.includes('?') ? '&' : '?') + 'cors=1';
 }
 
+/** 透過ありの形の型 (CSS の mask) に使う画像の CSS 値。mask の画像は CORS で読まれる (iPhone の Safari は許可がないと
+ * 型が全部透明になり、シールが消える)。背景で読んだ物 (許可なしでキャッシュされる) とは別の URL にする。2026-10-27
+ * @param {string} src */
+export const maskImage = src => `url("${corsUrl(src).replace(/"/g, '%22')}")`;
+
 /** 縮めた絵の透明な所の割合。何も描けなかった (全部透明) ときは null
  * @param {HTMLImageElement} img @returns {{ edge: number, all: number } | null} */
 function clearRatio(img) {
@@ -190,6 +195,7 @@ export function renderBadge(el, opts) {
   const pl = LETTER_PLACE[shape] ? { ...LETTER_PLACE[shape] } : { ...letterShift(shape, box || BOX_GUESS), k: 1 };
   el.className = `hb ${opts.transparent ? 'hb-shape' : 'hb-square'} hb-v${v} hb-k-${shape}`;
   el.style.setProperty('--hb-img', url);
+  if (opts.transparent) el.style.setProperty('--hb-mask', maskImage(String(opts.src))); else el.style.removeProperty('--hb-mask');
   el.style.setProperty('--hb-zoom', String(1 / crop));
   el.style.setProperty('--hb-cls-dx', String(pl.dx));
   el.style.setProperty('--hb-cls-dy', String(pl.dy));
@@ -511,7 +517,7 @@ export function attachTilt(el) {
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => el.classList.remove('hb-live'));
 }
 
-const API = { HOLO, isTransparent, renderBadge, attachTilt, reflatten, shapePath, badgeToCanvas, preloadBadge, preloadAllHolo };
+const API = { HOLO, isTransparent, maskImage, renderBadge, attachTilt, reflatten, shapePath, badgeToCanvas, preloadBadge, preloadAllHolo };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;

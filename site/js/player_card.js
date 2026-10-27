@@ -8,7 +8,7 @@
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
-import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten, shapePath } from './holo_badge.js';
+import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten, shapePath, maskImage } from './holo_badge.js';
 import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
@@ -576,6 +576,7 @@ function paintGlow(el, m) {
     const g = document.createElement('div');
     g.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)`;
     g.style.setProperty('--hb-img', `url("${src.replace(/"/g, '%22')}")`);
+    g.style.setProperty('--hb-mask', maskImage(src));
     const shape = (/** @type {boolean} */ tr) => { g.className = tr ? 'hb hb-shape' : `hb hb-square hb-k-${s.k}`; };
     shape(false);
     isTransparent(src).then(tr => { if (tr) shape(true); });
