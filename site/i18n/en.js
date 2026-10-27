@@ -428,6 +428,8 @@ window.SPSP_I18N.en = {
   'player.period.3m': '3 months',
   'player.filter.tournaments': 'Tournaments:',
   'player.counted': 'Counted',
+  'player.latest.tab_main': 'Main event',
+  'player.latest.tab_class': 'Class {c}',
   'player.not_counted': 'Not counted',
   'player.sec.top_tjpr': '💎 Most influential tournaments (placement)',
   'player.sec.top_bt': '⚔️ Most influential matches (head-to-head)',

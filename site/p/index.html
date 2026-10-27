@@ -178,6 +178,14 @@
   .tour-clickable:hover { background: #fafafa; }
   /* 最新の大会結果カード: 順位とパフォーマンスを統合したヒーロー表示 */
   #latestres-section h2 { margin-bottom: 0; }
+  /* 最新の大会結果の本戦 / 下位クラスのタブ (見た目は .chart-tab と同じ。.chart-tab はグラフ切替が全部拾うので別名) */
+  .lr-tabs { display: flex; gap: 4px; margin: 6px 0 2px; }
+  .lr-tab {
+    padding: 3px 8px; font-size: 10px; cursor: pointer; user-select: none;
+    background: #ffffff; border-radius: 4px; color: #6b7280;
+    border: 1px solid #e5e7eb;
+  }
+  .lr-tab.active { background: #dc2626; color: #fff; border-color: #dc2626; }
   .latestres-card .lr-top { margin-top: -1px; }
   .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
   /* ▶ は順位などの列とは別に右端 (幅が足りなくても ▶ だけ次の行に落ちないように) */
