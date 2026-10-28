@@ -82,6 +82,7 @@ async function managerLoginOnce(cfg: Config, store: Store, fetchFn: FetchFn, cod
   if (st.payload.f !== 'manager') return err('state_invalid', MSG_MANAGER_STATE, 'wrong_flow');
   const ex = await exchangeCodeForToken(cfg, code, fetchFn, MANAGER_SCOPE);
   if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
+  console.log('manager_login: token ok, expires_in=' + String(ex.expiresIn));
   const user = await fetchCurrentUser(ex.token, fetchFn);
   if (!user) return err('auth_failed', oauthErrorMessage('no_user'), 'no_user');
   const token = await issueSessionToken(cfg, user, now);

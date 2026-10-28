@@ -365,7 +365,10 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
         // start.gg が callback を 2 回開くと、後のページは「使用済み」になる。先のページが保存していれば成功 (少し待って確かめる)
         return SpspStartggManager.savedRecently(2 * 60 * 1000, 8000).then(function (saved) {
           if (saved) { location.replace(S.withFlag(back, 'login')); return; }
-          reportError('manager_failed', errCode);
+          var raw = null;
+          try { raw = JSON.parse(localStorage.getItem(SpspStartggManager.KEY) || 'null'); } catch (_) { /* 無い */ }
+          // 手掛かり: 保存があるか・期限まで何秒か・何秒前に保存したか (トークンは載せない)
+          reportError('manager_failed', errCode + (raw ? ';ttl=' + Math.round((raw.exp - Date.now()) / 1000) + ';age=' + Math.round((Date.now() - (raw.at || 0)) / 1000) : ';none'));
           show('error', i18n('callback.manager_title'), i18n('callback.state_invalid'), back);
         });
       }
