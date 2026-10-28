@@ -463,6 +463,7 @@ function uploadSetup(HTML) {
     function alert(m) { calls.alerts.push(m); }
     function confirm() { return true; }
     async function createPhaseThenUpload() { calls.createPhase++; }
+    function logSeedingUse(token, phaseId, count) { calls.logged = { phaseId: phaseId, count: count }; }   // 使用記録 (js/tool_log.js) は送ったことだけ見る
     var SmashSeed = { uploadSeeding: async function (phaseId, token, mapping) { calls.upload = { phaseId: phaseId, mapping: mapping }; return { ok: true, count: mapping.length }; } };
     ${extractFn(HTML, 'uploadOrderLabel')}
     ${extractFn(HTML, 'isAutoOptimizeOn')}
@@ -496,6 +497,7 @@ test('jsdom: 自動実行 ON → 最適化の完了を待ってから、反映�
   assert.strictEqual(JSON.stringify(c.upload.mapping), JSON.stringify([{ seedId: 13, seedNum: 1 }, { seedId: 12, seedNum: 2 }, { seedId: 11, seedNum: 3 }]));
   assert.match(win.document.getElementById('status').textContent, /シード適用成功/);
   assert.strictEqual(c.errors.length, 0);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(c.logged)), { phaseId: 77, count: 3 }, '書き込めたら使用記録を送る');
   // 反映済みなので、もう一度押しても回し直さない。
   await win.eval('uploadToStartgg()');
   assert.strictEqual(win.eval('calls').optimize, 1, '反映済みなのに最適化を回し直した');

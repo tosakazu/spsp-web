@@ -743,6 +743,7 @@ window.SPSP_I18N.en = {
   'seed.startgg.s10': 'Could not fetch the phase',
   'seed.startgg.s11': 'Could not fetch the event',
   'seed.startgg.s12': 'Overall',
+  'seed.startgg.order_csv': 'CSV order',
   'seed.startgg.s13': 'Placement',
   'seed.startgg.s14': 'Head-to-head',
   'seed.startgg.s15': 'Fetching entrants from the tournament to get the seedIds needed to apply…',

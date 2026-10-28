@@ -168,3 +168,16 @@ CREATE TABLE card_settings (
 - callback は、運営用ログインと Challonge のログインを **ログインを始めたブラウザ (nonce を持っている) でだけ** 処理する。
   開いたリンクを先に確かめるセキュリティ製品の自動ブラウザが、本人より先に callback を開いて code を使ってしまう例があったため
   (2026-10-28、preview)。普段のログインは nonce が無くても続ける (アプリ内ブラウザから別のブラウザに戻される経路のため、今までどおり)。
+
+### 使用記録 (D1 `tool_logs`、migrations/0009、2026-10-28)
+
+どの大会を、どのユーザーが、SPSP のどの機能で操作したかを残す。トークン・API キーは入れない。
+
+| 機能 (`tool`) | 操作 (`action`) | 書くのは | ユーザー |
+|---|---|---|---|
+| `seed` (シード作成) / `seed_upload` (シードアップロード) | `seeding` | start.gg への書き込みが成功したあと、ブラウザが `POST /api {action:'tool_log', op:'seeding', …}` (`site/js/tool_log.js`) | ログイン: SPSP のセッションで確かめる (`verified 1`) / API キー: そのキーで start.gg の currentUser を取って申告 (`verified 0`) |
+| `class` (下位クラス作成) | `create` / `delete` | `class_create` / `class_delete` が成功したときに Worker が書く (大会名などはブラウザが `log` に入れる) | start.gg で確かめた TO (`verified 1`) |
+
+- `detail` (JSON): シードは基準・被り回避 (反映したか・`so-*` の設定すべて)・手動の並べ替え (回数)・シード指定と固定 (件数)・フェーズを作ったか・CSV。下位クラスはクラス・形式・順位の範囲・Challonge。
+- 1 人 1 日 300 件まで (`TOOL_LOG_MAX_PER_DAY`)。記録に失敗しても操作は成功のまま。
+- 読むときは `wrangler d1 execute spsp --remote --command "SELECT … FROM tool_logs ORDER BY id DESC LIMIT 50"`。
