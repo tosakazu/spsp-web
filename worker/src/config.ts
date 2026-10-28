@@ -61,6 +61,9 @@ export const CARD_RATE_MAX_PER_DAY = 300;           // 同一ユーザーの当�
 /** 下位クラスの登録 (action class_register、docs/class_bracket_design.md)。 */
 export const CLASS_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同じ TO の登録間隔
 export const CLASS_RATE_MAX_PER_DAY = 50;            // 同じ TO の当日登録数
+/** 大会運営ツールの使用記録 (action tool_log、tool_logs)。1 人 1 日の上限と detail (JSON) の長さ */
+export const TOOL_LOG_MAX_PER_DAY = 300;
+export const TOOL_LOG_DETAIL_MAX = 4000;
 export const STARTGG_TIMEOUT_MS = 10 * 1000;         // start.gg GraphQL の応答待ち
 export const CHALLONGE_TIMEOUT_MS = 15 * 1000;       // Challonge API の応答待ち (1 回ごと)
 export const CLASS_MINE_DAYS = 60;                   // class_mine に出す期間

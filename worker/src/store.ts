@@ -124,6 +124,14 @@ export interface TitleOwnedWrite { uid: string; prev: { bits: string; n_pre: num
 /** csp_reports の 1 行 (書き出し用)。 */
 export interface CspRow { directive: string; blocked: string; path: string; hits: number; first_seen: string; last_seen: string }
 
+/** tool_logs の 1 行 (migrations/0009)。 */
+export interface ToolLogRow {
+  ts: string; ts_ms: number; day: string; tool: string; action: string;
+  user_id: string; gamer_tag: string; verified: number; auth: string;
+  tournament_id: number | null; tournament_slug: string; tournament_name: string;
+  event_id: number | null; event_name: string; phase_id: number | null; count: number | null; detail: string;
+}
+
 export interface Store {
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
@@ -177,4 +185,6 @@ export interface Store {
   listTitleOwned(lang: string, afterUid: number, limit: number): Promise<({ uid: number } & TitleOwnedRow)[]>;
   /** 連投条件 (user_id と action ごと) を満たすときだけ記録する。記録したら true。 */
   recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
+  /** 大会運営ツールの使用記録を 1 行足す。同じユーザーの当日分が maxPerDay 以上なら足さずに false */
+  insertToolLog(row: ToolLogRow, maxPerDay: number): Promise<boolean>;
 }

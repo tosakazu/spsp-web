@@ -164,6 +164,13 @@ export class MemStore {
     return true;
   }
 
+  async insertToolLog(row, maxPerDay) {
+    this.toolLogs = this.toolLogs || [];
+    if (this.toolLogs.filter((r) => r.user_id === row.user_id && r.day === row.day).length >= maxPerDay) return false;
+    this.toolLogs.push({ ...row });
+    return true;
+  }
+
   async recordCsp(key, e, ts, maxKeys) {
     const cur = this.csp.get(key);
     if (cur) { cur.hits += 1; cur.last_seen = ts; return; }

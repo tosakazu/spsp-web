@@ -12,6 +12,7 @@ import { escapeHtml } from '../../js/html.js';
 import SPSPRankingTable from '../../ranking-table.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
 import SpspStartggManager from '../../js/startgg_manager.js';
+import SpspToolLog from '../../js/tool_log.js';
 'use strict';
 
 /** start.gg API のエラー。rawError = 生の応答 (showError の details に出す) */
@@ -513,6 +514,7 @@ export async function uploadToStartgg() {
   const r = await SmashSeed.uploadSeeding(S.EVENT_CONTEXT.phaseId, token, mapping);
   if (r.ok) {
     if (status) status.textContent = `${i18n('seed.startgg.t8')}${r.count} ${i18n('seed.startgg.t9')}`;
+    logSeedingUse(token, S.EVENT_CONTEXT.phaseId, r.count, methodLabel, false);
   } else {
     showError(r.error || 'unknown error');
   }
@@ -605,6 +607,7 @@ async function createPhaseThenUpload(token) {
   const r = await SmashSeed.uploadSeeding(phase.id, token, mapping);
   if (r.ok) {
     status.textContent = `${i18n('seed.startgg.t20')}${r.count} ${i18n('seed.startgg.t9')}`;
+    logSeedingUse(token, phase.id, r.count, uploadOrderLabel(), true);
     const metaInfo = document.getElementById('meta-info');
     if (metaInfo) metaInfo.textContent = `${S.EVENT_CONTEXT.eventName} (phase ${phase.id})`;
     // phase はもう存在するので自動作成の設定 UI は閉じる
@@ -613,6 +616,38 @@ async function createPhaseThenUpload(token) {
   } else {
     showError(r.error || 'unknown error');
   }
+}
+
+/**
+ * シードを書き込んだ記録を SPSP に送る (js/tool_log.js → D1 tool_logs)。機能 (シード作成 / シードアップロード)・大会・人数と、
+ * 並びの決め方 (基準・被り回避の設定と反映・手動の並べ替え・シード指定と固定) を detail に入れる。待たない・失敗しても何もしない
+ * @param {string} token @param {unknown} phaseId @param {number | undefined} count @param {string} orderLabel @param {boolean} phaseCreated
+ */
+function logSeedingUse(token, phaseId, count, orderLabel, phaseCreated) {
+  const ctx = S.EVENT_CONTEXT;
+  if (!ctx) return;
+  /** @type {Record<string, unknown>} */
+  const options = {};
+  for (const el of /** @type {NodeListOf<HTMLInputElement | HTMLSelectElement>} */ (document.querySelectorAll('input[id^="so-"], select[id^="so-"]'))) {
+    options[el.id] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value;
+  }
+  const m = S.MANUAL, sp = S.SEED_SPEC;
+  const manualOps = m && m.ops ? m.ops.length : 0;
+  const n = (/** @type {Record<string, unknown> | null | undefined} */ o) => (o ? Object.keys(o).length : 0);
+  const detail = {
+    method: SEED_APP_CONFIG.mode === 'csv' ? 'csv' : S.currentMethod,
+    order_label: orderLabel,
+    csv: SEED_APP_CONFIG.mode === 'csv' && S.CSV_SOURCE ? { label: S.CSV_SOURCE.label, rows: S.CSV_SOURCE.rows.length } : undefined,
+    optimize: { applied: !!S.APPLIED_ORDER, options },
+    manual: { used: manualOps > 0, ops: manualOps },
+    spec: { used: !!sp && (n(sp.pins) + n(sp.waves) + n(sp.locks)) > 0, label: sp ? sp.label : null, pins: n(sp && sp.pins), waves: n(sp && sp.waves), locks: n(sp && sp.locks) },
+    phase_created: phaseCreated,
+  };
+  SpspToolLog.logSeeding(token, {
+    tool: SEED_APP_CONFIG.mode === 'csv' ? 'seed_upload' : 'seed',
+    tournament_id: ctx.tournamentId, tournament_slug: ctx.tournamentSlug || '', tournament_name: ctx.tournamentName,
+    event_id: ctx.eventId, event_name: ctx.eventName, phase_id: phaseId, count, detail,
+  });
 }
 
 /** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
@@ -830,6 +865,7 @@ async function performSeedFetch(token, ev, phaseId) {
   S.EVENT_CONTEXT = {
     phaseId, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
+    tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
     bracketType: _phase ? _phase.bracketType : null,
     poolCount: (_phase && _phase.groupCount) ? _phase.groupCount : null,  // 取得できたプール数
     waves,   // {poolCount, waveCount, poolToWave, letters, identifiers} | {error} | null
@@ -873,6 +909,7 @@ async function performEntrantsFetch(token, ev) {
   S.EVENT_CONTEXT = {
     phaseId: null, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
+    tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
     bracketType: null,   // phase 未作成 → 形式不明 → 既定 DE 想定
     poolCount: null,     // phase 未作成 → プール数不明
     waves: null,         // phase 未作成 → ウェーブ不明 (手動設定可)

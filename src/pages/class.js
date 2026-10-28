@@ -14,6 +14,7 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
 import SpspStartggManager from '../../site/js/startgg_manager.js';
+import SpspToolLog from '../../site/js/tool_log.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
@@ -490,8 +491,9 @@ async function create() {
     // 被り回避 (設定が ON なら) はここで 1 回だけ。並べ替えた順で作る
     await optimizeForCreate();
     createStatus(i18n('class.step.create'));
+    const log = await classLog(loaded.token);
     const r = await SpspLogin.api({
-      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
+      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken, log,
       parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
       format: $('cb-format').value, counted,   // 確認で見せた値をそのまま送る
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
@@ -706,6 +708,21 @@ $('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine
 
 // start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
 const SGG_TOKEN_KEY = 'spsp_startgg_token';
+/**
+ * 使用記録 (Worker が tool_logs に書く) に添える欄: ログインか API キーか・名前・大会とイベントの名前。ユーザーは Worker が start.gg で確かめる
+ * @param {string} token @returns {Promise<Record<string, unknown>>}
+ */
+async function classLog(token) {
+  const who = await SpspToolLog.userFields(token);
+  const p = parseStartggUrl($('cb-event').value);
+  const ev = loaded && loaded.event;
+  return {
+    auth: who.auth, gamer_tag: who.gamer_tag || '',
+    tournament_id: ev ? ev.tournament.id : null, tournament_name: ev ? ev.tournament.name : '',
+    tournament_slug: ev && p ? 'tournament/' + p.tournamentSlug : '', event_name: ev ? ev.name : '',
+  };
+}
+
 /** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
 function sggToken() {
   return SpspStartggManager.pick($('cb-sgg-key').value);
@@ -798,7 +815,7 @@ $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) 
   if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
   if (!confirm(i18n('class.del_confirm', { name: b.dataset.name || '' }))) return;
   b.disabled = true;
-  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: chToken, id: Number(b.dataset.id) });
+  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: chToken, id: Number(b.dataset.id), log: await classLog(sggToken()) });
   if (r && r.ok) { mineStatus(i18n('class.del_done'), 'ok'); loadMine(); return; }
   b.disabled = false;
   const code = (r && r.error && r.error.code) || 'unknown';

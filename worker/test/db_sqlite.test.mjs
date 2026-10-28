@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -190,4 +190,18 @@ test('csp_reports: 同じ key は hits+1・last_seen 更新、上限を超えた
   const rows = await store.listCsp();
   assert.deepStrictEqual(rows.map((r) => [r.blocked, r.hits, r.first_seen, r.last_seen]),
     [['https://h2.example', 3, 'T3', 'T6'], ['https://h1.example', 2, 'T1', 'T2']]);
+});
+
+test('tool_logs: 1 行足す (null の欄はそのまま)・同じユーザーの当日分が上限なら足さない', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store, db } = fresh();
+  const row = (u, day) => ({ ts: day + 'T12:00:00+09:00', ts_ms: 1, day, tool: 'seed', action: 'seeding', user_id: u, gamer_tag: 'T', verified: 0, auth: 'key',
+    tournament_id: 777, tournament_slug: 's', tournament_name: 'n', event_id: null, event_name: '', phase_id: 9, count: 32, detail: '{"a":1}' });
+  assert.strictEqual(await store.insertToolLog(row('1', '2026-10-28'), 2), true);
+  assert.strictEqual(await store.insertToolLog(row('1', '2026-10-28'), 2), true);
+  assert.strictEqual(await store.insertToolLog(row('1', '2026-10-28'), 2), false);
+  assert.strictEqual(await store.insertToolLog(row('1', '2026-10-29'), 2), true);
+  assert.strictEqual(await store.insertToolLog(row('2', '2026-10-28'), 2), true);
+  const rows = db.prepare('SELECT user_id, day, event_id, phase_id, count, detail FROM tool_logs ORDER BY id').all();
+  assert.strictEqual(rows.length, 4);
+  assert.deepStrictEqual({ ...rows[0] }, { user_id: '1', day: '2026-10-28', event_id: null, phase_id: 9, count: 32, detail: '{"a":1}' });
 });
