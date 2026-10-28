@@ -26,7 +26,8 @@ const FIX = path.join(__dirname, 'fixtures/build');
 const SNAP = path.join(ROOT, 'tests/frontend/snapshot_pages.cjs');
 const SCENARIOS = '^(index|c_index|c_ranking_1323|local_ranking_higoburaSP|pref_index|pref_ranking_tokyo|p_1787719|p_1983750|t_1503940|sim_1787719|priority)$';
 // 外部フォント (Google Fonts) の読み込み失敗は描画の比較に関係しない (jsdom は外へ出ない。tests/frontend/snapshot_pages.cjs の既存の扱い)
-const NOISE = /fonts\.googleapis\.com/;
+// 開催中の大会の速報 (data.spsp.games/live/) も同じ: フィクスチャに無く、従来・views のどちらで読んでも出ない (読み方に関係しない)
+const NOISE = /fonts\.googleapis\.com|data\.spsp\.games\/live\//;
 const errLines = (p) => fs.readFileSync(p, 'utf8').split('\n').filter((l) => l && !NOISE.test(l));
 // 使用率の列 = c/ranking の行の最後のセル (snapshot は '><' ごとに改行する)
 // (「サブ使用も表示」の行は後ろに「サブ」の印が付く。従来側は使用率が無いので印だけ)

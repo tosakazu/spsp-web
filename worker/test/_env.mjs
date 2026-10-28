@@ -1,4 +1,4 @@
-// テスト環境 (tests/post/_gas_env.cjs の Worker 版)。
+// テスト環境 (旧 GAS 版 tests/post/_gas_env.cjs の Worker 版。GAS 側は 2026-10-29 に削除)。
 //   opts.token     : token 交換の応答 { status, body } / null で例外 (network)
 //   opts.user      : currentUser の応答 { status, body }
 //   opts.player    : players/<uid>.json の応答 (既定 200 + characters 空)
