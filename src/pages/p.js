@@ -371,8 +371,8 @@ function loadUpcoming() {
 
 // 参加予定の大会: 出場登録している開催前の大会を近い順に 5 件ずつ (出場履歴と同じページ送り)。最初は大会名と集計対象のバッジだけ、
 // 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
-// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(押すと同じプールの人を
-// シード順に、メインキャラの絵文字付き) も
+// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(同じプールの人を
+// シード順に、メインキャラの絵文字付き。24 人ずつページ送り) も
 const POOL_PAGE = 24;   // プールのプレイヤーのページ送りの 1 ページの人数
 async function buildUpcomingSection() {
   if (!UID || !META) return;
@@ -445,7 +445,8 @@ async function buildUpcomingSection() {
       }).join('');
       const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
         `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
-      list = `<details class="pe-pool"><summary>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</summary><div class="pe-list">${chips}</div>${pager}</details>`;
+      // 見出しの右にページ送り (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない)
+      list = `<div class="pe-pool"><div class="pe-pool-h"><span>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</span>${pager}</div><div class="pe-list">${chips}</div></div>`;
     }
     // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
     const slug = slugOf.get(ev.tournament_id) || '';
