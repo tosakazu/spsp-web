@@ -18,6 +18,8 @@ import SpspToolLog from '../../site/js/tool_log.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
+import SPSPPublishedSeeds from '../../site/seeding/published_seeds.js';
+import SPSPPublishedSeedsUI from '../../site/seeding/published_seeds_ui.js';
 import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
@@ -28,8 +30,8 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-counted'];
-const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-av-published', 'cb-counted'];
+const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-av-published'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
 /** 1 つの下位クラスの最大人数 (Worker の class_create と同じ上限) */
@@ -71,7 +73,7 @@ async function sgg(token, query, variables = {}) {
  *   order = 作成に使う並び (外した人を除く。被り回避は「作成」を押したときにだけかける)、display = 表の並び (外した人もその場に残す)、
  *   touched = 手でオン・オフした人 (DQ の人は最初は外すが、手で入れたら設定を変えても外さない)、
  *   avoid = 被り回避の材料 (null = 使わない)、mainPairs = 本戦で当たった組 (必要になったら取る)、rngSeed = 同率の並びを設定を変えても保つための乱数の種
- * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, standings: ClassEntrant[], off: Set<number>,
+ * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string, startAt?: number | null } }, standings: ClassEntrant[], off: Set<number>,
  *   targets: ClassEntrant[], seeded: ClassEntrant[], order: ClassEntrant[], display: ClassEntrant[],
  *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> },
  *   mainPairs: Set<string> | null, rngSeed: number, touched: Set<number>, extras: ClassEntrant[] }} */
@@ -197,7 +199,8 @@ async function refreshAvoid() {
   if (!loaded) return;
   const L = loaded;
   const region = !!$('cb-av-region').checked, recent = !!$('cb-av-recent').checked, main = !!$('cb-av-main').checked;
-  if (!region && !recent && !main) { L.avoid = null; return; }
+  const published = !!$('cb-av-published').checked;
+  if (!region && !recent && !main && !published) { L.avoid = null; return; }
   /** @type {Record<string, boolean>} */
   const groups = {};
   for (const el of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('#cb-av-groups input[data-group]'))) groups[String(el.dataset.group)] = el.checked;
@@ -219,11 +222,40 @@ async function refreshAvoid() {
     const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, L.standings.length));
     for (const k of L.mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
   }
+  // 公開済みのほかの大会のシードで同じプールの組 (§6.2.2)。実際の対戦歴・本戦の組とは大きい方
+  if (published) {
+    const res = await selectPublished();
+    if (!('error' in res)) {
+      const uids = L.targets.map(p => p.userId);
+      SPSPPublishedSeeds.mergePublished({ recentPair, recentMeta: {} }, SPSPPublishedSeeds.publishedPairs(res.used, uids));
+    }
+  }
   L.avoid = {
     prefByUid: region && data ? data.prefByUid : {},
     recentPair,
-    params: { avoidRegion: region, avoidRecent: recent || main },
+    params: { avoidRegion: region, avoidRecent: recent || main || published },
   };
+}
+
+/** 公開済みシードの対象の大会を選び、チェックの下の欄に出す。本大会 (本戦) そのものは外す。開催日は本戦の大会の開始 (無ければ今)
+ * @returns {Promise<import('../../site/seeding/published_seeds_ui.js').PublishedSel>} */
+async function selectPublished() {
+  const box = $('cb-av-published-box');
+  if (!loaded) return { error: 'nodate' };
+  const L = loaded;
+  const res = await SPSPPublishedSeedsUI.select({
+    dataRoot: SPSP.data, eventId: L.event.id, startAt: L.event.tournament.startAt || null, fallbackStartAt: Math.floor(Date.now() / 1000),
+    attendees: L.targets.map(p => p.userId), excludeWeekday: !$('cb-av-weekday').checked,
+  });
+  if (loaded === L && $('cb-av-published').checked) { box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res); box.hidden = false; }
+  return res;
+}
+/** チェックの付け外し・対象の変更で欄を出し直す (チェックが外れていれば隠す) */
+function updatePublishedBox() {
+  const box = $('cb-av-published-box');
+  if (!loaded || !$('cb-av-published').checked) { box.hidden = true; return; }
+  if (!box.innerHTML) { box.textContent = i18n('seed.published.loading'); box.hidden = false; }
+  selectPublished().catch(() => {});
 }
 
 /** 設定 (対象の順位・シード・DQ・被り回避) から対象と並びを作り直す。本戦のデータは取り直さない
@@ -245,6 +277,7 @@ async function recompute() {
   L.seeded = seedOrder(L.targets, method, rankOf, seededRand(L.rngSeed));
   buildOrder();
   renderList();
+  updatePublishedBox();
   if (L.targets.length < 2) createStatus(i18n('class.err.too_few'), 'error');
   else if (L.order.length <= MAX_PARTICIPANTS) createStatus('');
 }
@@ -313,7 +346,7 @@ async function load() {
   const slug = await resolveEventSlug(token);
   if (!slug) return;
 
-  const ev = (await sgg(token, 'query($slug: String) { event(slug: $slug) { id name tournament { id name owner { id } } } }', { slug })).event;
+  const ev = (await sgg(token, 'query($slug: String) { event(slug: $slug) { id name tournament { id name startAt owner { id } } } }', { slug })).event;
   if (!ev) return status(i18n('class.err.event'), 'error');
   // 1. 管理者か。「管理している大会から選ぶ」の一覧にある大会なら確認済みとして飛ばす (作成時に Worker がもう一度確かめる)
   if (!(MY_TOURNAMENTS.token === token && MY_TOURNAMENTS.ids.has(String(ev.tournament.id)))) {
@@ -603,6 +636,7 @@ $('cb-create').addEventListener('click', () => {
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
+for (const id of ['cb-av-published', 'cb-av-weekday']) $(id).addEventListener('change', () => { updatePublishedBox(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
 // 本戦に出ていない人を追加 / 消す

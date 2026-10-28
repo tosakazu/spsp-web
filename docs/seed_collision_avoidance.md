@@ -406,6 +406,10 @@ w = R1: 1.0 / R2: 0.6 / R3: 0.35 / それ以降・勝者側で当たらない (�
 
 **実装**: 純粋な関数 = `site/seeding/published_seeds.js`（`selectPublishedEvents` / `publishedPairs` / `mergePublished`）。
 画面 = `site/seeding/app/75_series_rematch.js`（`updatePublishedToggleState`、`runSeedOptimize` で `buildSeedData` の結果に足す）。
+ページ共通の部分 (参加予定の大会の読み込み・対象の選択・欄の HTML) = `site/seeding/published_seeds_ui.js`。
+下位クラス作成 (`src/pages/class.js`、チェック `cb-av-published`、既定 ON、2026-10-29) でも同じ規則で使う。
+こちらは「直接対戦を考慮」と別に ON/OFF でき、本大会 = 本戦 (本戦そのものの公開シードは使わない。本戦で当たった組は別の項目)、
+開催日は本戦の大会の `startAt` (無ければ今)。罰則は実際の対戦歴・本戦の組と大きい方。
 最適化 (`seed_optimizer.js`) は recentPair をそのまま使い、レポートの項目に `published` を素通しするだけ。
 本大会の開催日は start.gg の大会の `startAt`（`EVENT_CONTEXT.startAt`）、無ければ参加予定のファイルの同じ event。
 回帰テスト = `tests/seeding/published_seeds.test.cjs`。

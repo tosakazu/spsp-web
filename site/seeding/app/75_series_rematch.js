@@ -13,8 +13,8 @@ import { escapeHtml } from '../../js/html.js';
 import SeedData from '../seed_data.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
-import SPSPViews from '../../js/views.js';
 import SPSPPublishedSeeds from '../published_seeds.js';
+import SPSPPublishedSeedsUI from '../published_seeds_ui.js';
 'use strict';
 
 // ── 同シリーズ再マッチ: 対象シリーズの判定 ────────────────────────────
@@ -93,63 +93,13 @@ export async function updateSeriesToggleState() {
 // ── 公開済みシードとの被り回避 (§6.2.2、既定 ON) ─────────────────────────
 // data/upcoming_entrants.json (参加予定の大会。公開済みならプールとシードも入る) を見て、前後の日の大会で
 // 同じプールにいる 2 人を直近対戦の罰則に足す。対象・対象外の大会は欄に出す (黙って使わない・黙って外さない)。
-/** @type {Promise<any> | null} */
-let UPCOMING_ENTRANTS_P = null;
-function loadUpcomingEntrants() {
-  if (!UPCOMING_ENTRANTS_P) {
-    UPCOMING_ENTRANTS_P = fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
-      .then((r) => { if (!r.ok) throw new Error('upcoming_entrants.json HTTP ' + r.status); return r.json(); })
-      .catch((e) => { UPCOMING_ENTRANTS_P = null; throw e; });   // 失敗は次の操作でやり直す
-  }
-  return UPCOMING_ENTRANTS_P;
-}
-/** 総合評価の全国順位 (仮のシードの判定用)。players_index.json (読み込み済みならそれ) @returns {Promise<(uid: number) => number | null>} */
-async function publishedRankOf() {
-  let I = S.MASTER_INDEX;
-  if (!I && typeof SPSPViews !== 'undefined' && SPSPViews) I = await SPSPViews.at(SPSP.data).index().catch(() => null);
-  return (uid) => { const r = I ? I.get(uid) : null; return r && r.ens ? Number(r.ens) : null; };
-}
-/** @typedef {{ used: any[], skipped: any[], generatedAt: number | null } | { error: string }} PublishedSel */
-/** 対象の大会を選ぶ。本大会の開催日は start.gg の大会の開始 (無ければ参加予定のファイルの同じ event)
- * @param {number[]} attendees @param {boolean} excludeWeekday @returns {Promise<PublishedSel>} */
-async function selectPublished(attendees, excludeWeekday) {
+/** 対象の大会を選ぶ (取得の失敗は { error })。本大会の開催日は start.gg の大会の開始 (無ければ参加予定のファイルの同じ event)
+ * @param {number[]} attendees @param {boolean} excludeWeekday */
+function selectPublished(attendees, excludeWeekday) {
   /** @type {Partial<SpspSeedEventContext>} */
   const ctx = S.EVENT_CONTEXT || {};
-  const up = await loadUpcomingEntrants();
-  const evs = up && up.events;
-  const self = evs && !Array.isArray(evs) && ctx.eventId != null ? evs[String(ctx.eventId)] : null;
-  const startAt = ctx.startAt || (self && self.start_at) || null;
-  if (!startAt) return { error: 'nodate' };
-  const sel = SPSPPublishedSeeds.selectPublishedEvents(up, {
-    targetEventId: ctx.eventId != null ? ctx.eventId : null, targetStartAt: startAt, attendees, excludeWeekday, rankOf: await publishedRankOf(),
-  });
-  return { used: sel.used, skipped: sel.skipped, generatedAt: up.generated_at || null };
-}
-/** @param {number} sec */
-function fmtAsOf(sec) {
-  const d = new Date(sec * 1000);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-/** @param {string} iso 'YYYY-MM-DD' */
-const mdOf = (iso) => { const p = String(iso || '').split('-'); return p.length === 3 ? `${+p[1]}/${+p[2]}` : String(iso || '?'); };
-/** 対象外の理由 (published_seeds.js selectPublishedEvents の reason) @type {Record<string, () => string>} */
-const PUBLISHED_REASON = {
-  range: () => i18n('seed.published.r_range'), weekday: () => i18n('seed.published.r_weekday'),
-  provisional: () => i18n('seed.published.r_provisional'), nopair: () => i18n('seed.published.r_nopair'),
-};
-/** 欄の中身 @param {PublishedSel} res */
-function publishedBoxHtml(res) {
-  if ('error' in res) return res.error === 'nodate' ? escHtml(i18n('seed.published.nodate')) : `<span style="color:#b91c1c">${escHtml(i18n('seed.published.error') + res.error)}</span>`;
-  const asof = res.generatedAt ? `<span style="color:#9ca3af">（${escHtml(i18n('seed.published.asof', { t: fmtAsOf(res.generatedAt) }))}）</span>` : '';
-  const evLine = (/** @type {any} */ e) => escHtml(i18n('seed.published.ev', { date: mdOf(e.date), name: e.name, nent: e.nent, common: e.common }));
-  let h = res.used.length
-    ? `<div>${escHtml(i18n('seed.published.used'))} ${asof}</div>` + res.used.map((e) => `<div style="padding-left:12px;color:#374151">${evLine(e)}</div>`).join('')
-    : `<div>${escHtml(i18n('seed.published.none'))} ${asof}</div>`;
-  if (res.skipped.length) {
-    h += `<details style="margin-top:2px"><summary style="cursor:pointer">${escHtml(i18n('seed.published.skipped', { n: res.skipped.length }))}</summary>` +
-      res.skipped.map((e) => `<div style="padding-left:12px">${evLine(e)} — ${escHtml(PUBLISHED_REASON[e.reason] ? PUBLISHED_REASON[e.reason]() : e.reason)}</div>`).join('') + `</details>`;
-  }
-  return h;
+  return SPSPPublishedSeedsUI.select({ dataRoot: SPSP.data, eventId: ctx.eventId != null ? ctx.eventId : null, startAt: ctx.startAt || null,
+    attendees, excludeWeekday, index: S.MASTER_INDEX || null });
 }
 /** チェックの状態に応じて欄を出し入れし、対象の大会を出す (大会の読み込み時・チェックの切り替え時) */
 export async function updatePublishedToggleState() {
@@ -162,12 +112,8 @@ export async function updatePublishedToggleState() {
   if (recentCb && !recentCb.checked) { box.textContent = i18n('seed.published.norecent'); return; }
   box.textContent = i18n('seed.published.loading');
   const weekdayCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-include-weekday'));
-  /** @type {PublishedSel} */
-  let res;
-  try {
-    res = await selectPublished(DATA.map((r) => r.user_id).filter((u) => u != null), !(weekdayCb && weekdayCb.checked));
-  } catch (e) { res = { error: String((/** @type {any} */ (e) && /** @type {any} */ (e).message) || e) }; }
-  box.innerHTML = publishedBoxHtml(res);
+  const res = await selectPublished(DATA.map((r) => r.user_id).filter((u) => u != null), !(weekdayCb && weekdayCb.checked));
+  box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res);
 }
 
 // 「プール内変動」トグルは 2プール以上のときだけ指定可能。
@@ -465,13 +411,11 @@ export async function runSeedOptimize() {
   let pubNote = '';
   const pubCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-published'));
   if (avoidRecent && pubCb && pubCb.checked) {
-    /** @type {PublishedSel} */
-    let res;
-    try { res = await selectPublished(ranking, excludeWeekday); } catch (e) { res = { error: String((/** @type {any} */ (e) && /** @type {any} */ (e).message) || e) }; }
+    const res = await selectPublished(ranking, excludeWeekday);
     const box = document.getElementById('so-published-box');
-    if (box) { box.style.display = ''; box.innerHTML = publishedBoxHtml(res); }
+    if (box) { box.style.display = ''; box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res); }
     if ('error' in res) {
-      pubNote = ' ' + (res.error === 'nodate' ? i18n('seed.published.nodate') : i18n('seed.published.error') + res.error);
+      pubNote = ' ' + SPSPPublishedSeedsUI.errorText(res);
     } else {
       const pairs = SPSPPublishedSeeds.publishedPairs(res.used, ranking);
       const n = SPSPPublishedSeeds.mergePublished(bundle, pairs, { recentAgg, sizeWeight: SeedData.sizeWeightFn(sizeWeight) });
