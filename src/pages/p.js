@@ -413,8 +413,9 @@ async function buildPoolSection() {
       const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
       return `<span class="pe-p${x.uid === UID ? ' me' : ''}">${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
     }).join('') + (members.length > POOL_MAX_PLAYERS ? `<span class="pe-more">${i18n('player.pool.more', { n: members.length - POOL_MAX_PLAYERS })}</span>` : '');
-    return `<div class="pool-ev"><div class="pe-name">${escapeHtml(ev.tournament_name || '')}</div>` +
-      `<div class="pe-meta">${meta}</div><div class="pe-list">${chips}</div></div>`;
+    // 最初は大会名だけ。押すと日付・プール・シードと同じプールの人を開く
+    return `<details class="pool-ev"><summary class="pe-name">${escapeHtml(ev.tournament_name || '')}</summary>` +
+      `<div class="pe-meta">${meta}</div><div class="pe-list">${chips}</div></details>`;
   }).join('');
   sec.style.display = '';
 }

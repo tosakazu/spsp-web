@@ -65,9 +65,12 @@
   .yosou-tour .yt-name a { color: inherit; }
   .yosou-tour .yt-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
   /* 参加予定の大会の予選プール (buildPoolSection) */
-  .pool-ev + .pool-ev { margin-top: 12px; }
-  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; }
-  .pool-ev .pe-meta { font-size: 12px; color: #6b7280; margin: 2px 0 6px; }
+  .pool-ev + .pool-ev { margin-top: 8px; }
+  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; cursor: pointer; list-style: none; }
+  .pool-ev .pe-name::-webkit-details-marker { display: none; }
+  .pool-ev .pe-name::before { content: '▶'; display: inline-block; font-size: 10px; color: #9ca3af; margin-right: 6px; transition: transform 0.15s; }
+  .pool-ev[open] .pe-name::before { transform: rotate(90deg); }
+  .pool-ev .pe-meta { font-size: 12px; color: #6b7280; margin: 4px 0 6px; }
   .pool-ev .pe-meta a { color: #2563eb; text-decoration: none; }
   .pool-ev .pe-list { display: flex; flex-wrap: wrap; gap: 4px 6px; }
   .pool-ev .pe-p { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1px 8px; white-space: nowrap; }
