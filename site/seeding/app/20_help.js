@@ -53,6 +53,7 @@ const HELP_TARGETS = [
   'so-scope-winners', 'so-include-weekday',
   'so-orderpow-label', 'so-shiftlimit-label', 'so-maxshift',
   'so-avoid-series', 'so-series-select', 'so-seriesmult',
+  'so-avoid-published',
   'so-mode', 'so-itersscale', 'so-worder', 'so-decaypoints',
   'so-kinter', 'so-kintra',
 ];

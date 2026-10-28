@@ -123,6 +123,7 @@ body {
 .cb-avoid-opts { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 12px; color: #374151; }
 .cb-avoid-opts label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cb-av-groups { display: contents; }
+.cb-av-published-box { margin-top: 6px; font-size: 11px; color: #6b7280; line-height: 1.6; }
 
 /* 一覧の検索・絞り込み (シード機能の手法タブと同じ見た目) */
 .cb-filter { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }

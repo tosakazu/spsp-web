@@ -15,6 +15,7 @@ import '../../site/player-detail.js';
 import '../../site/seeding/seed_optimizer.js';
 import '../../site/seeding/seed_data.js';
 import '../../site/seeding/published_seeds.js';
+import '../../site/seeding/published_seeds_ui.js';
 import '../../site/seeding/seed_share.js';
 import '../../site/nav.js';
 import '../../site/seeding/app/00_state.js';
