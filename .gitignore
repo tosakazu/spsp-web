@@ -19,8 +19,6 @@ site/seed_map.json
 site/demo/
 
 # ── 秘密 (INV-3: start.gg client secret は clasp push でだけ Apps Script に載せる) ──
-gas/secrets.gs
-gas/.clasp.json
 .env
 *.token
 

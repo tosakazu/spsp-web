@@ -3,7 +3,7 @@
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
-  "description": "SPSP ranking site — フロントエンド (site/) と投稿機能の Apps Script (gas/)。ビルド (spsp_scripts) が site/ に出力を書く",
+  "description": "SPSP ranking site — フロントエンド (site/) と Cloudflare Worker (worker/)。ビルド (spsp_scripts) が site/ に出力を書く",
   "scripts": {
     "test": "node --test tests/meta/*.cjs tests/post/*.cjs tests/seeding/*.cjs tests/frontend/*.test.cjs",
     "test:sim": "node tests/sim/check.js && node tests/sim/views_pop.js",

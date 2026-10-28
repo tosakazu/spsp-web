@@ -4,7 +4,7 @@ The Cloudflare Worker behind **spsp.games**. It serves the static site built fro
 (under `/jp/` and `/na/`) and the JSON API under `/api`, with Cloudflare D1 as storage.
 Large generated JSON (player pages, tournaments, history) is **not** served here; it lives
 in R2 at `data.spsp.games`. The API began as a port of the old Google Apps Script backend
-(`gas/`); background is in [docs/archive/refactor/07_cloudflare_plan.md](../docs/archive/refactor/07_cloudflare_plan.md).
+(`gas/`, removed on 2026-10-29; see git history); background is in [docs/archive/refactor/07_cloudflare_plan.md](../docs/archive/refactor/07_cloudflare_plan.md).
 
 ## Layout
 
