@@ -92,6 +92,31 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }
   }
 
+  /** preview の確認結果 (ログインのトークン = scope user.identity で start.gg の公開データが読めるか) @param {any[]} probe @param {string} next */
+  function showProbe(probe, next) {
+    var root = document.getElementById('cb-root');
+    root.className = 'cb';
+    root.textContent = '';
+    var h = document.createElement('p');
+    h.className = 'cb-title';
+    h.textContent = 'start.gg ログイン (user.identity) のトークンで読めるか';
+    root.appendChild(h);
+    var ul = document.createElement('ul');
+    ul.className = 'cb-probe';
+    probe.forEach(function (r) {
+      var li = document.createElement('li');
+      li.className = r && r.ok ? 'ok' : 'ng';
+      li.textContent = (r && r.ok ? '✅ ' : '❌ ') + String((r && r.name) || '') + ': ' + String((r && r.detail) || '');   // textContent なので応答由来でも安全
+      ul.appendChild(li);
+    });
+    root.appendChild(ul);
+    var a = document.createElement('a');
+    a.className = 'cb-back';
+    a.href = next;
+    a.textContent = i18n('callback.back');
+    root.appendChild(a);
+  }
+
   /**
    * 認証前の失敗はここでしか観測できない (GAS を通らない) ので、記録だけ送る。
    * 送るのは種別と短い手掛かりのみ。code / token は絶対に載せない。
@@ -300,6 +325,8 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).then(function (json) {
       if (json && json.ok && json.token && json.user) {
         AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        // preview だけ (Worker の STARTGG_IDENTITY_PROBE): ログインのトークンで公開データが読めたかを出し、戻るのは押してから
+        if (Array.isArray(json.probe)) { showProbe(json.probe, S.withFlag(back, 'login')); return; }
         location.replace(S.withFlag(back, 'login'));
         return;
       }

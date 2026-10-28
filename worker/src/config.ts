@@ -24,6 +24,8 @@ export interface Env {
   CSP_MODE?: string;
   /** 投票の資格判定を免除するテスト用 uid (カンマ区切り)。免除された投票は status='debug' で保存し、集計しない。 */
   VOTE_TESTER_UIDS?: string;
+  /** "1" なら login の直後に、ログインのトークン (user.identity) で start.gg の公開データが読めるかを試す (preview だけ。identity_probe.ts) */
+  STARTGG_IDENTITY_PROBE?: string;
   // secrets
   STARTGG_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
@@ -151,6 +153,8 @@ export interface Config {
   tsOffsetMin: number;
   /** 資格判定を免除するテスト用 uid (VOTE_TESTER_UIDS)。 */
   voteTesterUids?: string[];
+  /** STARTGG_IDENTITY_PROBE = "1" (preview だけ) */
+  identityProbe?: boolean;
 }
 
 function intOr(v: string | undefined, dflt: number): number {
@@ -183,6 +187,7 @@ export function configFromEnv(env: Env): Config {
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),
     tsOffsetMin: parseOffset(env.TS_OFFSET),
     voteTesterUids: String(env.VOTE_TESTER_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    identityProbe: env.STARTGG_IDENTITY_PROBE === '1',
   };
 }
 

@@ -7,6 +7,8 @@ import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMes
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { checkStateToken, issueSessionToken, signState, verifySessionToken } from './session.ts';
+import type { ProbeResult } from './identity_probe.ts';
+import { runIdentityProbe } from './identity_probe.ts';
 
 export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || req.code.length === 0) {
@@ -21,7 +23,10 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
       '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
       + '同じリンクを二度開いた可能性があります。投票ページからやり直してください。', st.reason);
   }
-  const auth = await authenticateCode(cfg, req.code, fetchFn);
+  let probe: ProbeResult[] | null = null;
+  // preview だけ: ログインのトークン (user.identity) で公開データが読めるかを試して、結果を応答に足す
+  const auth = await authenticateCode(cfg, req.code, fetchFn,
+    cfg.identityProbe ? async (t) => { probe = await runIdentityProbe(t, fetchFn); } : undefined);
   if (!auth.user) {
     // 何が起きたのかを可能な範囲で伝える (期限切れ / start.gg 障害 / 通信断)。
     return err('auth_failed', oauthErrorMessage(auth.reason), auth.reason || '');
@@ -32,6 +37,7 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
     token,
     user: { id: auth.user.id, slug: auth.user.slug, gamerTag: auth.user.gamerTag },
     exp: sess ? sess.exp : null,
+    ...(probe ? { probe } : {}),
   });
 }
 

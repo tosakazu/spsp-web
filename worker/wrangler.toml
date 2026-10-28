@@ -98,6 +98,8 @@ SESSION_TTL_MS = "15552000000"
 STATE_TTL_MS = "1800000"
 # サイトの CSP (セキュリティレビュー M4)。段階 1 = report-only で違反を集める (本番・na も同じ。静的アセットの分は assemble_dist.sh が _headers に書く)
 CSP_MODE = "report-only"
+# ログインのトークン (user.identity だけ) で start.gg の公開データが読めるかの確認 (login の直後に試して結果を戻り先の画面に出す)。preview だけ
+STARTGG_IDENTITY_PROBE = "1"
 
 # ── na (北米版。start.gg アプリ・データ・D1 を分ける) ──
 [env.na]

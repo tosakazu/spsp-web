@@ -159,10 +159,13 @@ export async function fetchCurrentUser(accessToken: string, fetchFn: FetchFn): P
  * code → access token → currentUser。login / post が共通で使う。
  * 失敗は { user: null, reason }。access token はこの関数の外に出さない (INV-4)。
  */
-export async function authenticateCode(cfg: Config, code: string, fetchFn: FetchFn): Promise<{ user: SessionUser | null; reason: OauthReason | null }> {
+export async function authenticateCode(cfg: Config, code: string, fetchFn: FetchFn,
+  withToken?: (token: string) => Promise<void>): Promise<{ user: SessionUser | null; reason: OauthReason | null }> {
   const ex = await exchangeCodeForToken(cfg, code, fetchFn);
   if (!ex.token) return { user: null, reason: ex.reason };
   const user = await fetchCurrentUser(ex.token, fetchFn);
   if (!user) return { user: null, reason: 'no_user' };
+  // preview 専用の確認 (identity_probe.ts) だけが使う。トークンはこの関数の外に出さない
+  if (withToken) await withToken(ex.token);
   return { user, reason: null };
 }

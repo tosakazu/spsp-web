@@ -258,3 +258,18 @@ test('checkStateToken: 期限ちょうどは通り、1 ms 過ぎたら expired',
   assert.ok('payload' in await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs));
   assert.deepStrictEqual(await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs + 1), { reason: 'expired' });
 });
+
+test('preview の確認 (identityProbe): ログインのトークンで公開データを問い合わせて結果を足す。トークンは返さない。既定では何もしない', async () => {
+  const off = makeEnv({ token: OK_TOKEN, user: OK_USER });
+  const r0 = await post(off, { action: 'login', code: 'C' });
+  assert.ok(r0.ok && !('probe' in r0));
+  assert.strictEqual(off.fetches.filter((f) => f.url.indexOf('/gql/') !== -1).length, 1);   // currentUser だけ
+  const on = makeEnv({ token: OK_TOKEN, user: OK_USER, cfg: { identityProbe: true } });
+  const r1 = await post(on, { action: 'login', code: 'C' });
+  assert.ok(r1.ok && Array.isArray(r1.probe) && r1.probe.length >= 5, JSON.stringify(r1));
+  assert.deepStrictEqual(r1.probe[0], { name: 'currentUser', ok: true, detail: 'id 4242' });
+  assert.ok(r1.probe.slice(1).every((p) => p.ok === false));   // テストの start.gg は currentUser しか返さない → data が空
+  const gql = on.fetches.filter((f) => f.url.indexOf('/gql/') !== -1);
+  assert.ok(gql.length > 1 && gql.every((f) => f.init.headers.Authorization === 'Bearer AT-secret'));
+  assert.ok(!JSON.stringify(r1).includes('AT-secret'));
+});
