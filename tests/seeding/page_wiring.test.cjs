@@ -592,6 +592,7 @@ function settingsSetup(HTML) {
     var modeDefaultsCalls = 0;
     function applyModeDefaults() { modeDefaultsCalls++; document.getElementById('so-restarts').value = '15'; }
     async function updateSeriesToggleState() {}
+    async function updatePublishedToggleState() {}
     ${extractFn(HTML, 'updateIntraToggleState')}
     ${extractFn(HTML, 'seedOptSettingFields')}
     ${extractFn(HTML, 'seedOptFieldValue')}

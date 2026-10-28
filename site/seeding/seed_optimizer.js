@@ -1277,7 +1277,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
                              seriesCount: (meta && meta.seriesCount) || 0,
                              seriesLastDate: (meta && meta.seriesLastDate) || null,
                              // 個別対戦履歴（UI のペア展開表示用。recentMeta に無い古い形式では null）
-                             matches: (meta && Array.isArray(meta.matches)) ? meta.matches : null };
+                             matches: (meta && Array.isArray(meta.matches)) ? meta.matches : null,
+                             // 公開済みのほかの大会のシードで同じプール (published_seeds.js、§6.2.2)
+                             published: (meta && Array.isArray(meta.published)) ? meta.published : null };
               recentInter.push(item);
               if (reportIntra && /** @type {number} */ (round) <= earlyRound) recentIntra.push(item);
             }
@@ -1322,7 +1324,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
                               lastNent: (meta && meta.lastNent != null) ? meta.lastNent : null,
                               seriesCount: (meta && meta.seriesCount) || 0,
                               seriesLastDate: (meta && meta.seriesLastDate) || null,
-                              matches: (meta && Array.isArray(meta.matches)) ? meta.matches : null });
+                              matches: (meta && Array.isArray(meta.matches)) ? meta.matches : null,
+                              published: (meta && Array.isArray(meta.published)) ? meta.published : null });
           }
         }
       }

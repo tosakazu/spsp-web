@@ -10,7 +10,7 @@ import SeedData from '../seed_data.js';
 import { downloadCsv, getToken, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
 import SpspStartggManager from '../../js/startgg_manager.js';
 import { UPCOMING_PAGE_SIZE, initEventSourceTabs, loadMyTournaments, renderUpcomingPage } from './60_upcoming.js';
-import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updateSeriesToggleState } from './75_series_rematch.js';
+import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updatePublishedToggleState, updateSeriesToggleState } from './75_series_rematch.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
 'use strict';
@@ -97,6 +97,11 @@ import SPSPGeo from '../../js/geo.js';
   // プール数に応じて「プール内変動」トグルの有効/無効を切り替える（2プール以上のみ指定可能）。
   const soPools = document.getElementById('so-pools');
   if (soPools) soPools.addEventListener('input', updateIntraToggleState);
+  // 公開済みシードとの被り回避: 対象の大会の欄 (直近対戦・平日の設定でも変わる)
+  for (const id of ['so-avoid-published', 'so-avoid-recent', 'so-include-weekday']) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { Promise.resolve(updatePublishedToggleState()).catch(() => {}); });
+  }
   // 同シリーズ再マッチ: ON にした時点で大会一覧をロードしてシリーズを判定する。
   const seriesCb = document.getElementById('so-avoid-series');
   if (seriesCb) seriesCb.addEventListener('change', () => {
@@ -262,6 +267,7 @@ function resetSeedOptSettings() {
   _lastShiftPrefill = SHIFT_LIMIT_IDS.map((id) => { const e = /** @type {HTMLInputElement | null} */ (document.getElementById(id)); return e ? e.value : ''; });
   refreshSeedOptDerivedUi();
   Promise.resolve(updateSeriesToggleState()).catch(() => {});
+  Promise.resolve(updatePublishedToggleState()).catch(() => {});
   const p = document.getElementById('so-progress');
   if (p) p.textContent = i18n('seed.boot.s4');
 }

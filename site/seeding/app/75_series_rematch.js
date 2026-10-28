@@ -13,6 +13,8 @@ import { escapeHtml } from '../../js/html.js';
 import SeedData from '../seed_data.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
+import SPSPViews from '../../js/views.js';
+import SPSPPublishedSeeds from '../published_seeds.js';
 'use strict';
 
 // ── 同シリーズ再マッチ: 対象シリーズの判定 ────────────────────────────
@@ -88,6 +90,86 @@ export async function updateSeriesToggleState() {
   populateSeriesSelect(SeedData.detectSeries(SERIES_INDEX, ctx.eventId, ctx.tournamentName || ''));
 }
 
+// ── 公開済みシードとの被り回避 (§6.2.2、既定 ON) ─────────────────────────
+// data/upcoming_entrants.json (参加予定の大会。公開済みならプールとシードも入る) を見て、前後の日の大会で
+// 同じプールにいる 2 人を直近対戦の罰則に足す。対象・対象外の大会は欄に出す (黙って使わない・黙って外さない)。
+/** @type {Promise<any> | null} */
+let UPCOMING_ENTRANTS_P = null;
+function loadUpcomingEntrants() {
+  if (!UPCOMING_ENTRANTS_P) {
+    UPCOMING_ENTRANTS_P = fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
+      .then((r) => { if (!r.ok) throw new Error('upcoming_entrants.json HTTP ' + r.status); return r.json(); })
+      .catch((e) => { UPCOMING_ENTRANTS_P = null; throw e; });   // 失敗は次の操作でやり直す
+  }
+  return UPCOMING_ENTRANTS_P;
+}
+/** 総合評価の全国順位 (仮のシードの判定用)。players_index.json (読み込み済みならそれ) @returns {Promise<(uid: number) => number | null>} */
+async function publishedRankOf() {
+  let I = S.MASTER_INDEX;
+  if (!I && typeof SPSPViews !== 'undefined' && SPSPViews) I = await SPSPViews.at(SPSP.data).index().catch(() => null);
+  return (uid) => { const r = I ? I.get(uid) : null; return r && r.ens ? Number(r.ens) : null; };
+}
+/** @typedef {{ used: any[], skipped: any[], generatedAt: number | null } | { error: string }} PublishedSel */
+/** 対象の大会を選ぶ。本大会の開催日は start.gg の大会の開始 (無ければ参加予定のファイルの同じ event)
+ * @param {number[]} attendees @param {boolean} excludeWeekday @returns {Promise<PublishedSel>} */
+async function selectPublished(attendees, excludeWeekday) {
+  /** @type {Partial<SpspSeedEventContext>} */
+  const ctx = S.EVENT_CONTEXT || {};
+  const up = await loadUpcomingEntrants();
+  const evs = up && up.events;
+  const self = evs && !Array.isArray(evs) && ctx.eventId != null ? evs[String(ctx.eventId)] : null;
+  const startAt = ctx.startAt || (self && self.start_at) || null;
+  if (!startAt) return { error: 'nodate' };
+  const sel = SPSPPublishedSeeds.selectPublishedEvents(up, {
+    targetEventId: ctx.eventId != null ? ctx.eventId : null, targetStartAt: startAt, attendees, excludeWeekday, rankOf: await publishedRankOf(),
+  });
+  return { used: sel.used, skipped: sel.skipped, generatedAt: up.generated_at || null };
+}
+/** @param {number} sec */
+function fmtAsOf(sec) {
+  const d = new Date(sec * 1000);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+/** @param {string} iso 'YYYY-MM-DD' */
+const mdOf = (iso) => { const p = String(iso || '').split('-'); return p.length === 3 ? `${+p[1]}/${+p[2]}` : String(iso || '?'); };
+/** 対象外の理由 (published_seeds.js selectPublishedEvents の reason) @type {Record<string, () => string>} */
+const PUBLISHED_REASON = {
+  range: () => i18n('seed.published.r_range'), weekday: () => i18n('seed.published.r_weekday'),
+  provisional: () => i18n('seed.published.r_provisional'), nopair: () => i18n('seed.published.r_nopair'),
+};
+/** 欄の中身 @param {PublishedSel} res */
+function publishedBoxHtml(res) {
+  if ('error' in res) return res.error === 'nodate' ? escHtml(i18n('seed.published.nodate')) : `<span style="color:#b91c1c">${escHtml(i18n('seed.published.error') + res.error)}</span>`;
+  const asof = res.generatedAt ? `<span style="color:#9ca3af">（${escHtml(i18n('seed.published.asof', { t: fmtAsOf(res.generatedAt) }))}）</span>` : '';
+  const evLine = (/** @type {any} */ e) => escHtml(i18n('seed.published.ev', { date: mdOf(e.date), name: e.name, nent: e.nent, common: e.common }));
+  let h = res.used.length
+    ? `<div>${escHtml(i18n('seed.published.used'))} ${asof}</div>` + res.used.map((e) => `<div style="padding-left:12px;color:#374151">${evLine(e)}</div>`).join('')
+    : `<div>${escHtml(i18n('seed.published.none'))} ${asof}</div>`;
+  if (res.skipped.length) {
+    h += `<details style="margin-top:2px"><summary style="cursor:pointer">${escHtml(i18n('seed.published.skipped', { n: res.skipped.length }))}</summary>` +
+      res.skipped.map((e) => `<div style="padding-left:12px">${evLine(e)} — ${escHtml(PUBLISHED_REASON[e.reason] ? PUBLISHED_REASON[e.reason]() : e.reason)}</div>`).join('') + `</details>`;
+  }
+  return h;
+}
+/** チェックの状態に応じて欄を出し入れし、対象の大会を出す (大会の読み込み時・チェックの切り替え時) */
+export async function updatePublishedToggleState() {
+  const cb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-published'));
+  const box = document.getElementById('so-published-box');
+  if (!cb || !box) return;
+  box.style.display = cb.checked && DATA.length ? '' : 'none';
+  if (!cb.checked || !DATA.length) return;
+  const recentCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-recent'));
+  if (recentCb && !recentCb.checked) { box.textContent = i18n('seed.published.norecent'); return; }
+  box.textContent = i18n('seed.published.loading');
+  const weekdayCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-include-weekday'));
+  /** @type {PublishedSel} */
+  let res;
+  try {
+    res = await selectPublished(DATA.map((r) => r.user_id).filter((u) => u != null), !(weekdayCb && weekdayCb.checked));
+  } catch (e) { res = { error: String((/** @type {any} */ (e) && /** @type {any} */ (e).message) || e) }; }
+  box.innerHTML = publishedBoxHtml(res);
+}
+
 // 「プール内変動」トグルは 2プール以上のときだけ指定可能。
 // 1プール×DE では intra が唯一の被り回避なので常に実行＝チェックは固定・無効表示。
 export function updateIntraToggleState() {
@@ -151,6 +233,7 @@ export function initSeedOptPanel() {
   // 非同期 (大会一覧のロードを伴うことがある)。失敗は欄の注記に出るので、
   // ここでは unhandled rejection にしないためだけに握る。
   Promise.resolve(updateSeriesToggleState()).catch(() => {});
+  Promise.resolve(updatePublishedToggleState()).catch(() => {});
   S.SEEDOPT_RESULT = null;
 }
 
@@ -378,6 +461,23 @@ export async function runSeedOptimize() {
     inputEl('so-run').disabled = false;
     return;
   }
+  // 公開済みシードとの被り回避 (§6.2.2): 対象の大会で同じプールのペアを直近対戦の罰則に足す (直近対戦を避けるときだけ)
+  let pubNote = '';
+  const pubCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-published'));
+  if (avoidRecent && pubCb && pubCb.checked) {
+    /** @type {PublishedSel} */
+    let res;
+    try { res = await selectPublished(ranking, excludeWeekday); } catch (e) { res = { error: String((/** @type {any} */ (e) && /** @type {any} */ (e).message) || e) }; }
+    const box = document.getElementById('so-published-box');
+    if (box) { box.style.display = ''; box.innerHTML = publishedBoxHtml(res); }
+    if ('error' in res) {
+      pubNote = ' ' + (res.error === 'nodate' ? i18n('seed.published.nodate') : i18n('seed.published.error') + res.error);
+    } else {
+      const pairs = SPSPPublishedSeeds.publishedPairs(res.used, ranking);
+      const n = SPSPPublishedSeeds.mergePublished(bundle, pairs, { recentAgg, sizeWeight: SeedData.sizeWeightFn(sizeWeight) });
+      pubNote = ' ' + i18n('seed.published.note', { e: res.used.length, p: n });
+    }
+  }
   // 取得状況（同意なきフォールバック禁止 → missing/errors を明示）。
   const m = bundle.meta;
   let note = `${i18n('seed.rematch.t10')} ${m.prefIdentified}/${m.attendees} ${i18n('seed.rematch.t11')}`;
@@ -385,6 +485,7 @@ export async function runSeedOptimize() {
   if (m.missing.length) note += ` ${i18n('seed.rematch.t14')} ${m.missing.length} ${i18n('seed.rematch.t15')}`;
   if (m.errors.length) note += ` ${i18n('seed.rematch.t16')} ${m.errors.length} ${i18n('seed.rematch.t11')}`;
   if (m.prefsError) note += ` ${i18n('seed.rematch.t17')}`;
+  note += pubNote;
   if (m.targetSeries) {
     note += ` ${i18n('seed.rematch.t18')}${m.targetSeries}${i18n('seed.rematch.t19')} ${m.seriesPairs} ${i18n('seed.rematch.t20')}`;
     if (m.seriesIndexError) note += ` ${i18n('seed.rematch.t21')}`;
@@ -593,6 +694,14 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
     `${m.tournament ? escHtml(m.tournament) : i18n('seed.rematch.s32')}` +
     `${m.nent != null ? `〈${m.nent}${i18n('seed.rematch.t53')}` : ''}</div>`;
 
+  // 公開済みのほかの大会のシードで同じプールのペア (§6.2.2): 印と履歴の行
+  const pubTag = (c) => (Array.isArray(c.published) && c.published.length)
+    ? `<span style="color:#1d4ed8;font-weight:600">${escHtml(i18n('seed.published.tag'))}</span> ` : '';
+  const pubLine = (x) => {
+    const p = { date: x.date, name: x.tournament, nent: x.nent, pool: x.pool || '?', round: x.round };
+    return `<div style="color:#1d4ed8">${escHtml(x.round <= 3 ? i18n('seed.published.hist', p) : i18n('seed.published.hist_late', p))}</div>`;
+  };
+  const histHtml = (c) => [...(Array.isArray(c.published) ? c.published.map(pubLine) : []), ...(Array.isArray(c.matches) ? c.matches.map(histLine) : [])].join('');
   // 直近対戦セルの描画。
   function recentCell(recent, withRound) {
     let h = `<div style="margin-top:5px;font-size:11px;color:#374151">${i18n('seed.rematch.t54')} <strong>${recent.pairs}</strong> ${i18n('seed.rematch.t20')}${recent.top.length ? i18n('seed.rematch.s33') : ''}</div>`;
@@ -604,10 +713,9 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
       const t = c.lastTournament
         ? ` ${escHtml(c.lastTournament)}${c.lastNent != null ? `〈${c.lastNent}${i18n('seed.rematch.t53')}` : ''}`
         : '';
-      const line = `${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（P${c.pool + 1}${withRound ? ' / ' + c.round + i18n('seed.rematch.s31') : ''} / ${c.count}${i18n('seed.rematch.t52')}${c.lastDate}${t}）`;
-      const ms = Array.isArray(c.matches) ? c.matches : [];
-      if (!ms.length) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
-      const hist = ms.map(histLine).join('');
+      const line = `${pubTag(c)}${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（P${c.pool + 1}${withRound ? ' / ' + c.round + i18n('seed.rematch.s31') : ''}${c.count === 0 ? '' : ` / ${c.count}${i18n('seed.rematch.t52')}${c.lastDate}${t}`}）`;
+      const hist = histHtml(c);
+      if (!hist) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
       return `<details style="padding:1px 0"><summary style="cursor:pointer">${line}</summary>` +
         `<div style="margin:2px 0 4px 18px;color:#6b7280">${hist}</div></details>`;
     }).join('');
@@ -672,10 +780,9 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
     h += `<div style="margin:3px 0 0;padding-left:6px;font-size:11px;color:#374151">`;
     h += pRec.top.map(c => {
       const t = c.lastTournament ? ` ${escHtml(c.lastTournament)}${c.lastNent != null ? `〈${c.lastNent}${i18n('seed.rematch.t53')}` : ''}` : '';
-      const line = `${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（seed${c.seedA}×${c.seedB} / ${c.round}${i18n('seed.rematch.s31')}${c.count != null ? ' / ' + c.count + i18n('seed.rematch.t49') : ''}${i18n('seed.rematch.t71')}${c.lastDate || '?'}${t}）`;
-      const ms = Array.isArray(c.matches) ? c.matches : [];
-      if (!ms.length) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
-      const hist = ms.map(histLine).join('');
+      const line = `${pubTag(c)}${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（seed${c.seedA}×${c.seedB} / ${c.round}${i18n('seed.rematch.s31')}${c.count === 0 ? '' : `${c.count != null ? ' / ' + c.count + i18n('seed.rematch.t49') : ''}${i18n('seed.rematch.t71')}${c.lastDate || '?'}${t}`}）`;
+      const hist = histHtml(c);
+      if (!hist) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
       return `<details style="padding:1px 0"><summary style="cursor:pointer">${line}</summary>` +
         `<div style="margin:2px 0 4px 18px;color:#6b7280">${hist}</div></details>`;
     }).join('');
