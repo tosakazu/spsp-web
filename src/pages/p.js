@@ -362,7 +362,10 @@ async function buildRivalsSection() {
 /** data/upcoming_entrants.json (参加予定の大会。次の集計対象大会と予選プールの欄で共有して 1 回だけ読む) @type {Promise<any> | null} */
 let UPCOMING_P = null;
 function loadUpcoming() {
-  return UPCOMING_P || (UPCOMING_P = fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
+  // プレビューの見本 (?live=sample、spsp.games 以外): 速報の見本と同じ場所の upcoming_entrants.json (予選プールの確認用)
+  const root = SpspLive.liveRoot();
+  const url = root.indexOf('/live/sample/') >= 0 ? root + 'upcoming_entrants.json' : SPSP.data + 'data/upcoming_entrants.json';
+  return UPCOMING_P || (UPCOMING_P = fetch(url, { cache: 'no-cache' })
     .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); }));
 }
 
