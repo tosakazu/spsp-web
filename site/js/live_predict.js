@@ -160,7 +160,10 @@ export function create(o) {
     if (!P) return null;
     const e = ents[myId];
     const nent = Object.keys(ents).length || doc.num_entrants || 0;
-    const ev = up && up.events ? up.events[String(doc.event_id)] : null;
+    let ev = up && up.events ? up.events[String(doc.event_id)] : null;
+    if (!ev && doc.sample && !o.upcoming) {   // 見本は過去の大会で参加予定に無いので、大会ファイルの印を使う (プレビューの確認用)
+      ev = await fetch(o.data + 'tournaments/' + doc.event_id + '.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    }
     const counted = gate(ev, nent);
     const final = e.placement != null && !!e.final;
     const place = final ? e.placement : (e.place_min != null ? e.place_min : null);
