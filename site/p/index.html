@@ -64,6 +64,16 @@
   .yosou-tour .yt-name { font-size: 13px; color: #111827; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .yosou-tour .yt-name a { color: inherit; }
   .yosou-tour .yt-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  /* 参加予定の大会の予選プール (buildPoolSection) */
+  .pool-ev + .pool-ev { margin-top: 12px; }
+  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; }
+  .pool-ev .pe-meta { font-size: 12px; color: #6b7280; margin: 2px 0 6px; }
+  .pool-ev .pe-meta a { color: #2563eb; text-decoration: none; }
+  .pool-ev .pe-list { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+  .pool-ev .pe-p { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1px 8px; white-space: nowrap; }
+  .pool-ev .pe-p.me { background: #fef2f2; border-color: #fecaca; font-weight: 600; }
+  .pool-ev .pe-p .s { color: #9ca3af; font-size: 10px; margin-right: 3px; }
+  .pool-ev .pe-more { font-size: 11px; color: #9ca3af; align-self: center; }
   .yosou-btn { flex: none; margin-left: auto; padding: 7px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #374151;
                font-weight: 600; font-size: 13px; text-decoration: none; white-space: nowrap; }   /* 目立ちすぎないよう灰色 (ほかの白いボタンと同じ) */
   .yosou-btn:hover { background: #f9fafb; color: #111827; }
@@ -573,6 +583,13 @@
         <div class="yosou-tour" id="yosou-tour" style="display:none"></div>
         <a class="yosou-btn" id="yosou-link" href="#" data-i18n="player.simulate">🔮 スコア予想</a>
       </div>
+    </div>
+
+    <!-- 参加予定の大会で同じ予選プールの人 (start.gg でトーナメントとシードが公開されている大会だけ。data/upcoming_entrants.json の bracket)
+         (シェア画像キャプチャ時は一時的に隠す) -->
+    <div class="section" id="pool-section" style="display:none">
+      <h2 data-i18n="player.sec.pool">🎯 参加予定の大会の予選プール</h2>
+      <div id="pool-body"></div>
     </div>
 
     <div class="section">

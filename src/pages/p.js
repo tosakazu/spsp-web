@@ -359,6 +359,63 @@ async function buildRivalsSection() {
   if (rivalsSection) rivalsSection.style.display = '';
 }
 
+/** data/upcoming_entrants.json (参加予定の大会。次の集計対象大会と予選プールの欄で共有して 1 回だけ読む) @type {Promise<any> | null} */
+let UPCOMING_P = null;
+function loadUpcoming() {
+  return UPCOMING_P || (UPCOMING_P = fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); }));
+}
+
+// 参加予定の大会の予選プール: start.gg でトーナメントとシードが公開されている大会 (smash_database が bracket と entrants[].seed / pg を付ける)
+// で、同じプールの人をシード順に (メインキャラの絵文字付き、SPSP にページがあればリンク)。近い順に 3 大会まで
+const POOL_MAX_EVENTS = 3;
+const POOL_MAX_PLAYERS = 48;   // 1 プールの大会 (全員同じプール) で多すぎるときはここまで
+async function buildPoolSection() {
+  const sec = document.getElementById('pool-section');
+  const body = document.getElementById('pool-body');
+  if (!UID || !sec || !body) return;
+  let up;
+  try { up = await loadUpcoming(); } catch (e) { return; }
+  const now = Date.now() / 1000;
+  const evs = ((up.by_uid || {})[String(UID)] || []).map(String).map((/** @type {string} */ eid) => up.events[eid])
+    .filter((/** @type {any} */ ev) => ev && ev.bracket && ev.start_at > now)
+    .map((/** @type {any} */ ev) => ({ ev, me: (ev.entrants || []).find((/** @type {any} */ x) => x.uid === UID) }))
+    .filter((/** @type {any} */ x) => x.me && x.me.pg != null)
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => a.ev.start_at - b.ev.start_at)
+    .slice(0, POOL_MAX_EVENTS);
+  if (!evs.length) return;
+  const hasPage = await SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)).catch(() => null);
+  // キャラの絵文字: charEmojiOf は全国順位のある人だけ (character_index の main_by_char)。計測中の人は players_index の char 列から
+  const I = await SPSPViews.index().catch(() => null);
+  const emojiOf = (/** @type {number} */ u) => {
+    const em = charEmojiOf(u);
+    if (em) return em;
+    const r = I && I.get(u);
+    const c = r && r.char != null && CHAR_EMOJI ? CHAR_EMOJI[String(r.char)] : null;
+    return (c && c.emoji) || '';
+  };
+  body.innerHTML = evs.map((/** @type {any} */ { ev, me }) => {
+    const pool = (ev.bracket.pools || {})[String(me.pg)] || {};
+    const members = (ev.entrants || []).filter((/** @type {any} */ x) => x.pg === me.pg)
+      .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+    const d = new Date(ev.start_at * 1000);
+    const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);
+    const poolTxt = Object.keys(ev.bracket.pools || {}).length > 1 && pool.ident ? i18n('player.pool.pool', { id: pool.ident }) : '';
+    const link = pool.url ? ` ・ <a href="${escapeHtml(pool.url)}" target="_blank" rel="noopener">${i18n('player.pool.view')} ↗</a>` : '';
+    const meta = `${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ${escapeHtml(ev.bracket.phase || '')}${poolTxt ? ' ' + escapeHtml(poolTxt) : ''}` +
+      (me.seed != null ? ` ・ ${i18n('player.pool.seed', { n: me.seed })}` : '') + link;
+    const chips = members.slice(0, POOL_MAX_PLAYERS).map((/** @type {any} */ x) => {
+      const em = x.uid != null ? emojiOf(x.uid) : '';
+      const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
+      const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
+      return `<span class="pe-p${x.uid === UID ? ' me' : ''}">${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+    }).join('') + (members.length > POOL_MAX_PLAYERS ? `<span class="pe-more">${i18n('player.pool.more', { n: members.length - POOL_MAX_PLAYERS })}</span>` : '');
+    return `<div class="pool-ev"><div class="pe-name">${escapeHtml(ev.tournament_name || '')}</div>` +
+      `<div class="pe-meta">${meta}</div><div class="pe-list">${chips}</div></div>`;
+  }).join('');
+  sec.style.display = '';
+}
+
 // スコアシミュレーション: 次に出場予定の集計対象大会
 // (エントラント登録済 & 現 Lv の加算対象) を出す。
 async function buildYosouSection() {
@@ -368,8 +425,7 @@ async function buildYosouSection() {
   // 欄 (見出し・大会・スコア予想のボタン) は次の集計対象大会があるときだけ出す
   const yosouSection = document.getElementById('yosou-section');
   try {
-    const up = await fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
-      .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); });
+    const up = await loadUpcoming();
     const lv = (PLAYER && PLAYER.scores && PLAYER.scores.shared_cascade_lv) || 1;
     // 集計対象の規模条件は meta.json の実効フィルタ (params.LV_FILTERS_EFFECTIVE) から。無い古い meta では従来の定数
     const _eff = (META.params && META.params.LV_FILTERS_EFFECTIVE) || null;
@@ -1389,6 +1445,7 @@ function render() {
   });
 
   buildYosouSection();
+  buildPoolSection();
   buildLatestResultSection();
   const liveSec = document.getElementById('live-section');
   if (liveSec) {   // 参加中の大会 (開催中だけ。js/live.js)。試合の行は最新の大会結果と同じ (相手は SPSP にページがあればリンク)
@@ -2074,6 +2131,9 @@ async function capturePng() {
   const latestres = document.getElementById('latestres-section');
   const latestresShown = latestres && latestres.style.display !== 'none';
   if (latestresShown) latestres.style.display = 'none';
+  const poolSec = document.getElementById('pool-section');
+  const poolShown = poolSec && poolSec.style.display !== 'none';
+  if (poolShown) poolSec.style.display = 'none';
   const myNotice = document.getElementById('my-notice');
   const myNoticeShown = myNotice && myNotice.style.display !== 'none';
   if (myNoticeShown) myNotice.style.display = 'none';
@@ -2086,6 +2146,7 @@ async function capturePng() {
     if (toggleBtn) toggleBtn.style.display = '';
     if (yosouShown) yosou.style.display = '';
     if (latestresShown) latestres.style.display = '';
+    if (poolShown) poolSec.style.display = '';
     if (myNoticeShown) myNotice.style.display = '';
   }
 }
