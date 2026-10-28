@@ -366,12 +366,15 @@ window.SPSPCalc = calcApi;
   }
 
   function renderTours() {
-    // 一番近い「参加登録中かつ集計対象」の大会だけ初期表示 (無ければ空)。
+    // 一番近い「参加登録中かつ集計対象」の大会だけ初期表示 (無ければ空。?eid= があればその大会)。
     // events に無い eid や開催後 24h 超の大会は除外
     if (!UPCOMING) return;
     var up = UPCOMING;
     var st = selfState();
     var now = Date.now() / 1000;
+    // ?eid=<event id> (プレイヤーページの参加予定の大会のボタン): その大会を出す
+    var want = params.get('eid');
+    if (want && up.events[want]) { addTourCard(want); return; }
     var eids = (up.by_uid[String(UID)] || []).map(String)
       .filter(function (eid) {
         var ev = up.events[eid];

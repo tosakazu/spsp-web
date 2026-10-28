@@ -360,58 +360,121 @@ async function buildRivalsSection() {
   if (rivalsSection) rivalsSection.style.display = '';
 }
 
-// スコアシミュレーション: 次に出場予定の集計対象大会
-// (エントラント登録済 & 現 Lv の加算対象) を出す。
-async function buildYosouSection() {
+/** data/upcoming_entrants.json (参加予定の大会。次の集計対象大会と予選プールの欄で共有して 1 回だけ読む) @type {Promise<any> | null} */
+let UPCOMING_P = null;
+function loadUpcoming() {
+  // プレビューの見本 (?live=sample、spsp.games 以外): 速報の見本と同じ場所の upcoming_entrants.json (予選プールの確認用)
+  const root = SpspLive.liveRoot();
+  const url = root.indexOf('/live/sample/') >= 0 ? root + 'upcoming_entrants.json' : SPSP.data + 'data/upcoming_entrants.json';
+  return UPCOMING_P || (UPCOMING_P = fetch(url, { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); }));
+}
+
+// 参加予定の大会: 出場登録している開催前の大会を近い順に 5 件ずつ (出場履歴と同じページ送り)。最初は大会名と集計対象のバッジだけ、
+// 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
+// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(同じプールの人を
+// シード順に、メインキャラの絵文字付き。24 人ずつページ送り) も
+const POOL_PAGE = 24;   // プールのプレイヤーのページ送りの 1 ページの人数
+async function buildUpcomingSection() {
   if (!UID || !META) return;
-  const yosouLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById('yosou-link'));
-  if (yosouLink) yosouLink.href = SPSP.langRoot + 'sim/?uid=' + UID;
-  // 欄 (見出し・大会・スコア予想のボタン) は次の集計対象大会があるときだけ出す
-  const yosouSection = document.getElementById('yosou-section');
-  try {
-    const up = await fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
-      .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); });
-    const lv = (PLAYER && PLAYER.scores && PLAYER.scores.shared_cascade_lv) || 1;
-    // 集計対象の規模条件は meta.json の実効フィルタ (params.LV_FILTERS_EFFECTIVE) から。無い古い meta では従来の定数
-    const _eff = (META.params && META.params.LV_FILTERS_EFFECTIVE) || null;
-    const MIN_NENT_GT = [0, 1, 2, 3, 4, 5].map(l => _eff ? ((_eff[String(l)] || {}).min_nent_gt || 0) : [0, 0, 8, 24, 32, 48][l]);
-    /** @param {any} ev */
-    const passes = ev => {
-      const nent = ev.num_entrants || (ev.entrants && ev.entrants.length) || 0;
-      if (ev.is_non_serious || nent < 5) return false;  // 全 Lv 共通の除外
-      if (lv >= 2 && nent <= MIN_NENT_GT[lv]) return false;
-      if (lv >= 3 && (!ev.is_weekend || ev.is_restricted || ev.is_lower_class)) return false;
-      return true;
-    };
-    const eids = (up.by_uid[String(UID)] || []).map(String)
-      .filter(eid => up.events[eid] && up.events[eid].start_at * 1000 > Date.now() && passes(up.events[eid]))
-      .sort((a, b) => up.events[a].start_at - up.events[b].start_at);
-    if (!eids.length) return;
-    if (yosouSection) yosouSection.style.display = '';
-    const ev = up.events[eids[0]];
+  const sec = document.getElementById('yosou-section');
+  if (!sec) return;
+  let up;
+  try { up = await loadUpcoming(); } catch (e) { return; }   // 予定のデータが読めなければ欄ごと出さない
+  const lv = (PLAYER && PLAYER.scores && PLAYER.scores.shared_cascade_lv) || 1;
+  // 集計対象の規模条件は meta.json の実効フィルタ (params.LV_FILTERS_EFFECTIVE) から。無い古い meta では従来の定数
+  const _eff = (META.params && META.params.LV_FILTERS_EFFECTIVE) || null;
+  const MIN_NENT_GT = [0, 1, 2, 3, 4, 5].map(l => _eff ? ((_eff[String(l)] || {}).min_nent_gt || 0) : [0, 0, 8, 24, 32, 48][l]);
+  /** @param {any} ev */
+  const passes = ev => {
+    const nent = ev.num_entrants || (ev.entrants && ev.entrants.length) || 0;
+    if (ev.is_non_serious || nent < 5) return false;  // 全 Lv 共通の除外
+    if (lv >= 2 && nent <= MIN_NENT_GT[lv]) return false;
+    if (lv >= 3 && (!ev.is_weekend || ev.is_restricted || ev.is_lower_class)) return false;
+    return true;
+  };
+  const now = Date.now();
+  const items = ((up.by_uid || {})[String(UID)] || []).map(String)
+    .filter((/** @type {string} */ eid) => up.events[eid] && up.events[eid].start_at * 1000 > now)
+    .map((/** @type {string} */ eid) => ({ eid, ev: up.events[eid], counted: passes(up.events[eid]) }))
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => a.ev.start_at - b.ev.start_at);
+  if (!items.length) return;
+  const [upList, hasPage, I] = await Promise.all([
+    fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null),   // 大会の start.gg の slug
+    SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)).catch(() => null),
+    SPSPViews.index().catch(() => null),
+  ]);
+  /** @type {Map<number, string>} */
+  const slugOf = new Map(((upList && upList.tournaments) || []).map((/** @type {any} */ x) => [x.tournament_id, x.tournament_slug]));
+  // キャラの絵文字: charEmojiOf は全国順位のある人だけ (character_index の main_by_char)。計測中の人は players_index の char 列から
+  const emojiOf = (/** @type {number} */ u) => {
+    const em = charEmojiOf(u);
+    if (em) return em;
+    const r = I && I.get(u);
+    const c = r && r.char != null && CHAR_EMOJI ? CHAR_EMOJI[String(r.char)] : null;
+    return (c && c.emoji) || '';
+  };
+  /** @param {{ eid: string, ev: any, counted: boolean }} it */
+  const SEP = '<span class="pe-sep">|</span>';   // 区切り (細く。全角の「・」は幅を取る)
+  const itemHtml = ({ eid, ev, counted }) => {
     const d = new Date(ev.start_at * 1000);
     const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);   // 表示言語の曜日 (ja: 日 / en: Sun)
-    const yosouHead = document.getElementById('yosou-head');
-    if (yosouHead) yosouHead.style.display = '';
-    const t = document.getElementById('yosou-tour');
-    if (!t) return;
-    t.style.display = '';
-    // 1 行目 = 大会名、2 行目 = 日付・人数
-    const meta2 = `${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` +
-      i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' });
-    const draw = (/** @type {string} */ nameHtml) => {
-      t.innerHTML = `<div class="yt-name">${nameHtml}</div><div class="yt-meta">${escapeHtml(meta2)}</div>`;
-    };
-    draw(escapeHtml(ev.tournament_name));
-    // 大会名は start.gg の大会のホームへのリンク (開催予定の一覧 upcoming.json の大会の slug から)
-    const upList = await fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
-    const tour = upList && Array.isArray(upList.tournaments)
-      ? upList.tournaments.find((/** @type {any} */ x) => x.tournament_id === ev.tournament_id) : null;
-    const slug = (tour && tour.tournament_slug) || '';
-    if (slug) {
-      draw(`<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>`);
+    const badge = counted ? `<span class="lr-badge ok">${i18n('player.counted')}</span>` : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
+    const me = (ev.entrants || []).find((/** @type {any} */ x) => x.uid === UID);
+    const pool = ev.bracket && me && me.pg != null ? (ev.bracket.pools || {})[String(me.pg)] || {} : null;
+    // 1 行目 (いつも出す): 大会名・日付・人数・集計対象のバッジ・スコア予想 (集計対象のとき)
+    const when = `${SEP}${d.getMonth() + 1}/${d.getDate()}(${wd})${SEP}` +
+      escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }));
+    const sim = counted ? `<a class="pe-sim" href="${escapeHtml(SPSP.langRoot + 'sim/?uid=' + UID + '&eid=' + encodeURIComponent(eid))}">${i18n('player.simulate')}</a>` : '';
+    // 開いたとき: フェーズ・プール・自分のシード・リンク、プールのプレイヤー (全員。POOL_PAGE 人ずつページ送り)
+    /** @type {string[]} */
+    const parts = [];
+    let list = '';
+    if (pool) {
+      const poolTxt = Object.keys(ev.bracket.pools || {}).length > 1 && pool.ident ? i18n('player.pool.pool', { id: pool.ident }) : '';
+      parts.push(escapeHtml(ev.bracket.phase || '') + (poolTxt ? ' ' + escapeHtml(poolTxt) : ''));
+      if (me.seed != null) parts.push(i18n('player.pool.seed', { n: me.seed }));
+      const members = (ev.entrants || []).filter((/** @type {any} */ x) => x.pg === me.pg)
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+      const pages = Math.ceil(members.length / POOL_PAGE);
+      const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
+        const em = x.uid != null ? emojiOf(x.uid) : '';
+        const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
+        const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
+        const pg = Math.floor(k / POOL_PAGE);
+        return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+      }).join('');
+      const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
+        `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
+      // 見出しの右にページ送り (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない)
+      list = `<div class="pe-pool"><div class="pe-pool-h"><span>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</span>${pager}</div><div class="pe-list">${chips}</div></div>`;
     }
-  } catch (e) { /* 予定のデータが読めなければ欄ごと出さない */ }
+    // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
+    const slug = slugOf.get(ev.tournament_id) || '';
+    const href = pool && pool.url ? pool.url : (slug ? 'https://www.start.gg/' + slug : '');
+    if (href) parts.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${pool && pool.url ? i18n('player.pool.view') : i18n('player.upcoming.view_tournament')} ↗</a>`);
+    const body = parts.length || list ? `<div class="pe-body">${parts.length ? `<div class="pe-meta">${parts.join(SEP)}</div>` : ''}${list}</div>` : '';
+    return `<details class="pool-ev"><summary class="pe-name"><span class="pe-t">${escapeHtml(ev.tournament_name || '')}</span>` +
+      `<span class="pe-when">${when}</span>${badge}${sim}</summary>${body}</details>`;
+  };
+  sec.style.display = '';   // ページ送りが高さを測るので先に出す
+  SPSPPager.setupPaginated(items, 'upcoming-list', 'upcoming-pager', (/** @type {any[]} */ arr) => arr.map(itemHtml).join(''), '');
+  // プールのプレイヤーのページ送り (表示を切り替えるだけ。描き直さない)
+  const listEl = document.getElementById('upcoming-list');
+  if (listEl) listEl.addEventListener('click', (e) => {
+    const b = /** @type {HTMLButtonElement | null} */ (/** @type {Element} */ (e.target).closest('.pe-pager .page-btn'));
+    if (!b) return;
+    const pager = /** @type {HTMLElement} */ (b.closest('.pe-pager'));
+    const pool = /** @type {HTMLElement} */ (pager.closest('.pe-pool'));
+    const pages = parseInt(pager.dataset.pages || '1', 10);
+    const cur = Math.max(0, Math.min(pages - 1, parseInt(pager.dataset.cur || '0', 10) + (b.dataset.act === 'next' ? 1 : -1)));
+    pager.dataset.cur = String(cur);
+    pool.querySelectorAll('.pe-p').forEach(c => { /** @type {HTMLElement} */ (c).hidden = /** @type {HTMLElement} */ (c).dataset.page !== String(cur); });
+    const info = pager.querySelector('.page-info');
+    if (info) info.textContent = `${cur + 1} / ${pages}`;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="prev"]')).disabled = cur === 0;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="next"]')).disabled = cur === pages - 1;
+  });
 }
 
 /** @type {PMeta | null} */
@@ -1389,7 +1452,7 @@ function render() {
     });
   });
 
-  buildYosouSection();
+  buildUpcomingSection();
   buildLatestResultSection();
   const liveSec = document.getElementById('live-section');
   if (liveSec) {   // 参加中の大会 (開催中だけ。js/live.js)。試合の行は最新の大会結果と同じ (相手は SPSP にページがあればリンク)
