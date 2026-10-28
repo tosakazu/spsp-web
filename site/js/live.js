@@ -11,6 +11,8 @@
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
 // 同じ部門の下位クラス (Bクラスなど) にいる人 (entrants[].in_class) は本戦の順位に「◯クラス参加中」を添える。
 // プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
+// 予想 (opts.predict があるとき。プレイヤーページが js/live_predict.js を渡す): 今の結果でのパフォーマンスを順位の横に、
+// 順位評価・直対評価の変化の予想をカードの下に出す。全国順位の変化の予想はボタンを押したときだけ計算する (opts.rankChange)。
 import SPSPI18n from './i18n.js';
 import { escapeHtml } from './html.js';
 import SPSPMatch from './match.js';
@@ -23,9 +25,15 @@ const REFRESH_MS = 30 * 1000;
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
 const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
+/** 全国順位の変化を出している部門 (event_id) */
+const rankOpened = new Set();
+/** 最後に描いた予想 (event_id → 予想)。ボタンを押したときに使う @type {Map<string, any>} */
+const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
- * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)
- * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null> }} LiveOpts */
+ * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
+ * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化
+ * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
+ *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any> }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
@@ -192,12 +200,68 @@ function setsHtml(doc, myId, opts, hasPage) {
   return `<div class="tour-matches live-sets">${header}${rows.join('')}</div>`;
 }
 
+/** 予想の数字 (最新の大会結果の chip と同じ形: 大きい数字 + 括弧に内訳) @param {string} lbl @param {number} v @param {number | null} sub @param {boolean} signedSub */
+function predChip(lbl, v, sub, signedSub) {
+  const big = Math.abs(v) > 0.05 ? `<span class="val ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : ''}${v.toFixed(1)}</span>` : '<span class="val dim">±0</span>';
+  const small = sub != null && Math.abs(sub) > 0.05 ? `<span class="sub">(${signedSub && sub > 0 ? '+' : ''}${sub.toFixed(1)})</span>` : '<span class="sub">&nbsp;</span>';
+  return `<div class="chip"><span class="lbl">${lbl}</span>${big}${small}</div>`;
+}
+
+/** パフォーマンス (順位の横。最新の大会結果と同じ形) @param {any} pr */
+function perfHeroHtml(pr) {
+  const pi = pr && pr.perfInfo;
+  if (!pi) return '';
+  return `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('player.performance')}</span>` +
+    `<span class="ph-perf-val"><span class="ph-rank"><span class="ph-lbl">${t('common.national')}</span>#${pi.eq}<span class="ph-lbl">${t('player.equivalent')}</span></span>` +
+    `<span class="lv-pill lv-${pi.eqLv}">Lv${pi.eqLv}${pi.lvSfx}</span></span></span>`;
+}
+
+/** 順位評価・直対評価の予想と、全国順位の変化のボタン @param {any} pr @param {string} eid @param {boolean} canRank */
+function predHtml(pr, eid, canRank) {
+  if (!pr) return '';
+  if (pr.counted === false) return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><span class="live-pred-note">${t('live.pred.not_counted')}</span></div>`;
+  if (pr.counted == null || (!pr.tjpr && !pr.bt)) return '';
+  const SCALE = 17.5;   // 順位評価の表示単位 (meta の TJPR_ELO_SCALE。最新の大会結果の chip と同じ)
+  const chips = (pr.tjpr ? predChip(t('ranking.tab.tjpr'), pr.tjpr.delta * SCALE, pr.tjpr.raw * SCALE, false) : '') +
+    (pr.bt ? predChip(t('ranking.tab.bt'), pr.bt.dPeak, pr.bt.dInt, true) : '');
+  const open = rankOpened.has(eid);
+  const btn = canRank ? `<button type="button" class="live-rank-btn${open ? ' open' : ''}" data-eid="${eid}">${t('live.pred.rank_btn')}</button>` : '';
+  return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div>${btn}</div>` +
+    (canRank ? `<div class="live-rank" data-eid="${eid}"${open ? '' : ' hidden'}></div>` : '') +
+    `<div class="live-pred-foot">${pr.final ? t('live.pred.note_final') : t('live.pred.note')}</div>`;
+}
+
+/** 全国順位の変化 (今 → 予想) @param {any} rc */
+function rankChangeHtml(rc) {
+  if (!rc) return `<span class="dim">${t('live.pred.rank_none')}</span>`;
+  const line = (/** @type {string} */ lbl, /** @type {{ cur: number, next: number } | null} */ x, /** @type {string} */ extra) => {
+    if (!x) return '';
+    const d = x.cur ? x.cur - x.next : 0;
+    return `<div>${lbl} ${x.cur ? '#' + x.cur : '—'} → <b>#${x.next}</b>` +
+      (d > 0 ? ` <span class="up">(↑${d})</span>` : d < 0 ? ` <span class="down">(↓${-d})</span>` : '') + extra + '</div>';
+  };
+  const lv = rc.lv && rc.lv.next !== rc.lv.cur ? ` <span class="lv-pill lv-${rc.lv.cur}">Lv${rc.lv.cur}</span> → <span class="lv-pill lv-${rc.lv.next}">Lv${rc.lv.next}</span>` : '';
+  return line(t('ranking.tab.ensemble'), rc.ens, lv) + line(t('ranking.tab.tjpr'), rc.tjpr, '') + line(t('ranking.tab.bt'), rc.bt, '');
+}
+
+/** @param {HTMLElement} box @param {string} eid @param {LiveOpts} opts */
+async function fillRank(box, eid, opts) {
+  const pr = lastPreds.get(eid);
+  if (!opts.rankChange || !pr) return;
+  if (!box.innerHTML) box.innerHTML = `<span class="dim">${t('live.pred.rank_loading')}</span>`;
+  const rc = await opts.rankChange(pr).catch(() => null);
+  box.innerHTML = rankChangeHtml(rc);
+}
+
 /** カードは「最新の大会結果」と同じ形 (大会アイコンは start.gg の画像をそのまま)
  * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items
- * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] */
-export function render(el, uid, items, opts = {}, hasPage = null) {
+ * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] @param {any[]} [preds] items と同じ並びの予想 (無ければ null) */
+export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
   const cards = [];
-  for (const { summary, doc } of items) {
+  lastPreds.clear();
+  items.forEach(({ doc }, i) => { if (preds[i]) lastPreds.set(String(doc.event_id ?? ''), preds[i]); });
+  for (const [idx, { summary, doc }] of items.entries()) {
+    const pred = preds[idx] || null;
     const [myId, e] = entrantOf(doc, uid);
     if (!e || myId == null) continue;
     const pool = poolOf(doc, e.pg);
@@ -214,6 +278,7 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
       hero += `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('live.seed_label')}</span>` +
         `<span class="ph-rank">${e.seed}</span></span>`;
     }
+    hero += perfHeroHtml(pred);
     const sets = setsHtml(doc, String(myId), opts, hasPage);
     const eid = escapeHtml(String(doc.event_id ?? ''));
     cards.push(
@@ -225,11 +290,14 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
           `<div class="perf-hero">${img}${hero}${sets ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +
+        predHtml(pred, eid, !!opts.rankChange) +
         sets +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
   el.innerHTML = cards.join('');
+  // 全国順位の変化を開いている部門は、読み直しても新しい予想で出し直す
+  if (el.querySelectorAll) el.querySelectorAll('.live-rank:not([hidden])').forEach(b => fillRank(/** @type {HTMLElement} */ (b), /** @type {HTMLElement} */ (b).dataset.eid || '', opts));
   return cards.length;
 }
 
@@ -242,6 +310,18 @@ export function start(section, uid, opts = {}) {
   body.addEventListener('click', (e) => {
     const target = /** @type {Element} */ (e.target);
     if (target.closest('a')) return;
+    const rb = /** @type {HTMLElement | null} */ (target.closest('.live-rank-btn'));
+    if (rb) {   // 全国順位の変化の予想 (押したときだけ計算)
+      const eid = rb.dataset.eid || '';
+      const box = /** @type {HTMLElement | null} */ ([...body.querySelectorAll('.live-rank')].find(b => /** @type {HTMLElement} */ (b).dataset.eid === eid) || null);
+      if (!box) return;
+      const open = !rankOpened.has(eid);
+      if (open) rankOpened.add(eid); else rankOpened.delete(eid);
+      rb.classList.toggle('open', open);
+      box.hidden = !open;
+      if (open) fillRank(box, eid, opts);
+      return;
+    }
     const card = target.closest('.live-group .live-toggle');   // tour-clickable はプレイヤーページの別の処理が拾うので使わない
     const g = /** @type {HTMLElement | null} */ (card && card.closest('.live-group'));
     if (!g) return;
@@ -251,7 +331,9 @@ export function start(section, uid, opts = {}) {
   const tick = async () => {
     const items = await load(uid);
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
-    const n = render(body, uid, items, opts, hasPage);
+    const predict = opts.predict;
+    const preds = predict ? await Promise.all(items.map(({ doc }) => predict(doc).catch(() => null))) : [];
+    const n = render(body, uid, items, opts, hasPage, preds);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
     if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, REFRESH_MS);

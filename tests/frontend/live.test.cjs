@@ -126,3 +126,23 @@ test('試合の一覧は最初は畳んである (カードを押すと開く �
   assert.match(e.innerHTML, /live-toggle latestres-card/);
   assert.match(e.innerHTML, /<span class="chevron lr-chev">▶<\/span><\/div>/);
 });
+
+test('予想があればパフォーマンスを順位の横に、順位評価・直対評価の chip と全国順位のボタン。集計対象外は一言だけ', () => {
+  const L = load();
+  const e = el();
+  const pred = { place: 2, final: false, counted: true, perf: 120, perfInfo: { eq: 120, eqLv: 5, lvSfx: '' },
+    tjpr: { delta: 0.1, raw: 2, newScore: 1 }, bt: { dPeak: 0, dInt: -3.21, peakAfter: 1500, n: 1 } };
+  L.render(e, 11, [{ summary: {}, doc: doc() }], { rankChange: async () => null }, null, [pred]);
+  assert.match(e.innerHTML, /player\.performance\{\}.*#120.*lv-pill lv-5/);
+  assert.match(e.innerHTML, /ranking\.tab\.tjpr\{\}<\/span><span class="val pos">\+1\.8<\/span><span class="sub">\(35\.0\)<\/span>/);
+  assert.match(e.innerHTML, /ranking\.tab\.bt\{\}<\/span><span class="val dim">±0<\/span><span class="sub">\(-3\.2\)<\/span>/);
+  assert.match(e.innerHTML, /class="live-rank-btn"/);
+  assert.match(e.innerHTML, /live\.pred\.note\{\}/);
+  const e2 = el();
+  L.render(e2, 11, [{ summary: {}, doc: doc() }], {}, null, [{ ...pred, counted: false, tjpr: null, bt: null }]);
+  assert.match(e2.innerHTML, /live\.pred\.not_counted/);
+  assert.doesNotMatch(e2.innerHTML, /live-rank-btn/);
+  const e3 = el();
+  L.render(e3, 11, [{ summary: {}, doc: doc() }]);
+  assert.doesNotMatch(e3.innerHTML, /live-pred|player\.performance/);
+});

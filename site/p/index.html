@@ -207,6 +207,16 @@
   .live-sets .dim { color: #9ca3af; }
   .live-next { font-size: 11px; font-weight: 700; }
   .live-foot { font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
+  /* 予想 (js/live_predict.js): 順位評価・直対評価の chip と、全国順位の変化 (ボタンを押したときだけ) */
+  .live-pred { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 2px; }
+  .live-pred .lr-stats { gap: 10px; }
+  .live-pred-tag { font-size: 10px; font-weight: 600; color: #7c3aed; background: #f5f3ff; border-radius: 8px; padding: 1px 7px; }
+  .live-pred-note { font-size: 11px; color: #6b7280; }
+  .live-rank-btn { font-size: 11px; padding: 3px 8px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; color: #374151; cursor: pointer; }
+  .live-rank-btn.open { border-color: #7c3aed; color: #7c3aed; }
+  .live-rank { font-size: 12px; text-align: center; margin: 4px 0; line-height: 1.6; }
+  .live-rank .up { color: #16a34a; } .live-rank .down { color: #2563eb; } .live-rank .dim { color: #9ca3af; }
+  .live-pred-foot { font-size: 10px; color: #9ca3af; text-align: center; margin: 0 4px 2px; }
   /* 大会アイコンの縮小版 (js/tour_icons.js)。読めるまでは枠だけ、表に無い大会は外す */
   /* 最新の大会結果・参加中の大会は順位の左に 44px、出場履歴は順位の上に 36px */
   img.tour-icon { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 6px; object-fit: cover; background: #f3f4f6; }

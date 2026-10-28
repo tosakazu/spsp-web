@@ -22,6 +22,7 @@ import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
+import SpspLivePredict from '../../site/js/live_predict.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
@@ -1396,11 +1397,24 @@ function render() {
       name: SPSPFormat.shortName((MAIN_REC && MAIN_REC.display) || ''),
       emojiOf: charEmojiOf,
       hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
+      ...livePredictOpts(),
     });
   }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   buildRivalsSection();
+}
+
+// 参加中の大会の予想 (js/live_predict.js)。全選手の数値 (sim_pop) は速報に載っているときだけ読む
+function livePredictOpts() {
+  if (!PLAYER || !UID) return {};
+  const pr = SpspLivePredict.create({ uid: UID, player: PLAYER, data: SPSP.data || '', meta: META,
+    utcOffset: /** @type {SpspSiteConfig} */ (SPSP.site).utcOffset || '+00:00' });
+  return {
+    predict: (/** @type {any} */ doc) => pr.predict(doc).then(r => r && Object.assign(r, {
+      perfInfo: r.perf != null ? perfInfoOf({ perf_rank: r.perf, place: r.place }) : null })),
+    rankChange: (/** @type {any} */ p) => pr.rankChange(p),
+  };
 }
 
 /** @type {ChartInstance | null} */
