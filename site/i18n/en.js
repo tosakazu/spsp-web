@@ -410,7 +410,7 @@ window.SPSP_I18N.en = {
   'live.pred.rank_none': 'Could not calculate',
   'live.or_better_unit': '{n, selectordinal, one{st} two{nd} few{rd} other{th}} or better',
   'live.unreflected': 'Not in the ranking yet',
-  'live.pool': 'Pool {id}',
+  'live.view_bracket': 'View bracket',
   'live.next': 'Next',
   'live.playing': 'Playing',
   'live.tbd': 'TBD',

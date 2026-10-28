@@ -44,7 +44,8 @@ test('残っている人は「N 位以上」、対戦中のセットが上、い
   assert.match(e.innerHTML, /live\.seed_label\{\}<\/span><span class="ph-rank">1</);
   assert.match(e.innerHTML, /live\.unreflected/);
   assert.match(e.innerHTML, /<img class="tour-icon lr-icon" src="https:\/\/images\.start\.gg\/i\.png"/);
-  assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10"/);
+  assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10" target="_blank" rel="noopener">live\.view_bracket\{\} ↗/);
+  assert.doesNotMatch(e.innerHTML, /start\.gg ↗|tournament\/t\/event\/sp/);   // 部門のページは大会名と被るので出さない
   assert.match(e.innerHTML, /T&lt;1&gt;/);
   assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('2-1'));
 });

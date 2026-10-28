@@ -413,7 +413,7 @@ window.SPSP_I18N.ja = {
   'live.pred.rank_none': '計算できませんでした',
   'live.or_better_unit': '位以上',
   'live.unreflected': 'ランキング未反映',
-  'live.pool': 'プール {id}',
+  'live.view_bracket': 'トーナメントを見る',
   'live.next': '次',
   'live.playing': '対戦中',
   'live.tbd': '未定',

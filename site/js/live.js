@@ -10,7 +10,8 @@
 //                             ログインしていなければ何もしない。プレビューでは ?live=sample&live_as=<uid> で本人の代わりにできる
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
 // 同じ部門の下位クラス (Bクラスなど) にいる人 (entrants[].in_class) は本戦の順位に「◯クラス参加中」を添える。
-// プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
+// 「トーナメントを見る」: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
+// 部門の start.gg のページへのリンクは出さない (大会名のリンクと被る)。
 // 予想 (opts.predict があるとき。プレイヤーページが js/live_predict.js を渡す): 今の結果でのパフォーマンスを順位の横に、
 // 順位評価・直対評価の変化と全国順位の変化の予想は、カードを押して試合の一覧を開いたときに一緒に出す (全国順位は開いたときに計算、opts.rankChange)。
 import SPSPI18n from './i18n.js';
@@ -275,9 +276,9 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
     const [myId, e] = entrantOf(doc, uid);
     if (!e || myId == null) continue;
     const pool = poolOf(doc, e.pg);
-    const poolTxt = pool ? `${pool.phase.name || ''}${pool.group.ident && (pool.phase.groups || []).length > 1 ? ' ' + t('live.pool', { id: pool.group.ident }) : ''}` : '';
+    // 今のプールのブラケット (start.gg)。部門のページは大会名のリンクと被るので出さない
     const poolLink = pool && pool.group.url
-      ? `<a class="live-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${escapeHtml(poolTxt)} ↗</a>` : '';
+      ? `<a class="live-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${t('live.view_bracket')} ↗</a>` : '';
     const img = summary.image ? `<img class="tour-icon lr-icon" src="${escapeHtml(summary.image)}" alt="" loading="lazy">` : '';
     const ended = !!(summary.ended || doc.ended_at);
     const badge = ended ? `<span class="lr-badge live-end">${t('live.ended')}</span>` : `<span class="lr-badge live-on">${t('live.on')}</span>`;
@@ -300,7 +301,7 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
           `<div class="perf-hero">${img}${hero}${canOpen ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
-          `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
+          `<div class="live-links">${cls}${poolLink}</div>` +
         `</div>` +
         sets +
         (predBlock ? `<div class="live-detail">${predBlock}</div>` : '') +
