@@ -41,8 +41,9 @@ const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
 /** 予想 1 部門分 (null の項目は出せない)
  * @typedef {{ place: number | null, final: boolean, counted: boolean | null,
  *             perf: number | null, tjpr: { delta: number, raw: number, newScore: number } | null,
- *             bt: { dPeak: number, dInt: number, peakAfter: number, n: number, perSet: Record<string, number> } | null }} LivePrediction */
-/* bt.perSet = セット id → その試合での自分の内部レートの変化 (試合の行に出す) */
+ *             bt: { dPeak: number, dInt: number, peakAfter: number, n: number, perSet: Record<string, number>, ifWin: Record<string, number> } | null }} LivePrediction */
+/* bt.perSet = セット id → その試合での自分の内部レートの変化 (試合の行に出す)。bt.ifWin = 相手の決まっているまだの試合 → 勝てばいくつ上がるか
+   (負けたときは出さない)。bt.n = 報告済みの自分の試合数 (0 なら順位評価・直対評価の chip は出さず、ifWin だけ) */
 
 /** @param {any[]} rows @param {string[]} cols @returns {Map<number, PopRec>} */
 function popMap(rows, cols) {
@@ -202,10 +203,13 @@ export function create(o) {
         .map((/** @type {any} */ s, /** @type {number} */ i) => ({ s, k: bracketOrderKey(s), i }))
         .sort((a, b) => (a.k[0] - b.k[0]) || (a.k[1] - b.k[1]) || (a.k[2] - b.k[2]) || (a.i - b.i)).map(x => x.s);
       const mine = sets.filter((/** @type {any} */ s) => s.e.map(String).includes(myId));
-      if (mine.length) {
+      // 相手の決まっているまだの試合 (対戦中・次): 勝てばいくつかだけ出す
+      const next = (doc.sets || []).filter((/** @type {any} */ s) => s.winner == null && !cls.has(String(s.pg))
+        && (s.e || []).length === 2 && s.e[0] != null && s.e[1] != null && s.e.map(String).includes(myId));
+      if (mine.length || next.length) {
         const ts = doc.start_at || Date.now() / 1000;
         const oppUids = new Set();
-        for (const s of mine) for (const x of s.e) { const u = (ents[String(x)] || {}).uid; if (u != null && String(x) !== myId) oppUids.add(u); }
+        for (const s of mine.concat(next)) for (const x of s.e) { const u = (ents[String(x)] || {}).uid; if (u != null && String(x) !== myId) oppUids.add(u); }
         const inits = new Map(await Promise.all([...oppUids].map(async u => /** @type {[number, OppInit]} */ ([u, await oppInit(u, P.get(u))]))));
         /** @type {Map<string, { p: any, lv: number }>} */
         const pl = new Map();
@@ -246,9 +250,19 @@ export function create(o) {
           if (wId === myId) perSet[String(s.id)] = w.p.rating() - wr;
           else if (lId === myId) perSet[String(s.id)] = l.p.rating() - lr;
         }
+        /** @type {Record<string, number>} */
+        const ifWin = {};
+        for (const s of next) {   // 今の状態から、その試合だけ勝った場合 (写しで計算し、本体は動かさない)
+          const o = playerOf(String(s.e[String(s.e[0]) === myId ? 1 : 0])).p;
+          const p2 = Object.assign(Object.create(Object.getPrototypeOf(me2)), me2);
+          const r0 = p2.rating();
+          p2.update([o.rating()], [o.rd()], [1]);
+          scaleUpdate(p2, r0, s.best_of === 1 ? BO1_K : 1);
+          ifWin[String(s.id)] = p2.rating() - r0;
+        }
         const after = me2.rating();
         const peakAfter = Math.max(C.peakAt(self.history, ts, after), after);
-        bt = { dPeak: peakAfter - (sc.bt_gated_elo || 0), dInt: after - before, peakAfter, n: mine.length, perSet };
+        bt = { dPeak: peakAfter - (sc.bt_gated_elo || 0), dInt: after - before, peakAfter, n: mine.length, perSet, ifWin };
       }
     }
     return { place, final, counted, perf, tjpr, bt };

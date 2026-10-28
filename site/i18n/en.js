@@ -404,6 +404,7 @@ window.SPSP_I18N.en = {
   'live.place_or_better': '{n, selectordinal, one{{n}st} two{{n}nd} few{{n}rd} other{{n}th}} or better',
   'live.seed_label': 'Seed',
   'live.pred.label': 'Projected',
+  'live.pred.if_win': 'If won',
   'live.pred.not_counted': 'Not counted for the ranking (performance only)',
   'live.pred.rank_loading': 'Calculating…',
   'live.pred.rank_none': 'Could not calculate',

@@ -125,6 +125,7 @@ function classOut(/** @type {any} */ doc, /** @type {string} */ myId) {
  * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage @param {any} [pred] */
 function setsHtml(doc, myId, opts, hasPage, pred) {
   const perSet = (pred && pred.bt && pred.bt.perSet) || {};
+  const ifWin = (pred && pred.bt && pred.bt.ifWin) || {};
   const mine = (doc.sets || []).filter((/** @type {any} */ s) => (s.e || []).map(String).includes(myId));
   if (!mine.length) return '';
   const order = (/** @type {any} */ s) => s.completed_at || s.started_at || (s.state === 2 ? 4e9 : 0) || 0;
@@ -171,7 +172,7 @@ function setsHtml(doc, myId, opts, hasPage, pred) {
         `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
         `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
-      `</span>${deltaHtml(perSet[String(s.id)], s.winner != null && String(s.winner) === myId)}</div>`;
+      `</span>${s.winner == null ? ifWinHtml(ifWin[String(s.id)]) : deltaHtml(perSet[String(s.id)], String(s.winner) === myId)}</div>`;
   };
   // フェーズが 2 つ以上なら境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」
   // (下位クラスに回ったときは「Bクラス」のように名前だけ)
@@ -206,6 +207,12 @@ function deltaHtml(d, won) {
   return `<span class="m-delta" style="color:${won ? '#16a34a' : '#2563eb'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>`;
 }
 
+/** まだの試合の右端: 勝てばいくつ上がるか (負けたときは出さない) @param {number | undefined} d */
+function ifWinHtml(d) {
+  if (d == null) return '<span class="m-delta"></span>';
+  return `<span class="m-delta live-ifwin"><span class="live-ifwin-lbl">${t('live.pred.if_win')}</span>+${d.toFixed(1)}</span>`;
+}
+
 /** 予想の数字 (最新の大会結果の chip と同じ形: 大きい数字 + 括弧に内訳) @param {string} lbl @param {number} v @param {number | null} sub @param {boolean} signedSub */
 function predChip(lbl, v, sub, signedSub) {
   const big = Math.abs(v) > 0.05 ? `<span class="val ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : ''}${v.toFixed(1)}</span>` : '<span class="val dim">±0</span>';
@@ -226,10 +233,10 @@ function perfHeroHtml(pr) {
 function predHtml(pr, eid, canRank) {
   if (!pr) return '';
   if (pr.counted === false) return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><span class="live-pred-note">${t('live.pred.not_counted')}</span></div>`;
-  if (pr.counted == null || (!pr.tjpr && !pr.bt)) return '';
+  if (pr.counted == null || (!pr.tjpr && !(pr.bt && pr.bt.n))) return '';
   const SCALE = 17.5;   // 順位評価の表示単位 (meta の TJPR_ELO_SCALE。最新の大会結果の chip と同じ)
   const chips = (pr.tjpr ? predChip(t('ranking.tab.tjpr'), pr.tjpr.delta * SCALE, pr.tjpr.raw * SCALE, false) : '') +
-    (pr.bt ? predChip(t('ranking.tab.bt'), pr.bt.dPeak, pr.bt.dInt, true) : '');
+    (pr.bt && pr.bt.n ? predChip(t('ranking.tab.bt'), pr.bt.dPeak, pr.bt.dInt, true) : '');
   return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div></div>` +
     (canRank ? `<div class="live-rank" data-eid="${eid}"></div>` : '');
 }

@@ -407,6 +407,7 @@ window.SPSP_I18N.ja = {
   'live.place_or_better': '{n} 位以上',
   'live.seed_label': 'シード',
   'live.pred.label': '予想',
+  'live.pred.if_win': '勝てば',
   'live.pred.not_counted': 'この大会は集計対象外 (パフォーマンスだけ)',
   'live.pred.rank_loading': '計算中…',
   'live.pred.rank_none': '計算できませんでした',

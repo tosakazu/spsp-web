@@ -127,11 +127,11 @@ test('試合の一覧は最初は畳んである (カードを押すと開く �
   assert.match(e.innerHTML, /<span class="chevron lr-chev">▶<\/span><\/div>/);
 });
 
-test('予想があればパフォーマンスを順位の横に、順位評価・直対評価の chip と全国順位のボタン。集計対象外は一言だけ', () => {
+test('予想があればパフォーマンスを順位の横に、開いた中に順位評価・直対評価の chip と全国順位、試合の行に変化と「勝てば」。集計対象外は一言だけ', () => {
   const L = load();
   const e = el();
   const pred = { place: 2, final: false, counted: true, perf: 120, perfInfo: { eq: 120, eqLv: 5, lvSfx: '' },
-    tjpr: { delta: 0.1, raw: 2, newScore: 1 }, bt: { dPeak: 0, dInt: -3.21, peakAfter: 1500, n: 1, perSet: { 1: 4.26 } } };
+    tjpr: { delta: 0.1, raw: 2, newScore: 1 }, bt: { dPeak: 0, dInt: -3.21, peakAfter: 1500, n: 1, perSet: { 1: 4.26 }, ifWin: { 2: 7.04 } } };
   L.render(e, 11, [{ summary: {}, doc: doc() }], { rankChange: async () => null }, null, [pred]);
   assert.match(e.innerHTML, /player\.performance\{\}.*#120.*lv-pill lv-5/);
   assert.match(e.innerHTML, /ranking\.tab\.tjpr\{\}<\/span><span class="val pos">\+1\.8<\/span><span class="sub">\(35\.0\)<\/span>/);
@@ -142,7 +142,9 @@ test('予想があればパフォーマンスを順位の横に、順位評価�
   assert.doesNotMatch(e.innerHTML, /live-pred-foot/);
   // 試合の行: 予想のある試合 (id 1、勝ち) は緑で +4.3、対戦中の試合は空
   assert.match(e.innerHTML, /<span class="m-delta" style="color:#16a34a">\+4\.3<\/span>/);
-  assert.strictEqual((e.innerHTML.match(/<span class="m-delta"><\/span>/g) || []).length, 1);
+  // 対戦中の試合 (id 2) は「勝てば +7.0」、負けたときの値は出さない
+  assert.match(e.innerHTML, /<span class="m-delta live-ifwin"><span class="live-ifwin-lbl">live\.pred\.if_win\{\}<\/span>\+7\.0<\/span>/);
+  assert.strictEqual((e.innerHTML.match(/<span class="m-delta"><\/span>/g) || []).length, 0);   // 自分の試合 (id 1・2) は両方埋まる
   const e2 = el();
   L.render(e2, 11, [{ summary: {}, doc: doc() }], {}, null, [{ ...pred, counted: false, tjpr: null, bt: null }]);
   assert.match(e2.innerHTML, /live\.pred\.not_counted/);

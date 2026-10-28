@@ -79,6 +79,16 @@ test('予想: 勝ち残りは place_min で。格上に勝てば直対評価が�
   const extra = await mk().predict(doc([win('e2'), win('e3', [-1, 0]), { ...win('e4'), pg: 2 }]));
   assert.ok(Math.abs(extra.bt.dInt - r.bt.dInt) < 1e-9);
   assert.strictEqual(extra.bt.n, 1);
+  // まだの試合 (相手が決まっている): 勝てばの値だけ。報告済みの値は変わらない
+  const nx = await mk().predict(doc([win('e2'), { id: 'n1', pg: 1, label: 'Winners TOP 2', e: ['e1', 'e4'], score: [null, null], winner: null, best_of: 3 },
+    { id: 'n2', pg: 1, e: ['e1', null], winner: null }]));
+  assert.ok(nx.bt.ifWin.n1 > 0 && !('n2' in nx.bt.ifWin));
+  assert.ok(Math.abs(nx.bt.dInt - r.bt.dInt) < 1e-9 && nx.bt.n === 1);
+  // 1 試合目の前 (報告済み 0): 勝てばだけあり、chip 用の n は 0
+  const first = await mk().predict(doc([{ id: 'n1', pg: 1, e: ['e1', 'e2'], score: [null, null], winner: null, best_of: 1 }]));
+  const first3 = await mk().predict(doc([{ id: 'n1', pg: 1, e: ['e1', 'e2'], score: [null, null], winner: null, best_of: 3 }]));
+  assert.strictEqual(first.bt.n, 0);
+  assert.ok(Math.abs(first.bt.ifWin.n1 - first3.bt.ifWin.n1 / 2) < 1e-9);   // 1 本先取は半分
   // 全国順位の変化 (タップ): 上がる向き
   const rc = await p.rankChange(r);
   assert.ok(rc.ens.next <= rc.ens.cur && rc.bt.next <= rc.bt.cur && rc.tjpr.next <= rc.tjpr.cur, JSON.stringify(rc));
