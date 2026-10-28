@@ -31,7 +31,7 @@ const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
  * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
- * latin = カードの裏面に出す英字の名前 (本人が登録。null = 自動、js/latin_name.js)
+ * latin = カードの裏面に出す英字の名前 (null = 自動 = こちらが用意したもの、js/latin_name.js。文字 = 本人が書いたもの、自動と同じ綴りでも残す)
  * back = 裏面のシール (js/card_stickers.js、null = 貼っていない)
  * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null, latin?: string | null,
  *   back?: import('./card_stickers.js').CardBack | null }} CardSettings */

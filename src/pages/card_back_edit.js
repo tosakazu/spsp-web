@@ -210,7 +210,8 @@ export async function mountBackEditor(o) {
   paintTextTop(); renderBase(); paintSx();
 
   // ── 裏面の名前 (英字名、カードの設定 latin)。欄には最初から今の名前 (未設定なら名前から自動で作ったもの、js/latin_name.js)。
-  //    自動と同じ・空なら設定なし (= 自動)。正しい形のときだけカードと設定に、使えない文字のときは理由を出す ──
+  //    設定 latin: null = 自動 (こちらが用意した名前、触っていない・空にした)、文字 = 本人が書いたもの (自動と同じ綴りでも本人が確かめたので残す。
+  //    大会で使うことがあるので、どちらか分かるようにしておく。2026-10-28)。正しい形のときだけカードと設定に、使えない文字のときは理由を出す ──
   const latinEl = /** @type {HTMLInputElement} */ ($('bz-latin'));
   const latinNote = $('bz-latin-note');
   const auto = autoLatin(SPSPFormat.stripTeamTag(data.rec.display), data.readings);
@@ -223,7 +224,7 @@ export async function mountBackEditor(o) {
     latinNote.textContent = ok ? '' : SPSPI18n.t('card_edit.latin_bad');
     latinNote.classList.toggle('bad', !ok);
     if (!ok) return;
-    const next = v === '' || v === auto ? null : v;
+    const next = v === '' ? null : v;
     if (next === latin) return;
     latin = next;
     renderBase();

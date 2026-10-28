@@ -32,7 +32,7 @@ export interface CardSettings {
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
   title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
-  latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)
+  latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)、文字 = 本人が書いたもの (自動と同じ綴りでも)
   back?: CardBack;        // 裏面のシール (無ければ欄ごと無し = 貼っていない・既定)
 }
 
