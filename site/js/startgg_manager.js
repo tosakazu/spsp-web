@@ -164,6 +164,46 @@ export function mount(opts) {
   });
   window.addEventListener('storage', e => { if (e.key === KEY || e.key === MODE_KEY || e.key === null) changed(); });
   render();
+  maybeNotice(opts);
+}
+
+const NOTICE_KEY = 'spsp_startgg_login_notice';   // 案内を出した印 (3 ページで共通、1 回だけ)
+
+/**
+ * API キーを保存している人に 1 回だけ「ログインで使えるようになった」を案内する。既定は API キーのまま (閉じれば何も変わらない)
+ * @param {{ beforeLogin?: () => void }} opts
+ */
+function maybeNotice(opts) {
+  if (lsGet(NOTICE_KEY) || mode() !== 'key' || !lsGet(API_KEY_KEY) || load()) return;
+  try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { return; }   // 印を残せないなら毎回出てしまうので出さない
+  /** @param {string} k */
+  const i18n = (k) => SPSPI18n.t(k);
+  const back = document.createElement('div');
+  back.className = 'sgg-notice-back';
+  back.innerHTML = `<div class="sgg-notice" role="dialog" aria-modal="true" aria-labelledby="sgg-notice-title">
+      <h2 id="sgg-notice-title"></h2><p class="b1"></p><p class="sgg-auth-muted b2"></p>
+      <div class="sgg-notice-actions"><button type="button" class="sgg-auth-btn sub" data-a="close"></button><button type="button" class="sgg-auth-btn" data-a="login"></button></div>
+    </div>`;
+  const q = (/** @type {string} */ s) => /** @type {HTMLElement} */ (back.querySelector(s));
+  q('h2').textContent = i18n('sggmgr.notice_title');
+  q('.b1').textContent = i18n('sggmgr.notice_body');
+  q('.b2').textContent = i18n('sggmgr.notice_keep');
+  q('[data-a="close"]').textContent = i18n('sggmgr.notice_close');
+  q('[data-a="login"]').textContent = i18n('sggmgr.notice_login');
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.addEventListener('click', async (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (t === back || t.dataset.a === 'close') { close(); return; }
+    if (t.dataset.a === 'login') {
+      /** @type {HTMLButtonElement} */ (t).disabled = true;
+      if (opts.beforeLogin) opts.beforeLogin();
+      if (!(await start())) close();
+    }
+  });
+  document.body.appendChild(back);
+  q('[data-a="login"]').focus();
 }
 
 const API = { KEY, load, save, logout, mode, setMode, pick, start, mount };

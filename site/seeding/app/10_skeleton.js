@@ -53,47 +53,44 @@ const SEED_APP_SKELETON_HTML = `
     </div>
   </div>
 
-  <!-- 自分が管理している大会 (start.gg トークンで取れたときだけ。60_upcoming.js loadMyTournaments) -->
-  <div class="upcoming-box open" id="mytours-box" style="display:none">
-    <div class="upcoming-toggle" id="mytours-toggle">
-      <span class="chev">▶</span>
-      <span>${i18n('seed.mine.title')}</span>
-      <span class="badge" id="mytours-count">0</span>
-      <span style="color:#9ca3af;font-weight:400;font-size:11px;margin-left:auto">${i18n('seed.mine.note')}</span>
-    </div>
-    <div class="upcoming-body">
-      <div class="upcoming-list" id="mytours-list"></div>
-    </div>
-  </div>
-
-  <div class="upcoming-box" id="upcoming-box">
-    <div class="upcoming-toggle" id="upcoming-toggle">
-      <span class="chev">▶</span>
-      <span>${i18n('seed.skeleton.t3')}</span>
-      <span class="badge" id="upcoming-count" style="display:none">0</span>
-      <span style="color:#9ca3af;font-weight:400;font-size:11px;margin-left:auto">${i18n('seed.skeleton.t4')}</span>
-    </div>
-    <div class="upcoming-body" id="upcoming-body">
-      <div class="upcoming-loading" id="upcoming-loading">${i18n('seed.skeleton.t5')}</div>
-      <div class="upcoming-pager" id="upcoming-pager" style="display:none">
-        <button type="button" id="upcoming-prev">${i18n('seed.skeleton.t6')}</button>
-        <span id="upcoming-pageinfo">1 / 1</span>
-        <button type="button" id="upcoming-next">${i18n('seed.skeleton.t7')}</button>
-      </div>
-      <div class="upcoming-list" id="upcoming-list" style="display:none"></div>
-    </div>
-  </div>
-
   <form id="seed-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:280px">
-        <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
-        <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
-          style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
-        <div id="event-url-help" style="font-size:10px;color:#9ca3af;margin-top:3px">${i18n('seed.skeleton.t11')} <code>/event/...</code> ${i18n('seed.skeleton.t12')}</div>
+    <!-- 大会の選び方: 管理している大会 / 直近の大会 / URL を入力 (同じ場所のタブ。60_upcoming.js initEventSourceTabs) -->
+    <div class="ev-src" id="ev-src">
+      <div class="ev-tabs" role="tablist">
+        <button type="button" role="tab" data-t="mine">${i18n('seed.src.mine')}<span class="badge" id="mytours-count" style="display:none">0</span></button>
+        <button type="button" role="tab" data-t="upcoming">${i18n('seed.src.upcoming')}<span class="badge" id="upcoming-count" style="display:none">0</span></button>
+        <button type="button" role="tab" data-t="url">${i18n('seed.src.url')}</button>
       </div>
-      <div style="display:flex;align-items:flex-end;padding-bottom:14px">
-        <button type="submit" id="fetch-btn" style="background:#dc2626;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t13')}</button>
+      <!-- 自分が管理している大会 (start.gg の認証で取れたとき。60_upcoming.js loadMyTournaments) -->
+      <div class="ev-pane" data-p="mine">
+        <div class="ev-note">${i18n('seed.mine.note')}</div>
+        <div class="upcoming-loading" id="mytours-empty"></div>
+        <div id="mytours-box" style="display:none">
+          <div class="upcoming-list" id="mytours-list"></div>
+        </div>
+      </div>
+      <div class="ev-pane" data-p="upcoming" id="upcoming-box">
+        <div class="ev-note">${i18n('seed.skeleton.t4')}</div>
+        <div class="upcoming-loading" id="upcoming-loading">${i18n('seed.skeleton.t5')}</div>
+        <div class="upcoming-pager" id="upcoming-pager" style="display:none">
+          <button type="button" id="upcoming-prev">${i18n('seed.skeleton.t6')}</button>
+          <span id="upcoming-pageinfo">1 / 1</span>
+          <button type="button" id="upcoming-next">${i18n('seed.skeleton.t7')}</button>
+        </div>
+        <div class="upcoming-list" id="upcoming-list" style="display:none"></div>
+      </div>
+      <div class="ev-pane" data-p="url">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px">
+            <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
+            <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
+              style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
+            <div id="event-url-help" style="font-size:10px;color:#9ca3af;margin-top:3px">${i18n('seed.skeleton.t11')} <code>/event/...</code> ${i18n('seed.skeleton.t12')}</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;padding-bottom:14px">
+            <button type="submit" id="fetch-btn" style="background:#dc2626;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t13')}</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="phase-row" style="display:none">

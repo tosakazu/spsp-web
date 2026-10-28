@@ -24,3 +24,17 @@
 .sgg-auth-btn.sub:hover { background: #f9fafb; }
 .sgg-auth-login .sgg-auth-muted { margin-left: 0; }
 .sgg-auth [hidden] { display: none !important; }
+
+/* API キーを保存している人への 1 回だけの案内 (mount が出す) */
+.sgg-notice-back {
+  position: fixed; inset: 0; background: rgba(17, 24, 39, .45); display: flex; align-items: center; justify-content: center;
+  padding: 16px; z-index: 1000;
+}
+.sgg-notice {
+  background: #fff; border-radius: 12px; max-width: 440px; width: 100%; padding: 20px 20px 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+}
+.sgg-notice h2 { margin: 0 0 10px; font-size: 16px; color: #111827; }
+.sgg-notice p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: #374151; }
+.sgg-notice p.sgg-auth-muted { font-size: 12px; color: #6b7280; margin-left: 0; }
+.sgg-notice-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.sgg-notice-actions .sgg-auth-btn.sub { margin-left: 0; }
