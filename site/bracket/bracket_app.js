@@ -6,7 +6,9 @@
 //     PITCH (1回戦の縦ピッチ) を基準に、ラウンド r の m 試合目の中心 =
 //     (m+0.5) * PITCH * 2^r。敗者側はラウンドごとの試合数で等分割。
 //   - 選手情報は表示中プールの players/<uid>.json を遅延取得
-//     (404=未登録 / それ以外はリトライ付き。失敗は明示)。
+//     (404=未登録 / それ以外はリトライ付き。失敗は明示)。名前は一覧の索引 (views/players_index.json) で先に出す。
+//     表示中プールを読み終えたら、ほかのプールの選手を裏で先に読んでおく (prefetch。表示中プールの読み込みを優先)。
+//     取った選手はプレビューで使う欄だけに縮めて持つ (上位帯は 1 人 0.5MB 超あり、先読みでメモリを食わないように)。
 //     居住地・直近対戦の集計は seed_data.js の buildSeedData をプール単位で呼ぶ。
 //   - ペイロード仕様: docs/seed_preview_design.md
 import BracketCore from './bracket_core.js';
@@ -14,6 +16,7 @@ import SPSPHtml from '../js/html.js';
 import SPSPI18n from '../js/i18n.js';
 import SPSPCharEmoji from '../js/char_emoji.js';
 import SPSPPlayerData from '../js/player_data.js';
+import SPSPViews from '../js/views.js';
 import SeedData from '../seeding/seed_data.js';
 import SeedOptimizer from '../seeding/seed_optimizer.js';
 import SeedShare from '../seeding/seed_share.js';
@@ -49,6 +52,10 @@ import SeedShare from '../seeding/seed_share.js';
     poolAgg: new Map(),   // "ph:pool:wd:N" -> buildSeedData の結果
     charByUid: new Map(), // uid -> {name, emoji} (メイン使用キャラ)
     renderToken: 0,       // 非同期描画の競合ガード
+    inflight: new Map(),  // uid -> 取得中の Promise (表示中プールと先読みで同じ選手を二重に取らない)
+    fgLoading: 0,         // 表示中プールの読み込み中 (> 0 の間は先読みを止める)
+    prefetch: { list: [], i: 0, gen: 0, running: 0 },   // 先読みの順番 (表示中プールの次から)
+    lastDraw: null,       // { token, members, key } 直近に描いたプール (名前が後から分かったときに描き直す)
     phasesEdited: false,  // このページでフェーズ構成を編集したか (データ版が共有元とズレる理由の説明用)
   };
 
@@ -81,32 +88,40 @@ import SeedShare from '../seeding/seed_share.js';
     throw lastErr || new Error(i18n('bracket.s1'));
   }
 
+  // 居住地・海外勢・メイン使用キャラの表 (並べて取る。どれが無くても表示は続ける)
   async function loadStaticData() {
     const warns = [];
-    try {
-      STATE.prefsRaw = await fetchJson(SPSP.data + 'data/player_prefectures.json');
-      if (STATE.prefsRaw.__missing) { STATE.prefsRaw = {}; warns.push(i18n('bracket.s2')); }
-    } catch (e) { STATE.prefsRaw = {}; warns.push(i18n('bracket.s3') + e.message); }
-    try {
-      const ov = await fetchJson(SPSP.data + 'data/overseas.json');
-      STATE.overseas = new Set((ov && ov.uids) || []);
-    } catch (e) { STATE.overseas = new Set(); warns.push(i18n('bracket.s4') + e.message); }
+    const prefs = async () => {
+      try {
+        STATE.prefsRaw = await fetchJson(SPSP.data + 'data/player_prefectures.json');
+        if (STATE.prefsRaw.__missing) { STATE.prefsRaw = {}; warns.push(i18n('bracket.s2')); }
+      } catch (e) { STATE.prefsRaw = {}; warns.push(i18n('bracket.s3') + e.message); }
+    };
+    const overseas = async () => {
+      try {
+        const ov = await fetchJson(SPSP.data + 'data/overseas.json');
+        STATE.overseas = new Set((ov && ov.uids) || []);
+      } catch (e) { STATE.overseas = new Set(); warns.push(i18n('bracket.s4') + e.message); }
+    };
     // メイン使用キャラの絵文字 (プレイヤーページと同じ定義: character_index の
-    // main_by_char を逆引きして char_emoji の絵文字を引く)。無くても表示は続ける。
-    try {
-      const [idx, emo] = await Promise.all([
-        fetchJson(SPSP.data + 'data/character_index.json'),
-        fetchJson((SPSPCharEmoji ? SPSPCharEmoji.url() : SPSP.root + 'data/char_emoji.json')),
-      ]);
-      const mbc = idx && idx.main_by_char;
-      if (mbc && emo && !emo.__missing) {
-        for (const cid in mbc) {
-          const c = emo[cid];
-          if (!c || !c.emoji) continue;
-          for (const u of mbc[cid] || []) STATE.charByUid.set(Number(u), c);
+    // main_by_char を逆引きして char_emoji の絵文字を引く)。
+    const chars = async () => {
+      try {
+        const [idx, emo] = await Promise.all([
+          fetchJson(SPSP.data + 'data/character_index.json'),
+          fetchJson((SPSPCharEmoji ? SPSPCharEmoji.url() : SPSP.root + 'data/char_emoji.json')),
+        ]);
+        const mbc = idx && idx.main_by_char;
+        if (mbc && emo && !emo.__missing) {
+          for (const cid in mbc) {
+            const c = emo[cid];
+            if (!c || !c.emoji) continue;
+            for (const u of mbc[cid] || []) STATE.charByUid.set(Number(u), c);
+          }
         }
-      }
-    } catch (e) { warns.push(i18n('bracket.s5') + e.message); }
+      } catch (e) { warns.push(i18n('bracket.s5') + e.message); }
+    };
+    await Promise.all([prefs(), overseas(), chars()]);
     return warns;
   }
 
@@ -123,27 +138,103 @@ import SeedShare from '../seeding/seed_share.js';
     return p != null && !p.__error;
   }
 
+  // プレビューで使う欄だけ残す (popup・居住地・直近対戦の集計 = seed_data.js buildSeedData が読む欄)。
+  // recent_matches が 1 人数百 KB あるので、先読みでたくさん持ってもメモリを食わないように
+  function slimPlayer(rec) {
+    if (!rec || typeof rec !== 'object') return rec;
+    return {
+      display: rec.display, country: rec.country, country_ja: rec.country_ja, ranks: rec.ranks,
+      tournaments: Array.isArray(rec.tournaments) ? rec.tournaments.map((t) => ({
+        event_id: t.event_id, nent: t.nent, is_weekend: t.is_weekend, series: t.series, date: t.date, name: t.name, place: t.place,
+      })) : [],
+      recent_matches: Array.isArray(rec.recent_matches) ? rec.recent_matches.map((m) => ({
+        opp_uid: m.opp_uid, event_id: m.event_id, date: m.date, phase_name: m.phase_name, round: m.round,
+        round_text: m.round_text, tournament_name: m.tournament_name,
+      })) : [],
+    };
+  }
+
+  // 一覧の分割ファイル (views/) の読み口。views.js が無い環境 (古典 script のテスト) では null
+  function viewsAt() { return (SPSPViews && SPSPViews.at(SPSP.data)) || null; }
+
+  // 1 人分を取る (取得中なら同じ Promise を待つ)。結果は STATE.players に入る
+  function loadPlayer(uid) {
+    if (STATE.inflight.has(uid)) return STATE.inflight.get(uid);
+    const p = (async () => {
+      try {
+        // 選手 JSON は分割されている (安定部分 + players_current.json)。ranks は揮発部分から。
+        // 履歴は要らない。無ければ __missing (= DB 未登録) として扱う (../js/player_data.js)
+        const rec = await SPSPPlayerData.load(SPSP.data, uid, { history: false });
+        STATE.players.set(uid, rec ? slimPlayer(rec) : { __missing: true });
+      } catch (e) {
+        // 通信エラー: __missing とは区別して保持 (missing=DB未登録, error=取得失敗)
+        STATE.players.set(uid, { __error: String(e && e.message || e) });
+      } finally {
+        STATE.inflight.delete(uid);
+      }
+    })();
+    STATE.inflight.set(uid, p);
+    return p;
+  }
+
   async function ensurePlayers(uids, onProgress) {
     const targets = uids.filter((u) => u != null && !playerLoaded(u));
     let done = 0;
     const queue = targets.slice();
     async function worker() {
       while (queue.length) {
-        const uid = queue.shift();
-        try {
-          // 選手 JSON は分割されている (安定部分 + players_current.json)。ranks は揮発部分から。
-          // 履歴は要らない。無ければ __missing (= DB 未登録) として扱う (../js/player_data.js)
-          const rec = await SPSPPlayerData.load(SPSP.data, uid, { history: false });
-          STATE.players.set(uid, rec || { __missing: true });
-        } catch (e) {
-          // 通信エラー: __missing とは区別して保持 (missing=DB未登録, error=取得失敗)
-          STATE.players.set(uid, { __error: String(e && e.message || e) });
-        }
+        await loadPlayer(queue.shift());
         done++;
         if (onProgress) onProgress(done, targets.length);
       }
     }
-    await Promise.all(Array.from({ length: 6 }, worker));
+    STATE.fgLoading++;
+    try { await Promise.all(Array.from({ length: 6 }, worker)); } finally { STATE.fgLoading--; }
+  }
+
+  // ── 先読み: 表示中プールを読み終えたら、ほかのプールの選手を裏で読んでおく ──
+  // 順番 = 表示中フェーズの次のプールから一周 → ほかのフェーズ。表示中プールの読み込み中は止まる (そちらが先)。
+  // 回線を占有しないよう同時 2 件・上限 PREFETCH_MAX 人。データ節約モード (Save-Data) では読まない。
+  const PREFETCH_MAX = 1500;
+  const PREFETCH_PARALLEL = 2;
+  function prefetchOrder() {
+    const order = [];
+    const seen = new Set();
+    const counts = phaseCounts();
+    const cur = currentPhase();
+    const phs = [cur].concat(STATE.payload.phases.map((_, i) => i).filter((i) => i !== cur));
+    for (const ph of phs) {
+      const pools = C.phasePools(counts[ph], Math.max(1, STATE.payload.phases[ph].pools | 0));
+      const start = ph === cur ? currentPoolIdx() + 1 : 0;
+      for (let k = 0; k < pools.length; k++) {
+        for (const gi of pools[(start + k) % pools.length]) {
+          const u = uidOf(gi);
+          if (u != null && !seen.has(u)) { seen.add(u); order.push(u); }
+        }
+      }
+    }
+    return order;
+  }
+  function schedulePrefetch() {
+    const conn = /** @type {any} */ (navigator).connection;
+    if (conn && conn.saveData) return;
+    STATE.prefetch = { list: prefetchOrder(), i: 0, gen: STATE.prefetch.gen + 1, running: STATE.prefetch.running };
+    for (let k = STATE.prefetch.running; k < PREFETCH_PARALLEL; k++) prefetchWorker();
+  }
+  async function prefetchWorker() {
+    STATE.prefetch.running++;
+    try {
+      for (;;) {
+        if (STATE.fgLoading > 0) { await new Promise((r) => setTimeout(r, 250)); continue; }
+        if (STATE.players.size >= PREFETCH_MAX) return;
+        const q = STATE.prefetch;
+        let uid = null;
+        // 取得に失敗した人は先読みでは取り直さない (表示したとき・再取得ボタンで取り直す)
+        while (q.i < q.list.length) { const u = q.list[q.i++]; if (!STATE.players.has(u) && !STATE.inflight.has(u)) { uid = u; break; } }
+        if (uid == null) return;
+        await loadPlayer(uid);
+      }
+    } finally { STATE.prefetch.running--; }
   }
 
   // プール内の直近対戦・地域集計 (キャッシュ付き)。uids は uid のある参加者のみ渡す。
@@ -172,7 +263,13 @@ import SeedShare from '../seeding/seed_share.js';
       const pj = STATE.players.get(uid);
       if (pj && !pj.__missing && !pj.__error && pj.display) return pj.display;
     }
-    return (STATE.payload.names && STATE.payload.names[String(gi)]) || '';
+    const given = STATE.payload.names && STATE.payload.names[String(gi)];
+    if (given) return given;
+    // 共有 URL が長くなる規模では DB 登録者の名前が載っていない → 一覧の索引 (順位表に載っている人) から
+    const V = uid != null ? viewsAt() : null;
+    const ix = V && V.peekIndex();
+    const row = ix && ix.get(uid);
+    return (row && row.name) || '';
   }
 
   function nameOf(gi) { return resolvedName(gi) || i18n('bracket.s6'); }
@@ -283,6 +380,7 @@ import SeedShare from '../seeding/seed_share.js';
 
     const uids = members.map((gi) => uidOf(gi)).filter((u) => u != null);
     const cachedAgg = STATE.poolAgg.get(aggKey(ph, poolIdx)) || null;
+    STATE.lastDraw = { token, members, key: aggKey(ph, poolIdx) };
     drawBracket(host, members, cachedAgg);
 
     // ここから先は付加情報 (居住地・直近対戦・プロフィール) の取得
@@ -305,6 +403,14 @@ import SeedShare from '../seeding/seed_share.js';
 
     drawBracket(host, members, agg);
     setStatus(statusLine(members, uids, agg, aggWarn));
+    schedulePrefetch();   // 表示中プールが揃ったので、ほかのプールを裏で読む
+  }
+
+  // 名前の索引が後から届いたとき: 直近に描いたプールをそのまま描き直す (取得はしない)
+  function redrawLast() {
+    const L = STATE.lastDraw;
+    if (!L || L.token !== STATE.renderToken) return;
+    drawBracket($('bp-bracket'), L.members, STATE.poolAgg.get(L.key) || null);
   }
 
   // そのフェーズの1プールあたり進出人数 (最終フェーズは 0 = 優勝まで)。
@@ -1080,9 +1186,13 @@ import SeedShare from '../seeding/seed_share.js';
     wireEvents();
     const frag = S.parseFragment(location.hash);
     STATE.view = frag.view;
-    const staticWarns = await loadStaticData();
-    if (staticWarns.length) setStatus('⚠ ' + staticWarns.join(' / '));
+    // 居住地・海外勢・キャラの表と名前の索引は待たずに描く (届いたら描き直す)
+    const staticReady = loadStaticData();
+    const V = viewsAt();
+    if (V) V.index().then((ix) => { if (ix) redrawLast(); }).catch(() => { /* 名前は選手 JSON が届けば出る */ });
     if (!frag.d) {
+      const staticWarns = await staticReady;
+      if (staticWarns.length) setStatus('⚠ ' + staticWarns.join(' / '));
       showError(i18n('bracket.s25'));
       $('bp-csv-panel').open = true;
       return;
@@ -1098,6 +1208,10 @@ import SeedShare from '../seeding/seed_share.js';
     }
     $('bp-controls').hidden = false;
     renderAll();
+    const staticWarns = await staticReady;
+    if (staticWarns.length) setStatus('⚠ ' + staticWarns.join(' / '));
+    STATE.poolAgg.clear();   // 居住地の表が無いうちに作った集計は作り直す
+    renderBracket();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
