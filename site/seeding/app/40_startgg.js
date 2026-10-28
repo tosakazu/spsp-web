@@ -400,11 +400,12 @@ export function downloadCsv() {
 
 // 適用の confirm に出す「何の順か」。被り回避・手動調整の反映があれば添える。
 function uploadOrderLabel() {
-  const base = {
+  const csvBase = !!(S.MANUAL && S.MANUAL.src === 'csv');   // シードアップロード: 読み込んだ CSV の順が基準
+  const base = csvBase ? i18n('seed.startgg.order_csv') : {
     ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
   }[S.currentMethod] || i18n('seed.startgg.s12');
   const extra = [];
-  if (S.MANUAL) extra.push(i18n('seed.startgg.s31'));
+  if (S.MANUAL && S.MANUAL.hpos > 0) extra.push(i18n('seed.startgg.s31'));   // 手動調整は取得後いつも開いている。実際に動かしたときだけ
   if (S.APPLIED_ORDER) extra.push(i18n('seed.startgg.s32'));
   return extra.length ? i18n('seed.startgg.order_applied', { base: base, extra: extra.join(i18n('seed.startgg.order_applied_sep')) }) : base;
 }
@@ -632,7 +633,7 @@ function logSeedingUse(token, phaseId, count, orderLabel, phaseCreated) {
     options[el.id] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value;
   }
   const m = S.MANUAL, sp = S.SEED_SPEC;
-  const manualOps = m && m.ops ? m.ops.length : 0;
+  const manualOps = m ? m.hpos : 0;   // 手動調整は取得後いつも開いているので、効いている移動の数 (取り消した分は数えない) で見る
   const n = (/** @type {Record<string, unknown> | null | undefined} */ o) => (o ? Object.keys(o).length : 0);
   const detail = {
     method: SEED_APP_CONFIG.mode === 'csv' ? 'csv' : S.currentMethod,

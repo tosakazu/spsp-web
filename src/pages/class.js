@@ -713,14 +713,16 @@ const SGG_TOKEN_KEY = 'spsp_startgg_token';
  * @param {string} token @returns {Promise<Record<string, unknown>>}
  */
 async function classLog(token) {
-  const who = await SpspToolLog.userFields(token);
-  const p = parseStartggUrl($('cb-event').value);
-  const ev = loaded && loaded.event;
-  return {
-    auth: who.auth, gamer_tag: who.gamer_tag || '',
-    tournament_id: ev ? ev.tournament.id : null, tournament_name: ev ? ev.tournament.name : '',
-    tournament_slug: ev && p ? 'tournament/' + p.tournamentSlug : '', event_name: ev ? ev.name : '',
-  };
+  try {
+    const who = await SpspToolLog.userFields(token);
+    const p = parseStartggUrl($('cb-event').value);
+    const ev = loaded && loaded.event;
+    return {
+      auth: who.auth, gamer_tag: who.gamer_tag || '',
+      tournament_id: ev ? ev.tournament.id : null, tournament_name: ev ? ev.tournament.name : '',
+      tournament_slug: ev && p ? 'tournament/' + p.tournamentSlug : '', event_name: ev ? ev.name : '',
+    };
+  } catch (e) { return {}; }   // 記録の欄が作れなくても作成・削除は止めない
 }
 
 /** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
