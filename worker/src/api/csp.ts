@@ -3,7 +3,9 @@
  *
  *   POST /api/csp-report   ブラウザが送る違反報告。旧形式 (application/csp-report: {"csp-report":{…}}) と
  *                          Reporting API (application/reports+json: [{type:"csp-violation", body:{…}}]) の両方。
- *                          (directive, blocked, path) でまとめて数える。クエリ文字列は保存しない。応答は 204 (中身なし)
+ *                          (directive, blocked, path, sample, source) でまとめて数える。クエリ文字列は保存しない。応答は 204 (中身なし)
+ *                          sample = インラインのスクリプトの先頭 (CSP の 'report-sample'、40 文字まで)、source = 違反を起こしたスクリプトの origin
+ *                          (どちらも 2026-10-28 から。インラインの違反が Google アナリティクスか拡張機能かを見分けるため)
  *   action: "csp_export"   { key } → { reports:[{directive, blocked, path, hits, first_seen, last_seen}], total }
  *                          鍵はエクスポートと同じ (exportKeyOk)
  */
@@ -15,7 +17,23 @@ import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { formatIso } from './time.ts';
 
-export interface CspEntry { directive: string; blocked: string; path: string }
+export interface CspEntry { directive: string; blocked: string; path: string; sample: string; source: string }
+
+/** script-sample / sample → 先頭 40 文字 (制御文字は空白に)。無ければ '' */
+export function normalizeSample(v: unknown): string {
+  return String(v === undefined || v === null ? '' : v).replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 40);
+}
+/** source-file / sourceFile → origin (拡張機能なら chrome-extension などの種類)。無ければ '' */
+export function normalizeSource(v: unknown): string {
+  const s = String(v === undefined || v === null ? '' : v).trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    return /^(https?|wss?):$/.test(u.protocol) ? u.origin : u.protocol.slice(0, -1).slice(0, 30);
+  } catch (_) {
+    return 'other';
+  }
+}
 
 const KEYWORDS = new Set(['inline', 'eval', 'wasm-eval', 'trusted-types-policy', 'trusted-types-sink', 'data', 'blob', 'self']);
 
@@ -58,8 +76,10 @@ export function parseCspReports(body: unknown): CspEntry[] {
   const one = (r: Record<string, unknown> | null | undefined, legacy: boolean) => {
     if (!r || typeof r !== 'object') return;
     out.push(legacy
-      ? { directive: normalizeDirective(r['effective-directive'], r['violated-directive']), blocked: normalizeBlocked(r['blocked-uri']), path: normalizePath(r['document-uri']) }
-      : { directive: normalizeDirective(r.effectiveDirective, r.violatedDirective), blocked: normalizeBlocked(r.blockedURL), path: normalizePath(r.documentURL) });
+      ? { directive: normalizeDirective(r['effective-directive'], r['violated-directive']), blocked: normalizeBlocked(r['blocked-uri']), path: normalizePath(r['document-uri']),
+          sample: normalizeSample(r['script-sample']), source: normalizeSource(r['source-file']) }
+      : { directive: normalizeDirective(r.effectiveDirective, r.violatedDirective), blocked: normalizeBlocked(r.blockedURL), path: normalizePath(r.documentURL),
+          sample: normalizeSample(r.sample), source: normalizeSource(r.sourceFile) });
   };
   if (Array.isArray(body)) {
     for (const x of body.slice(0, 20)) {
@@ -98,7 +118,9 @@ export async function recordCspReport(cfg: Config, store: Store, text: string, i
   const ts = formatIso(now, cfg.tsOffsetMin);
   for (const e of parseCspReports(body)) {
     try {
-      await store.recordCsp(e.directive + '|' + e.blocked + '|' + e.path, e, ts, CSP_REPORT_MAX_KEYS);
+      // sample / source が無いものは今までと同じ key (前からの行に数え続ける)
+      const key = e.directive + '|' + e.blocked + '|' + e.path + (e.sample || e.source ? '|' + e.source + '|' + e.sample : '');
+      await store.recordCsp(key, e, ts, CSP_REPORT_MAX_KEYS);
     } catch (ex) {
       console.error('csp report store failed: ' + (ex instanceof Error ? ex.message : String(ex)));
       return;

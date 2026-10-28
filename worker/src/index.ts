@@ -64,11 +64,13 @@ export const CALLBACK_CSP = "default-src 'none'; script-src 'self'; style-src 'u
  */
 export const SITE_CSP = "default-src 'self'; "
   // static.cloudflareinsights.com / cloudflareinsights.com = Cloudflare Web Analytics (本番ドメインに Cloudflare が自動で差し込む。preview には無い)
-  + "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com; "
+  // 'report-sample' = インラインのスクリプトの違反の報告に、コードの先頭 (40 文字) を付けてもらう (正体を見分けるため。2026-10-28)
+  + "script-src 'self' 'report-sample' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com; "
   + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
   + "img-src 'self' data: blob: https:; "
+  // www.google.com = Google アナリティクス (gtag) が送る先の 1 つ (2026-10-28、報告の 8 割がこれ)
   + "connect-src 'self' https://data.spsp.games https://api.start.gg https://docs.google.com https://*.googleusercontent.com "
-  + "https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://cloudflareinsights.com; "
+  + "https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://cloudflareinsights.com; "
   + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/csp-report";
 
 const SECURITY_HEADERS: Record<string, string> = {
