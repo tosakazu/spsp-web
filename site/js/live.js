@@ -10,7 +10,10 @@
 //                             ログインしていなければ何もしない。プレビューでは ?live=sample&live_as=<uid> で本人の代わりにできる
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
 // 同じ部門の下位クラス (Bクラスなど) にいる人 (entrants[].in_class) は本戦の順位に「◯クラス参加中」を添える。
-// プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
+// 「トーナメントを見る」: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
+// 部門の start.gg のページへのリンクは出さない (大会名のリンクと被る)。
+// 予想 (opts.predict があるとき。プレイヤーページが js/live_predict.js を渡す): 今の結果でのパフォーマンスを順位の横に、
+// 順位評価・直対評価の変化と全国順位の変化の予想は、カードを押して試合の一覧を開いたときに一緒に出す (全国順位は開いたときに計算、opts.rankChange)。
 import SPSPI18n from './i18n.js';
 import { escapeHtml } from './html.js';
 import SPSPMatch from './match.js';
@@ -23,9 +26,13 @@ const REFRESH_MS = 30 * 1000;
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
 const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
+/** 最後に描いた予想 (event_id → 予想)。ボタンを押したときに使う @type {Map<string, any>} */
+const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
- * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)
- * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null> }} LiveOpts */
+ * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
+ * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化
+ * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
+ *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any> }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
@@ -115,8 +122,11 @@ function classOut(/** @type {any} */ doc, /** @type {string} */ myId) {
 }
 
 /** その選手のセット (終わっていない試合 → 新しい順)。行は「最新の大会結果」の試合と同じ形 (ラウンドの位置・スコア・相手・シード・UF)
- * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage */
-function setsHtml(doc, myId, opts, hasPage) {
+ * 予想 (pred.bt.perSet) があれば、試合ごとの内部レートの変化の予想を右端に (最新の大会結果の試合の行と同じ形)
+ * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage @param {any} [pred] */
+function setsHtml(doc, myId, opts, hasPage, pred) {
+  const perSet = (pred && pred.bt && pred.bt.perSet) || {};
+  const ifWin = (pred && pred.bt && pred.bt.ifWin) || {};
   const mine = (doc.sets || []).filter((/** @type {any} */ s) => (s.e || []).map(String).includes(myId));
   if (!mine.length) return '';
   const order = (/** @type {any} */ s) => s.completed_at || s.started_at || (s.state === 2 ? 4e9 : 0) || 0;
@@ -163,7 +173,7 @@ function setsHtml(doc, myId, opts, hasPage) {
         `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
         `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
-      `</span><span class="m-delta"></span></div>`;
+      `</span>${s.winner == null ? ifWinHtml(ifWin[String(s.id)]) : deltaHtml(perSet[String(s.id)], String(s.winner) === myId)}</div>`;
   };
   // フェーズが 2 つ以上なら境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」
   // (下位クラスに回ったときは「Bクラス」のように名前だけ)
@@ -192,18 +202,83 @@ function setsHtml(doc, myId, opts, hasPage) {
   return `<div class="tour-matches live-sets">${header}${rows.join('')}</div>`;
 }
 
+/** 試合の行の右端: 内部レートの変化 (勝ち = 緑、負け = 青。予想が無い試合は空) @param {number | undefined} d @param {boolean} won */
+function deltaHtml(d, won) {
+  if (d == null) return '<span class="m-delta"></span>';
+  return `<span class="m-delta" style="color:${won ? '#16a34a' : '#2563eb'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>`;
+}
+
+/** まだの試合の右端: 勝てばいくつ上がるか (負けたときは出さない) @param {number | undefined} d */
+function ifWinHtml(d) {
+  if (d == null) return '<span class="m-delta"></span>';
+  return `<span class="m-delta live-ifwin"><span class="live-ifwin-lbl">${t('live.pred.if_win')}</span>+${d.toFixed(1)}</span>`;
+}
+
+/** 予想の数字 (最新の大会結果の chip と同じ形: 大きい数字 + 括弧に内訳) @param {string} lbl @param {number} v @param {number | null} sub @param {boolean} signedSub */
+function predChip(lbl, v, sub, signedSub) {
+  const big = Math.abs(v) > 0.05 ? `<span class="val ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : ''}${v.toFixed(1)}</span>` : '<span class="val dim">±0</span>';
+  const small = sub != null && Math.abs(sub) > 0.05 ? `<span class="sub">(${signedSub && sub > 0 ? '+' : ''}${sub.toFixed(1)})</span>` : '<span class="sub">&nbsp;</span>';
+  return `<div class="chip"><span class="lbl">${lbl}</span>${big}${small}</div>`;
+}
+
+/** パフォーマンス (順位の横。最新の大会結果と同じ形) @param {any} pr */
+function perfHeroHtml(pr) {
+  const pi = pr && pr.perfInfo;
+  if (!pi) return '';
+  return `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('player.performance')}</span>` +
+    `<span class="ph-perf-val"><span class="ph-rank"><span class="ph-lbl">${t('common.national')}</span>#${pi.eq}<span class="ph-lbl">${t('player.equivalent')}</span></span>` +
+    `<span class="lv-pill lv-${pi.eqLv}">Lv${pi.eqLv}${pi.lvSfx}</span></span></span>`;
+}
+
+/** 順位評価・直対評価の予想と、全国順位の変化 (開いたときに fillRank が埋める) @param {any} pr @param {string} eid @param {boolean} canRank */
+function predHtml(pr, eid, canRank) {
+  if (!pr) return '';
+  if (pr.counted === false) return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><span class="live-pred-note">${t('live.pred.not_counted')}</span></div>`;
+  if (pr.counted == null || (!pr.tjpr && !(pr.bt && pr.bt.n))) return '';
+  const SCALE = 17.5;   // 順位評価の表示単位 (meta の TJPR_ELO_SCALE。最新の大会結果の chip と同じ)
+  const chips = (pr.tjpr ? predChip(t('ranking.tab.tjpr'), pr.tjpr.delta * SCALE, pr.tjpr.raw * SCALE, false) : '') +
+    (pr.bt && pr.bt.n ? predChip(t('ranking.tab.bt'), pr.bt.dPeak, pr.bt.dInt, true) : '');
+  return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div></div>` +
+    (canRank ? `<div class="live-rank" data-eid="${eid}"></div>` : '');
+}
+
+/** 全国順位の変化 (今 → 予想) @param {any} rc */
+function rankChangeHtml(rc) {
+  if (!rc) return `<span class="dim">${t('live.pred.rank_none')}</span>`;
+  const line = (/** @type {string} */ lbl, /** @type {{ cur: number, next: number } | null} */ x, /** @type {string} */ extra) => {
+    if (!x) return '';
+    const d = x.cur ? x.cur - x.next : 0;
+    return `<div>${lbl} ${x.cur ? '#' + x.cur : '—'} → <b>#${x.next}</b>` +
+      (d > 0 ? ` <span class="up">(↑${d})</span>` : d < 0 ? ` <span class="down">(↓${-d})</span>` : '') + extra + '</div>';
+  };
+  const lv = rc.lv && rc.lv.next !== rc.lv.cur ? ` <span class="lv-pill lv-${rc.lv.cur}">Lv${rc.lv.cur}</span> → <span class="lv-pill lv-${rc.lv.next}">Lv${rc.lv.next}</span>` : '';
+  return line(t('ranking.tab.ensemble'), rc.ens, lv) + line(t('ranking.tab.tjpr'), rc.tjpr, '') + line(t('ranking.tab.bt'), rc.bt, '');
+}
+
+/** @param {HTMLElement} box @param {string} eid @param {LiveOpts} opts */
+async function fillRank(box, eid, opts) {
+  const pr = lastPreds.get(eid);
+  if (!opts.rankChange || !pr) return;
+  if (!box.innerHTML) box.innerHTML = `<span class="dim">${t('live.pred.rank_loading')}</span>`;
+  const rc = await opts.rankChange(pr).catch(() => null);
+  box.innerHTML = rankChangeHtml(rc);
+}
+
 /** カードは「最新の大会結果」と同じ形 (大会アイコンは start.gg の画像をそのまま)
  * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items
- * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] */
-export function render(el, uid, items, opts = {}, hasPage = null) {
+ * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] @param {any[]} [preds] items と同じ並びの予想 (無ければ null) */
+export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
   const cards = [];
-  for (const { summary, doc } of items) {
+  lastPreds.clear();
+  items.forEach(({ doc }, i) => { if (preds[i]) lastPreds.set(String(doc.event_id ?? ''), preds[i]); });
+  for (const [idx, { summary, doc }] of items.entries()) {
+    const pred = preds[idx] || null;
     const [myId, e] = entrantOf(doc, uid);
     if (!e || myId == null) continue;
     const pool = poolOf(doc, e.pg);
-    const poolTxt = pool ? `${pool.phase.name || ''}${pool.group.ident && (pool.phase.groups || []).length > 1 ? ' ' + t('live.pool', { id: pool.group.ident }) : ''}` : '';
+    // 今のプールのブラケット (start.gg)。部門のページは大会名のリンクと被るので出さない
     const poolLink = pool && pool.group.url
-      ? `<a class="live-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${escapeHtml(poolTxt)} ↗</a>` : '';
+      ? `<a class="live-link" href="${escapeHtml(pool.group.url)}" target="_blank" rel="noopener">${t('live.view_bracket')} ↗</a>` : '';
     const img = summary.image ? `<img class="tour-icon lr-icon" src="${escapeHtml(summary.image)}" alt="" loading="lazy">` : '';
     const ended = !!(summary.ended || doc.ended_at);
     const badge = ended ? `<span class="lr-badge live-end">${t('live.ended')}</span>` : `<span class="lr-badge live-on">${t('live.on')}</span>`;
@@ -214,22 +289,28 @@ export function render(el, uid, items, opts = {}, hasPage = null) {
       hero += `<span class="ph-sep"></span><span class="ph-perf"><span class="ph-perf-lbl">${t('live.seed_label')}</span>` +
         `<span class="ph-rank">${e.seed}</span></span>`;
     }
-    const sets = setsHtml(doc, String(myId), opts, hasPage);
+    hero += perfHeroHtml(pred);
+    const sets = setsHtml(doc, String(myId), opts, hasPage, pred);
     const eid = escapeHtml(String(doc.event_id ?? ''));
+    const predBlock = predHtml(pred, eid, !!opts.rankChange);
+    const canOpen = !!(sets || predBlock);
     cards.push(
-      `<div class="tour-group live-group${sets && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
-        `<div class="tour-item tour-item-nohover${sets ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
+      `<div class="tour-group live-group${canOpen && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
+        `<div class="tour-item tour-item-nohover${canOpen ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
           `<div class="lr-top"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
-          `<div class="perf-hero">${img}${hero}${sets ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
-          `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
+          `<div class="perf-hero">${img}${hero}${canOpen ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
+          `<div class="live-links">${cls}${poolLink}</div>` +
         `</div>` +
         sets +
+        (predBlock ? `<div class="live-detail">${predBlock}</div>` : '') +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
   el.innerHTML = cards.join('');
+  // 開いている部門の全国順位の変化は、読み直しても新しい予想で出し直す
+  if (el.querySelectorAll) el.querySelectorAll('.live-group.expanded .live-rank').forEach(b => fillRank(/** @type {HTMLElement} */ (b), /** @type {HTMLElement} */ (b).dataset.eid || '', opts));
   return cards.length;
 }
 
@@ -246,12 +327,18 @@ export function start(section, uid, opts = {}) {
     const g = /** @type {HTMLElement | null} */ (card && card.closest('.live-group'));
     if (!g) return;
     const eid = g.dataset.eid || '';
-    if (g.classList.toggle('expanded')) opened.add(eid); else opened.delete(eid);
+    if (g.classList.toggle('expanded')) {
+      opened.add(eid);
+      const box = /** @type {HTMLElement | null} */ (g.querySelector('.live-rank'));
+      if (box) fillRank(box, eid, opts);   // 全国順位の変化は開いたときに計算
+    } else opened.delete(eid);
   });
   const tick = async () => {
     const items = await load(uid);
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
-    const n = render(body, uid, items, opts, hasPage);
+    const predict = opts.predict;
+    const preds = predict ? await Promise.all(items.map(({ doc }) => predict(doc).catch(() => null))) : [];
+    const n = render(body, uid, items, opts, hasPage, preds);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
     if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, REFRESH_MS);

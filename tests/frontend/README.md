@@ -42,7 +42,7 @@ tests/frontend/compare_with_ref.sh HEAD~1 --data path/to/published-data --only '
 tests/frontend/compare_with_ref.sh main --data path/to/published-data --computed        # compare which CSS rules win per element
 ```
 
-Other options: `--out <dir>`, `--ignore <selector>` (skip new UI on both sides), `--after-site <dir>`. `snapshot_pages.cjs` can also be run directly (`TZ=Asia/Tokyo NODE_PATH=<jsdom node_modules> node tests/frontend/snapshot_pages.cjs --data <dir> --out <dir>`) with `--region NA`, `--lang en`, `--base /jp/` or `--block <regex>`; see the header of the file.
+Other options: `--out <dir>`, `--ignore <selector>` (skip new UI on both sides), `--after-site <dir>`. `snapshot_pages.cjs --live <dir>` serves the live results (`data.spsp.games/live/…`) from a local directory (`<dir>/jp/index.json`, `<dir>/jp/events/<id>.json`). `snapshot_pages.cjs` can also be run directly (`TZ=Asia/Tokyo NODE_PATH=<jsdom node_modules> node tests/frontend/snapshot_pages.cjs --data <dir> --out <dir>`) with `--region NA`, `--lang en`, `--base /jp/` or `--block <regex>`; see the header of the file.
 
 Not covered: layout (widths, wrapping, real colors), images made with html2canvas, and anything that needs start.gg. When moving CSS between files, either keep the joined CSS text identical or use `--computed`.
 

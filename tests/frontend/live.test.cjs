@@ -44,7 +44,8 @@ test('残っている人は「N 位以上」、対戦中のセットが上、い
   assert.match(e.innerHTML, /live\.seed_label\{\}<\/span><span class="ph-rank">1</);
   assert.match(e.innerHTML, /live\.unreflected/);
   assert.match(e.innerHTML, /<img class="tour-icon lr-icon" src="https:\/\/images\.start\.gg\/i\.png"/);
-  assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10"/);
+  assert.match(e.innerHTML, /href="https:\/\/www\.start\.gg\/x\/brackets\/1\/10" target="_blank" rel="noopener">live\.view_bracket\{\} ↗/);
+  assert.doesNotMatch(e.innerHTML, /start\.gg ↗|tournament\/t\/event\/sp/);   // 部門のページは大会名と被るので出さない
   assert.match(e.innerHTML, /T&lt;1&gt;/);
   assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('2-1'));
 });
@@ -125,4 +126,31 @@ test('試合の一覧は最初は畳んである (カードを押すと開く �
   assert.match(e.innerHTML, /<div class="tour-group live-group" data-eid="">/);
   assert.match(e.innerHTML, /live-toggle latestres-card/);
   assert.match(e.innerHTML, /<span class="chevron lr-chev">▶<\/span><\/div>/);
+});
+
+test('予想があればパフォーマンスを順位の横に、開いた中に順位評価・直対評価の chip と全国順位、試合の行に変化と「勝てば」。集計対象外は一言だけ', () => {
+  const L = load();
+  const e = el();
+  const pred = { place: 2, final: false, counted: true, perf: 120, perfInfo: { eq: 120, eqLv: 5, lvSfx: '' },
+    tjpr: { delta: 0.1, raw: 2, newScore: 1 }, bt: { dPeak: 0, dInt: -3.21, peakAfter: 1500, n: 1, perSet: { 1: 4.26 }, ifWin: { 2: 7.04 } } };
+  L.render(e, 11, [{ summary: {}, doc: doc() }], { rankChange: async () => null }, null, [pred]);
+  assert.match(e.innerHTML, /player\.performance\{\}.*#120.*lv-pill lv-5/);
+  assert.match(e.innerHTML, /ranking\.tab\.tjpr\{\}<\/span><span class="val pos">\+1\.8<\/span><span class="sub">\(35\.0\)<\/span>/);
+  assert.match(e.innerHTML, /ranking\.tab\.bt\{\}<\/span><span class="val dim">±0<\/span><span class="sub">\(-3\.2\)<\/span>/);
+  assert.match(e.innerHTML, /<div class="live-detail"><div class="live-pred">.*<div class="live-rank" data-eid=/);
+  assert.match(e.innerHTML, /live-toggle/);
+  assert.ok(e.innerHTML.indexOf('live-sets') < e.innerHTML.indexOf('live-detail'));   // 試合の一覧の下
+  assert.doesNotMatch(e.innerHTML, /live-pred-foot/);
+  // 試合の行: 予想のある試合 (id 1、勝ち) は緑で +4.3、対戦中の試合は空
+  assert.match(e.innerHTML, /<span class="m-delta" style="color:#16a34a">\+4\.3<\/span>/);
+  // 対戦中の試合 (id 2) は「勝てば +7.0」、負けたときの値は出さない
+  assert.match(e.innerHTML, /<span class="m-delta live-ifwin"><span class="live-ifwin-lbl">live\.pred\.if_win\{\}<\/span>\+7\.0<\/span>/);
+  assert.strictEqual((e.innerHTML.match(/<span class="m-delta"><\/span>/g) || []).length, 0);   // 自分の試合 (id 1・2) は両方埋まる
+  const e2 = el();
+  L.render(e2, 11, [{ summary: {}, doc: doc() }], {}, null, [{ ...pred, counted: false, tjpr: null, bt: null }]);
+  assert.match(e2.innerHTML, /live\.pred\.not_counted/);
+  assert.doesNotMatch(e2.innerHTML, /live-rank/);
+  const e3 = el();
+  L.render(e3, 11, [{ summary: {}, doc: doc() }]);
+  assert.doesNotMatch(e3.innerHTML, /live-pred|player\.performance/);
 });
