@@ -371,7 +371,7 @@ function loadUpcoming() {
 
 // 参加予定の大会: 出場登録している開催前の大会を近い順に 5 件ずつ (出場履歴と同じページ送り)。最初は大会名と集計対象のバッジだけ、
 // 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
-// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「予選プールのプレイヤー」(押すと同じプールの人を
+// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(押すと同じプールの人を
 // シード順に、メインキャラの絵文字付き) も
 const POOL_MAX_PLAYERS = 48;   // 1 プールの大会 (全員同じプール) で多すぎるときはここまで
 async function buildUpcomingSection() {

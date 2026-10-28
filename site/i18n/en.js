@@ -416,7 +416,7 @@ window.SPSP_I18N.en = {
   'player.pool.pool': 'Pool {id}',
   'player.pool.seed': 'Seed #{n}',
   'player.pool.view': 'View bracket',
-  'player.pool.list': 'Players in your pool ({n})',
+  'player.pool.list': 'Players in the pool ({n})',
   'player.upcoming.view_tournament': 'Tournament page',
   'player.pool.more': '+{n} more',
   'player.simulate': '🔮 Score forecast',
