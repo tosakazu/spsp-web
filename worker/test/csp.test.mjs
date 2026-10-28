@@ -32,9 +32,9 @@ test('CSP_MODE: report-only は HTML に Report-Only、enforce は Content-Secur
 });
 
 test('SITE_CSP: 依頼どおりの指定と report-uri', () => {
-  for (const s of ["default-src 'self'", "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com", 'https://cloudflareinsights.com;',
+  for (const s of ["default-src 'self'", "script-src 'self' 'report-sample' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com", 'https://cloudflareinsights.com;',
     "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'", 'report-uri /api/csp-report', "worker-src 'self' blob:",
-    'https://*.google-analytics.com', 'https://data.spsp.games']) {
+    'https://*.google-analytics.com', 'https://www.google.com', 'https://data.spsp.games']) {
     assert.ok(SITE_CSP.includes(s), s);
   }
   assert.ok(!/unsafe-eval/.test(SITE_CSP));
@@ -65,22 +65,35 @@ test('違反報告の読み取り: 旧形式と Reporting API。クエリは残�
   assert.deepStrictEqual(parseCspReports({ 'csp-report': {
     'document-uri': 'https://spsp.games/jp/callback?code=SECRET&state=x', 'violated-directive': 'script-src-elem',
     'effective-directive': 'script-src-elem', 'blocked-uri': 'https://evil.example/x.js?token=SECRET',
-  } }), [{ directive: 'script-src-elem', blocked: 'https://evil.example', path: '/jp/callback' }]);
+  } }), [{ directive: 'script-src-elem', blocked: 'https://evil.example', path: '/jp/callback', sample: '', source: '' }]);
   assert.deepStrictEqual(parseCspReports([
     { type: 'csp-violation', body: { documentURL: 'https://spsp.games/jp/p/?d=abc#x', effectiveDirective: 'script-src-attr', blockedURL: 'inline' } },
     { type: 'deprecation', body: {} },
     { type: 'csp-violation', body: { documentURL: 'https://spsp.games/jp/', effectiveDirective: 'script-src', blockedURL: 'eval' } },
   ]), [
-    { directive: 'script-src-attr', blocked: 'inline', path: '/jp/p/' },
-    { directive: 'script-src', blocked: 'eval', path: '/jp/' },
+    { directive: 'script-src-attr', blocked: 'inline', path: '/jp/p/', sample: '', source: '' },
+    { directive: 'script-src', blocked: 'eval', path: '/jp/', sample: '', source: '' },
   ]);
   assert.deepStrictEqual(parseCspReports({ 'csp-report': { 'violated-directive': 'img-src https:', 'blocked-uri': 'data:image/png;base64,AAAA' } }),
-    [{ directive: 'img-src', blocked: 'data', path: 'other' }]);
+    [{ directive: 'img-src', blocked: 'data', path: 'other', sample: '', source: '' }]);
   for (const bad of [null, 'x', 1, {}, [1, 2], { 'csp-report': 'x' }]) assert.deepStrictEqual(parseCspReports(bad), []);
   assert.strictEqual(normalizeBlocked('blob:https://spsp.games/uuid'), 'blob');
   assert.strictEqual(normalizeBlocked(''), 'none');
   assert.strictEqual(normalizeBlocked('wss://x.example/ws?k=1'), 'wss://x.example');
   assert.strictEqual(normalizePath('/jp/a?b=1'), '/jp/a');
+});
+
+test('違反報告: インラインの先頭 (sample、40 文字) と起こしたスクリプトの origin (source) も。別の行に数える', async () => {
+  assert.deepStrictEqual(parseCspReports({ 'csp-report': { 'document-uri': 'https://spsp.games/jp/', 'effective-directive': 'script-src-elem', 'blocked-uri': 'inline',
+    'script-sample': 'window.__x = 1;\n'.repeat(5), 'source-file': 'https://www.googletagmanager.com/gtag/js?id=G-X' } }),
+  [{ directive: 'script-src-elem', blocked: 'inline', path: '/jp/', sample: 'window.__x = 1; window.__x = 1; window._', source: 'https://www.googletagmanager.com' }]);
+  assert.deepStrictEqual(parseCspReports([{ type: 'csp-violation', body: { documentURL: 'https://spsp.games/jp/', effectiveDirective: 'script-src-elem', blockedURL: 'inline', sample: 'abc', sourceFile: 'chrome-extension://abcdef/content.js' } }]),
+    [{ directive: 'script-src-elem', blocked: 'inline', path: '/jp/', sample: 'abc', source: 'chrome-extension' }]);
+  const e = makeEnv({});
+  const rep = (sample) => http(e, 'POST', '/api/csp-report', { 'csp-report': { 'document-uri': 'https://spsp.games/jp/', 'effective-directive': 'script-src-elem', 'blocked-uri': 'inline', ...(sample ? { 'script-sample': sample } : {}) } }, { 'cf-connecting-ip': '9.9.9.9' });
+  await rep(''); await rep('a()'); await rep('a()');
+  const rows = await e.store.listCsp();
+  assert.deepStrictEqual(rows.map((x) => [x.sample, x.hits]), [['a()', 2], ['', 1]]);
 });
 
 test('POST /api/csp-report: まとめて数える (同じ組は hits+1)。応答は 204、鍵や code は保存しない', async () => {
@@ -133,7 +146,7 @@ test('csp_export: エクスポート鍵で読める (多い順)。鍵違いは a
   const r = await post(e, { action: 'csp_export', key: 'EXP' });
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.total, 2);
-  assert.deepStrictEqual(r.reports[0], { directive: 'script-src', blocked: 'inline', path: '/jp/', hits: 2, first_seen: 't1', last_seen: 't2' });
+  assert.deepStrictEqual(r.reports[0], { directive: 'script-src', blocked: 'inline', path: '/jp/', sample: '', source: '', hits: 2, first_seen: 't1', last_seen: 't2' });
   assert.strictEqual((await post(e, { action: 'csp_export', key: 'wrong' })).error.code, 'auth_failed');
   // client secret からの導出鍵でも読める (エクスポートと同じ仕組み)
   assert.strictEqual((await post(e, { action: 'csp_export', key: await deriveExportKey(e.cfg.clientSecret) })).ok, true);

@@ -179,7 +179,7 @@ export class MemStore {
     const cur = this.csp.get(key);
     if (cur) { cur.hits += 1; cur.last_seen = ts; return; }
     if (this.csp.size >= maxKeys) return;
-    this.csp.set(key, { directive: e.directive, blocked: e.blocked, path: e.path, hits: 1, first_seen: ts, last_seen: ts });
+    this.csp.set(key, { directive: e.directive, blocked: e.blocked, path: e.path, sample: e.sample || '', source: e.source || '', hits: 1, first_seen: ts, last_seen: ts });
   }
 
   async listCsp() {

@@ -122,7 +122,7 @@ export interface TitleOwnedRow { bits: string; updated: string; n_pre: number; n
 /** title_sync の 1 人分。prev = 同期の道具が読んだときの行 (無ければ null)。prev のままのときだけ書く */
 export interface TitleOwnedWrite { uid: string; prev: { bits: string; n_pre: number; n_post: number } | null; bits: string; n_pre: number; n_post: number }
 /** csp_reports の 1 行 (書き出し用)。 */
-export interface CspRow { directive: string; blocked: string; path: string; hits: number; first_seen: string; last_seen: string }
+export interface CspRow { directive: string; blocked: string; path: string; sample: string; source: string; hits: number; first_seen: string; last_seen: string }
 
 /** ログインの記録 1 行 (login_log。ユーザー ID・時刻・どのログインか だけ) */
 export interface LoginRow { user_id: string; ts_ms: number; flow: string }
@@ -154,7 +154,7 @@ export interface Store {
    */
   checkState(key: string, consume: boolean, expiresMs: number, nowMs: number): Promise<boolean>;
   /** CSP の違反を数える。同じ key があれば hits+1、無ければ maxKeys 未満のときだけ追加。 */
-  recordCsp(key: string, e: { directive: string; blocked: string; path: string }, ts: string, maxKeys: number): Promise<void>;
+  recordCsp(key: string, e: { directive: string; blocked: string; path: string; sample: string; source: string }, ts: string, maxKeys: number): Promise<void>;
   /** 多い順。 */
   listCsp(): Promise<CspRow[]>;
   /** プレイヤーカードの設定。無ければ null。 */

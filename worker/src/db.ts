@@ -277,18 +277,18 @@ export class D1Store implements Store {
     return (res.meta?.changes ?? 0) > 0;
   }
 
-  async recordCsp(key: string, e: { directive: string; blocked: string; path: string }, ts: string, maxKeys: number): Promise<void> {
+  async recordCsp(key: string, e: { directive: string; blocked: string; path: string; sample: string; source: string }, ts: string, maxKeys: number): Promise<void> {
     const up = await this.db.prepare('UPDATE csp_reports SET hits = hits + 1, last_seen = ? WHERE key = ?').bind(ts, key).run();
     if ((up.meta?.changes ?? 0) > 0) return;
     await this.db.prepare(
-      `INSERT OR IGNORE INTO csp_reports (key, directive, blocked, path, hits, first_seen, last_seen)
-       SELECT ?1, ?2, ?3, ?4, 1, ?5, ?5 WHERE (SELECT COUNT(*) FROM csp_reports) < ?6`)
-      .bind(key, e.directive, e.blocked, e.path, ts, maxKeys).run();
+      `INSERT OR IGNORE INTO csp_reports (key, directive, blocked, path, sample, source, hits, first_seen, last_seen)
+       SELECT ?1, ?2, ?3, ?4, ?7, ?8, 1, ?5, ?5 WHERE (SELECT COUNT(*) FROM csp_reports) < ?6`)
+      .bind(key, e.directive, e.blocked, e.path, ts, maxKeys, e.sample, e.source).run();
   }
 
   async listCsp(): Promise<CspRow[]> {
     const r = await this.db.prepare(
-      'SELECT directive, blocked, path, hits, first_seen, last_seen FROM csp_reports ORDER BY hits DESC, key ASC').all<CspRow>();
+      'SELECT directive, blocked, path, sample, source, hits, first_seen, last_seen FROM csp_reports ORDER BY hits DESC, key ASC').all<CspRow>();
     return (r.results || []).map((x) => ({ ...x, hits: Number(x.hits) }));
   }
 }

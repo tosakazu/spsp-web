@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -180,7 +180,7 @@ test('title_owned: 0007 で WITHOUT ROWID に作り直し、0005 の行はその
 
 test('csp_reports: 同じ key は hits+1・last_seen 更新、上限を超えた新しい key は入れない、多い順', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
   const { store } = fresh();
-  const e = (i) => ({ directive: 'img-src', blocked: 'https://h' + i + '.example', path: '/' });
+  const e = (i) => ({ directive: 'img-src', blocked: 'https://h' + i + '.example', path: '/', sample: i === 2 ? 'x()' : '', source: '' });
   await store.recordCsp('a', e(1), 'T1', 2);
   await store.recordCsp('a', e(1), 'T2', 2);
   await store.recordCsp('b', e(2), 'T3', 2);
@@ -188,8 +188,8 @@ test('csp_reports: 同じ key は hits+1・last_seen 更新、上限を超えた
   await store.recordCsp('b', e(2), 'T5', 2);
   await store.recordCsp('b', e(2), 'T6', 2);
   const rows = await store.listCsp();
-  assert.deepStrictEqual(rows.map((r) => [r.blocked, r.hits, r.first_seen, r.last_seen]),
-    [['https://h2.example', 3, 'T3', 'T6'], ['https://h1.example', 2, 'T1', 'T2']]);
+  assert.deepStrictEqual(rows.map((r) => [r.blocked, r.hits, r.first_seen, r.last_seen, r.sample]),
+    [['https://h2.example', 3, 'T3', 'T6', 'x()'], ['https://h1.example', 2, 'T1', 'T2', '']]);
 });
 
 test('login_log: 1 行ずつ足す (ユーザー ID・時刻・flow)', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
