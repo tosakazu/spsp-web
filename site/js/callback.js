@@ -227,19 +227,19 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
       runLogin(code, state, back);
       return;
     }
+    // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
+    // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
+    // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
+    if ((intent === 'challonge' || intent === 'manager') && !hadNonce) {
+      reportError('state_missing', intent + ' ' + S.browserTag(navigator.userAgent));
+      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
+      return;
+    }
     if (intent === 'challonge') {
       runChallonge(code, state, back);
       return;
     }
     if (intent === 'manager') {
-      // 運営用ログインは、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
-      // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
-      // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
-      if (!hadNonce) {
-        reportError('state_missing', 'manager ' + S.browserTag(navigator.userAgent));
-        show('error', i18n('callback.manager_title'), i18n('callback.manager_no_nonce'), back);
-        return;
-      }
       runManager(code, state, back);
       return;
     }
@@ -370,17 +370,6 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
         }
       }
       var errCode = (json && json.error && json.error.code) || (json && json.ok ? 'storage' : 'unknown');
-      if (errCode === 'state_invalid') {
-        // start.gg が callback を 2 回開くと、後のページは「使用済み」になる。先のページが保存していれば成功 (少し待って確かめる)
-        return SpspStartggManager.savedRecently(2 * 60 * 1000, 8000).then(function (saved) {
-          if (saved) { location.replace(S.withFlag(back, 'login')); return; }
-          var raw = null;
-          try { raw = JSON.parse(localStorage.getItem(SpspStartggManager.KEY) || 'null'); } catch (_) { /* 無い */ }
-          // 手掛かり: 保存があるか・期限まで何秒か・何秒前に保存したか (トークンは載せない)
-          reportError('manager_failed', errCode + (raw ? ';ttl=' + Math.round((raw.exp - Date.now()) / 1000) + ';age=' + Math.round((Date.now() - (raw.at || 0)) / 1000) : ';none'));
-          show('error', i18n('callback.manager_title'), i18n('callback.state_invalid'), back);
-        });
-      }
       reportError('manager_failed', errCode);
       var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
         : ((json && json.error && json.error.message) || i18n('callback.manager_failed'));

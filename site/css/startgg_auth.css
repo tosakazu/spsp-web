@@ -1,0 +1,26 @@
+/* start.gg の認証の欄 (js/startgg_manager.js の mount)。シード作成・シードアップロード・下位クラス作成で共通 */
+.sgg-auth {
+  border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; padding: 10px 12px; margin: 0 0 12px;
+}
+.sgg-auth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.sgg-auth-title { font-size: 12px; font-weight: 700; color: #374151; }
+.sgg-seg { display: inline-flex; padding: 2px; background: #f3f4f6; border-radius: 8px; }
+.sgg-seg button {
+  border: none; background: transparent; color: #6b7280; font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.sgg-seg button.on { background: #fff; color: #111827; font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.sgg-auth-login { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-height: 32px; }
+.sgg-auth-state { font-size: 13px; color: #111827; display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 2px; }
+.sgg-auth-state::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; margin-right: 6px; align-self: center;
+}
+.sgg-auth-muted { font-size: 11px; color: #6b7280; margin-left: 6px; }
+.sgg-auth-btn {
+  padding: 7px 14px; font: inherit; font-size: 12px; font-weight: 600; color: #fff; background: #dc2626;
+  border: none; border-radius: 6px; cursor: pointer;
+}
+.sgg-auth-btn:disabled { opacity: .6; cursor: default; }
+.sgg-auth-btn.sub { color: #374151; font-weight: 500; background: #fff; border: 1px solid #d1d5db; margin-left: auto; }
+.sgg-auth-btn.sub:hover { background: #f9fafb; }
+.sgg-auth-login .sgg-auth-muted { margin-left: 0; }
+.sgg-auth [hidden] { display: none !important; }

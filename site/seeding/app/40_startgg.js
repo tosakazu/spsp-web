@@ -615,12 +615,10 @@ async function createPhaseThenUpload(token) {
   }
 }
 
-/** start.gg に送るトークン: 大会運営用の start.gg ログイン中ならそのアクセストークン、そうでなければ API キー欄 */
+/** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
 export function getToken() {
-  const mgr = SpspStartggManager.token();
-  if (mgr) return mgr;
-  // 保存は 💾 ボタンを押したときだけ (以前は読むたび sessionStorage に書いていて、UI の「💾 を押した場合のみ保存」と矛盾していた)
-  return /** @type {HTMLInputElement} */ (document.getElementById('token')).value.trim();   // 骨格 (10_skeleton.js) に必ずある
+  // API キーの保存は 💾 ボタンを押したときだけ (以前は読むたび sessionStorage に書いていて、UI の「💾 を押した場合のみ保存」と矛盾していた)
+  return SpspStartggManager.pick(/** @type {HTMLInputElement} */ (document.getElementById('token')).value);   // 骨格 (10_skeleton.js) に必ずある
 }
 
 // method-tabs / 検索 / CSV / upload ボタンを参加者取得後だけ表示する.

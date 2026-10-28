@@ -465,13 +465,3 @@
   .help-ico { width: 16px; height: 16px; font-size: 11px; }
 }
 
-/* 大会運営用の start.gg ログイン (js/startgg_manager.js)。API キー欄の上 */
-.sgg-mgr { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 2px 0 6px; }
-.sgg-mgr-btn {
-  padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; color: #fff;
-  border: none; border-radius: 6px; background: #dc2626;
-}
-.sgg-mgr-btn:disabled { opacity: .6; cursor: default; }
-.sgg-mgr-btn.sgg-mgr-off { color: #111827; font-weight: 400; background: #fff; border: 1px solid #d1d5db; }
-.sgg-mgr-note { font-size: 11px; color: #6b7280; }
-.sgg-mgr-state { font-size: 13px; color: #047857; font-weight: 700; }

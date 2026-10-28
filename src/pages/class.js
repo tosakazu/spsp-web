@@ -706,9 +706,9 @@ $('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine
 
 // start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
 const SGG_TOKEN_KEY = 'spsp_startgg_token';
-/** start.gg に送るトークン: 大会運営用の start.gg ログイン中ならそのアクセストークン、そうでなければ API キー欄 */
+/** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
 function sggToken() {
-  return SpspStartggManager.token() || String($('cb-sgg-key').value || '').trim();
+  return SpspStartggManager.pick($('cb-sgg-key').value);
 }
 function updateKeyHint() {
   const v = String($('cb-sgg-key').value || '').trim();
@@ -733,8 +733,8 @@ $('cb-sgg-save').addEventListener('click', () => {
   b.disabled = true;
   setTimeout(() => { b.textContent = orig; b.disabled = false; }, 1500);
 });
-// API キーの代わりに start.gg でログインしても使える (どちらでも)。ログイン中は API キー欄を隠す
-SpspStartggManager.mount({ before: $('cb-sgg-mgr'), keyBlock: $('cb-sgg-keyblock'), beforeLogin: saveForm, onChange: () => { loadMyTournaments(); loadMine(); } });
+// start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインはシード作成・シードアップロードと共通)
+SpspStartggManager.mount({ root: $('cb-sgg-auth'), keyBlock: $('cb-sgg-keyblock'), beforeLogin: saveForm, onChange: () => { loadMyTournaments(); loadMine(); } });
 loadMyTournaments();
 
 /** 作成した下位クラス (class_mine)。間違えて作ったものは削除できる (取り込み済みは不可)。まだ API が無い環境では出さない */

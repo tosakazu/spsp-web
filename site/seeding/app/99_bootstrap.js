@@ -40,9 +40,9 @@ import SPSPGeo from '../../js/geo.js';
   // トークンがあれば、そのアカウントが管理している大会を一覧の上に出す (入力し終わったとき = change でも取り直す)
   loadMyTournaments(getToken());
   tokenEl.addEventListener('change', () => { loadMyTournaments(getToken()); });
-  // API キーの代わりに start.gg でログインしても使える (どちらでも)。ログイン中は API キー欄を隠す
-  const mgrEl = document.getElementById('token-mgr'), keyBlock = document.getElementById('token-key-block');
-  if (mgrEl && keyBlock) SpspStartggManager.mount({ before: mgrEl, keyBlock, onChange: () => loadMyTournaments(getToken()) });
+  // start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインは下位クラス作成・シードアップロードと共通)
+  const authEl = document.getElementById('token-auth'), keyBlock = document.getElementById('token-key-block');
+  if (authEl && keyBlock) SpspStartggManager.mount({ root: authEl, keyBlock, onChange: () => loadMyTournaments(getToken()) });
   revealBtn.addEventListener('click', () => {
     const isPwd = tokenEl.type === 'password';
     tokenEl.type = isPwd ? 'text' : 'password';

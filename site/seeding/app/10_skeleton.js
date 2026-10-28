@@ -34,6 +34,25 @@ const SEED_APP_SKELETON_HTML = `
   <h1>${i18n('seed.skeleton.t1')}</h1>
   <p class="subtitle">${i18n('seed.skeleton.t2')}</p>
 
+  <!-- start.gg の認証 (ログイン / API キーの切り替え。js/startgg_manager.js の mount が組み立てる。ログインは下位クラス作成と共通) -->
+  <div id="token-auth">
+    <div id="token-key-block">
+    <label for="token" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">
+      start.gg API Token
+      <a href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" style="color:#dc2626;margin-left:6px;font-size:10px;text-decoration:underline">${i18n('seed.skeleton.t8')}</a>
+    </label>
+    <div style="display:flex;gap:4px;align-items:stretch">
+      <input type="password" id="token" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off"
+        style="flex:1;min-width:0;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
+      <button type="button" id="token-reveal" title="${i18n('seed.skeleton.t116')}"
+        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;padding:0 10px;font-size:14px;cursor:pointer;font-family:inherit">👁</button>
+      <button type="button" id="token-save" title="${i18n('seed.skeleton.t117')}"
+        style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
+    </div>
+    <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
+    </div>
+  </div>
+
   <!-- 自分が管理している大会 (start.gg トークンで取れたときだけ。60_upcoming.js loadMyTournaments) -->
   <div class="upcoming-box open" id="mytours-box" style="display:none">
     <div class="upcoming-toggle" id="mytours-toggle">
@@ -67,26 +86,7 @@ const SEED_APP_SKELETON_HTML = `
 
   <form id="seed-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px">
-        <!-- 大会運営用の start.gg ログイン (js/startgg_manager.js が中身を作る)。ログイン中は下の API キー欄を隠す -->
-        <div id="token-mgr"></div>
-        <div id="token-key-block">
-        <label for="token" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">
-          start.gg API Token
-          <a href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" style="color:#dc2626;margin-left:6px;font-size:10px;text-decoration:underline">${i18n('seed.skeleton.t8')}</a>
-        </label>
-        <div style="display:flex;gap:4px;align-items:stretch">
-          <input type="password" id="token" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off"
-            style="flex:1;min-width:0;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
-          <button type="button" id="token-reveal" title="${i18n('seed.skeleton.t116')}"
-            style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;padding:0 10px;font-size:14px;cursor:pointer;font-family:inherit">👁</button>
-          <button type="button" id="token-save" title="${i18n('seed.skeleton.t117')}"
-            style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
-        </div>
-        <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
-        </div>
-      </div>
-      <div style="flex:2;min-width:280px">
+      <div style="flex:1;min-width:280px">
         <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
         <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
           style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
