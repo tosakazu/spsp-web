@@ -73,6 +73,7 @@ test('予想: 勝ち残りは place_min で。格上に勝てば直対評価が�
   assert.ok(r.perf != null);
   assert.ok(r.tjpr && r.tjpr.raw > 0 && r.tjpr.delta > 0);
   assert.ok(r.bt && r.bt.dInt > 0 && r.bt.n === 1);
+  assert.deepStrictEqual(Object.values(r.bt.perSet).map((d) => +d.toFixed(9)), [+r.bt.dInt.toFixed(9)]);   // 1 試合なら合計と同じ
   const bo1 = await mk().predict(doc([win('e2', [1, 0])]));
   assert.ok(Math.abs(bo1.bt.dInt - r.bt.dInt / 2) < 1e-9, `${bo1.bt.dInt} vs ${r.bt.dInt}`);
   const extra = await mk().predict(doc([win('e2'), win('e3', [-1, 0]), { ...win('e4'), pg: 2 }]));

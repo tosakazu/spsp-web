@@ -123,8 +123,10 @@ function classOut(/** @type {any} */ doc, /** @type {string} */ myId) {
 }
 
 /** その選手のセット (終わっていない試合 → 新しい順)。行は「最新の大会結果」の試合と同じ形 (ラウンドの位置・スコア・相手・シード・UF)
- * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage */
-function setsHtml(doc, myId, opts, hasPage) {
+ * 予想 (pred.bt.perSet) があれば、試合ごとの内部レートの変化の予想を右端に (最新の大会結果の試合の行と同じ形)
+ * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage @param {any} [pred] */
+function setsHtml(doc, myId, opts, hasPage, pred) {
+  const perSet = (pred && pred.bt && pred.bt.perSet) || {};
   const mine = (doc.sets || []).filter((/** @type {any} */ s) => (s.e || []).map(String).includes(myId));
   if (!mine.length) return '';
   const order = (/** @type {any} */ s) => s.completed_at || s.started_at || (s.state === 2 ? 4e9 : 0) || 0;
@@ -171,7 +173,7 @@ function setsHtml(doc, myId, opts, hasPage) {
         `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
         `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
-      `</span><span class="m-delta"></span></div>`;
+      `</span>${deltaHtml(perSet[String(s.id)], s.winner != null && String(s.winner) === myId)}</div>`;
   };
   // フェーズが 2 つ以上なら境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」
   // (下位クラスに回ったときは「Bクラス」のように名前だけ)
@@ -198,6 +200,12 @@ function setsHtml(doc, myId, opts, hasPage) {
   const header = (opts.name || pSeed != null)
     ? `<div class="match-header">${escapeHtml(opts.name || '')}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>` : '';
   return `<div class="tour-matches live-sets">${header}${rows.join('')}</div>`;
+}
+
+/** 試合の行の右端: 内部レートの変化 (勝ち = 緑、負け = 青。予想が無い試合は空) @param {number | undefined} d @param {boolean} won */
+function deltaHtml(d, won) {
+  if (d == null) return '<span class="m-delta"></span>';
+  return `<span class="m-delta" style="color:${won ? '#16a34a' : '#2563eb'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>`;
 }
 
 /** 予想の数字 (最新の大会結果の chip と同じ形: 大きい数字 + 括弧に内訳) @param {string} lbl @param {number} v @param {number | null} sub @param {boolean} signedSub */
@@ -278,7 +286,7 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
         `<span class="ph-rank">${e.seed}</span></span>`;
     }
     hero += perfHeroHtml(pred);
-    const sets = setsHtml(doc, String(myId), opts, hasPage);
+    const sets = setsHtml(doc, String(myId), opts, hasPage, pred);
     const eid = escapeHtml(String(doc.event_id ?? ''));
     cards.push(
       `<div class="tour-group live-group${sets && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +

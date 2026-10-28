@@ -41,7 +41,8 @@ const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThi
 /** 予想 1 部門分 (null の項目は出せない)
  * @typedef {{ place: number | null, final: boolean, counted: boolean | null,
  *             perf: number | null, tjpr: { delta: number, raw: number, newScore: number } | null,
- *             bt: { dPeak: number, dInt: number, peakAfter: number, n: number } | null }} LivePrediction */
+ *             bt: { dPeak: number, dInt: number, peakAfter: number, n: number, perSet: Record<string, number> } | null }} LivePrediction */
+/* bt.perSet = セット id → その試合での自分の内部レートの変化 (試合の行に出す) */
 
 /** @param {any[]} rows @param {string[]} cols @returns {Map<number, PopRec>} */
 function popMap(rows, cols) {
@@ -232,6 +233,8 @@ export function create(o) {
         const tmeta = { nent, isWeekend: !!ev.is_weekend, isCapped: !!(ev.is_restricted || ev.is_lower_class) };
         const me2 = playerOf(myId).p;
         const before = me2.rating();
+        /** @type {Record<string, number>} */
+        const perSet = {};
         for (const s of sets) {
           const wId = String(s.winner), lId = String(s.e[String(s.e[0]) === wId ? 1 : 0]);
           const w = playerOf(wId), l = playerOf(lId);
@@ -240,10 +243,12 @@ export function create(o) {
           const k = Math.max(sc2[0] ?? 0, sc2[1] ?? 0) === 1 ? BO1_K : 1;   // 勝った側のスコアが 1 = 1 本先取
           if (wId === myId || C.tournamentPassesLv(w.lv, tmeta)) { w.p.update([lr], [lrd], [1]); scaleUpdate(w.p, wr, k); }
           if (lId === myId || C.tournamentPassesLv(l.lv, tmeta)) { l.p.update([wr], [wrd], [0]); scaleUpdate(l.p, lr, k); }
+          if (wId === myId) perSet[String(s.id)] = w.p.rating() - wr;
+          else if (lId === myId) perSet[String(s.id)] = l.p.rating() - lr;
         }
         const after = me2.rating();
         const peakAfter = Math.max(C.peakAt(self.history, ts, after), after);
-        bt = { dPeak: peakAfter - (sc.bt_gated_elo || 0), dInt: after - before, peakAfter, n: mine.length };
+        bt = { dPeak: peakAfter - (sc.bt_gated_elo || 0), dInt: after - before, peakAfter, n: mine.length, perSet };
       }
     }
     return { place, final, counted, perf, tjpr, bt };
