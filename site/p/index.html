@@ -66,7 +66,9 @@
   .pool-ev .pe-name::before { content: '▶'; flex: none; font-size: 9px; color: #9ca3af; margin-right: 5px; transition: transform 0.15s; }
   .pool-ev[open] .pe-name::before { transform: rotate(90deg); }
   .pool-ev .pe-t { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
-  .pool-ev .pe-when { flex: none; font-size: 11px; font-weight: 400; color: #6b7280; }
+  .pool-ev[open] .pe-name { white-space: normal; }
+  .pool-ev[open] .pe-t { overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .pool-ev .pe-name .lr-badge, .pool-ev .pe-name .pe-sim { flex: none; }
   .pool-ev .pe-sep { font-size: 10px; color: #d1d5db; margin: 0 4px; }
   .pool-ev .pe-sim { flex: none; margin-left: auto; padding: 1px 7px; font-size: 10px; font-weight: 500; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; text-decoration: none; background: #fff; }
   .pool-ev .pe-sim:hover { background: #f9fafb; }
