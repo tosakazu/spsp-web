@@ -178,8 +178,10 @@ const SEED_APP_SKELETON_HTML = `
         </select>
         <span id="so-series-note" style="margin-left:5px"></span>
       </span>
+      <label title="${i18n('seed.published.help')}"><input type="checkbox" id="so-avoid-published" checked> ${i18n('seed.published.toggle')}</label>
       <span id="so-group-box" style="display:contents"></span>
     </div>
+    <div id="so-published-box" style="display:none;margin-top:6px;font-size:11px;color:#6b7280"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;color:#374151">
       <span id="so-shiftlimit-label" style="font-weight:600">${i18n('seed.skeleton.t45')}</span>
       <label>${i18n('seed.skeleton.t46')} <input type="number" id="so-shift0" min="1" style="width:52px"> ${i18n('seed.skeleton.t47')}</label>

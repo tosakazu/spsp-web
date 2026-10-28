@@ -19,7 +19,7 @@ import SpspToolLog from '../../js/tool_log.js';
 /** @typedef {Error & { rawError?: string }} StartggError */
 /** start.gg の event (EVENT_QUERY の応答。phases は phase 未作成なら空) */
 /** @typedef {{ id: number | string, name: string, slug?: string | null, numEntrants?: number,
- *              tournament?: { id?: number | string, name: string, slug?: string } | null, phases?: any[] | null, [k: string]: any }} StartggEvent */
+ *              tournament?: { id?: number | string, name: string, slug?: string, startAt?: number | null } | null, phases?: any[] | null, [k: string]: any }} StartggEvent */
 /** 参加者 1 人分 (seeds / entrants のノードから。phase 未作成なら seedId / originalSeed は null) */
 /** @typedef {{ seedId: number | string | null, originalSeed: number | null, userId: number | null | undefined, display: string,
  *              discriminator: string | null, entrantId: number | null }} SeedInfo */
@@ -867,6 +867,7 @@ async function performSeedFetch(token, ev, phaseId) {
     phaseId, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
     tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
+    startAt: ev.tournament && ev.tournament.startAt ? Number(ev.tournament.startAt) : null,   // 開催日 (公開済みシードとの被り回避の範囲)
     bracketType: _phase ? _phase.bracketType : null,
     poolCount: (_phase && _phase.groupCount) ? _phase.groupCount : null,  // 取得できたプール数
     waves,   // {poolCount, waveCount, poolToWave, letters, identifiers} | {error} | null
@@ -911,6 +912,7 @@ async function performEntrantsFetch(token, ev) {
     phaseId: null, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
     tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
+    startAt: ev.tournament && ev.tournament.startAt ? Number(ev.tournament.startAt) : null,   // 開催日 (公開済みシードとの被り回避の範囲)
     bracketType: null,   // phase 未作成 → 形式不明 → 既定 DE 想定
     poolCount: null,     // phase 未作成 → プール数不明
     waves: null,         // phase 未作成 → ウェーブ不明 (手動設定可)

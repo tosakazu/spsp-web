@@ -241,6 +241,8 @@ declare global {
     tournamentName: string;
     tournamentId?: number | string | null;
     tournamentSlug?: string;
+    /** 大会の開始 (unix 秒)。公開済みシードとの被り回避 (seeding/published_seeds.js) の範囲に使う */
+    startAt?: number | null;
     bracketType: string | null;
     poolCount: number | null;
     waves: SpspSeedWaves | null;
