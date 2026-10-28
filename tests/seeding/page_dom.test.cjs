@@ -245,3 +245,12 @@ test('参加者が揃ったら手動調整は編集状態で開く / 被り回�
   const apply = extractFn(HTML, 'applySeedOptimize');
   assert.ok(/MANUAL\.editing = false/.test(apply), apply.slice(0, 500));
 });
+
+test('csv モード: 保存済みの手動調整が無ければ、既定の手動調整を開く前に CSV 順を基準にする (CSV → 適用でランキング順になっていた)', () => {
+  const restore = extractFn(HTML, 'restoreManualForEvent');
+  const csvFirst = restore.indexOf('if (!restored && typeof applyCsvOrderIfReady');
+  const dflt = restore.indexOf('if (!S.MANUAL && DATA.length)');
+  assert.ok(csvFirst > 0 && dflt > 0 && csvFirst < dflt, restore.slice(-900));
+  // 復元した手動調整は CSV で上書きしない (案内だけ)
+  assert.ok(/if \(restored && typeof applyCsvOrderIfReady === 'function'\) applyCsvOrderIfReady\(true\)/.test(restore), restore.slice(-500));
+});
