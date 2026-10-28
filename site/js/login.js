@@ -40,7 +40,12 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', e => { if (e.key === SpspAuth.KEY) notify(); });   // 別のタブでのログイン・ログアウト
 }
 
-export function logout() { SpspAuth.clear(); notify(); }
+// ログアウトでは start.gg のトークン (js/startgg_identity.js の KEY。import すると循環するので名前で消す) も消す
+export function logout() {
+  SpspAuth.clear();
+  try { localStorage.removeItem('spsp_startgg_identity'); } catch (e) { /* 何もしない */ }
+  notify();
+}
 
 /** @param {number | string | null | undefined} uid */
 export function isSelf(uid) {

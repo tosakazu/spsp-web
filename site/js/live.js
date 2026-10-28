@@ -5,7 +5,10 @@
 // ランキングの対象外になる大会 (オンライン・身内など) も載る。
 //   load(uid)                 その選手が出ている部門の一覧 [{summary, doc}] (無ければ [])。index.json は 1 回だけ読む
 //   render(el, uid, items, opts?, hasPage?)  セクションの中身を描く (opts は LiveOpts)
-//   start(sectionEl, uid, opts?)  読んで描く。載っていればセクションを出し、REFRESH_MS ごとに読み直す (タブが裏のときは止める)
+//   start(sectionEl, uid, opts?)  読んで描く。載っていればセクションを出し、REFRESH_MS ごとに読み直す (タブが裏のときは止める)。
+//                             opts.browser (js/live_browser.js) があり、見ている人がログインして start.gg のトークンを持っていれば、
+//                             BROWSER_MS ごとにブラウザが start.gg から差分で読み直す (サーバの速報は SERVER_MS ごと、新しい方を出す)。
+//                             トークンが無ければ「ログインすると自動で最新に」の案内 (ログイン済みなら再ログインの案内)
 //   showNotice(el)            トップの帯: ログイン中の本人が出ている開催中の部門 (大会名と順位、自分のプレイヤーページへ)。
 //                             ログインしていなければ何もしない。プレビューでは ?live=sample&live_as=<uid> で本人の代わりにできる
 // 順位: 確定 (final) なら「N 位」、まだ残っていれば place_min を「N 位以上」、どちらも無ければ「—」。
@@ -22,6 +25,8 @@ import SpspLogin from './login.js';
 import SPSPLinks from './links.js';
 
 const REFRESH_MS = 30 * 1000;
+const BROWSER_MS = 15 * 1000;   // ブラウザが start.gg から読み直す間隔 (何も起きていなければ 1 回の問い合わせ)
+const SERVER_MS = 60 * 1000;    // ブラウザで読み直しているときに、サーバの速報 (どの部門に出ているか・5 分ごとの更新) を見直す間隔
 /** 試合の一覧を開いている部門 (event_id)。最初は全部閉じている */
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
@@ -32,7 +37,8 @@ const lastPreds = new Map();
  * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
  * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化
  * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
- *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any> }} LiveOpts */
+ *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any>,
+ *             browser?: { pick: (doc: any) => any, refresh: (doc: any) => Promise<any>, status: () => string } }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
@@ -333,15 +339,42 @@ export function start(section, uid, opts = {}) {
       if (box) fillRank(box, eid, opts);   // 全国順位の変化は開いたときに計算
     } else opened.delete(eid);
   });
+  // 案内 (start.gg のトークンが無いとき): ログインすると自動で最新に / ログインし直すと
+  const note = document.createElement('div');
+  note.className = 'live-browser-note';
+  note.hidden = true;
+  section.appendChild(note);
+  note.addEventListener('click', (e) => {
+    const b = /** @type {HTMLButtonElement | null} */ (/** @type {Element} */ (e.target).closest('button'));
+    if (!b) return;
+    b.disabled = true;
+    SpspLogin.startLogin().then((ok) => { if (!ok) b.disabled = false; });
+  });
+  /** @type {{summary: any, doc: any}[]} */
+  let serverItems = [];
+  let serverAt = 0;
   const tick = async () => {
-    const items = await load(uid);
+    const br = opts.browser || null;
+    const st = br ? br.status() : null;
+    if (!serverItems.length || st !== 'on' || Date.now() - serverAt >= SERVER_MS) { serverItems = await load(uid); serverAt = Date.now(); }
+    let items = serverItems;
+    if (br) {
+      items = serverItems.map(({ summary, doc }) => ({ summary, doc: br.pick(doc) }));
+      if (st === 'on') {
+        items = await Promise.all(items.map(async (it) => (it.summary.ended ? it
+          : { summary: it.summary, doc: (await br.refresh(it.doc).catch(() => null)) || it.doc })));
+      }
+    }
+    const st2 = br ? br.status() : null;
+    note.hidden = !items.length || !br || st2 === 'on' || !SpspLogin.apiAvailable();
+    if (!note.hidden) note.innerHTML = `<span>${st2 === 'relogin' ? t('live.browser.relogin') : t('live.browser.login')}</span><button type="button">${t('live.browser.login_btn')}</button>`;
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
     const predict = opts.predict;
     const preds = predict ? await Promise.all(items.map(({ doc }) => predict(doc).catch(() => null))) : [];
     const n = render(body, uid, items, opts, hasPage, preds);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
-    if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, REFRESH_MS);
+    if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, st2 === 'on' ? BROWSER_MS : REFRESH_MS);
   };
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {

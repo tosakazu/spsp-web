@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type {
+import type { LoginRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
 } from './store.ts';
 
@@ -63,6 +63,10 @@ export class D1Store implements Store {
         row.body, row.status, row.ts.slice(0, 10))
       .run();
     return (res.meta?.changes ?? 0) > 0;
+  }
+
+  async insertLogin(row: LoginRow): Promise<void> {
+    await this.db.prepare('INSERT INTO login_log (user_id, ts_ms, flow) VALUES (?, ?, ?)').bind(row.user_id, row.ts_ms, row.flow).run();
   }
 
   async insertError(row: ErrorRow, maxRows: number, trimTo: number): Promise<void> {

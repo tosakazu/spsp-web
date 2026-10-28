@@ -124,7 +124,12 @@ export interface TitleOwnedWrite { uid: string; prev: { bits: string; n_pre: num
 /** csp_reports の 1 行 (書き出し用)。 */
 export interface CspRow { directive: string; blocked: string; path: string; hits: number; first_seen: string; last_seen: string }
 
+/** ログインの記録 1 行 (login_log。ユーザー ID・時刻・どのログインか だけ) */
+export interface LoginRow { user_id: string; ts_ms: number; flow: string }
+
 export interface Store {
+  /** ログインの記録を 1 行足す。 */
+  insertLogin(row: LoginRow): Promise<void>;
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
   /** 連投条件を満たすときだけ 1 行追記する。追記したら true。 */

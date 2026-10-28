@@ -25,7 +25,7 @@ import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine,
 import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
-import { handleLogin, handleManagerBegin, handleManagerLogin } from './login.ts';
+import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
 import type { ApiBody, HandlerResult } from './respond.ts';
@@ -77,6 +77,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleManagerBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
       case 'manager_login':
         res = await handleManagerLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'startgg_refresh':
+        res = await handleStartggRefresh(ctx.cfg, ctx.fetch, r); break;
       case 'vote':
         res = await handleVote(ctx.cfg, ctx.store, ctx.dataFetch, r, now); break;
       case 'me':

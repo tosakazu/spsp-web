@@ -23,6 +23,7 @@ import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
+import SpspLiveBrowser from '../../site/js/live_browser.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
@@ -1461,6 +1462,7 @@ function render() {
       emojiOf: charEmojiOf,
       hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
       ...livePredictOpts(),
+      browser: SpspLiveBrowser,   // ログインしていればブラウザが start.gg から 15 秒ごとに読み直す
     });
   }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)

@@ -164,6 +164,10 @@ export class MemStore {
     return true;
   }
 
+  async insertLogin(row) {
+    (this.logins = this.logins || []).push({ ...row });
+  }
+
   async recordCsp(key, e, ts, maxKeys) {
     const cur = this.csp.get(key);
     if (cur) { cur.hits += 1; cur.last_seen = ts; return; }

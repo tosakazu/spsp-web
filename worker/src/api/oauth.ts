@@ -5,13 +5,15 @@
  *   - Content-Type: application/json で、パラメータは JSON body に入れる
  *   - body のキーは grant_type / client_id / client_secret / code / scope / redirect_uri
  *   - 応答は { access_token, token_type: "Bearer", expires_in, refresh_token }
- * refresh token は使わない (1 回きりの本人確認なので破棄する。INV-4)。
+ * 2026-10-28 から: 普段のログイン (scope user.identity) のアクセストークンと refresh token もブラウザに返す
+ * (プレイヤーページの参加中の大会を、ブラウザが start.gg から直接読み直すため。js/startgg_identity.js)。
+ * Worker は保存しない・ログに出さない。延長は refreshAccessToken (action startgg_refresh) で、client secret が要るので Worker を通す。
  *
  * GAS はグローバル LAST_OAUTH_ERROR で失敗理由を伝えていたが、Worker は同時に
  * 複数リクエストを処理するので返り値で伝える。
  */
 import type { Config } from '../config.ts';
-import { GQL_URL, SCOPE, TOKEN_URL, requireClientId, requireSecret } from '../config.ts';
+import { GQL_URL, REFRESH_URL, SCOPE, TOKEN_URL, requireClientId, requireSecret } from '../config.ts';
 import type { SessionUser } from './session.ts';
 
 /** 失敗理由。秘密は入れない。 */
@@ -43,7 +45,7 @@ export function oauthErrorMessage(reason: string | null | undefined): string {
   }
 }
 
-export type ExchangeResult = { token: string; expiresIn: number | null; reason: null } | { token: null; reason: OauthReason };
+export type ExchangeResult = { token: string; expiresIn: number | null; refreshToken?: string | null; reason: null } | { token: null; reason: OauthReason };
 
 /**
  * 認可コードを access token に交換する。
@@ -51,19 +53,21 @@ export type ExchangeResult = { token: string; expiresIn: number | null; reason: 
  * scope は認可リクエストと同じ値 (既定 = 普段のログイン。大会運営用は MANAGER_SCOPE)。
  * code / secret / token は一切ログに出さない (INV-3 / INV-4)。
  */
-export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: FetchFn, scope: string = SCOPE): Promise<ExchangeResult> {
-  const payload = {
-    grant_type: 'authorization_code',
+export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: FetchFn, scope: string = SCOPE, refreshToken?: string): Promise<ExchangeResult> {
+  // refreshToken があれば延長 (refreshAccessToken)。それ以外は token 交換とまったく同じ
+  const base = {
     client_id: requireClientId(cfg),
     client_secret: requireSecret(cfg.clientSecret, 'STARTGG_CLIENT_SECRET'),
-    code,
     scope,
     redirect_uri: cfg.redirectUri,
   };
+  const payload = refreshToken
+    ? { grant_type: 'refresh_token', refresh_token: refreshToken, ...base }
+    : { grant_type: 'authorization_code', code, ...base };
 
   let res: Response;
   try {
-    res = await fetchFn(TOKEN_URL, {
+    res = await fetchFn(refreshToken ? REFRESH_URL : TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -102,7 +106,17 @@ export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: F
     return { token: null, reason };
   }
   const exp = Number(json.expires_in);
-  return { token: json.access_token, expiresIn: Number.isFinite(exp) && exp > 0 ? exp : null, reason: null };
+  const rt = (json as { refresh_token?: unknown }).refresh_token;
+  return { token: json.access_token, expiresIn: Number.isFinite(exp) && exp > 0 ? exp : null,
+    refreshToken: typeof rt === 'string' && rt ? rt : null, reason: null };
+}
+
+/**
+ * refresh token でアクセストークンを取り直す (POST https://api.start.gg/oauth/refresh、本文は token 交換と同じ形で
+ * grant_type=refresh_token)。返り値は exchangeCodeForToken と同じ。refresh token は保存しない・ログに出さない。
+ */
+export async function refreshAccessToken(cfg: Config, refreshToken: string, fetchFn: FetchFn, scope: string = SCOPE): Promise<ExchangeResult> {
+  return exchangeCodeForToken(cfg, '', fetchFn, scope, refreshToken);
 }
 
 /**
@@ -159,10 +173,13 @@ export async function fetchCurrentUser(accessToken: string, fetchFn: FetchFn): P
  * code → access token → currentUser。login / post が共通で使う。
  * 失敗は { user: null, reason }。access token はこの関数の外に出さない (INV-4)。
  */
-export async function authenticateCode(cfg: Config, code: string, fetchFn: FetchFn): Promise<{ user: SessionUser | null; reason: OauthReason | null }> {
+/** 普段のログインで手に入る start.gg のトークン (ブラウザに返す。Worker は保存しない) */
+export type StartggTokens = { access_token: string; expires_in: number | null; refresh_token: string | null };
+
+export async function authenticateCode(cfg: Config, code: string, fetchFn: FetchFn): Promise<{ user: SessionUser | null; reason: OauthReason | null; startgg?: StartggTokens }> {
   const ex = await exchangeCodeForToken(cfg, code, fetchFn);
   if (!ex.token) return { user: null, reason: ex.reason };
   const user = await fetchCurrentUser(ex.token, fetchFn);
   if (!user) return { user: null, reason: 'no_user' };
-  return { user, reason: null };
+  return { user, reason: null, startgg: { access_token: ex.token, expires_in: ex.expiresIn, refresh_token: ex.refreshToken ?? null } };
 }
