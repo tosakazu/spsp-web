@@ -175,11 +175,11 @@ test('チェックボックスはラベル末尾のまま', { skip: !JSDOM ? 'js
 });
 
 test('外付け <label for> があればそちらの末尾に付く', { skip: !JSDOM ? 'jsdom 未導入' : false }, () => {
-  const win = mount('<label for="event-url">大会イベント URL</label><input type="text" id="event-url">');
-  const label = win.document.querySelector('label[for="event-url"]');
+  const win = mount('<label for="token">start.gg API Token</label><input type="password" id="token">');
+  const label = win.document.querySelector('label[for="token"]');
   assert.ok(label.lastElementChild && label.lastElementChild.classList.contains('help-ico'),
     'ラベル側に付いていない');
-  assert.strictEqual(win.document.querySelector('#event-url').nextElementSibling, null);
+  assert.strictEqual(win.document.querySelector('#token').nextElementSibling, null);
 });
 
 test('対象が非表示なら ? も非表示', { skip: !JSDOM ? 'jsdom 未導入' : false }, () => {
