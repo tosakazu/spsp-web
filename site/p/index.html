@@ -59,14 +59,14 @@
   .lr-share { position: absolute; top: -4px; right: 0; padding: 5px 7px; }
   .lr-share svg { width: 15px; height: 15px; }
   /* 次に出場予定の大会: 左に大会名と日付・人数の 2 行、右にスコア予想のボタン */
-  .yosou-row { display: flex; align-items: center; gap: 10px; }
-  .yosou-tour { flex: 1; min-width: 0; }
-  .yosou-tour .yt-name { font-size: 13px; color: #111827; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .yosou-tour .yt-name a { color: inherit; }
-  .yosou-tour .yt-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
-  /* 参加予定の大会の予選プール (buildPoolSection) */
-  .pool-ev + .pool-ev { margin-top: 8px; }
-  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; cursor: pointer; list-style: none; }
+  /* 参加予定の大会 (buildUpcomingSection) */
+  .pool-ev { border-bottom: 1px solid #f3f4f6; padding: 6px 0; }
+  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 2px; }
+  .pool-ev .pe-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .pool-ev .pe-body { display: flex; align-items: flex-start; gap: 10px; padding-left: 16px; }
+  .pool-ev .pe-info { flex: 1; min-width: 0; }
+  .pool-ev .pe-body .yosou-btn { margin-top: 4px; }
+  .pe-pool > summary { font-size: 12px; color: #2563eb; cursor: pointer; margin-bottom: 4px; }
   .pool-ev .pe-name::-webkit-details-marker { display: none; }
   .pool-ev .pe-name::before { content: '▶'; display: inline-block; font-size: 10px; color: #9ca3af; margin-right: 6px; transition: transform 0.15s; }
   .pool-ev[open] .pe-name::before { transform: rotate(90deg); }
@@ -579,20 +579,13 @@
 
     <!-- スコアシミュレーション: 次回出場予定の集計対象大会 + シミュレーションボタン
          (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
+    <!-- 参加予定の大会 (buildUpcomingSection): 近い順に 5 件ずつ。最初は大会名と集計対象のバッジ、押すと日付・人数・スコア予想、
+         トーナメントとシードが公開されていれば予選プール (data/upcoming_entrants.json の bracket)
+         (share-top 内だがシェア画像キャプチャ時は一時的に隠す) -->
     <div class="section" id="yosou-section" style="display:none">
-      <h2 id="yosou-head" style="display:none" data-i18n="player.sec.upcoming">📅 次の集計対象大会</h2>
-      <!-- 左に大会名 (1 行目) と日付・人数 (2 行目)、右にスコア予想のボタン -->
-      <div class="yosou-row">
-        <div class="yosou-tour" id="yosou-tour" style="display:none"></div>
-        <a class="yosou-btn" id="yosou-link" href="#" data-i18n="player.simulate">🔮 スコア予想</a>
-      </div>
-    </div>
-
-    <!-- 参加予定の大会で同じ予選プールの人 (start.gg でトーナメントとシードが公開されている大会だけ。data/upcoming_entrants.json の bracket)
-         (シェア画像キャプチャ時は一時的に隠す) -->
-    <div class="section" id="pool-section" style="display:none">
-      <h2 data-i18n="player.sec.pool">🎯 参加予定の大会の予選プール</h2>
-      <div id="pool-body"></div>
+      <h2 data-i18n="player.sec.upcoming">📅 参加予定の大会</h2>
+      <div class="pager" id="upcoming-pager" data-target="upcoming-list" style="display:none"></div>
+      <div id="upcoming-list"></div>
     </div>
 
     <div class="section">
