@@ -100,8 +100,17 @@ function buildLatestResultSection() {
   if (!PLAYER || !META) return;
   const tours = (PLAYER && PLAYER.tournaments) || [];
   if (!tours.length) return;
-  const t = tours.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  const latest = tours.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  // 下位クラスに出た大会は同じ大会の本戦の行もある: 本戦 / クラスをタブで切り替える (本戦が先、最初は本戦)
+  const pid = latest.parent_event_id != null ? latest.parent_event_id : latest.event_id;
+  const sibs = pid == null ? [latest]
+    : tours.filter(x => x.event_id === pid || x.parent_event_id === pid)
+      .sort((a, b) => (a.parent_event_id != null ? 1 : 0) - (b.parent_event_id != null ? 1 : 0));
+  renderLatestResultCard(sibs.length > 1 ? sibs[0] : latest, sibs.length > 1 ? sibs : []);
+}
 
+/** @param {PTour} t 表示する行 @param {PTour[]} tabs 同じ大会の本戦・クラスの行 (タブが要らなければ空) */
+function renderLatestResultCard(t, tabs) {
   // ---- パフォーマンス (build がエクスポートする perf_rank をそのまま使う) ----
   const perf = perfInfoOf(t);
 
@@ -154,8 +163,8 @@ function buildLatestResultSection() {
       `</div>`;
   }
   // 順位評価 / 直対評価 chips (= 出場大会一覧の行と同じ表記、▶ 展開の中)
-  const ELO_PER_UNIT2 = (META.params && META.params.ELO_PER_UNIT) || 29.48;
-  const TJPR_SCALE2 = (META.params && META.params.TJPR_ELO_SCALE) || 17.5;
+  const ELO_PER_UNIT2 = (META && META.params && META.params.ELO_PER_UNIT) || 29.48;
+  const TJPR_SCALE2 = (META && META.params && META.params.TJPR_ELO_SCALE) || 17.5;
   const w = (t.tjpr_w || 0) * TJPR_SCALE2;
   const base = (t.tjpr_raw || 0) * TJPR_SCALE2;
   const tjprChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.tjpr')}</span>${
@@ -174,7 +183,10 @@ function buildLatestResultSection() {
   const dataPid = (t.parent_event_id != null) ? t.parent_event_id : (t.event_id != null ? t.event_id : '');
   const isClass = t.parent_event_id != null ? '1' : '0';
   const lrBody = document.getElementById('latestres-body');
-  if (lrBody) lrBody.innerHTML =
+  const tabsHtml = tabs.length ? `<div class="lr-tabs">${tabs.map((x, i) =>
+    `<div class="lr-tab${x === t ? ' active' : ''}" data-lr-tab="${i}">${x.parent_event_id != null
+      ? escapeHtml(i18n('player.latest.tab_class', { c: x.class_letter || '' })) : i18n('player.latest.tab_main')}</div>`).join('')}</div>` : '';
+  if (lrBody) lrBody.innerHTML = tabsHtml +
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
         <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
@@ -200,6 +212,10 @@ function buildLatestResultSection() {
       if (cap) cap.style.display = cap.style.display === 'none' ? '' : 'none';
     });
   }
+  if (lrBody) lrBody.querySelectorAll('[data-lr-tab]').forEach(el => el.addEventListener('click', () => {
+    const x = tabs[parseInt(/** @type {string} */ (/** @type {HTMLElement} */ (el).dataset.lrTab))];
+    if (x && x !== t) renderLatestResultCard(x, tabs);
+  }));
 }
 
 // ライバルプレイヤー: 4指標ごとに全国順位の近い上下2人 (カテゴリ間で重複なし)。

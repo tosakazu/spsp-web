@@ -431,6 +431,8 @@ window.SPSP_I18N.ja = {
   'player.period.3m': '3ヶ月',
   'player.filter.tournaments': '大会:',
   'player.counted': '集計対象',
+  'player.latest.tab_main': '本戦',
+  'player.latest.tab_class': '{c}クラス',
   'player.not_counted': '集計対象外',
   'player.sec.top_tjpr': '💎 順位評価 影響の大きい大会',
   'player.sec.top_bt': '⚔️ 直対評価 影響の大きい対戦',
