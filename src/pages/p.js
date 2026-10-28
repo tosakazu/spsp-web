@@ -373,7 +373,7 @@ function loadUpcoming() {
 // 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
 // bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(押すと同じプールの人を
 // シード順に、メインキャラの絵文字付き) も
-const POOL_MAX_PLAYERS = 48;   // 1 プールの大会 (全員同じプール) で多すぎるときはここまで
+const POOL_PAGE = 24;   // プールのプレイヤーのページ送りの 1 ページの人数
 async function buildUpcomingSection() {
   if (!UID || !META) return;
   const sec = document.getElementById('yosou-section');
@@ -414,36 +414,65 @@ async function buildUpcomingSection() {
     return (c && c.emoji) || '';
   };
   /** @param {{ eid: string, ev: any, counted: boolean }} it */
+  const SEP = '<span class="pe-sep">・</span>';   // 区切り (小さく)
   const itemHtml = ({ eid, ev, counted }) => {
     const d = new Date(ev.start_at * 1000);
     const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);   // 表示言語の曜日 (ja: 日 / en: Sun)
     const badge = counted ? `<span class="lr-badge ok">${i18n('player.counted')}</span>` : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
     const me = (ev.entrants || []).find((/** @type {any} */ x) => x.uid === UID);
     const pool = ev.bracket && me && me.pg != null ? (ev.bracket.pools || {})[String(me.pg)] || {} : null;
-    let meta = `${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` + escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }));
+    // 1 行目 (いつも出す): 大会名・日付・人数・集計対象のバッジ・スコア予想 (集計対象のとき)
+    const when = `${SEP}${d.getMonth() + 1}/${d.getDate()}(${wd})${SEP}` +
+      escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }));
+    const sim = counted ? `<a class="pe-sim" href="${escapeHtml(SPSP.langRoot + 'sim/?uid=' + UID + '&eid=' + encodeURIComponent(eid))}">${i18n('player.simulate')}</a>` : '';
+    // 開いたとき: フェーズ・プール・自分のシード・リンク、プールのプレイヤー (全員。POOL_PAGE 人ずつページ送り)
+    /** @type {string[]} */
+    const parts = [];
     let list = '';
     if (pool) {
       const poolTxt = Object.keys(ev.bracket.pools || {}).length > 1 && pool.ident ? i18n('player.pool.pool', { id: pool.ident }) : '';
-      meta += ` ・ ${escapeHtml(ev.bracket.phase || '')}${poolTxt ? ' ' + escapeHtml(poolTxt) : ''}` + (me.seed != null ? ` ・ ${i18n('player.pool.seed', { n: me.seed })}` : '');
+      parts.push(escapeHtml(ev.bracket.phase || '') + (poolTxt ? ' ' + escapeHtml(poolTxt) : ''));
+      if (me.seed != null) parts.push(i18n('player.pool.seed', { n: me.seed }));
       const members = (ev.entrants || []).filter((/** @type {any} */ x) => x.pg === me.pg)
         .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
-      list = `<details class="pe-pool"><summary>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</summary><div class="pe-list">` + members.slice(0, POOL_MAX_PLAYERS).map((/** @type {any} */ x) => {
+      const pages = Math.ceil(members.length / POOL_PAGE);
+      const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
         const em = x.uid != null ? emojiOf(x.uid) : '';
         const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
         const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
-        return `<span class="pe-p${x.uid === UID ? ' me' : ''}">${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
-      }).join('') + (members.length > POOL_MAX_PLAYERS ? `<span class="pe-more">${i18n('player.pool.more', { n: members.length - POOL_MAX_PLAYERS })}</span>` : '') + '</div></details>';
+        const pg = Math.floor(k / POOL_PAGE);
+        return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+      }).join('');
+      const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
+        `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
+      list = `<details class="pe-pool"><summary>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</summary><div class="pe-list">${chips}</div>${pager}</details>`;
     }
     // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
     const slug = slugOf.get(ev.tournament_id) || '';
     const href = pool && pool.url ? pool.url : (slug ? 'https://www.start.gg/' + slug : '');
-    if (href) meta += ` ・ <a href="${escapeHtml(href)}" target="_blank" rel="noopener">${pool && pool.url ? i18n('player.pool.view') : i18n('player.upcoming.view_tournament')} ↗</a>`;
-    const sim = counted ? `<a class="yosou-btn" href="${escapeHtml(SPSP.langRoot + 'sim/?uid=' + UID + '&eid=' + encodeURIComponent(eid))}">${i18n('player.simulate')}</a>` : '';
-    return `<details class="pool-ev"><summary class="pe-name"><span class="pe-t">${escapeHtml(ev.tournament_name || '')}</span>${badge}</summary>` +
-      `<div class="pe-body"><div class="pe-info"><div class="pe-meta">${meta}</div>${list}</div>${sim}</div></details>`;
+    if (href) parts.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${pool && pool.url ? i18n('player.pool.view') : i18n('player.upcoming.view_tournament')} ↗</a>`);
+    const body = parts.length || list ? `<div class="pe-body">${parts.length ? `<div class="pe-meta">${parts.join(SEP)}</div>` : ''}${list}</div>` : '';
+    return `<details class="pool-ev"><summary class="pe-name"><span class="pe-t">${escapeHtml(ev.tournament_name || '')}</span>` +
+      `<span class="pe-when">${when}</span>${badge}${sim}</summary>${body}</details>`;
   };
   sec.style.display = '';   // ページ送りが高さを測るので先に出す
   SPSPPager.setupPaginated(items, 'upcoming-list', 'upcoming-pager', (/** @type {any[]} */ arr) => arr.map(itemHtml).join(''), '');
+  // プールのプレイヤーのページ送り (表示を切り替えるだけ。描き直さない)
+  const listEl = document.getElementById('upcoming-list');
+  if (listEl) listEl.addEventListener('click', (e) => {
+    const b = /** @type {HTMLButtonElement | null} */ (/** @type {Element} */ (e.target).closest('.pe-pager .page-btn'));
+    if (!b) return;
+    const pager = /** @type {HTMLElement} */ (b.closest('.pe-pager'));
+    const pool = /** @type {HTMLElement} */ (pager.closest('.pe-pool'));
+    const pages = parseInt(pager.dataset.pages || '1', 10);
+    const cur = Math.max(0, Math.min(pages - 1, parseInt(pager.dataset.cur || '0', 10) + (b.dataset.act === 'next' ? 1 : -1)));
+    pager.dataset.cur = String(cur);
+    pool.querySelectorAll('.pe-p').forEach(c => { /** @type {HTMLElement} */ (c).hidden = /** @type {HTMLElement} */ (c).dataset.page !== String(cur); });
+    const info = pager.querySelector('.page-info');
+    if (info) info.textContent = `${cur + 1} / ${pages}`;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="prev"]')).disabled = cur === 0;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="next"]')).disabled = cur === pages - 1;
+  });
 }
 
 /** @type {PMeta | null} */

@@ -60,23 +60,26 @@
   .lr-share svg { width: 15px; height: 15px; }
   /* 次に出場予定の大会: 左に大会名と日付・人数の 2 行、右にスコア予想のボタン */
   /* 参加予定の大会 (buildUpcomingSection) */
-  .pool-ev { border-bottom: 1px solid #f3f4f6; padding: 6px 0; }
-  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 2px; }
-  .pool-ev .pe-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .pool-ev .pe-body { display: flex; align-items: flex-start; gap: 10px; padding-left: 16px; }
-  .pool-ev .pe-info { flex: 1; min-width: 0; }
-  .pool-ev .pe-body .yosou-btn { margin-top: 4px; }
-  .pe-pool > summary { font-size: 12px; color: #2563eb; cursor: pointer; margin-bottom: 4px; }
+  .pool-ev { border-bottom: 1px solid #f3f4f6; padding: 5px 0; }
+  .pool-ev .pe-name { font-size: 13px; font-weight: 600; color: #111827; cursor: pointer; list-style: none; display: flex; align-items: center; white-space: nowrap; }
   .pool-ev .pe-name::-webkit-details-marker { display: none; }
-  .pool-ev .pe-name::before { content: '▶'; display: inline-block; font-size: 10px; color: #9ca3af; margin-right: 6px; transition: transform 0.15s; }
+  .pool-ev .pe-name::before { content: '▶'; flex: none; font-size: 9px; color: #9ca3af; margin-right: 5px; transition: transform 0.15s; }
   .pool-ev[open] .pe-name::before { transform: rotate(90deg); }
-  .pool-ev .pe-meta { font-size: 12px; color: #6b7280; margin: 4px 0 6px; }
+  .pool-ev .pe-t { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+  .pool-ev .pe-when { flex: none; font-size: 11px; font-weight: 400; color: #6b7280; }
+  .pool-ev .pe-sep { font-size: 8px; color: #c4c8cf; margin: 0 2px; }
+  .pool-ev .pe-sim { flex: none; margin-left: auto; padding: 1px 7px; font-size: 10px; font-weight: 500; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; text-decoration: none; background: #fff; }
+  .pool-ev .pe-sim:hover { background: #f9fafb; }
+  .pool-ev .pe-body { padding-left: 14px; }
+  .pool-ev .pe-meta { font-size: 11px; color: #6b7280; margin: 3px 0 4px; }
   .pool-ev .pe-meta a { color: #2563eb; text-decoration: none; }
-  .pool-ev .pe-list { display: flex; flex-wrap: wrap; gap: 4px 6px; }
-  .pool-ev .pe-p { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1px 8px; white-space: nowrap; }
+  .pe-pool > summary { font-size: 11px; color: #2563eb; cursor: pointer; margin-bottom: 4px; }
+  .pool-ev .pe-list { display: flex; flex-wrap: wrap; gap: 4px 5px; }
+  .pool-ev .pe-p { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1px 7px; white-space: nowrap; }
+  .pool-ev .pe-p[hidden] { display: none; }
   .pool-ev .pe-p.me { background: #fef2f2; border-color: #fecaca; font-weight: 600; }
   .pool-ev .pe-p .s { color: #9ca3af; font-size: 10px; margin-right: 3px; }
-  .pool-ev .pe-more { font-size: 11px; color: #9ca3af; align-self: center; }
+  .pool-ev .pe-pager { margin: 6px 0 2px; }
   .yosou-btn { flex: none; margin-left: auto; padding: 7px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #374151;
                font-weight: 600; font-size: 13px; text-decoration: none; white-space: nowrap; }   /* 目立ちすぎないよう灰色 (ほかの白いボタンと同じ) */
   .yosou-btn:hover { background: #f9fafb; color: #111827; }
