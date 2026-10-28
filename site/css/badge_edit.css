@@ -202,3 +202,18 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
   .bz-title { font-size: 15px; }
   .bz-head-btns { gap: 2px; }
 }
+
+/* 使い方ガイド (src/pages/card_back_guide.js): 本物の欄を切り抜いて明るく (ほかは暗く)、横に説明 */
+.bzg { position: fixed; inset: 0; z-index: 40; touch-action: pan-y; }
+.bzg-hole { position: fixed; border-radius: 10px; box-shadow: 0 0 0 200vmax rgba(17, 24, 39, .62); outline: 2px solid #fff; pointer-events: none;
+  transition: left .2s, top .2s, width .2s, height .2s; }
+.bzg-tip { position: fixed; box-sizing: border-box; background: #fff; color: #111827; border-radius: 12px; padding: 12px 14px 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+  font-size: 13px; line-height: 1.6; transition: top .2s, left .2s; }
+.bzg-step { font-size: 11px; color: #6b7280; font-variant-numeric: tabular-nums; }
+.bzg-title { font-size: 15px; font-weight: 700; margin: 2px 0 4px; }
+.bzg-btns { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.bzg-sp { flex: 1; }
+.bzg-btns button { font: inherit; font-size: 13px; font-weight: 600; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer; }
+.bzg-btns .bzg-skip { border-color: transparent; color: #6b7280; padding: 0 6px; }
+.bzg-btns .bzg-next { background: #111827; border-color: #111827; color: #fff; }
+@media (prefers-reduced-motion: reduce) { .bzg-hole, .bzg-tip { transition: none; } }

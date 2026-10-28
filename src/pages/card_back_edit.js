@@ -8,6 +8,7 @@
 //   保存のときサーバも確かめる (worker/src/api/card.ts)
 //   1 つの大会で、一番上の色から下の色まで全部持つ (優勝なら 虹・金・銀・素 の 4 枚。素 = ホロなし)
 //   貼ったシール: ドラッグで移動、角のつまみ (↻) で回転と大きさ、2 本指でも回転と大きさ。重ねてよい (並びの後ろほど上)
+//   使い方ガイド = src/pages/card_back_guide.js (初めて開いたときと ? のボタン)
 //   操作の欄は選んでいてもいなくても同じ高さ (一覧がずれない)。大きさ・回転・切り取りは 1 本のスライダーを切り替える。元に戻す・やり直すあり
 //   一覧は大会ごと。大会を押すといちばん上の色を貼る (貼ってあれば、貼ってある中でいちばん上の色を選ぶ)、色の丸を押すとその色を貼る。一覧はページごとスクロールし、押すとカードの所へ戻る
 //   透過なしのシールは形 (四角・角丸・丸・六角形・ひし形) と切り取り (絵の何割を見せるか) を選べる。切り取りは絵の縮尺を保ったまま
@@ -17,6 +18,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
 import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
+import { startGuide, maybeStartGuide } from './card_back_guide.js';
 import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, TEXT_S_MIN, TEXT_S_MAX, normRot, normBack, normParts, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
 
@@ -1094,6 +1096,8 @@ export async function mountBackEditor(o) {
   paintTray();
   paintHistory();
   // 表のタブで変えたもの (色・二つ名など) を裏のカードにも出す (裏のタブに戻ったときに p_edit.js が呼ぶ)
-  return { refresh: () => { renderBase(); paintTextSel(); } };
+  // 使い方ガイド: ? のボタンで出す。初めてなら裏の欄を見せたとき (refresh) に出す
+  $('bz-guide').addEventListener('click', () => { menu.open = false; startGuide(); });
+  return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); } };
 }
 
