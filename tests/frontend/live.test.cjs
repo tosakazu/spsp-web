@@ -137,7 +137,7 @@ test('予想があればパフォーマンスを順位の横に、順位評価�
   assert.match(e.innerHTML, /ranking\.tab\.tjpr\{\}<\/span><span class="val pos">\+1\.8<\/span><span class="sub">\(35\.0\)<\/span>/);
   assert.match(e.innerHTML, /ranking\.tab\.bt\{\}<\/span><span class="val dim">±0<\/span><span class="sub">\(-3\.2\)<\/span>/);
   assert.match(e.innerHTML, /class="live-rank-btn"/);
-  assert.match(e.innerHTML, /live\.pred\.note\{\}/);
+  assert.doesNotMatch(e.innerHTML, /live-pred-foot/);
   const e2 = el();
   L.render(e2, 11, [{ summary: {}, doc: doc() }], {}, null, [{ ...pred, counted: false, tjpr: null, bt: null }]);
   assert.match(e2.innerHTML, /live\.pred\.not_counted/);

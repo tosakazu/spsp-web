@@ -411,8 +411,6 @@ window.SPSP_I18N.ja = {
   'live.pred.rank_btn': '全国順位の変化を予想',
   'live.pred.rank_loading': '計算中…',
   'live.pred.rank_none': '計算できませんでした',
-  'live.pred.note': '予想は今の結果から計算 (勝ち残っている間は、次で負けたときの順位で)。大会がランキングに入ると本当の値に変わります',
-  'live.pred.note_final': '予想は今の結果から計算。大会がランキングに入ると本当の値に変わります',
   'live.or_better_unit': '位以上',
   'live.unreflected': 'ランキング未反映',
   'live.pool': 'プール {id}',

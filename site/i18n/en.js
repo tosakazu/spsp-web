@@ -408,8 +408,6 @@ window.SPSP_I18N.en = {
   'live.pred.rank_btn': 'Project ranking change',
   'live.pred.rank_loading': 'Calculating…',
   'live.pred.rank_none': 'Could not calculate',
-  'live.pred.note': 'Projected from current results (while still in, as if eliminated in the next match). Replaced by the real values once the tournament is in the ranking',
-  'live.pred.note_final': 'Projected from current results. Replaced by the real values once the tournament is in the ranking',
   'live.or_better_unit': '{n, selectordinal, one{st} two{nd} few{rd} other{th}} or better',
   'live.unreflected': 'Not in the ranking yet',
   'live.pool': 'Pool {id}',

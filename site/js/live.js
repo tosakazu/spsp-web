@@ -227,8 +227,7 @@ function predHtml(pr, eid, canRank) {
   const open = rankOpened.has(eid);
   const btn = canRank ? `<button type="button" class="live-rank-btn${open ? ' open' : ''}" data-eid="${eid}">${t('live.pred.rank_btn')}</button>` : '';
   return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div>${btn}</div>` +
-    (canRank ? `<div class="live-rank" data-eid="${eid}"${open ? '' : ' hidden'}></div>` : '') +
-    `<div class="live-pred-foot">${pr.final ? t('live.pred.note_final') : t('live.pred.note')}</div>`;
+    (canRank ? `<div class="live-rank" data-eid="${eid}"${open ? '' : ' hidden'}></div>` : '');
 }
 
 /** 全国順位の変化 (今 → 予想) @param {any} rc */
