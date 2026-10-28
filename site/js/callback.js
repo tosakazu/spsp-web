@@ -16,6 +16,7 @@ import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 import SpspLogin from './login.js';
+import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
 import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
@@ -182,6 +183,7 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     var st = S.decodeState(state);
     // 単回使用。ここで取り出したら保存側は消える。
     var stored = S.takeNonce();
+    var hadNonce = !!stored;   // 下で stored を別の値に使い回すので、ここで取っておく
 
     // 照合の本体は GAS 側の署名検証に移した (アプリ内ブラウザ→別ブラウザで
     // 戻される経路では、保存領域が引き継がれず必ず失敗するため)。
@@ -225,8 +227,20 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
       runLogin(code, state, back);
       return;
     }
+    // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
+    // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
+    // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
+    if ((intent === 'challonge' || intent === 'manager') && !hadNonce) {
+      reportError('state_missing', intent + ' ' + S.browserTag(navigator.userAgent));
+      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
+      return;
+    }
     if (intent === 'challonge') {
       runChallonge(code, state, back);
+      return;
+    }
+    if (intent === 'manager') {
+      runManager(code, state, back);
       return;
     }
 
@@ -332,6 +346,37 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).catch(function () {
       reportError('network', 'challonge fetch failed');
       show('error', i18n('callback.challonge_title'), i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * manager フロー (大会運営用の start.gg ログイン): Worker が code を運営用の scope で交換し、start.gg のアクセストークンと
+   * 普段のセッションを返す。アクセストークンはこのブラウザ (startgg_manager.js) にだけ置き、元のページに ?login=1 で戻る。
+   */
+  function runManager(code, state, back) {
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'manager_login', code: code, state: state }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.access_token && json.token && json.user) {
+        AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        if (SpspStartggManager.save(json)) {
+          location.replace(S.withFlag(back, 'login'));
+          return;
+        }
+      }
+      var errCode = (json && json.error && json.error.code) || (json && json.ok ? 'storage' : 'unknown');
+      reportError('manager_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.manager_failed'));
+      show('error', i18n('callback.manager_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'manager fetch failed');
+      show('error', i18n('callback.manager_title'), i18n('callback.s28'), back);
     });
   }
 

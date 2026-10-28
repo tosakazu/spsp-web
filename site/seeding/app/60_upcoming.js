@@ -172,8 +172,21 @@ function fillEventUrlAndFetch(url) {
 // ── 自分が管理している大会 ─────────────────────────
 // start.gg のトークンの持ち主が管理者の大会 (tournamentView: "admin") のうち、開催中とこれからのものを
 // 開催中 → 近い順で出す。SSBU の event が無い大会は出さない。取れなければ欄ごと出さない (URL を入れればよい)。
-let MY_TOURS_TOKEN = '';
+/** @type {string | null} */
+let MY_TOURS_TOKEN = null;   // まだ一度も読んでいない (最初の '' でも「認証なし」を出すため)
 const MY_TOURS_MAX = 20;
+
+/** 管理している大会の欄の状態 (空のときの文言と件数の印)
+ * @param {'none' | 'loading' | 'empty' | 'ok'} state none = 認証なし / empty = 取れない・0 件 */
+function setMyToursState(state) {
+  const empty = document.getElementById('mytours-empty');
+  if (empty) {
+    empty.textContent = state === 'none' ? i18n('seed.mine.need_auth') : state === 'loading' ? i18n('seed.skeleton.t5') : state === 'empty' ? i18n('seed.mine.empty') : '';
+    empty.style.display = state === 'ok' ? 'none' : '';
+  }
+  const badge = document.getElementById('mytours-count');
+  if (badge) badge.style.display = state === 'ok' ? '' : 'none';
+}
 
 /** @param {string} token */
 export async function loadMyTournaments(token) {
@@ -184,7 +197,9 @@ export async function loadMyTournaments(token) {
   token = String(token || '').trim();
   if (token === MY_TOURS_TOKEN) return;
   MY_TOURS_TOKEN = token;
-  if (!token) { box.style.display = 'none'; return; }
+  if (!token) { box.style.display = 'none'; setMyToursState('none'); return; }
+  box.style.display = 'none';
+  setMyToursState('loading');
   /** @type {any[]} */
   let all = [];
   try {
@@ -211,16 +226,38 @@ export async function loadMyTournaments(token) {
     .filter(t => t.events.length)
     .sort((a, b) => (Number(b.live) - Number(a.live)) || (a.start_at - b.start_at))
     .slice(0, MY_TOURS_MAX);
-  if (!tours.length) { box.style.display = 'none'; return; }
+  if (!tours.length) { box.style.display = 'none'; setMyToursState('empty'); return; }
   list.innerHTML = '';
   for (const t of tours) list.appendChild(upcomingRowEl(t));
   countBadge.textContent = String(tours.length);
   box.style.display = '';
+  setMyToursState('ok');
 }
 
-export function toggleMyToursBox() {
-  const box = document.getElementById('mytours-box');
-  if (box) box.classList.toggle('open');
+/**
+ * 大会の選び方のタブ (管理している大会 / 直近の大会 / URL を入力)。同じ場所で切り替える。
+ * 最初は常に「管理している大会」(認証が無い・0 件ならその案内を出す)。直近の大会は開いたときに読む。
+ * 一覧で大会を押すと URL 欄に入れて読み込む (fillEventUrlAndFetch。タブはそのまま)
+ */
+export function initEventSourceTabs() {
+  const root = document.getElementById('ev-src');
+  if (!root) return;
+  /** @param {string} t */
+  const show = (t) => {
+    for (const b of /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('.ev-tabs button'))) {
+      const on = b.dataset.t === t;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    for (const p of /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('.ev-pane'))) p.hidden = p.dataset.p !== t;
+    if (t === 'upcoming') openUpcomingBox();
+  };
+  root.querySelector('.ev-tabs')?.addEventListener('click', (e) => {
+    const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-t]'));
+    if (!b || !b.dataset.t) return;
+    show(b.dataset.t);
+  });
+  show('mine');
 }
 
 // 現在時刻以降の大会だけカウント (= 過去大会を除外).
@@ -266,15 +303,6 @@ export async function openUpcomingBox() {
   }
 }
 
-export function toggleUpcomingBox() {
-  const box = document.getElementById('upcoming-box');
-  if (!box) return;
-  if (box.classList.contains('open')) {
-    box.classList.remove('open');
-  } else {
-    openUpcomingBox();
-  }
-}
 
 // ── event-picker (= handleFetch 複数 event 警告の inline UI) ─────
 // 上記 renderEventChoicesHtml を再利用.

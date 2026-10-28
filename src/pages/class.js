@@ -13,6 +13,7 @@ import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
+import SpspStartggManager from '../../site/js/startgg_manager.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
@@ -305,7 +306,7 @@ async function load() {
   $('cb-settings').hidden = true;
   $('cb-preview').hidden = true;
   $('cb-done').hidden = true;
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   if (!parseStartggUrl($('cb-event').value)) return status(i18n('class.err.url'), 'error');
   if (!token) return status(i18n('class.err.startgg_key'), 'error');
   const slug = await resolveEventSlug(token);
@@ -653,7 +654,7 @@ let MY_TOURNAMENTS = { token: '', ids: /** @type {Set<string>} */ (new Set()) };
 /** キーで管理できる大会 (tournamentView admin) を、開催中 → これから → 最近終わった の順に選択欄へ。
  * 取れなければ欄は出さない (URL を入れればよい) */
 async function loadMyTournaments() {
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   const row = $('cb-tour-pick-row');
   if (!token) { row.hidden = true; return; }
   /** @type {any[]} */
@@ -705,6 +706,10 @@ $('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine
 
 // start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
 const SGG_TOKEN_KEY = 'spsp_startgg_token';
+/** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
+function sggToken() {
+  return SpspStartggManager.pick($('cb-sgg-key').value);
+}
 function updateKeyHint() {
   const v = String($('cb-sgg-key').value || '').trim();
   $('cb-sgg-hint').textContent = v ? `${i18n('seed.boot.t1')} ${v.slice(-4)} (${v.length} ${i18n('seed.boot.t2')}` : '';
@@ -728,11 +733,13 @@ $('cb-sgg-save').addEventListener('click', () => {
   b.disabled = true;
   setTimeout(() => { b.textContent = orig; b.disabled = false; }, 1500);
 });
+// start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインはシード作成・シードアップロードと共通)
+SpspStartggManager.mount({ root: $('cb-sgg-auth'), keyBlock: $('cb-sgg-keyblock'), beforeLogin: saveForm, onChange: () => { loadMyTournaments(); loadMine(); } });
 loadMyTournaments();
 
 /** 作成した下位クラス (class_mine)。間違えて作ったものは削除できる (取り込み済みは不可)。まだ API が無い環境では出さない */
 async function loadMine() {
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   const box = $('cb-mine');
   if (!token || !SpspLogin.apiAvailable()) { box.hidden = true; return; }
   const r = await SpspLogin.api({ action: 'class_mine', startgg_token: token });
@@ -791,7 +798,7 @@ $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) 
   if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
   if (!confirm(i18n('class.del_confirm', { name: b.dataset.name || '' }))) return;
   b.disabled = true;
-  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: String($('cb-sgg-key').value || '').trim(), challonge_token: chToken, id: Number(b.dataset.id) });
+  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: chToken, id: Number(b.dataset.id) });
   if (r && r.ok) { mineStatus(i18n('class.del_done'), 'ok'); loadMine(); return; }
   b.disabled = false;
   const code = (r && r.error && r.error.code) || 'unknown';

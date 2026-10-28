@@ -43,20 +43,21 @@ export function oauthErrorMessage(reason: string | null | undefined): string {
   }
 }
 
-export type ExchangeResult = { token: string; reason: null } | { token: null; reason: OauthReason };
+export type ExchangeResult = { token: string; expiresIn: number | null; reason: null } | { token: null; reason: OauthReason };
 
 /**
  * 認可コードを access token に交換する。
  * 失敗したら token: null と理由を返す (呼び出し側が auth_failed にする)。
+ * scope は認可リクエストと同じ値 (既定 = 普段のログイン。大会運営用は MANAGER_SCOPE)。
  * code / secret / token は一切ログに出さない (INV-3 / INV-4)。
  */
-export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: FetchFn): Promise<ExchangeResult> {
+export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: FetchFn, scope: string = SCOPE): Promise<ExchangeResult> {
   const payload = {
     grant_type: 'authorization_code',
     client_id: requireClientId(cfg),
     client_secret: requireSecret(cfg.clientSecret, 'STARTGG_CLIENT_SECRET'),
     code,
-    scope: SCOPE,
+    scope,
     redirect_uri: cfg.redirectUri,
   };
 
@@ -85,7 +86,7 @@ export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: F
     return { token: null, reason };
   }
 
-  let json: { access_token?: unknown; error?: unknown } | null;
+  let json: { access_token?: unknown; expires_in?: unknown; error?: unknown } | null;
   try {
     json = await res.json();
   } catch (_) {
@@ -100,7 +101,8 @@ export async function exchangeCodeForToken(cfg: Config, code: string, fetchFn: F
       : 'code_invalid';   // invalid_grant / 本文に手掛かり無し = code が無効か使用済み
     return { token: null, reason };
   }
-  return { token: json.access_token, reason: null };
+  const exp = Number(json.expires_in);
+  return { token: json.access_token, expiresIn: Number.isFinite(exp) && exp > 0 ? exp : null, reason: null };
 }
 
 /**

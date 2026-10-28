@@ -25,7 +25,7 @@ import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine,
 import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
-import { handleLogin } from './login.ts';
+import { handleLogin, handleManagerBegin, handleManagerLogin } from './login.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
 import type { ApiBody, HandlerResult } from './respond.ts';
@@ -73,6 +73,10 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleBeginLogin(ctx.cfg, r, now)).body;
       case 'login':
         res = await handleLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'manager_begin':
+        return (await handleManagerBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
+      case 'manager_login':
+        res = await handleManagerLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'vote':
         res = await handleVote(ctx.cfg, ctx.store, ctx.dataFetch, r, now); break;
       case 'me':
@@ -139,7 +143,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     if (sess) uid = sess.id;
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
-  const NOTE_ACTIONS = ['login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
+  const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

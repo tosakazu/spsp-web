@@ -16,7 +16,6 @@ const HELP_TEXT = {
   // 何の機能で、どういうときに使うのかだけを書く。細かい挙動は書かない。
   // ── 取得まわり ──
   'token': i18n('seed.help.s1'),
-  'event-url': i18n('seed.help.s2'),
   'fetch-btn': i18n('seed.help.s3'),
   'phase-select': i18n('seed.help.s4'),
   'pc-group-count': i18n('seed.help.s5'),
@@ -47,7 +46,7 @@ const HELP_TEXT = {
 
 // アイコンを付ける対象。ここに id を並べるだけで付く。
 const HELP_TARGETS = [
-  'token', 'event-url', 'fetch-btn', 'phase-select', 'pc-group-count', 'pc-phase-name',
+  'token', 'fetch-btn', 'phase-select', 'pc-group-count', 'pc-phase-name',
   'csv-btn', 'upload-btn', 'so-auto-apply', 'spec-export', 'bracket-preview',
   'so-pools', 'so-waves', 'so-run', 'so-stop', 'so-cancel', 'so-reset-defaults',
   'so-enable-intra', 'so-avoid-region', 'so-avoid-recent', 'so-keep-deplace',

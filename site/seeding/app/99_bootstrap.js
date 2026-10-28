@@ -7,8 +7,9 @@ import { i18n, regionGroupToggleId, regionGroupToggles } from './10_skeleton.js'
 import { injectHelpIcons } from './20_help.js';
 import { cachedFetchers } from './70_players_cache.js';
 import SeedData from '../seed_data.js';
-import { downloadCsv, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
-import { UPCOMING_PAGE_SIZE, loadMyTournaments, openUpcomingBox, renderUpcomingPage, toggleMyToursBox, toggleUpcomingBox } from './60_upcoming.js';
+import { downloadCsv, getToken, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
+import SpspStartggManager from '../../js/startgg_manager.js';
+import { UPCOMING_PAGE_SIZE, initEventSourceTabs, loadMyTournaments, renderUpcomingPage } from './60_upcoming.js';
 import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updateSeriesToggleState } from './75_series_rematch.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
@@ -22,6 +23,8 @@ import SPSPGeo from '../../js/geo.js';
   const saveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('token-save'));
   const TOKEN_KEY = 'spsp_startgg_token';
   if (!tokenEl || !hintEl || !revealBtn || !saveBtn) return;   // 骨格 (10_skeleton.js) に必ずある
+  // 大会の選び方のタブ (最初は「管理している大会」)
+  initEventSourceTabs();
 
   function updateHint() {
     if (!tokenEl || !hintEl) return;   // 巻き上げられる関数宣言なので上の guard の絞り込みは効かない
@@ -37,8 +40,11 @@ import SPSPGeo from '../../js/geo.js';
   } catch (e) {}
   tokenEl.addEventListener('input', () => { updateHint(); });
   // トークンがあれば、そのアカウントが管理している大会を一覧の上に出す (入力し終わったとき = change でも取り直す)
-  loadMyTournaments(tokenEl.value);
-  tokenEl.addEventListener('change', () => { loadMyTournaments(tokenEl.value); });
+  loadMyTournaments(getToken());
+  tokenEl.addEventListener('change', () => { loadMyTournaments(getToken()); });
+  // start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインは下位クラス作成・シードアップロードと共通)
+  const authEl = document.getElementById('token-auth'), keyBlock = document.getElementById('token-key-block');
+  if (authEl && keyBlock) SpspStartggManager.mount({ root: authEl, keyBlock, onChange: () => loadMyTournaments(getToken()) });
   revealBtn.addEventListener('click', () => {
     const isPwd = tokenEl.type === 'password';
     tokenEl.type = isPwd ? 'text' : 'password';
@@ -106,11 +112,7 @@ import SPSPGeo from '../../js/geo.js';
     }
   });
 
-  const myToggle = document.getElementById('mytours-toggle');
-  if (myToggle) myToggle.addEventListener('click', toggleMyToursBox);
-  // ── 直近の大会ピッカー: イベント binding ──
-  const upToggle = document.getElementById('upcoming-toggle');
-  if (upToggle) upToggle.addEventListener('click', toggleUpcomingBox);
+  // ── 直近の大会ピッカー: イベント binding (タブは initEventSourceTabs、開いたときに読む) ──
   const upPrev = document.getElementById('upcoming-prev');
   if (upPrev) upPrev.addEventListener('click', () => {
     if (S.UPCOMING_PAGE > 0) { S.UPCOMING_PAGE -= 1; renderUpcomingPage(); }
@@ -121,11 +123,6 @@ import SPSPGeo from '../../js/geo.js';
     const totalPages = Math.max(1, Math.ceil(total / UPCOMING_PAGE_SIZE));
     if (S.UPCOMING_PAGE < totalPages - 1) { S.UPCOMING_PAGE += 1; renderUpcomingPage(); }
   });
-  // 既定は閉じている (管理している大会を先に見せる)。開いた状態にしたときだけ起動時に読む
-  const upcomingBox = document.getElementById('upcoming-box');
-  if (upcomingBox && upcomingBox.classList.contains('open')) {
-    openUpcomingBox();
-  }
 })();
 
 // ───────────────────────── 被り回避最適化パネル ─────────────────────────

@@ -7,6 +7,7 @@
 <meta name="description" content="start.gg の本戦の結果から、下位クラス (Bクラス・Cクラスなど) のトーナメントを Challonge に作ります。" data-i18n-attr="content:page.class.description">
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="../css/class_bracket.css">
+<link rel="stylesheet" href="../css/startgg_auth.css">
 <link rel="stylesheet" href="../region/site.css">
 </head>
 <body>
@@ -26,6 +27,9 @@
     <!-- 1. アカウント -->
     <div class="cb-sec">
       <h2 data-i18n="class.h.accounts">アカウント</h2>
+      <!-- start.gg の認証 (ログイン / API キーの切り替え。js/startgg_manager.js の mount が組み立てる。ログインはシード作成と共通) -->
+      <div id="cb-sgg-auth">
+      <div id="cb-sgg-keyblock">
       <label class="cb-label" for="cb-sgg-key">
         <span data-i18n="class.startgg_key">start.gg の API キー (その大会の管理者)</span>
         <a class="cb-help-link" href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" data-i18n="seed.skeleton.t8">API キー取得→</a>
@@ -36,6 +40,9 @@
         <button type="button" class="cb-save-btn" id="cb-sgg-save" data-i18n-attr="title:seed.skeleton.t117" title="ブラウザに保存" data-i18n="seed.skeleton.t9">💾 保存</button>
       </div>
       <div class="cb-hint" id="cb-sgg-hint"></div>
+      <div class="sgg-key-note" data-i18n="class.key_note">🔒 API キーは start.gg への問い合わせと、作成時に SPSP のサーバでその大会の管理者かを確かめるためだけに使い、保存しません。「💾 保存」を押したときだけ、このブラウザ (localStorage) に保存します。</div>
+      </div>
+      </div>
 
       <div class="cb-label"><span data-i18n="class.challonge">Challonge</span></div>
       <div class="cb-connect">
