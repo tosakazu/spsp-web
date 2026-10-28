@@ -126,6 +126,8 @@ export const CLIENT_ERROR_KINDS: Record<string, 1> = {
   no_code: 1,            // code/state が返ってこなかった
   login_failed: 1,       // login が失敗 (server 側にも残るが経路確認用)
   network: 1,            // fetch 自体が失敗
+  manager_failed: 1,     // 大会運営用の start.gg ログイン (manager_login) が失敗
+  challonge_failed: 1,   // Challonge のログインが失敗
 };
 
 /** ハンドラが使う設定 (env から組み立てる。テストでは直接作る)。 */

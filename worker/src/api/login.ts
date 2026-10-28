@@ -56,12 +56,31 @@ export async function handleManagerBegin(cfg: Config, req: Record<string, unknow
   return ok({ url: AUTHORIZE_URL + '?' + q.toString(), ttlMs: cfg.stateTtlMs });
 }
 
+/*
+ * 同じ code・state の 2 回目は 1 回目と同じ結果を返す。start.gg の許可画面 (新しい scope を初めて許可するとき) から
+ * callback が 2 回開かれ、1 回目のページは結果を受け取る前に消えて、2 回目は「使用済み」で失敗していた (2026-10-28)。
+ * Worker のメモリ (この isolate) にだけ短時間置く。D1 などには書かない。別の isolate に当たった 2 回目は今までどおり失敗する。
+ */
+const MANAGER_DEDUP_MS = 2 * 60 * 1000;
+const managerInflight = new Map<string, { at: number; res: Promise<HandlerResult> }>();
+
 export async function handleManagerLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || !req.code || req.code.length > 1024) return err('bad_request', '認証コードがありません。');
-  const st = await checkStateToken(cfg, store, req.state, true, now);
+  if (typeof req.state !== 'string') return err('state_invalid', MSG_MANAGER_STATE, 'malformed');
+  for (const [k, v] of managerInflight) if (now - v.at > MANAGER_DEDUP_MS) managerInflight.delete(k);
+  const key = req.code + '\n' + req.state;
+  const prev = managerInflight.get(key);
+  if (prev) { console.log('manager_login: same code/state again (dedup)'); return prev.res; }
+  const res = managerLoginOnce(cfg, store, fetchFn, req.code, req.state, now);
+  managerInflight.set(key, { at: now, res });
+  return res;
+}
+
+async function managerLoginOnce(cfg: Config, store: Store, fetchFn: FetchFn, code: string, state: string, now: number): Promise<HandlerResult> {
+  const st = await checkStateToken(cfg, store, state, true, now);
   if ('reason' in st) return err('state_invalid', MSG_MANAGER_STATE, st.reason);
   if (st.payload.f !== 'manager') return err('state_invalid', MSG_MANAGER_STATE, 'wrong_flow');
-  const ex = await exchangeCodeForToken(cfg, req.code, fetchFn, MANAGER_SCOPE);
+  const ex = await exchangeCodeForToken(cfg, code, fetchFn, MANAGER_SCOPE);
   if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
   const user = await fetchCurrentUser(ex.token, fetchFn);
   if (!user) return err('auth_failed', oauthErrorMessage('no_user'), 'no_user');

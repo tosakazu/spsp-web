@@ -61,3 +61,17 @@ test('manager_login: state は単回使用、code なしは bad_request、交換
   const f = env({ token: { status: 400, body: { error: 'invalid_grant' } } });
   assert.strictEqual((await rawPost(f, { action: 'manager_login', code: 'C', state: await managerState(f) })).error.code, 'auth_failed');
 });
+
+test("manager_login: 同じ code・state が続けて来たら (callback が 2 回開かれた) 2 回目も同じ結果", async () => {
+  const e = env();
+  const st = await managerState(e);
+  const [a, b] = await Promise.all([
+    rawPost(e, { action: "manager_login", code: "CODE-D", state: st }),
+    rawPost(e, { action: "manager_login", code: "CODE-D", state: st }),
+  ]);
+  assert.strictEqual(a.ok, true, JSON.stringify(a));
+  assert.deepStrictEqual(b, a);
+  assert.strictEqual(e.fetches.filter(f => f.url.indexOf("/oauth/") !== -1).length, 1);   // start.gg との交換は 1 回だけ
+  const c = await rawPost(e, { action: "manager_login", code: "CODE-D", state: st });   // 後から来ても同じ
+  assert.strictEqual(c.access_token, "AT-manager");
+});
