@@ -414,7 +414,7 @@ async function buildUpcomingSection() {
     return (c && c.emoji) || '';
   };
   /** @param {{ eid: string, ev: any, counted: boolean }} it */
-  const SEP = '<span class="pe-sep">・</span>';   // 区切り (小さく)
+  const SEP = '<span class="pe-sep">|</span>';   // 区切り (細く。全角の「・」は幅を取る)
   const itemHtml = ({ eid, ev, counted }) => {
     const d = new Date(ev.start_at * 1000);
     const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);   // 表示言語の曜日 (ja: 日 / en: Sun)
