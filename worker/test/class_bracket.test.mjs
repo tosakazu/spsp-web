@@ -622,3 +622,27 @@ test('class_create: :nocount の参加者もそのまま bulk_add に入る', as
   const b = JSON.parse(e.calls.find((c) => c.kind === 'bulk').init.body);
   assert.strictEqual(b.data.attributes.participants[2].misc, 'startgg:5555:nocount');
 });
+
+test('class_create / class_delete: 使用記録 (tool_logs) に start.gg で確かめたユーザーで残す。大会名などはブラウザの log から', async () => {
+  const e = env({ ...okHandlers(), gql: gqlBy(() => meResp(111), () => gqlOk(111, 111, null)) });
+  e.nowMs = Date.parse('2026-10-01T03:00:00Z');
+  assert.strictEqual((await post(e, body({ log: { auth: 'login', gamer_tag: 'Toko', tournament_name: '篝火#15', tournament_slug: 'tournament/kagaribi-15', event_name: 'Singles', tournament_id: 1 } }))).ok, true);
+  e.nowMs += 60 * 1000;
+  const c = e.store.toolLogs[0];
+  assert.strictEqual(c.tool, 'class');
+  assert.strictEqual(c.action, 'create');
+  assert.strictEqual(c.user_id, '111');
+  assert.strictEqual(c.verified, 1);
+  assert.strictEqual(c.auth, 'login');
+  assert.strictEqual(c.gamer_tag, 'Toko');
+  assert.strictEqual(c.tournament_id, 777, '大会 ID は start.gg に問い合わせた値を優先');
+  assert.strictEqual(c.tournament_name, '篝火#15');
+  assert.strictEqual(c.count, 4);
+  assert.strictEqual(JSON.parse(c.detail).challonge_id, 98765);
+  assert.strictEqual(leaked(e), false);
+  setHandlers(e, { gql: gqlBy(() => meResp(111), () => { throw new Error('not needed'); }), delete: () => new Response(null, { status: 204 }) });
+  assert.strictEqual((await post(e, delBody({ log: { auth: 'key' } }))).ok, true);
+  const d = e.store.toolLogs[1];
+  assert.deepStrictEqual([d.tool, d.action, d.user_id, d.verified, d.auth], ['class', 'delete', '111', 1, 'key']);
+  assert.strictEqual(JSON.parse(d.detail).by_creator, true);
+});

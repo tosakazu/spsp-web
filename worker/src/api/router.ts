@@ -26,6 +26,7 @@ import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
+import { handleToolLog } from './tool_log.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
 import type { ApiBody, HandlerResult } from './respond.ts';
@@ -94,6 +95,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleTitleExport(ctx.cfg, ctx.store, r); break;
       case 'card_put':
         res = await handleCardPut(ctx.cfg, ctx.store, r, now); break;
+      case 'tool_log':
+        res = await handleToolLog(ctx.cfg, ctx.store, r, now); break;
       case 'class_create':
         res = await handleClassCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_mine':
@@ -145,7 +148,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     if (sess) uid = sess.id;
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
-  const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
+  const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

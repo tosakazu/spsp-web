@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type { LoginRow,
-  CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, VoteRow,
+  CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -264,6 +264,17 @@ export class D1Store implements Store {
     if ((res.meta?.changes ?? 0) === 0) return false;
     await this.db.prepare('DELETE FROM class_actions WHERE ts_ms < ?').bind(g.nowMs - 2 * 24 * 3600 * 1000).run();
     return true;
+  }
+
+  async insertToolLog(r: ToolLogRow, maxPerDay: number): Promise<boolean> {
+    const res = await this.db.prepare(
+      `INSERT INTO tool_logs (ts, ts_ms, day, tool, action, user_id, gamer_tag, verified, auth, tournament_id, tournament_slug, tournament_name,
+         event_id, event_name, phase_id, count, detail)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+       WHERE (SELECT COUNT(*) FROM tool_logs WHERE user_id = ?6 AND day = ?3) < ?18`)
+      .bind(r.ts, r.ts_ms, r.day, r.tool, r.action, r.user_id, r.gamer_tag, r.verified, r.auth, r.tournament_id, r.tournament_slug, r.tournament_name,
+        r.event_id, r.event_name, r.phase_id, r.count, r.detail, maxPerDay).run();
+    return (res.meta?.changes ?? 0) > 0;
   }
 
   async recordCsp(key: string, e: { directive: string; blocked: string; path: string }, ts: string, maxKeys: number): Promise<void> {

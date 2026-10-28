@@ -749,6 +749,7 @@ window.SPSP_I18N.ja = {
   'seed.startgg.s10': 'phase が取得できません',
   'seed.startgg.s11': 'event が取得できません',
   'seed.startgg.s12': '総合評価',
+  'seed.startgg.order_csv': 'CSV の順',
   'seed.startgg.s13': '順位評価',
   'seed.startgg.s14': '直対評価',
   'seed.startgg.s15': '適用に必要な seedId を取得するため、大会から参加者を取得します…',

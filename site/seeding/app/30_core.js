@@ -195,6 +195,10 @@ export function restoreManualForEvent() {
       }
     }
   } catch (e) { S.MANUAL = null; S.SEED_SPEC = null; }
+  const restored = !!S.MANUAL;
+  // csv モード: 保存済みの手動調整を復元しなかったら、読み込み済みの CSV 順を基準にする。下の既定の手動調整より先に
+  // (先に既定を開くと「手動調整あり」とみなされて CSV 順が使われず、CSV を読んでから適用するとランキング順で書き込んでいた。2026-10-28)
+  if (!restored && typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
   // 手動調整は既定でオン。復元が無ければ現在の出力順を基準に開いておく
   // (オフにしておく理由が無いので、わざわざ「編集を開始」を押させない)。
   if (!S.MANUAL && DATA.length) {
@@ -206,8 +210,8 @@ export function restoreManualForEvent() {
   }
   renderManualUI();
   renderSpecStatus();
-  // csv モード: 参加者が揃ったので読み込み済み CSV 順を基準に反映 (復元済み手動調整は優先)。
-  if (typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
+  // csv モード: 復元した手動調整は CSV で上書きしない (案内だけ出す)。
+  if (restored && typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
 }
 /** @param {number} uid @param {number} to */
 function manualPushOp(uid, to) {

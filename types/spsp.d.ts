@@ -239,6 +239,8 @@ declare global {
     eventName: string;
     eventId: number | string;
     tournamentName: string;
+    tournamentId?: number | string | null;
+    tournamentSlug?: string;
     bracketType: string | null;
     poolCount: number | null;
     waves: SpspSeedWaves | null;

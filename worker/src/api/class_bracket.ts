@@ -23,6 +23,7 @@ import type { FetchFn } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { dayKey, formatIso } from './time.ts';
+import { recordClassLog } from './tool_log.ts';
 
 const CLASS_LETTERS = ['B', 'C', 'D', 'E'];
 const FORMATS = ['single', 'double'];
@@ -280,6 +281,12 @@ export async function handleClassCreate(cfg: Config, store: Store, fetchFn: Fetc
     const code = ins.status === 'duplicate' ? 'duplicate' : 'rate_limited';
     return withTournament(err(code, 'トーナメントは作れましたが、SPSP への登録に失敗しました。', 'insert:' + ins.status), t);
   }
+  // 6. 使用記録 (tool_logs。大会名などはブラウザが log に入れて送る。失敗しても作成は成功のまま)
+  await recordClassLog(cfg, store, req, now, {
+    action: 'create', userId: adm.userId, tournamentId: adm.tournamentId, eventId: inp.parentEventId, count: inp.participants.length,
+    detail: { class_id: ins.id, class_letter: inp.classLetter, name: inp.name, format: inp.format, counted: inp.counted,
+      place_min: inp.placeMin, place_max: inp.placeMax, seeding: inp.seeding, challonge_id: tid, challonge_url: turl },
+  });
   return ok({ id: ins.id, challonge: t });
 }
 
@@ -382,5 +389,9 @@ export async function handleClassDelete(cfg: Config, store: Store, fetchFn: Fetc
     return err('already_imported', 'Challonge のトーナメントは削除しましたが、直前に SPSP に取り込まれていました。', 'already_imported_race');
   }
   if (m === 'missing') return err('not_found', 'その下位クラスはありません (削除済みかもしれません)。', 'not_found_race');
+  await recordClassLog(cfg, store, req, now, {
+    action: 'delete', userId: me.userId, tournamentId: null, eventId: row.parent_event_id, count: null,
+    detail: { class_id: id, challonge_id: row.challonge_id, by_creator: row.registered_by === me.userId },
+  });
   return ok({ id });
 }
