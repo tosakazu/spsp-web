@@ -251,6 +251,7 @@
   .upcoming-item:hover { border-color: #dc2626; background: #fef2f2; }
   .upcoming-item .row-1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .upcoming-item .ev-date { color: #dc2626; font-weight: 600; font-size: 11px; white-space: nowrap; }
+  .upcoming-item .ev-live { background: #dc2626; color: #fff; font-size: 10px; font-weight: 600; padding: 0 6px; border-radius: 8px; white-space: nowrap; }
   .upcoming-item .ev-name { font-size: 13px; color: #111827; font-weight: 500; flex: 1; min-width: 0; }
   .upcoming-item .ev-link {
     color: #9ca3af; text-decoration: none; font-size: 12px;

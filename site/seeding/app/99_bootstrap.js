@@ -8,7 +8,7 @@ import { injectHelpIcons } from './20_help.js';
 import { cachedFetchers } from './70_players_cache.js';
 import SeedData from '../seed_data.js';
 import { downloadCsv, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
-import { UPCOMING_PAGE_SIZE, openUpcomingBox, renderUpcomingPage, toggleUpcomingBox } from './60_upcoming.js';
+import { UPCOMING_PAGE_SIZE, loadMyTournaments, openUpcomingBox, renderUpcomingPage, toggleMyToursBox, toggleUpcomingBox } from './60_upcoming.js';
 import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updateSeriesToggleState } from './75_series_rematch.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
@@ -36,6 +36,9 @@ import SPSPGeo from '../../js/geo.js';
     if (t) { tokenEl.value = t; updateHint(); }
   } catch (e) {}
   tokenEl.addEventListener('input', () => { updateHint(); });
+  // トークンがあれば、そのアカウントが管理している大会を一覧の上に出す (入力し終わったとき = change でも取り直す)
+  loadMyTournaments(tokenEl.value);
+  tokenEl.addEventListener('change', () => { loadMyTournaments(tokenEl.value); });
   revealBtn.addEventListener('click', () => {
     const isPwd = tokenEl.type === 'password';
     tokenEl.type = isPwd ? 'text' : 'password';
@@ -103,6 +106,8 @@ import SPSPGeo from '../../js/geo.js';
     }
   });
 
+  const myToggle = document.getElementById('mytours-toggle');
+  if (myToggle) myToggle.addEventListener('click', toggleMyToursBox);
   // ── 直近の大会ピッカー: イベント binding ──
   const upToggle = document.getElementById('upcoming-toggle');
   if (upToggle) upToggle.addEventListener('click', toggleUpcomingBox);
@@ -116,7 +121,7 @@ import SPSPGeo from '../../js/geo.js';
     const totalPages = Math.max(1, Math.ceil(total / UPCOMING_PAGE_SIZE));
     if (S.UPCOMING_PAGE < totalPages - 1) { S.UPCOMING_PAGE += 1; renderUpcomingPage(); }
   });
-  // 開いた状態で起動するので初期 load を即実行
+  // 既定は閉じている (管理している大会を先に見せる)。開いた状態にしたときだけ起動時に読む
   const upcomingBox = document.getElementById('upcoming-box');
   if (upcomingBox && upcomingBox.classList.contains('open')) {
     openUpcomingBox();
