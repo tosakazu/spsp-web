@@ -311,6 +311,39 @@ test('login: GAS がエラーを返したらトークンを保存しない', { s
   assert.match(r.text(), /認証に失敗しました/);
 });
 
+// 2026-10-28: nonce の無いブラウザ (別のブラウザに戻された / セキュリティ製品の自動ブラウザが先に開いた) では
+// すぐには送らず、「ログインを続ける」を押してから送る (自動ブラウザは押さないので code が使われずに残る)
+test('login: nonce が無ければボタンを押してから送る', { skip: !JSDOM }, async () => {
+  const r = await run({
+    search: '?code=CODE-L&state=' + encodeURIComponent(stateFor('/spsp/vote.html')),
+    session: { spsp_oauth_intent: 'login' }, config: CONFIG,
+    response: { ok: true, token: 'tok.sig', user: { id: 4242, slug: 'user/x', gamerTag: 'Toko' }, exp: Date.now() + 1000000 },
+  });
+  assertNoCodeSent(r);
+  assert.match(r.text(), /ログインを続けますか/);
+  const btn = r.w.document.querySelector('#cb-root button');
+  assert.ok(btn);
+  btn.click();
+  await new Promise((res) => setTimeout(res, 20));
+  const sent = r.calls.fetch.map((f) => JSON.parse(f.init.body)).find((b) => b.action === 'login');
+  assert.ok(sent && sent.code === 'CODE-L' && sent.state);
+  assert.deepStrictEqual(r.calls.nav, ['/spsp/vote.html?login=1']);
+});
+
+test('login: preview の確認結果 (probe) があれば出して、押してから戻る', { skip: !JSDOM }, async () => {
+  const r = await run({
+    search: '?code=C&state=' + encodeURIComponent(stateFor('/spsp/vote.html')),
+    session: LOGIN_SESSION, config: CONFIG,
+    response: { ok: true, token: 't.s', user: { id: 1, slug: '', gamerTag: '' }, exp: Date.now() + 1000,
+      probe: [{ name: 'tournament (slug)', ok: true, detail: '第74回 (289 人)' }, { name: 'sets', ok: false, detail: '<b>x</b>' }] },
+  });
+  assert.deepStrictEqual(r.calls.nav, []);
+  const lis = [...r.w.document.querySelectorAll('.cb-probe li')].map((li) => li.textContent);
+  assert.deepStrictEqual(lis, ['✅ tournament (slug): 第74回 (289 人)', '❌ sets: <b>x</b>']);
+  assert.strictEqual(r.w.document.querySelector('.cb-back').getAttribute('href'), '/spsp/vote.html?login=1');
+  assert.ok(r.w.localStorage.getItem('spsp_session_v1'));
+});
+
 test('post フロー: intent=post が明示されていても従来どおり動く', { skip: !JSDOM }, async () => {
   const r = await run({
     search: '?code=C&state=' + encodeURIComponent(stateFor('/spsp/post.html')),

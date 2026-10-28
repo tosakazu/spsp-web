@@ -249,6 +249,13 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }
 
     if (intent === 'login') {
+      // 普段のログインは、アプリ内ブラウザから別のブラウザに戻される経路があるので nonce が無くても続けられるようにする。
+      // ただし nonce が無いときはボタンを押してから (セキュリティ製品の自動ブラウザが先に開いても押さないので code は残る。2026-10-28)
+      if (!hadNonce) {
+        reportError('state_missing', 'login ' + S.browserTag(navigator.userAgent));
+        confirmLogin(code, state, back);
+        return;
+      }
       runLogin(code, state, back);
       return;
     }
@@ -308,6 +315,32 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
       show('error', i18n('callback.s27'),
         i18n('callback.s28'), back);
     });
+  }
+
+  /** nonce の無いブラウザ (別のブラウザに戻された・自動ブラウザ): ボタンを押したらログインを続ける */
+  function confirmLogin(code, state, back) {
+    var root = document.getElementById('cb-root');
+    root.className = 'cb';
+    root.textContent = '';
+    var h = document.createElement('p');
+    h.className = 'cb-title';
+    h.textContent = i18n('callback.confirm_login_title');
+    var d = document.createElement('p');
+    d.className = 'cb-detail';
+    d.textContent = i18n('callback.confirm_login');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cb-retry';
+    b.textContent = i18n('callback.confirm_login_btn');
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      h.textContent = i18n('callback.busy_login');   // 処理中 (ロゴの枠は消したので文字だけ)
+      d.textContent = '';
+      runLogin(code, state, back);
+    });
+    root.appendChild(h);
+    root.appendChild(d);
+    root.appendChild(b);
   }
 
   /**
