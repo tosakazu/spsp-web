@@ -934,6 +934,7 @@ window.SPSP_I18N.ja = {
   'callback.challonge_failed': 'Challonge のログインを確かめられませんでした。もう一度お試しください。',
   'callback.manager_title': 'start.gg のログインに失敗しました',
   'callback.manager_failed': 'start.gg のログインを確かめられませんでした。もう一度お試しください。',
+  'callback.manager_no_nonce': 'このブラウザではログインを始めていないため、ここでは処理しませんでした。ログインのボタンを押したブラウザで、もう一度お試しください。',
   'sggmgr.login': 'start.gg でログインして使う',
   'sggmgr.or_key': 'または下に API キーを入れる (ログインは 7 日で切れます)',
   'sggmgr.logged_in': 'start.gg ログイン中: {name} ({date} まで)',

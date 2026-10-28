@@ -931,6 +931,7 @@ window.SPSP_I18N.en = {
   'callback.challonge_failed': 'Could not verify the Challonge login. Please try again.',
   'callback.manager_title': 'start.gg login failed',
   'callback.manager_failed': 'Could not verify the start.gg login. Please try again.',
+  'callback.manager_no_nonce': 'This browser did not start the login, so it was not completed here. Please try again in the browser where you pressed the login button.',
   'sggmgr.login': 'Log in with start.gg',
   'sggmgr.or_key': 'or enter an API key below (the login expires in 7 days)',
   'sggmgr.logged_in': 'Logged in to start.gg: {name} (until {date})',

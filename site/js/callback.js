@@ -183,6 +183,7 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     var st = S.decodeState(state);
     // 単回使用。ここで取り出したら保存側は消える。
     var stored = S.takeNonce();
+    var hadNonce = !!stored;   // 下で stored を別の値に使い回すので、ここで取っておく
 
     // 照合の本体は GAS 側の署名検証に移した (アプリ内ブラウザ→別ブラウザで
     // 戻される経路では、保存領域が引き継がれず必ず失敗するため)。
@@ -231,6 +232,14 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
       return;
     }
     if (intent === 'manager') {
+      // 運営用ログインは、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
+      // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
+      // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
+      if (!hadNonce) {
+        reportError('state_missing', 'manager ' + S.browserTag(navigator.userAgent));
+        show('error', i18n('callback.manager_title'), i18n('callback.manager_no_nonce'), back);
+        return;
+      }
       runManager(code, state, back);
       return;
     }
