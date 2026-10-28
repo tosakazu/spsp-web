@@ -689,7 +689,6 @@ window.SPSP_I18N.en = {
 
   // ── seed.help (site/seeding/app/20_help.js) ──
   'seed.help.s1': 'Your start.gg API token. Used to fetch entrants and apply seeds. Never stored on SPSP.',
-  'seed.help.s2': 'start.gg URL of the target event. Use the URL of the event (e.g. singles), not the tournament page.',
   'seed.help.s3': 'Fetch the entrants of the URL and order them by the SPSP ranking. This is the starting point.',
   'seed.help.s4': 'The phase to seed. Choose it for events with pools.',
   'seed.help.s5': 'Number of pools for the new phase.',
@@ -1107,7 +1106,6 @@ window.SPSP_I18N.en = {
   'seed.skeleton.t25': 'Download CSV',
   'seed.skeleton.t26': 'Apply seeds on start.gg',
   'seed.skeleton.t27': 'Run conflict avoidance on apply',
-  'seed.skeleton.t28': 'Enter a tournament URL and press “Fetch entrants”',
   'seed.skeleton.t29': '🔀 Conflict avoidance',
   'seed.skeleton.t30': 'Optimize the seed order to avoid regional (prefecture) conflicts and recent rematches.',
   'seed.skeleton.t31': 'Waves',
@@ -1190,7 +1188,6 @@ window.SPSP_I18N.en = {
   'seed.skeleton.t110': 'restored as they were, so you can resume work or share it.',
   'seed.skeleton.t111': 'Save work state (CSV)',
   'seed.skeleton.t112': 'Bracket preview',
-  'seed.skeleton.t113': 'Enter a tournament URL and press “Fetch entrants” to show the ranking here',
   'seed.skeleton.t114': '🔒 Your API key is sent from this browser to start.gg only. It is never sent to or stored on the SPSP server.',
   'seed.skeleton.t115': 'It is kept in this browser (localStorage) only when you press “💾 Save”.',
   'seed.core.t1': 'and',

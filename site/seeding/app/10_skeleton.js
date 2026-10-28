@@ -137,7 +137,7 @@ const SEED_APP_SKELETON_HTML = `
     <button id="csv-btn" disabled style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:none">${i18n('seed.skeleton.t25')}</button>
     <button id="upload-btn" disabled style="background:#b91c1c;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:none">${i18n('seed.skeleton.t26')}</button>
     <label id="auto-opt-label" style="display:none;font-size:12px;color:#374151;white-space:nowrap"><input type="checkbox" id="so-auto-apply" checked> ${i18n('seed.skeleton.t27')}</label>
-    <span class="status" id="status">${i18n('seed.skeleton.t28')}</span>
+    <span class="status" id="status"></span>
   </div>
   <div id="error-help" style="display:none;margin-top:8px"></div>
 </div>
@@ -316,9 +316,7 @@ const SEED_APP_SKELETON_HTML = `
 <div class="table-wrap">
   <table id="ranktable">
     <!-- thead は SPSPRankingTable コンポーネントが自動生成 -->
-    <tbody id="tbody">
-      <tr><td colspan="9" class="empty-msg">${i18n('seed.skeleton.t113')}</td></tr>
-    </tbody>
+    <tbody id="tbody"></tbody>
   </table>
 </div>
 `;
@@ -342,8 +340,8 @@ export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_C
     // 「参加者を取得」前提の案内文も CSV 向けに差し替え
     const st = root.querySelector('#status');
     if (st) st.textContent = i18n('seed.skeleton.s4');
-    const emptyMsg = root.querySelector('#ranktable .empty-msg');
-    if (emptyMsg) emptyMsg.textContent = i18n('seed.skeleton.s5');
+    const tbody = root.querySelector('#tbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">${i18n('seed.skeleton.s5')}</td></tr>`;
   }
   // csv モード: 基準順位ソース (CSV / Sheets) の入力欄を差し込む
   if (SEED_APP_CONFIG.mode === 'csv') {

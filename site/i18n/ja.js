@@ -692,7 +692,6 @@ window.SPSP_I18N.ja = {
 
   // ── seed.help (site/seeding/app/20_help.js) — tools/frontend/i18n_extract_literals.py で機械的に抽出 ──
   'seed.help.s1': 'start.gg の API トークン。参加者の取得とシード適用に使います。SPSP 側には保存されません。',
-  'seed.help.s2': '対象イベントの start.gg URL。大会ページではなく、シングルス等の「イベント」の URL を入れてください。',
   'seed.help.s3': '入力した URL の参加者を取得し、SPSP のランキング順に並べます。ここが出発点です。',
   'seed.help.s4': 'シードを適用するフェーズ。プール分けのあるイベントで選びます。',
   'seed.help.s5': '新しく作るフェーズのプール数。',
@@ -1110,7 +1109,6 @@ window.SPSP_I18N.ja = {
   'seed.skeleton.t25': 'CSV ダウンロード',
   'seed.skeleton.t26': 'start.gg にシード適用',
   'seed.skeleton.t27': '適用時に被り回避を自動実行',
-  'seed.skeleton.t28': '大会 URL を入力して「参加者を取得」を押してください',
   'seed.skeleton.t29': '🔀 被り回避最適化',
   'seed.skeleton.t30': '地域被り（都道府県）と直近再対戦を避けるようシード順を最適化します。',
   'seed.skeleton.t31': 'ウェーブ数',
@@ -1193,7 +1191,6 @@ window.SPSP_I18N.ja = {
   'seed.skeleton.t110': 'そのまま復元されるので、作業の再開や他の人との共有に使えます。',
   'seed.skeleton.t111': '作業状況を保存 (CSV)',
   'seed.skeleton.t112': 'トーナメントプレビュー',
-  'seed.skeleton.t113': '大会 URL を入力して「参加者を取得」を押すとここにランキングが表示されます',
   'seed.skeleton.t114': '🔒 API キーはこのブラウザから start.gg にだけ送ります。SPSP のサーバには送らず、保存もしません。',
   'seed.skeleton.t115': '「💾 保存」を押したときだけ、このブラウザ (localStorage) に保存します。',
 
