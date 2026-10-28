@@ -127,3 +127,18 @@ test('最適化のレポートに published が載る (同じプールに置い�
   assert.ok(it, JSON.stringify(items));
   assert.strictEqual(it.published[0].tournament, '大会1');
 });
+
+test('壊れた・欠けたデータでも落ちない (events が無い・配列・null、出場者の欠け)', () => {
+  for (const up of [null, {}, { events: null }, { events: [] }, { events: { 1: null } }]) {
+    assert.deepStrictEqual(sel(up), { used: [], skipped: [] });
+  }
+  const [, e1] = ev(1, 1, 30, [[1, 2, 3]]);
+  e1.entrants.push({ uid: 4, seed: null, pg: 9000 }, { uid: null, seed: 9, pg: 9000 }, { uid: 5, seed: 10, pg: null });
+  delete e1.bracket.pools;   // プール名が無い
+  const r = sel({ events: [Object.assign({ event_id: 1 }, e1)] });
+  assert.strictEqual(r.used.length, 1);
+  assert.deepStrictEqual(r.used[0].pools[0].seeds.map((s) => s.uid), [1, 2, 3, null]);
+  const pairs = P.publishedPairs(r.used, ATT);
+  assert.strictEqual(pairs.length, 3);
+  assert.ok(pairs.every((x) => x.pool === '' && x.w > 0));
+});
