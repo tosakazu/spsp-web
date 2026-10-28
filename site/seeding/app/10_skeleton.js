@@ -50,6 +50,7 @@ const SEED_APP_SKELETON_HTML = `
         style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
     </div>
     <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
+    <div class="sgg-key-note">${i18n('seed.skeleton.t114')} ${i18n('seed.skeleton.t115')}</div>
     </div>
   </div>
 
@@ -85,9 +86,8 @@ const SEED_APP_SKELETON_HTML = `
             <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
             <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
               style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
-            <div id="event-url-help" style="font-size:10px;color:#9ca3af;margin-top:3px">${i18n('seed.skeleton.t11')} <code>/event/...</code> ${i18n('seed.skeleton.t12')}</div>
           </div>
-          <div style="display:flex;align-items:flex-end;padding-bottom:14px">
+          <div style="display:flex;align-items:flex-end">
             <button type="submit" id="fetch-btn" style="background:#dc2626;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t13')}</button>
           </div>
         </div>
@@ -321,11 +321,7 @@ const SEED_APP_SKELETON_HTML = `
     </tbody>
   </table>
 </div>
-
-<div style="max-width:1400px;margin:24px auto 0;padding:0 24px;font-size:11px;color:#9ca3af;line-height:1.6">
-  ${i18n('seed.skeleton.t114')}
-  ${i18n('seed.skeleton.t115')}
-</div>`;
+`;
 
 export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_CONFIG || {});
 (function mountSeedAppSkeleton() {
