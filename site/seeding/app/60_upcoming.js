@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { i18n } from './10_skeleton.js';
-import { handleFetch } from './40_startgg.js';
+import { handleFetch, startggQuery } from './40_startgg.js';
 import { escapeHtml } from '../../js/html.js';
 'use strict';
 
@@ -66,34 +66,7 @@ export function renderUpcomingPage() {
   const start = S.UPCOMING_PAGE * UPCOMING_PAGE_SIZE;
   const slice = tours.slice(start, start + UPCOMING_PAGE_SIZE);
   list.innerHTML = '';
-  for (const t of slice) {
-    const row = document.createElement('div');
-    row.className = 'upcoming-item';
-    row.dataset.tslug = t.tournament_slug;
-    const tslugBare = String(t.tournament_slug || '').replace(/^tournament\//, '');
-    const ttoUrl = `https://www.start.gg/${t.tournament_slug || ('tournament/' + tslugBare)}`;
-    const cityHtml = t.city ? `<span class="city">${escapeHtml(t.city)}</span>` : '';
-    const onlineHtml = t.is_online ? `<span class="city">${i18n('seed.upcoming.online')}</span>` : '';
-    row.innerHTML = `
-      <div class="row-1">
-        <span class="ev-date">${formatUpcomingDate(t.start_at)}</span>
-        <span class="ev-name">${escapeHtml(t.tournament_name)}</span>
-        <a class="ev-link" href="${escapeHtml(ttoUrl)}" target="_blank" rel="noopener" title="${i18n('seed.upcoming.t1')}" aria-label="${i18n('seed.upcoming.t1')}">↗</a>
-      </div>
-      <div class="row-2">
-        ${cityHtml}${onlineHtml}
-        <span>${(t.events || []).length} event</span>
-      </div>
-      <div class="upcoming-events"></div>
-    `;
-    row.addEventListener('click', (ev) => {
-      // start.gg リンクアイコンは通常リンク動作 (= 新規タブで開く)
-      if (/** @type {Element} */ (ev.target).closest('.ev-link')) return;
-      // event 行クリックは個別 handler が処理 (stopPropagation)
-      handleUpcomingItemClick(t, row);
-    });
-    list.appendChild(row);
-  }
+  for (const t of slice) list.appendChild(upcomingRowEl(t));
   list.style.display = '';
   pager.style.display = totalPages > 1 ? '' : 'none';
   const pageInfo = document.getElementById('upcoming-pageinfo');
@@ -102,6 +75,37 @@ export function renderUpcomingPage() {
   if (prevBtn) prevBtn.disabled = S.UPCOMING_PAGE === 0;
   const nextBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('upcoming-next'));
   if (nextBtn) nextBtn.disabled = S.UPCOMING_PAGE >= totalPages - 1;
+}
+
+/** 今後の大会・管理している大会の 1 行 (押すとその event を読み込む。複数 event なら選択肢を開く)
+ * @param {SpspUpcomingTournament & { live?: boolean }} t @returns {HTMLElement} */
+function upcomingRowEl(t) {
+  const row = document.createElement('div');
+  row.className = 'upcoming-item';
+  row.dataset.tslug = t.tournament_slug;
+  const tslugBare = String(t.tournament_slug || '').replace(/^tournament\//, '');
+  const ttoUrl = `https://www.start.gg/${t.tournament_slug || ('tournament/' + tslugBare)}`;
+  const cityHtml = t.city ? `<span class="city">${escapeHtml(t.city)}</span>` : '';
+  const onlineHtml = t.is_online ? `<span class="city">${i18n('seed.upcoming.online')}</span>` : '';
+  row.innerHTML = `
+    <div class="row-1">
+      <span class="ev-date">${formatUpcomingDate(t.start_at)}</span>${t.live ? `<span class="ev-live">${i18n('seed.mine.live')}</span>` : ''}
+      <span class="ev-name">${escapeHtml(t.tournament_name)}</span>
+      <a class="ev-link" href="${escapeHtml(ttoUrl)}" target="_blank" rel="noopener" title="${i18n('seed.upcoming.t1')}" aria-label="${i18n('seed.upcoming.t1')}">↗</a>
+    </div>
+    <div class="row-2">
+      ${cityHtml}${onlineHtml}
+      <span>${(t.events || []).length} event</span>
+    </div>
+    <div class="upcoming-events"></div>
+  `;
+  row.addEventListener('click', (ev) => {
+    // start.gg リンクアイコンは通常リンク動作 (= 新規タブで開く)
+    if (/** @type {Element} */ (ev.target).closest('.ev-link')) return;
+    // event 行クリックは個別 handler が処理 (stopPropagation)
+    handleUpcomingItemClick(t, row);
+  });
+  return row;
 }
 
 /** @param {SpspUpcomingTournament} tournament @param {HTMLElement} rowEl */
@@ -163,6 +167,60 @@ function fillEventUrlAndFetch(url) {
   // Scroll user to the table for feedback
   const status = document.getElementById('status');
   if (status) status.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ── 自分が管理している大会 ─────────────────────────
+// start.gg のトークンの持ち主が管理者の大会 (tournamentView: "admin") のうち、開催中とこれからのものを
+// 開催中 → 近い順で出す。SSBU の event が無い大会は出さない。取れなければ欄ごと出さない (URL を入れればよい)。
+let MY_TOURS_TOKEN = '';
+const MY_TOURS_MAX = 20;
+
+/** @param {string} token */
+export async function loadMyTournaments(token) {
+  const box = document.getElementById('mytours-box');
+  const list = document.getElementById('mytours-list');
+  const countBadge = document.getElementById('mytours-count');
+  if (!box || !list || !countBadge) return;
+  token = String(token || '').trim();
+  if (token === MY_TOURS_TOKEN) return;
+  MY_TOURS_TOKEN = token;
+  if (!token) { box.style.display = 'none'; return; }
+  /** @type {any[]} */
+  let all = [];
+  try {
+    for (let page = 1; page <= 5; page++) {
+      const d = await startggQuery(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 20, filter: { tournamentView: "admin" } }) {
+        nodes { id name slug startAt endAt city isOnline events { name slug numEntrants videogame { id } } } } } }`, { page });
+      const nodes = (d && d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
+      all = all.concat(nodes);
+      if (nodes.length < 20) break;
+    }
+  } catch (e) { all = []; }
+  if (token !== MY_TOURS_TOKEN) return;   // 取っている間にトークンが変わった
+  const now = Date.now() / 1000;
+  const HALF_DAY = 43200;
+  /** @type {(SpspUpcomingTournament & { live: boolean })[]} */
+  const tours = all.filter(t => t && t.slug && t.startAt && (t.endAt || t.startAt) >= now - HALF_DAY)
+    .map(t => ({
+      tournament_slug: String(t.slug), tournament_name: String(t.name || ''), start_at: Number(t.startAt),
+      city: t.city || null, is_online: !!t.isOnline,
+      live: t.startAt <= now,   // 始まっていて、終わってから半日以内
+      events: (t.events || []).filter((/** @type {any} */ e) => e && e.slug && e.videogame && Number(e.videogame.id) === 1386)
+        .map((/** @type {any} */ e) => ({ event_name: e.name, event_slug: e.slug, num_entrants: e.numEntrants || 0 })),
+    }))
+    .filter(t => t.events.length)
+    .sort((a, b) => (Number(b.live) - Number(a.live)) || (a.start_at - b.start_at))
+    .slice(0, MY_TOURS_MAX);
+  if (!tours.length) { box.style.display = 'none'; return; }
+  list.innerHTML = '';
+  for (const t of tours) list.appendChild(upcomingRowEl(t));
+  countBadge.textContent = String(tours.length);
+  box.style.display = '';
+}
+
+export function toggleMyToursBox() {
+  const box = document.getElementById('mytours-box');
+  if (box) box.classList.toggle('open');
 }
 
 // 現在時刻以降の大会だけカウント (= 過去大会を除外).

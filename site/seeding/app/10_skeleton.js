@@ -34,7 +34,20 @@ const SEED_APP_SKELETON_HTML = `
   <h1>${i18n('seed.skeleton.t1')}</h1>
   <p class="subtitle">${i18n('seed.skeleton.t2')}</p>
 
-  <div class="upcoming-box open" id="upcoming-box">
+  <!-- 自分が管理している大会 (start.gg トークンで取れたときだけ。60_upcoming.js loadMyTournaments) -->
+  <div class="upcoming-box open" id="mytours-box" style="display:none">
+    <div class="upcoming-toggle" id="mytours-toggle">
+      <span class="chev">▶</span>
+      <span>${i18n('seed.mine.title')}</span>
+      <span class="badge" id="mytours-count">0</span>
+      <span style="color:#9ca3af;font-weight:400;font-size:11px;margin-left:auto">${i18n('seed.mine.note')}</span>
+    </div>
+    <div class="upcoming-body">
+      <div class="upcoming-list" id="mytours-list"></div>
+    </div>
+  </div>
+
+  <div class="upcoming-box" id="upcoming-box">
     <div class="upcoming-toggle" id="upcoming-toggle">
       <span class="chev">▶</span>
       <span>${i18n('seed.skeleton.t3')}</span>
