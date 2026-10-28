@@ -17,6 +17,7 @@ import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 import SpspLogin from './login.js';
 import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
+import SpspStartggIdentity from './startgg_identity.js';   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
 import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
@@ -333,6 +334,7 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).then(function (json) {
       if (json && json.ok && json.token && json.user) {
         AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        if (json.startgg) SpspStartggIdentity.save(json.startgg, json.user.id);
         location.replace(S.withFlag(back, 'login'));
         return;
       }

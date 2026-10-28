@@ -3,7 +3,7 @@ import type { Config } from '../config.ts';
 import { AUTHORIZE_URL, MANAGER_SCOPE, requireClientId } from '../config.ts';
 import type { Store } from '../store.ts';
 import type { FetchFn } from './oauth.ts';
-import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage } from './oauth.ts';
+import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { checkStateToken, issueSessionToken, signState, verifySessionToken } from './session.ts';
@@ -28,11 +28,33 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   }
   const token = await issueSessionToken(cfg, auth.user, now);
   const sess = await verifySessionToken(cfg, token, now); // exp を取り出すついでに自己検証
+  await logLogin(store, auth.user.id, 'login', now);
   return ok({
     token,
     user: { id: auth.user.id, slug: auth.user.slug, gamerTag: auth.user.gamerTag },
     exp: sess ? sess.exp : null,
+    // start.gg のトークン (scope user.identity)。ブラウザが参加中の大会を start.gg から直接読み直すのに使う (js/startgg_identity.js)
+    startgg: auth.startgg || null,
   });
+}
+
+/** ログインの記録 (ユーザー ID・時刻・どのログインか だけ。トークンなどは入れない)。記録に失敗してもログインは止めない */
+async function logLogin(store: Store, userId: string, flow: string, now: number): Promise<void> {
+  try { await store.insertLogin({ user_id: String(userId), ts_ms: now, flow }); } catch (e) {
+    console.error('login log failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+/*
+ * action: "startgg_refresh" { refresh_token } → { access_token, expires_in, refresh_token }
+ * 普段のログインの start.gg のトークンの延長 (client secret が要るので Worker を通す)。保存しない・ログに出さない。
+ */
+export async function handleStartggRefresh(cfg: Config, fetchFn: FetchFn, req: Record<string, unknown>): Promise<HandlerResult> {
+  const rt = req.refresh_token;
+  if (typeof rt !== 'string' || !rt || rt.length > 4096) return err('bad_request', 'refresh token がありません。');
+  const ex = await refreshAccessToken(cfg, rt, fetchFn);
+  if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
+  return ok({ access_token: ex.token, expires_in: ex.expiresIn, refresh_token: ex.refreshToken ?? null });
 }
 
 /*
@@ -68,6 +90,7 @@ export async function handleManagerLogin(cfg: Config, store: Store, fetchFn: Fet
   if (!user) return err('auth_failed', oauthErrorMessage('no_user'), 'no_user');
   const token = await issueSessionToken(cfg, user, now);
   const sess = await verifySessionToken(cfg, token, now);
+  await logLogin(store, user.id, 'manager', now);
   return ok({
     token,
     user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag },

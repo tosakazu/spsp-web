@@ -39,6 +39,8 @@ export interface Env {
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
 export const TOKEN_URL = 'https://api.start.gg/oauth/access_token';
+/** アクセストークンの延長 (refresh token。本文は token 交換と同じ形で grant_type=refresh_token) */
+export const REFRESH_URL = 'https://api.start.gg/oauth/refresh';
 export const AUTHORIZE_URL = 'https://start.gg/oauth/authorize';
 export const GQL_URL = 'https://api.start.gg/gql/alpha';
 

@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -190,6 +190,14 @@ test('csp_reports: 同じ key は hits+1・last_seen 更新、上限を超えた
   const rows = await store.listCsp();
   assert.deepStrictEqual(rows.map((r) => [r.blocked, r.hits, r.first_seen, r.last_seen]),
     [['https://h2.example', 3, 'T3', 'T6'], ['https://h1.example', 2, 'T1', 'T2']]);
+});
+
+test('login_log: 1 行ずつ足す (ユーザー ID・時刻・flow)', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { db, store } = fresh();
+  await store.insertLogin({ user_id: '4242', ts_ms: 1793000000000, flow: 'login' });
+  await store.insertLogin({ user_id: '4242', ts_ms: 1793000001000, flow: 'manager' });
+  assert.deepStrictEqual(db.prepare('SELECT user_id, ts_ms, flow FROM login_log ORDER BY id').all().map((r) => ({ ...r })),
+    [{ user_id: '4242', ts_ms: 1793000000000, flow: 'login' }, { user_id: '4242', ts_ms: 1793000001000, flow: 'manager' }]);
 });
 
 test('tool_logs: 1 行足す (null の欄はそのまま)・同じユーザーの当日分が上限なら足さない', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {

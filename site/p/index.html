@@ -223,6 +223,10 @@
   .live-sets .dim { color: #9ca3af; }
   .live-next { font-size: 11px; font-weight: 700; }
   .live-foot { font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
+  /* start.gg のトークンが無いときの案内 (js/live.js、ログインするとブラウザが start.gg から自動で読み直す) */
+  .live-browser-note { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #6b7280; margin: 8px 0 0; }
+  .live-browser-note[hidden] { display: none; }
+  .live-browser-note button { font-size: 11px; padding: 2px 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; color: #374151; cursor: pointer; }
   /* 予想 (js/live_predict.js): 順位評価・直対評価の chip と、全国順位の変化 (開いたときだけ) */
   .live-pred { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 2px; }
   .live-pred .lr-stats { gap: 10px; }
