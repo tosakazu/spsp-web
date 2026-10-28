@@ -23,6 +23,19 @@ function jst(ms, dateOnly) {
   return dateOnly ? iso.slice(0, 10) : iso.slice(0, 19) + '+09:00';
 }
 
+/** 引数なしの new Date() と Date.now() が now を返す Date (それ以外は本物と同じ) */
+function fixedDate(now) {
+  return class extends Date {
+    constructor(...a) { if (a.length) super(...a); else super(now); }
+    static now() { return now; }
+  };
+}
+
+/** 日本時間で今日の正午 (ms)。「当日」を数えるテストで、いつ動かしても前後の日にはみ出さないように */
+function jstNoon() {
+  return Date.parse(jst(Date.now(), true) + 'T12:00:00+09:00');
+}
+
 const OK_TOKEN = { status: 200, body: { access_token: 'AT-secret', token_type: 'Bearer' } };
 const OK_USER = {
   status: 200,
@@ -46,6 +59,7 @@ function toBuf(data) {
  *   opts.charEmoji   : char_emoji.json の応答 (既定 200 + 2 キャラ)
  *   opts.props       : スクリプトプロパティ
  *   opts.sheetMissing: posts/char_votes シートが未作成の状態にする
+ *   opts.now         : GAS 側の時計 (ms) を固定する (日付の境目で結果が変わるテスト用。既定は本物の時計)
  */
 function makeEnv(opts) {
   const o = opts || {};
@@ -169,6 +183,7 @@ function makeEnv(opts) {
       getUuid: () => crypto.randomUUID(),
     },
   };
+  if (o.now != null) sandbox.Date = fixedDate(o.now);
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(SRC, sandbox);
@@ -212,4 +227,4 @@ function loginToken(env) {
   return res.token;
 }
 
-module.exports = { GAS_DIR, HEADER, VOTES_HEADER, jst, OK_TOKEN, OK_USER, makeEnv, post, rawPost, beginState, loginToken };
+module.exports = { GAS_DIR, HEADER, VOTES_HEADER, jst, jstNoon, OK_TOKEN, OK_USER, makeEnv, post, rawPost, beginState, loginToken };

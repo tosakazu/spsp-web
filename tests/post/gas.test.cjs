@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { GAS_DIR, HEADER, jst, OK_TOKEN, OK_USER, makeEnv, post } = require('./_gas_env.cjs');
+const { GAS_DIR, HEADER, jst, jstNoon, OK_TOKEN, OK_USER, makeEnv, post } = require('./_gas_env.cjs');
 
 test('happy path: currentUser の値で 1 行 append され pending が付く', () => {
   const env = makeEnv({ token: OK_TOKEN, user: OK_USER });
@@ -167,7 +167,7 @@ test('連投: 別ユーザーの直近投稿には引っかからない', () => 
 });
 
 test('当日 10 件で rate_limited、9 件なら通る', () => {
-  const now = Date.now();
+  const now = jstNoon();   // 時計を正午に固定 (本物の時計だと 0 時すぎは作った行が前日にはみ出して落ちる)
   const mk = (n) => {
     const rows = [HEADER];
     for (let i = 0; i < n; i++) {
@@ -176,10 +176,10 @@ test('当日 10 件で rate_limited、9 件なら通る', () => {
     }
     return rows;
   };
-  const nine = makeEnv({ token: OK_TOKEN, user: OK_USER, rows: mk(9) });
+  const nine = makeEnv({ token: OK_TOKEN, user: OK_USER, rows: mk(9), now });
   assert.strictEqual(post(nine, { action: 'post', code: 'C', body: 'x' }).ok, true);
 
-  const ten = makeEnv({ token: OK_TOKEN, user: OK_USER, rows: mk(10) });
+  const ten = makeEnv({ token: OK_TOKEN, user: OK_USER, rows: mk(10), now });
   const res = post(ten, { action: 'post', code: 'C', body: 'x' });
   assert.strictEqual(res.error.code, 'rate_limited');
   assert.strictEqual(ten.rows.length, 11); // 増えていない
