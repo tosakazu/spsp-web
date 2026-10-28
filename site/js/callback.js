@@ -361,6 +361,14 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
         }
       }
       var errCode = (json && json.error && json.error.code) || (json && json.ok ? 'storage' : 'unknown');
+      if (errCode === 'state_invalid') {
+        // start.gg が callback を 2 回開くと、後のページは「使用済み」になる。先のページが保存していれば成功 (少し待って確かめる)
+        return SpspStartggManager.savedRecently(2 * 60 * 1000, 8000).then(function (saved) {
+          if (saved) { location.replace(S.withFlag(back, 'login')); return; }
+          reportError('manager_failed', errCode);
+          show('error', i18n('callback.manager_title'), i18n('callback.state_invalid'), back);
+        });
+      }
       reportError('manager_failed', errCode);
       var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
         : ((json && json.error && json.error.message) || i18n('callback.manager_failed'));

@@ -17,7 +17,7 @@ const MARGIN_MS = 10 * 60 * 1000;
 /** start.gg が expires_in を返さなかったときの見込み (説明では 7 日) */
 const DEFAULT_TTL_MS = 7 * 24 * 3600 * 1000;
 
-/** @typedef {{ token: string, exp: number, user: { id: string, slug: string, gamerTag: string } | null }} ManagerLogin */
+/** @typedef {{ token: string, exp: number, user: { id: string, slug: string, gamerTag: string } | null, at?: number }} ManagerLogin */
 
 /** @returns {ManagerLogin | null} */
 export function load() {
@@ -34,8 +34,24 @@ export function token() { const o = load(); return o ? o.token : ''; }
 /** @param {{ access_token: string, expires_in?: number | null, user?: any }} r manager_login の応答 */
 export function save(r) {
   const ttl = Number(r.expires_in) > 0 ? Number(r.expires_in) * 1000 : DEFAULT_TTL_MS;
-  const o = { token: r.access_token, exp: Date.now() + ttl, user: r.user || null };
+  const o = { token: r.access_token, exp: Date.now() + ttl, user: r.user || null, at: Date.now() };
   try { localStorage.setItem(KEY, JSON.stringify(o)); return true; } catch (e) { return false; }
+}
+
+/**
+ * ms ミリ秒以内に保存されたログインがあるか (少し待って確かめる)。start.gg は許可画面から callback を 2 回開くことがあり、
+ * 後のページは「使用済み」で失敗する。先のページが保存していれば成功として扱うため (callback.js)。
+ * @param {number} ms 何ミリ秒前までの保存を見るか @param {number} waitMs 最大何ミリ秒待つか @returns {Promise<boolean>}
+ */
+export function savedRecently(ms, waitMs) {
+  const fresh = () => { const o = load(); return !!(o && typeof o.at === 'number' && Date.now() - o.at <= ms); };
+  if (fresh()) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      if (fresh()) { clearInterval(id); resolve(true); } else if (Date.now() - t0 >= waitMs) { clearInterval(id); resolve(false); }
+    }, 250);
+  });
 }
 
 export function clear() { try { localStorage.removeItem(KEY); } catch (e) { /* 何もしない */ } }
@@ -102,6 +118,6 @@ export function mount(opts) {
   window.addEventListener('storage', e => { if (e.key === KEY) { render(); if (opts.onChange) opts.onChange(); } });
 }
 
-const API = { KEY, load, token, save, clear, start, mount };
+const API = { KEY, load, token, save, savedRecently, clear, start, mount };
 if (typeof window !== 'undefined') (/** @type {any} */ (window).SPSP = /** @type {any} */ (window).SPSP || {}).StartggManager = API;
 export default API;
