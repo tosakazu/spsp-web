@@ -154,3 +154,39 @@ test('予想があればパフォーマンスを順位の横に、開いた中�
   L.render(e3, 11, [{ summary: {}, doc: doc() }]);
   assert.doesNotMatch(e3.innerHTML, /live-pred|player\.performance/);
 });
+
+test('もう試合が無いか: 順位が確定して試合待ちが無い / 下位クラスで負けて終わった (ブラウザの読み直しを止める)', () => {
+  const L = load();
+  assert.strictEqual(L.isOut(doc(), 11), false);   // 勝ち残り
+  assert.strictEqual(L.isOut(doc(), 33), false);   // 順位は確定でも対戦中のセットがある
+  const d = doc();
+  d.sets[1].winner = 1; d.sets[1].score = [2, 0]; d.sets[1].completed_at = 300;
+  assert.strictEqual(L.isOut(d, 33), true);
+  assert.strictEqual(L.isOut(d, 22), false);       // 下位クラスで試合待ち
+  d.sets[2] = { id: 3, pg: 30, e: [2, 4], score: [0, 2], winner: 4, completed_at: 400 };
+  assert.strictEqual(L.isOut(d, 22), true);
+  assert.strictEqual(L.isOut(d, 99), false);       // 出ていない
+});
+
+test('ブラウザの読み直し: 試合が残っていれば 15 秒ごと、もう試合が無ければ読み直さずサーバの速報だけを 30 秒ごと', async () => {
+  const run = async (uid, d) => {
+    const timers = [];
+    const calls = [];
+    const fetch = async (url) => ({ ok: true, json: async () => (/index\.json$/.test(url)
+      ? { events: [{ event_id: 5 }], players: { [uid]: [5] } } : d) });
+    const document = { visibilityState: 'visible', addEventListener() {}, createElement: () => ({ addEventListener() {} }) };
+    const L = load('', 'spsp.games', { fetch, document, SpspLogin: { apiAvailable: () => true },
+      setTimeout: (f, ms) => { timers.push(ms); return 1; }, clearTimeout() {} });
+    const section = { style: {}, appendChild() {}, querySelector: () => ({ innerHTML: '', addEventListener() {} }) };
+    const browser = { status: () => 'on', pick: (x) => x, refresh: async (x) => { calls.push(x.event_id); return x; } };
+    L.start(section, uid, { browser });
+    for (let i = 0; i < 20 && !timers.length; i++) await new Promise((r) => setImmediate(r));
+    return { timers, calls };
+  };
+  const live = await run(11, { ...doc(), event_id: 5 });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(live)), { timers: [15000], calls: [5] });
+  const d = { ...doc(), event_id: 5 };
+  d.sets[1].winner = 1; d.sets[1].score = [2, 0]; d.sets[1].completed_at = 300;
+  const out = await run(33, d);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(out)), { timers: [30000], calls: [] });
+});

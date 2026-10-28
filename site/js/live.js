@@ -127,6 +127,16 @@ function classOut(/** @type {any} */ doc, /** @type {string} */ myId) {
   return !!last && String(last.winner) !== myId;
 }
 
+/** その選手はもう試合が無いか (本戦で順位が確定して下位クラスに出ていない / 下位クラスでも負けて終わった)。
+ * そうなったらブラウザからの読み直しはやめる (サーバの速報は見続けるので、あとで下位クラスに入ればまた読み直す)
+ * @param {any} doc @param {number | string} uid */
+export function isOut(doc, uid) {
+  const [myId, e] = entrantOf(doc, uid);
+  if (!e || myId == null) return false;
+  if (e.in_class) return classOut(doc, String(myId));
+  return !!e.final && !(doc.sets || []).some((/** @type {any} */ s) => s.winner == null && (s.e || []).map(String).includes(String(myId)));
+}
+
 /** その選手のセット (終わっていない試合 → 新しい順)。行は「最新の大会結果」の試合と同じ形 (ラウンドの位置・スコア・相手・シード・UF)
  * 予想 (pred.bt.perSet) があれば、試合ごとの内部レートの変化の予想を右端に (最新の大会結果の試合の行と同じ形)
  * @param {any} doc @param {string} myId @param {LiveOpts} opts @param {((uid: number) => boolean) | null} hasPage @param {any} [pred] */
@@ -361,11 +371,13 @@ export function start(section, uid, opts = {}) {
     if (br) {
       items = serverItems.map(({ summary, doc }) => ({ summary, doc: br.pick(doc) }));
       if (st === 'on') {
-        items = await Promise.all(items.map(async (it) => (it.summary.ended ? it
+        items = await Promise.all(items.map(async (it) => (it.summary.ended || isOut(it.doc, uid) ? it
           : { summary: it.summary, doc: (await br.refresh(it.doc).catch(() => null)) || it.doc })));
       }
     }
     const st2 = br ? br.status() : null;
+    // 読み直す部門が残っていなければ、サーバの速報だけを REFRESH_MS ごとに見る
+    const fast = st2 === 'on' && items.some((it) => !it.summary.ended && !it.doc.ended_at && !isOut(it.doc, uid));
     note.hidden = !items.length || !br || st2 === 'on' || !SpspLogin.apiAvailable();
     if (!note.hidden) note.innerHTML = `<span>${st2 === 'relogin' ? t('live.browser.relogin') : t('live.browser.login')}</span><button type="button">${t('live.browser.login_btn')}</button>`;
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
@@ -374,7 +386,7 @@ export function start(section, uid, opts = {}) {
     const n = render(body, uid, items, opts, hasPage, preds);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
-    if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, st2 === 'on' ? BROWSER_MS : REFRESH_MS);
+    if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, fast ? BROWSER_MS : REFRESH_MS);
   };
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
@@ -414,6 +426,6 @@ export async function showNotice(el) {
   el.style.display = '';
 }
 
-const api = { liveRoot, load, render, start, showNotice };
+const api = { liveRoot, load, render, start, showNotice, isOut };
 export default api;
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLive = api;
