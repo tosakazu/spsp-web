@@ -150,3 +150,21 @@ CREATE TABLE card_settings (
 3. 他人の編集ページでは編集できない。`card_put` に他人の設定を送っても自分の行しか変わらない
 4. キャラ投票: ヘッダーでログイン済みなら、投票ページでログインを求められない
 5. ログアウト → ヘッダーがログアウト中の表示に戻る。別タブにも反映
+
+## 大会運営ツールの start.gg ログイン (2026-10-28)
+
+シード作成・シードアップロード・下位クラス作成は、API キーの代わりに start.gg のログインでも使える (どちらでも選べる)。
+
+| 段階 | 誰が | 内容 |
+|---|---|---|
+| 1 | ページ | `POST /api {action:'manager_begin', nonce, returnPath}` → scope `user.identity tournament.manager` の認可 URL (state は `f:'manager'`) |
+| 2 | callback.html | `POST /api {action:'manager_login', code, state}` → `{token, user, exp, access_token, expires_in}` |
+| 3 | callback.html | 普段のセッションと、start.gg のアクセストークン (`localStorage.spsp_startgg_manager`、期限つき) を保存 |
+
+- 普段のログイン (`login`) と投稿 (`post`) は `f:'manager'` の state を受けない (scope が違う)。`manager_login` も他の flow の state を受けない。
+- アクセストークンは Worker が交換して返すだけで、保存しない・ログに出さない。期限は start.gg の `expires_in` (7 日)。
+- 画面は `site/js/startgg_manager.js` の `mount` (「start.gg でログイン | API キー」の切り替え・ログアウト)。
+  ログインと選んだ方は localStorage なので 3 ページで共通 (別のタブにも効く)。API キーを保存している人には 1 回だけ案内を出す (既定は API キーのまま)。
+- callback は、運営用ログインと Challonge のログインを **ログインを始めたブラウザ (nonce を持っている) でだけ** 処理する。
+  開いたリンクを先に確かめるセキュリティ製品の自動ブラウザが、本人より先に callback を開いて code を使ってしまう例があったため
+  (2026-10-28、preview)。普段のログインは nonce が無くても続ける (アプリ内ブラウザから別のブラウザに戻される経路のため、今までどおり)。
