@@ -39,10 +39,13 @@ export interface Env {
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
 export const TOKEN_URL = 'https://api.start.gg/oauth/access_token';
+export const AUTHORIZE_URL = 'https://start.gg/oauth/authorize';
 export const GQL_URL = 'https://api.start.gg/gql/alpha';
 
 /** 認可リクエストと token 交換で同じ値を送る必要がある。 */
 export const SCOPE = 'user.identity';
+/** 大会運営用のログイン (flow 'manager'、シード作成・下位クラス作成で API キーの代わり)。自分が管理する大会のシード・トーナメント設定だけ。 */
+export const MANAGER_SCOPE = 'user.identity tournament.manager';
 
 /** 本文の長さ (UTF-16 code unit 数。クライアントの textarea maxlength と同じ数え方)。 */
 export const BODY_MIN = 1;

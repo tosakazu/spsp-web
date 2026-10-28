@@ -68,6 +68,9 @@ const SEED_APP_SKELETON_HTML = `
   <form id="seed-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
+        <!-- 大会運営用の start.gg ログイン (js/startgg_manager.js が中身を作る)。ログイン中は下の API キー欄を隠す -->
+        <div id="token-mgr"></div>
+        <div id="token-key-block">
         <label for="token" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">
           start.gg API Token
           <a href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" style="color:#dc2626;margin-left:6px;font-size:10px;text-decoration:underline">${i18n('seed.skeleton.t8')}</a>
@@ -81,6 +84,7 @@ const SEED_APP_SKELETON_HTML = `
             style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
         </div>
         <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
+        </div>
       </div>
       <div style="flex:2;min-width:280px">
         <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>

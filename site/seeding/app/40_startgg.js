@@ -11,6 +11,7 @@ import { fetchPhaseWaves } from './85_waves.js';
 import { escapeHtml } from '../../js/html.js';
 import SPSPRankingTable from '../../ranking-table.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
+import SpspStartggManager from '../../js/startgg_manager.js';
 'use strict';
 
 /** start.gg API のエラー。rawError = 生の応答 (showError の details に出す) */
@@ -614,7 +615,10 @@ async function createPhaseThenUpload(token) {
   }
 }
 
-function getToken() {
+/** start.gg に送るトークン: 大会運営用の start.gg ログイン中ならそのアクセストークン、そうでなければ API キー欄 */
+export function getToken() {
+  const mgr = SpspStartggManager.token();
+  if (mgr) return mgr;
   // 保存は 💾 ボタンを押したときだけ (以前は読むたび sessionStorage に書いていて、UI の「💾 を押した場合のみ保存」と矛盾していた)
   return /** @type {HTMLInputElement} */ (document.getElementById('token')).value.trim();   // 骨格 (10_skeleton.js) に必ずある
 }

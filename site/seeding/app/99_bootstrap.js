@@ -7,7 +7,8 @@ import { i18n, regionGroupToggleId, regionGroupToggles } from './10_skeleton.js'
 import { injectHelpIcons } from './20_help.js';
 import { cachedFetchers } from './70_players_cache.js';
 import SeedData from '../seed_data.js';
-import { downloadCsv, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
+import { downloadCsv, getToken, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
+import SpspStartggManager from '../../js/startgg_manager.js';
 import { UPCOMING_PAGE_SIZE, loadMyTournaments, openUpcomingBox, renderUpcomingPage, toggleMyToursBox, toggleUpcomingBox } from './60_upcoming.js';
 import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updateSeriesToggleState } from './75_series_rematch.js';
 import SeedOptimizer from '../seed_optimizer.js';
@@ -37,8 +38,11 @@ import SPSPGeo from '../../js/geo.js';
   } catch (e) {}
   tokenEl.addEventListener('input', () => { updateHint(); });
   // トークンがあれば、そのアカウントが管理している大会を一覧の上に出す (入力し終わったとき = change でも取り直す)
-  loadMyTournaments(tokenEl.value);
-  tokenEl.addEventListener('change', () => { loadMyTournaments(tokenEl.value); });
+  loadMyTournaments(getToken());
+  tokenEl.addEventListener('change', () => { loadMyTournaments(getToken()); });
+  // API キーの代わりに start.gg でログインしても使える (どちらでも)。ログイン中は API キー欄を隠す
+  const mgrEl = document.getElementById('token-mgr'), keyBlock = document.getElementById('token-key-block');
+  if (mgrEl && keyBlock) SpspStartggManager.mount({ before: mgrEl, keyBlock, onChange: () => loadMyTournaments(getToken()) });
   revealBtn.addEventListener('click', () => {
     const isPwd = tokenEl.type === 'password';
     tokenEl.type = isPwd ? 'text' : 'password';

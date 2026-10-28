@@ -26,6 +26,9 @@
     <!-- 1. アカウント -->
     <div class="cb-sec">
       <h2 data-i18n="class.h.accounts">アカウント</h2>
+      <!-- 大会運営用の start.gg ログイン (js/startgg_manager.js が中身を作る)。ログイン中は下の API キー欄を隠す -->
+      <div id="cb-sgg-mgr"></div>
+      <div id="cb-sgg-keyblock">
       <label class="cb-label" for="cb-sgg-key">
         <span data-i18n="class.startgg_key">start.gg の API キー (その大会の管理者)</span>
         <a class="cb-help-link" href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" data-i18n="seed.skeleton.t8">API キー取得→</a>
@@ -36,6 +39,7 @@
         <button type="button" class="cb-save-btn" id="cb-sgg-save" data-i18n-attr="title:seed.skeleton.t117" title="ブラウザに保存" data-i18n="seed.skeleton.t9">💾 保存</button>
       </div>
       <div class="cb-hint" id="cb-sgg-hint"></div>
+      </div>
 
       <div class="cb-label"><span data-i18n="class.challonge">Challonge</span></div>
       <div class="cb-connect">

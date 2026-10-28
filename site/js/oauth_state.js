@@ -72,7 +72,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       r: typeof o.r === 'string' ? o.r : '',
       // f = このフローが投票のログインか投稿か。GAS が署名時に載せる。
       // 保存領域が引き継がれない経路でも判別するために state 側に持たせている。
-      f: (o.f === 'post' || o.f === 'login') ? o.f : null,
+      f: (o.f === 'post' || o.f === 'login' || o.f === 'manager') ? o.f : null,
     };
   }
 
