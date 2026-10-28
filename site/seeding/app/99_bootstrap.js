@@ -23,7 +23,7 @@ import SPSPGeo from '../../js/geo.js';
   const saveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('token-save'));
   const TOKEN_KEY = 'spsp_startgg_token';
   if (!tokenEl || !hintEl || !revealBtn || !saveBtn) return;   // 骨格 (10_skeleton.js) に必ずある
-  // 大会の選び方のタブ (管理している大会の読み込みが知らせる状態を受けるので、loadMyTournaments より先に)
+  // 大会の選び方のタブ (最初は「管理している大会」)
   initEventSourceTabs();
 
   function updateHint() {
