@@ -423,13 +423,12 @@ async function buildUpcomingSection() {
     const badge = counted ? `<span class="lr-badge ok">${i18n('player.counted')}</span>` : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
     const me = (ev.entrants || []).find((/** @type {any} */ x) => x.uid === UID);
     const pool = ev.bracket && me && me.pg != null ? (ev.bracket.pools || {})[String(me.pg)] || {} : null;
-    // 1 行目 (いつも出す): 大会名・日付・人数・集計対象のバッジ・スコア予想 (集計対象のとき)
-    const when = `${SEP}${d.getMonth() + 1}/${d.getDate()}(${wd})${SEP}` +
-      escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }));
+    // 1 行目 (いつも出す): 大会名・集計対象のバッジ・スコア予想 (集計対象のとき)。大会名は開くと省略せずに折り返す
     const sim = counted ? `<a class="pe-sim" href="${escapeHtml(SPSP.langRoot + 'sim/?uid=' + UID + '&eid=' + encodeURIComponent(eid))}">${i18n('player.simulate')}</a>` : '';
-    // 開いたとき: フェーズ・プール・自分のシード・リンク、プールのプレイヤー (全員。POOL_PAGE 人ずつページ送り)
+    // 開いたとき: 日付・人数・フェーズ・プール・自分のシード・リンク、プールのプレイヤー (全員。POOL_PAGE 人ずつページ送り)
     /** @type {string[]} */
-    const parts = [];
+    const parts = [`${d.getMonth() + 1}/${d.getDate()}(${wd})`,
+      escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }))];
     let list = '';
     if (pool) {
       const poolTxt = Object.keys(ev.bracket.pools || {}).length > 1 && pool.ident ? i18n('player.pool.pool', { id: pool.ident }) : '';
@@ -454,9 +453,9 @@ async function buildUpcomingSection() {
     const slug = slugOf.get(ev.tournament_id) || '';
     const href = pool && pool.url ? pool.url : (slug ? 'https://www.start.gg/' + slug : '');
     if (href) parts.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${pool && pool.url ? i18n('player.pool.view') : i18n('player.upcoming.view_tournament')} ↗</a>`);
-    const body = parts.length || list ? `<div class="pe-body">${parts.length ? `<div class="pe-meta">${parts.join(SEP)}</div>` : ''}${list}</div>` : '';
+    const body = `<div class="pe-body"><div class="pe-meta">${parts.join(SEP)}</div>${list}</div>`;
     return `<details class="pool-ev"><summary class="pe-name"><span class="pe-t">${escapeHtml(ev.tournament_name || '')}</span>` +
-      `<span class="pe-when">${when}</span>${badge}${sim}</summary>${body}</details>`;
+      `${badge}${sim}</summary>${body}</details>`;
   };
   sec.style.display = '';   // ページ送りが高さを測るので先に出す
   SPSPPager.setupPaginated(items, 'upcoming-list', 'upcoming-pager', (/** @type {any[]} */ arr) => arr.map(itemHtml).join(''), '');
