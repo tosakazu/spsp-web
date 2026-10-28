@@ -136,7 +136,9 @@ test('予想があればパフォーマンスを順位の横に、順位評価�
   assert.match(e.innerHTML, /player\.performance\{\}.*#120.*lv-pill lv-5/);
   assert.match(e.innerHTML, /ranking\.tab\.tjpr\{\}<\/span><span class="val pos">\+1\.8<\/span><span class="sub">\(35\.0\)<\/span>/);
   assert.match(e.innerHTML, /ranking\.tab\.bt\{\}<\/span><span class="val dim">±0<\/span><span class="sub">\(-3\.2\)<\/span>/);
-  assert.match(e.innerHTML, /class="live-rank-btn"/);
+  assert.match(e.innerHTML, /<div class="live-detail"><div class="live-pred">.*<div class="live-rank" data-eid=/);
+  assert.match(e.innerHTML, /live-toggle/);
+  assert.ok(e.innerHTML.indexOf('live-sets') < e.innerHTML.indexOf('live-detail'));   // 試合の一覧の下
   assert.doesNotMatch(e.innerHTML, /live-pred-foot/);
   // 試合の行: 予想のある試合 (id 1、勝ち) は緑で +4.3、対戦中の試合は空
   assert.match(e.innerHTML, /<span class="m-delta" style="color:#16a34a">\+4\.3<\/span>/);
@@ -144,7 +146,7 @@ test('予想があればパフォーマンスを順位の横に、順位評価�
   const e2 = el();
   L.render(e2, 11, [{ summary: {}, doc: doc() }], {}, null, [{ ...pred, counted: false, tjpr: null, bt: null }]);
   assert.match(e2.innerHTML, /live\.pred\.not_counted/);
-  assert.doesNotMatch(e2.innerHTML, /live-rank-btn/);
+  assert.doesNotMatch(e2.innerHTML, /live-rank/);
   const e3 = el();
   L.render(e3, 11, [{ summary: {}, doc: doc() }]);
   assert.doesNotMatch(e3.innerHTML, /live-pred|player\.performance/);

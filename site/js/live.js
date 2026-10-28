@@ -12,7 +12,7 @@
 // 同じ部門の下位クラス (Bクラスなど) にいる人 (entrants[].in_class) は本戦の順位に「◯クラス参加中」を添える。
 // プール: entrants[].pg (その選手が最後に試合をしたプール) の start.gg ブラケットの URL。無ければ最初のフェーズのプール。
 // 予想 (opts.predict があるとき。プレイヤーページが js/live_predict.js を渡す): 今の結果でのパフォーマンスを順位の横に、
-// 順位評価・直対評価の変化の予想をカードの下に出す。全国順位の変化の予想はボタンを押したときだけ計算する (opts.rankChange)。
+// 順位評価・直対評価の変化と全国順位の変化の予想は、カードを押して試合の一覧を開いたときに一緒に出す (全国順位は開いたときに計算、opts.rankChange)。
 import SPSPI18n from './i18n.js';
 import { escapeHtml } from './html.js';
 import SPSPMatch from './match.js';
@@ -25,8 +25,6 @@ const REFRESH_MS = 30 * 1000;
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
 const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
-/** 全国順位の変化を出している部門 (event_id) */
-const rankOpened = new Set();
 /** 最後に描いた予想 (event_id → 予想)。ボタンを押したときに使う @type {Map<string, any>} */
 const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
@@ -224,7 +222,7 @@ function perfHeroHtml(pr) {
     `<span class="lv-pill lv-${pi.eqLv}">Lv${pi.eqLv}${pi.lvSfx}</span></span></span>`;
 }
 
-/** 順位評価・直対評価の予想と、全国順位の変化のボタン @param {any} pr @param {string} eid @param {boolean} canRank */
+/** 順位評価・直対評価の予想と、全国順位の変化 (開いたときに fillRank が埋める) @param {any} pr @param {string} eid @param {boolean} canRank */
 function predHtml(pr, eid, canRank) {
   if (!pr) return '';
   if (pr.counted === false) return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><span class="live-pred-note">${t('live.pred.not_counted')}</span></div>`;
@@ -232,10 +230,8 @@ function predHtml(pr, eid, canRank) {
   const SCALE = 17.5;   // 順位評価の表示単位 (meta の TJPR_ELO_SCALE。最新の大会結果の chip と同じ)
   const chips = (pr.tjpr ? predChip(t('ranking.tab.tjpr'), pr.tjpr.delta * SCALE, pr.tjpr.raw * SCALE, false) : '') +
     (pr.bt ? predChip(t('ranking.tab.bt'), pr.bt.dPeak, pr.bt.dInt, true) : '');
-  const open = rankOpened.has(eid);
-  const btn = canRank ? `<button type="button" class="live-rank-btn${open ? ' open' : ''}" data-eid="${eid}">${t('live.pred.rank_btn')}</button>` : '';
-  return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div>${btn}</div>` +
-    (canRank ? `<div class="live-rank" data-eid="${eid}"${open ? '' : ' hidden'}></div>` : '');
+  return `<div class="live-pred"><span class="live-pred-tag">${t('live.pred.label')}</span><div class="v-stats lr-stats">${chips}</div></div>` +
+    (canRank ? `<div class="live-rank" data-eid="${eid}"></div>` : '');
 }
 
 /** 全国順位の変化 (今 → 予想) @param {any} rc */
@@ -288,23 +284,25 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
     hero += perfHeroHtml(pred);
     const sets = setsHtml(doc, String(myId), opts, hasPage, pred);
     const eid = escapeHtml(String(doc.event_id ?? ''));
+    const predBlock = predHtml(pred, eid, !!opts.rankChange);
+    const canOpen = !!(sets || predBlock);
     cards.push(
-      `<div class="tour-group live-group${sets && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
-        `<div class="tour-item tour-item-nohover${sets ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
+      `<div class="tour-group live-group${canOpen && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
+        `<div class="tour-item tour-item-nohover${canOpen ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
           `<div class="lr-top"><a href="${escapeHtml(doc.tournament_url || summary.tournament_url || '')}" target="_blank" rel="noopener">${escapeHtml(doc.tournament_name || '')}</a>` +
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
-          `<div class="perf-hero">${img}${hero}${sets ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
+          `<div class="perf-hero">${img}${hero}${canOpen ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
           `<div class="live-links">${cls}${poolLink}<a class="live-link" href="${escapeHtml(doc.url || '')}" target="_blank" rel="noopener">start.gg ↗</a></div>` +
         `</div>` +
-        predHtml(pred, eid, !!opts.rankChange) +
         sets +
+        (predBlock ? `<div class="live-detail">${predBlock}</div>` : '') +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
   el.innerHTML = cards.join('');
-  // 全国順位の変化を開いている部門は、読み直しても新しい予想で出し直す
-  if (el.querySelectorAll) el.querySelectorAll('.live-rank:not([hidden])').forEach(b => fillRank(/** @type {HTMLElement} */ (b), /** @type {HTMLElement} */ (b).dataset.eid || '', opts));
+  // 開いている部門の全国順位の変化は、読み直しても新しい予想で出し直す
+  if (el.querySelectorAll) el.querySelectorAll('.live-group.expanded .live-rank').forEach(b => fillRank(/** @type {HTMLElement} */ (b), /** @type {HTMLElement} */ (b).dataset.eid || '', opts));
   return cards.length;
 }
 
@@ -317,23 +315,15 @@ export function start(section, uid, opts = {}) {
   body.addEventListener('click', (e) => {
     const target = /** @type {Element} */ (e.target);
     if (target.closest('a')) return;
-    const rb = /** @type {HTMLElement | null} */ (target.closest('.live-rank-btn'));
-    if (rb) {   // 全国順位の変化の予想 (押したときだけ計算)
-      const eid = rb.dataset.eid || '';
-      const box = /** @type {HTMLElement | null} */ ([...body.querySelectorAll('.live-rank')].find(b => /** @type {HTMLElement} */ (b).dataset.eid === eid) || null);
-      if (!box) return;
-      const open = !rankOpened.has(eid);
-      if (open) rankOpened.add(eid); else rankOpened.delete(eid);
-      rb.classList.toggle('open', open);
-      box.hidden = !open;
-      if (open) fillRank(box, eid, opts);
-      return;
-    }
     const card = target.closest('.live-group .live-toggle');   // tour-clickable はプレイヤーページの別の処理が拾うので使わない
     const g = /** @type {HTMLElement | null} */ (card && card.closest('.live-group'));
     if (!g) return;
     const eid = g.dataset.eid || '';
-    if (g.classList.toggle('expanded')) opened.add(eid); else opened.delete(eid);
+    if (g.classList.toggle('expanded')) {
+      opened.add(eid);
+      const box = /** @type {HTMLElement | null} */ (g.querySelector('.live-rank'));
+      if (box) fillRank(box, eid, opts);   // 全国順位の変化は開いたときに計算
+    } else opened.delete(eid);
   });
   const tick = async () => {
     const items = await load(uid);

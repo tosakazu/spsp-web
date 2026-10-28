@@ -405,7 +405,6 @@ window.SPSP_I18N.en = {
   'live.seed_label': 'Seed',
   'live.pred.label': 'Projected',
   'live.pred.not_counted': 'Not counted for the ranking (performance only)',
-  'live.pred.rank_btn': 'Project ranking change',
   'live.pred.rank_loading': 'Calculating…',
   'live.pred.rank_none': 'Could not calculate',
   'live.or_better_unit': '{n, selectordinal, one{st} two{nd} few{rd} other{th}} or better',
