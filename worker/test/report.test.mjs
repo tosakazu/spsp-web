@@ -8,7 +8,7 @@ import { openJson, sealJson } from '../src/api/report_crypto.ts';
 import { adminDecision, mergeResults, parseResult, parseSettings, playerGate, reconcile, sameOutcome } from '../src/api/report_logic.ts';
 import { reportExpiry } from '../src/api/report.ts';
 import { downstreamDoneOf, gameDataOf, parseStartggSet } from '../src/api/report_startgg.ts';
-import { cAlive, cSetOf, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
+import { cLPlacement, cSetOf, losersPlace, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
 import { MemStore } from './_mem_store.mjs';
 
 const G = (w, c0 = null, c1 = null, s = null) => ({ w, c: [c0, c1], s });
@@ -141,8 +141,21 @@ test('Challonge の試合: 両方の形 (player1_id / relationships) を読み�
   assert.deepStrictEqual(s.slots.map((x) => x.users), [['11'], ['14']]);
   assert.strictEqual(s.downstreamDone, false);
   assert.strictEqual(cSetOf(d, ms[1]).slots[0].id, '2');
-  assert.strictEqual(cAlive(d, ms[1], false), 3);   // 4 が負けて 3 人
-  assert.strictEqual(cAlive(d, ms[1], true), 4);    // ダブルなら 1 敗はまだ残る
+  assert.strictEqual(cLPlacement(d, ms[0], false), 3);   // 4 人のシングル: 1 回戦の負け = 3 位
+  assert.strictEqual(cLPlacement(d, ms[2], false), 2);   // 決勝
+});
+
+test('Challonge の負けた人の順位: シングル・ダブル (8 人) は start.gg と同じ 1,2,3,4,5,5,7,7', () => {
+  assert.deepStrictEqual([0, 1, 2, 3, 4, 5, 6, 7].map(losersPlace), [3, 4, 5, 7, 9, 13, 17, 25]);
+  const mk = (rounds, n) => ({ participants: new Map(Array.from({ length: n }, (_, i) => [String(i), {}])),
+    matches: rounds.map((r, i) => ({ id: String(i), round: r, p: [null, null], prereq: [null, null], state: 'open' })) });
+  const se = mk([1, 1, 1, 1, 2, 2, 3, 0], 8);
+  assert.deepStrictEqual(se.matches.map((m) => cLPlacement(se, m, false)), [5, 5, 5, 5, 3, 3, 2, 4]);
+  const de = mk([1, 2, 3, 4, 5, -1, -2, -3, -4], 8);   // 勝者側 1〜3・GF 4〜5・敗者側 -1〜-4
+  assert.deepStrictEqual(de.matches.map((m) => cLPlacement(de, m, true)), [7, 5, 3, 2, 2, 7, 5, 4, 3]);
+  const de16 = mk([1, 2, 3, 4, -1, -2, -3, -4, -5, -6], 16);
+  assert.deepStrictEqual(de16.matches.map((m) => cLPlacement(de16, m, true)), [13, 9, 5, 3, 13, 9, 7, 5, 4, 3]);
+  assert.strictEqual(cLPlacement(se, { ...se.matches[0], round: null }, false), null);
 });
 
 // ── 偽の start.gg ──
@@ -393,7 +406,7 @@ test('Challonge の下位クラス: 作った本人が受付 → 選手の報告
   assert.strictEqual(en.report.kind, 'challonge');
   assert.deepStrictEqual(en.report.settings, { top_cut: 4, classes_only: false });
   const code = en.report.code;
-  // 2 人なので残り 2 人 ≤ トップ 4 → 運営が入力
+  // 2 人のシングル: 決勝の負け = 2 位 ≤ トップ 4 → 運営が入力
   let r = await e.call({ action: 'report_submit', token: await e.tok(11), code, set_id: '50', result: { w: 0, g: [{ w: 0 }, { w: 1 }, { w: 0 }] } });
   assert.strictEqual(r.error.code, 'not_allowed');
   await e.call({ action: 'report_settings', token: await e.tok(4242), code, settings: { top_cut: null } });

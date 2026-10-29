@@ -363,17 +363,17 @@ async function challongeData(fetchFn: FetchFn, token: string, tid: string): Prom
 }
 
 /** Challonge の自分の試合 (画面用)。start.gg はブラウザが本人のトークンで読む */
-function challongeMine(d: CData, uid: string) {
+function challongeMine(d: CData, uid: string, double: boolean) {
   const me = Array.from(d.participants.values()).find((p) => p.uid === uid) || null;
   if (!me) return { participant: null, matches: [] };
   const view = (m: CMatch) => {
-    const set = cSetOf(d, m);
+    const set = cSetOf(d, m, double);
     const prereq = m.prereq.map((id, i) => {
       if (!id || set.slots[i]) return null;
       const pm = d.matches.find((x) => x.id === id);
       return pm ? { match_id: id, loser: m.prereqLoser[i], state: pm.state, slots: cSetOf(d, pm).slots } : null;
     });
-    return { id: m.id, state: m.state, round: m.round, identifier: m.identifier, slots: set.slots, winner: set.remote ? set.remote.w : null,
+    return { id: m.id, state: m.state, round: m.round, identifier: m.identifier, slots: set.slots, winner: set.remote ? set.remote.w : null, l_placement: set.lPlacement,
       score: set.remote && set.remote.g.length ? [set.remote.g.filter((g) => g.w === 0).length, set.remote.g.filter((g) => g.w === 1).length] : null, prereq };
   };
   return { participant: me, matches: d.matches.filter((m) => m.p[0] === me.id || m.p[1] === me.id).map(view) };
@@ -391,7 +391,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const out: Record<string, unknown> = { report: publicOf(o.ev, now), me: { id: sess.id }, admin: admins(o.ev).includes(sess.id), sets };
   if (o.ev.kind === 'challonge') {
     const d = await challongeData(fetchFn, o.token, o.ev.target_id);
-    out.challonge = d.ok ? challongeMine(d.data, sess.id) : { error: d.note };
+    out.challonge = d.ok ? challongeMine(d.data, sess.id, parseSettings(o.ev.settings).double === true) : { error: d.note };
   }
   return ok(out);
 }

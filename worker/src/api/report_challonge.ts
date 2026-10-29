@@ -70,21 +70,36 @@ export function cDownstreamDone(d: CData, m: CMatch): boolean {
     && (!x.completedAt || !m.completedAt || x.completedAt > m.completedAt));
 }
 
+/** ダブルイリミの敗者側で、決勝 (敗者側の最後の回戦) から j 回戦前の負けの順位: 3, 4, 5, 7, 9, 13, 17, 25, … */
+export function losersPlace(j: number): number {
+  const h = Math.floor(j / 2);
+  return j % 2 === 0 ? 2 ** (h + 1) + 1 : 2 ** (h + 1) + 2 ** h + 1;
+}
+
 /**
- * まだ残っている人数 (この試合の結果は数えない)。負け数がシングル 1・ダブル 2 に届いていない参加者。
- * 選手の報告の「トップ N から運営が入力」の判定に使う (start.gg の lPlacement の代わりの近似)。
+ * この試合の負けた人の順位 (start.gg の lPlacement と同じ意味)。選手の報告の「トップ N から運営が入力」の判定に使う。
+ * Challonge の round は 勝者側 1, 2, …・敗者側 -1, -2, …・3 位決定戦 0。
+ *   シングル: 勝者側 r 回戦の負け = 2^(R-r)+1 (R = 最後の回戦)。3 位決定戦の負け = 4
+ *   ダブル:   敗者側 -k 回戦の負け = losersPlace(L-k) (L = 敗者側の最後の回戦)。
+ *             勝者側 r 回戦の負けは敗者側に落ちる (1 回戦 → -1、r 回戦 → -2(r-1)) ので、落ちた先で負けたときの順位 (この試合で決まる一番下)。
+ *             勝者側の最後の回戦 (= ceil(log2 人数)) より後はグランドファイナル = 2
+ * 回戦が分からなければ null (判定しない)。
  */
-export function cAlive(d: CData, m: CMatch, double: boolean): number {
-  const losses = new Map<string, number>();
-  for (const x of d.matches) {
-    if (x.id === m.id || x.state !== 'complete' || !x.winner) continue;
-    const loser = x.p[0] === x.winner ? x.p[1] : x.p[1] === x.winner ? x.p[0] : null;
-    if (loser) losses.set(loser, (losses.get(loser) || 0) + 1);
+export function cLPlacement(d: CData, m: CMatch, double: boolean): number | null {
+  const r = m.round;
+  if (r === null) return null;
+  const rounds = d.matches.map((x) => x.round || 0);
+  if (!double) {
+    if (r === 0) return 4;
+    const R = Math.max(0, ...rounds);
+    return r > 0 && R >= r ? 2 ** (R - r) + 1 : null;
   }
-  const lim = double ? 2 : 1;
-  let n = 0;
-  for (const id of d.participants.keys()) if ((losses.get(id) || 0) < lim) n++;
-  return n;
+  const L = Math.max(0, ...rounds.map((x) => -x));
+  if (r < 0) return L >= -r ? losersPlace(L + r) : null;
+  const rw = Math.max(1, Math.ceil(Math.log2(Math.max(2, d.participants.size))));
+  if (r > rw) return 2;
+  if (!L) return null;
+  return losersPlace(Math.max(0, L - (r === 1 ? 1 : 2 * (r - 1))));
 }
 
 export function cSetOf(d: CData, m: CMatch, double = false): NSet {
@@ -108,7 +123,7 @@ export function cSetOf(d: CData, m: CMatch, double = false): NSet {
       remote = { w, g };
     }
   }
-  return { id: m.id, complete, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cAlive(d, m, double), isClass: true };
+  return { id: m.id, complete, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cLPlacement(d, m, double), isClass: true };
 }
 
 async function getAll(fetchFn: FetchFn, token: string, path: string): Promise<{ ok: true; items: unknown[] } | { ok: false; note: string }> {

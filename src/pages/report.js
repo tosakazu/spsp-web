@@ -28,7 +28,9 @@ const W = /** @type {any} */ (window);
 const SPSP = W.SPSP || {};
 const Q = new URLSearchParams(location.search);
 const CODE = (Q.get('c') || '').toLowerCase();
-const WANT_ADMIN = Q.get('admin') === '1';
+const WANT_ADMIN = Q.get('admin') === '1' || Q.get('demo') === 'admin';
+/** 見本の画面 (?demo=list|match|conflict|waiting|done|gate|challonge|admin|setup)。見本のデータで描くだけで、API にも start.gg にも送らない */
+const DEMO = Q.get('demo') || '';
 const POLL_MS = 15000;
 const ULT = 1386;   // start.gg の videogame (スマブラ SP)
 const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];   // worker/src/api/report_logic.ts と同じ
@@ -47,8 +49,9 @@ let FORM_OPEN = null; // 入力中の試合 (読み直しで消さない)
 // ── 共通 ──────────────────────────────────────────────────────────
 
 function sess() { return SpspLogin.session(); }
-function myUid() { const s = sess(); return s && s.user ? String(s.user.id) : ''; }
-async function api(body) { return SpspLogin.api(body); }
+function myUid() { if (DEMO) return DEMO_ME; const s = sess(); return s && s.user ? String(s.user.id) : ''; }
+function tok() { const s = sess(); return s ? s.token : ''; }
+async function api(body) { return DEMO ? demoApi(body) : SpspLogin.api(body); }
 function errText(r) { return (r && r.error && r.error.message) || i18n('report.err.generic'); }
 function setStatus(el, text, kind) { el.textContent = text || ''; el.className = 'rp-status' + (kind ? ' rp-' + kind : ''); }
 
@@ -199,7 +202,7 @@ function fromChallonge(c) {
     return {
       id: String(m.id), kind: 'challonge', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: false,
       round: m.round != null ? i18n('report.round', { n: m.round }) : '', pool: m.identifier || '', phase: '', station: null, stream: null,
-      slots, mySide, winner: m.winner, score: m.score, games: [], totalGames: null, lPlacement: null, isClass: true, prereq,
+      slots, mySide, winner: m.winner, score: m.score, games: [], totalGames: null, lPlacement: m.l_placement || null, isClass: true, prereq,
     };
   }).filter(Boolean);
 }
@@ -207,6 +210,7 @@ function fromChallonge(c) {
 // ── 予想 (勝ったら・負けたら・ここまでの変化。start.gg の大会で速報に載っているときだけ) ──
 
 async function loadPrediction(force) {
+  if (DEMO) return PRED;
   if (!INFO || INFO.kind !== 'startgg' || !myUid()) return null;
   if (!force && PRED && Date.now() - PRED_AT < 60000) return PRED;
   try {
@@ -421,7 +425,7 @@ function wireForm(form, m) {
     const st = form.querySelector('[data-form-status]');
     setStatus(st, i18n('report.sending'), 'busy');
     form.querySelector('button[type=submit]').disabled = true;
-    const r = await api({ action: 'report_submit', token: sess().token, code: CODE, set_id: m.id, result });
+    const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); form.querySelector('button[type=submit]').disabled = false; return; }
     const sentKind = ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
@@ -435,8 +439,8 @@ const SEEN_KEY = 'spsp_report_seen_v1';
 function seen(id) { try { return (JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')).includes(id); } catch (e) { return false; } }
 function markSeen(id) { try { const a = JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]'); a.push(id); sessionStorage.setItem(SEEN_KEY, JSON.stringify(a.slice(-50))); } catch (e) { /* 毎回出るだけ */ } }
 function matchAnimation(m) {
-  if (seen(m.id)) return Promise.resolve();
-  markSeen(m.id);
+  if (!DEMO && seen(m.id)) return Promise.resolve();
+  if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
   const ov = document.createElement('div');
   ov.className = 'rp-match-ov';
@@ -458,7 +462,7 @@ function renderPlayer() {
   const cur = MATCHES.find((m) => m.state === 'open');
   const waiting = MATCHES.find((m) => m.state === 'waiting');
   const done = MATCHES.filter((m) => m.state === 'complete');
-  const notices = (VIEW && VIEW.sets ? VIEW.sets : []).filter((r) => r.state === 'conflict' || r.state === 'review');
+  const notices = (VIEW && VIEW.sets ? VIEW.sets : []).filter((r) => r.state === 'conflict');
   let h = '';
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
   if (cur) {
@@ -517,11 +521,12 @@ function renderPlayer() {
 
 let GQL = null;
 async function poll(force) {
+  if (DEMO) { renderPlayer(); return; }
   clearTimeout(pollTimer);
   if (!force && document.visibilityState === 'hidden') { pollTimer = setTimeout(poll, POLL_MS); return; }
   const st = $('rp-status');
   try {
-    const v = await api({ action: 'report_view', token: sess().token, code: CODE });
+    const v = await api({ action: 'report_view', token: tok(), code: CODE });
     if (!v || !v.ok) {
       setStatus(st, errText(v), 'err');
       if (v && v.error && (v.error.code === 'report_closed' || v.error.code === 'auth_failed')) return;
@@ -586,7 +591,7 @@ function readSettings(root) {
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
-  const r = await api({ action: 'report_admin', token: sess().token, code: CODE });
+  const r = await api({ action: 'report_admin', token: tok(), code: CODE });
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
   const ev = r.report;
   const url = pageUrl(CODE, false);
@@ -624,13 +629,13 @@ async function renderAdmin() {
   root.innerHTML = h;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
   $('rp-save-set').addEventListener('click', async () => {
-    const x = await api({ action: 'report_settings', token: sess().token, code: CODE, settings: readSettings(root) });
+    const x = await api({ action: 'report_settings', token: tok(), code: CODE, settings: readSettings(root) });
     setStatus($('rp-set-status'), x && x.ok ? i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
     if (x && x.ok && INFO) INFO.settings = x.settings;
   });
   $('rp-stop').addEventListener('click', async () => {
     if (!confirm(i18n('report.admin.stop_confirm'))) return;
-    const x = await api({ action: 'report_stop', token: sess().token, code: CODE });
+    const x = await api({ action: 'report_stop', token: tok(), code: CODE });
     if (x && x.ok) location.reload(); else alert(errText(x));
   });
   for (const row of root.querySelectorAll('.rp-adm-row')) {
@@ -644,14 +649,14 @@ async function renderAdmin() {
       for (let i = 0; i < a; i++) g.push({ w, c: [null, null], s: null });
       if (!confirm(i18n('report.admin.fix_confirm'))) return;
       setStatus(st, i18n('report.sending'), 'busy');
-      const x = await api({ action: 'report_admin_fix', token: sess().token, code: CODE, set_id: setId, result: { w, g } });
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result: { w, g } });
       setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
       if (x && x.ok) setTimeout(renderAdmin, 800);
     });
     row.querySelector('[data-reset]').addEventListener('click', async () => {
       if (!confirm(i18n('report.admin.reset_confirm'))) return;
       setStatus(st, i18n('report.sending'), 'busy');
-      const x = await api({ action: 'report_admin_fix', token: sess().token, code: CODE, set_id: setId, reset: true });
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, reset: true });
       setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
       if (x && x.ok) setTimeout(renderAdmin, 800);
     });
@@ -678,14 +683,124 @@ function renderSetup() {
     const st = $('rp-setup-status');
     if (!/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(ev) && !/^\d+$/.test(ev)) { setStatus(st, i18n('report.setup.bad_event'), 'err'); return; }
     setStatus(st, i18n('report.setup.going'), 'busy');
+    if (DEMO) { setStatus(st, i18n('report.demo.nogo'), 'warn'); return; }
     const okk = await SpspReportAuth.start({ event: ev, settings: readSettings(root) }, location.pathname);
     if (!okk) setStatus(st, i18n('report.err.generic'), 'err');
   });
 }
 
+// ── 見本の画面 ─────────────────────────────────────────────────────
+
+let DEMO_ME = '';
+const DEMO_SCENES = ['match', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'admin', 'setup'];
+
+/** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に) */
+async function demoPlayers() {
+  let rows = [];
+  try {
+    const j = await (await fetch((SPSP.data || '') + 'data/views/players_index.json')).json();
+    const cols = j.cols || j.columns || [];
+    const ci = (k) => cols.indexOf(k);
+    rows = (j.rows || []).slice(40, 60).map((r) => ({ uid: String(r[ci('uid')]), name: String(r[ci('name')] || ''), char: Number(r[ci('char')]) || null }));
+  } catch (e) { rows = []; }
+  while (rows.length < 12) rows.push({ uid: '', name: 'Player ' + (rows.length + 1), char: null });
+  const s = sess();
+  if (s && s.user) rows[0] = { uid: String(s.user.id), name: s.user.gamerTag || rows[0].name, char: null };
+  W.__rpMain = {};
+  for (const r of rows) if (r.uid) W.__rpMain[r.uid] = r.char;
+  return rows;
+}
+
+function demoBanner() {
+  const links = DEMO_SCENES.map((k) => '<a href="?demo=' + k + '"' + (k === DEMO ? ' class="on"' : '') + '>' + escapeHtml(i18n('report.demo.' + k)) + '</a>').join('');
+  const el = document.createElement('div');
+  el.className = 'rp-demo';
+  el.innerHTML = '<b>' + escapeHtml(i18n('report.demo.banner')) + '</b><div class="rp-demo-links">' + links + '</div>';
+  const main = document.querySelector('.rp-main');
+  main.insertBefore(el, main.firstChild);
+}
+
+function demoSlot(p, seed, side) {
+  return p ? { id: 'e' + side + '_' + p.uid, name: p.name, uid: p.uid || null, seed } : null;
+}
+
+function demoMatch(P, o) {
+  return Object.assign({ id: 'd1', kind: 'startgg', state: 'open', started: true, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
+    station: 12, stream: null, slots: [demoSlot(P[0], 5, 0), demoSlot(P[1], 28, 1)], mySide: 0, winner: null, score: null, games: [],
+    totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null] }, o || {});
+}
+
+function demoRow(id, state, mine, theirs, P) {
+  const reports = {};
+  if (mine) reports['0'] = { result: mine, ts: 1, mine: true };
+  if (theirs) reports['1'] = { result: theirs, ts: 2, mine: false };
+  return { code: 'demo', set_id: id, state, note: state === 'review' ? 'locked_conflict' : '', applied: mine || null,
+    slots: [{ id: 'a', name: P[0].name }, { id: 'b', name: P[1].name }], reports, updated_ms: Date.now() - 60000 };
+}
+
+const R20 = { w: 0, g: [{ w: 0, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }] };
+const R21 = { w: 0, g: [{ w: 0, c: [null, null], s: null }, { w: 1, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }] };
+const L12 = { w: 1, g: [{ w: 1, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }, { w: 1, c: [null, null], s: null }] };
+
+let DEMO_P = [];
+async function demoApi(body) {
+  const P = DEMO_P;
+  if (body.action === 'report_submit') {
+    const state = DEMO === 'conflict' ? 'agreed' : 'reported';
+    const row = demoRow(body.set_id, state, body.result, DEMO === 'conflict' ? body.result : null, P);
+    VIEW.sets = (VIEW.sets || []).filter((x) => x.set_id !== body.set_id).concat([row]);
+    return { ok: true, set_id: body.set_id, state, op: 'report' };
+  }
+  if (body.action === 'report_admin') {
+    const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [{ id: 'a', name: P[i].name }, { id: 'b', name: P[i + 1].name }] });
+    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: 8, classes_only: false } },
+      sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
+  }
+  if (body.action === 'report_settings') return { ok: true, settings: body.settings };
+  return { ok: true, state: 'fixed', op: 'report' };
+}
+
+async function runDemo() {
+  demoBanner();
+  if (DEMO === 'list' || !DEMO_SCENES.includes(DEMO)) { $('rp-title').textContent = i18n('report.demo.title'); return; }
+  if (DEMO === 'setup') { renderSetup(); return; }
+  DEMO_P = await demoPlayers();
+  const P = DEMO_P;
+  DEMO_ME = P[0].uid;
+  INFO = { code: 'demo', kind: DEMO === 'challonge' ? 'challonge' : 'startgg', name: i18n(DEMO === 'challonge' ? 'report.demo.class_name' : 'report.demo.event_name'),
+    event_id: 0, active: true, expires_ms: Date.now() + 86400e3, settings: { top_cut: DEMO === 'gate' ? 8 : null, classes_only: false } };
+  $('rp-title').textContent = INFO.name;
+  if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
+  VIEW = { ok: true, admin: true, sets: [] };
+  if (DEMO === 'admin') { await renderAdmin(); return; }
+  await loadChars();
+  STAGES = ['戦場', '終点', '小戦場', 'ポケモンスタジアム2', 'すま村', 'ホロウバスティオン', 'カロスポケモンリーグ'].map((name, i) => ({ id: 9001 + i, name }));
+  const done0 = demoMatch(P, { id: 'd0', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
+  PRED = { p: { bt: { ifWin: { d1: 14.2 }, ifLose: { d1: -9.6 }, perSet: { d0: 6.8 } }, tjpr: { delta: 41.5 } } };
+  if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)]; }
+  if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('d1', 'conflict', R21, L12, P)]; }
+  if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 8', pool: '' })];
+  if (DEMO === 'challonge') { MATCHES = [demoMatch(P, { kind: 'challonge', station: null, phase: '', pool: 'A', round: i18n('report.round', { n: 1 }), totalGames: null, isClass: true })]; PRED = { none: true }; }
+  if (DEMO === 'waiting') {
+    const pre = { id: 'p1', state: 'playing', round: 'Winners Round 2', station: 7, loser: false, slots: [demoSlot(P[2], 12, 0), demoSlot(P[3], 21, 1)], deeper: [null, null] };
+    MATCHES = [demoMatch(P, { id: 'd2', state: 'waiting', round: 'Winners Quarter-Final', station: null, slots: [demoSlot(P[0], 5, 0), null], prereq: [null, pre] }), done0];
+    VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)];
+  }
+  if (DEMO === 'done') {
+    MATCHES = [done0,
+      demoMatch(P, { id: 'd3', state: 'complete', round: 'Winners Round 2', slots: [demoSlot(P[0], 5, 0), demoSlot(P[6], 12, 1)], winner: 1, score: [1, 2] }),
+      demoMatch(P, { id: 'd4', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
+    VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P), demoRow('d3', 'review', null, L12, P), demoRow('d4', 'reported', R21, null, P)];
+  }
+  const cur = MATCHES.find((m) => m.state === 'open');
+  if (cur) await matchAnimation(cur);
+  renderPlayer();
+}
+
 // ── はじめ ─────────────────────────────────────────────────────────
 
 async function main() {
+  if (DEMO) { await runDemo(); return; }
   if (!CODE) { renderSetup(); return; }
   const info = await api({ action: 'report_info', code: CODE });
   if (!info || !info.ok) { setStatus($('rp-status'), errText(info), 'err'); return; }
@@ -693,8 +808,6 @@ async function main() {
   $('rp-title').textContent = INFO.name || i18n('report.title');
   const tags = [];
   if (INFO.kind === 'challonge') tags.push(i18n('report.kind.challonge'));
-  if (INFO.settings && INFO.settings.top_cut) tags.push(i18n('report.gate.top_cut', { n: INFO.settings.top_cut }));
-  if (INFO.settings && INFO.settings.classes_only) tags.push(i18n('report.gate.classes_only'));
   $('rp-sub').textContent = tags.join(' · ');
   if (!INFO.active) { setStatus($('rp-status'), i18n('report.closed'), 'warn'); return; }
   if (!sess()) {
