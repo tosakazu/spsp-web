@@ -234,8 +234,7 @@ function predHtml(m) {
   const bt = PRED.p.bt;
   let h = '';
   if (m && m.state === 'open') {
-    h += `<div class="rp-pred-row"><span>${escapeHtml(i18n('report.pred.win'))}</span><b class="rp-up">${fmtDelta(bt.ifWin && bt.ifWin[m.id])}</b>`
-      + `<span>${escapeHtml(i18n('report.pred.lose'))}</span><b class="rp-down">${fmtDelta(bt.ifLose && bt.ifLose[m.id])}</b></div>`;
+    h += `<div class="rp-pred-row"><span>${escapeHtml(i18n('report.pred.win'))}</span><b class="rp-up">${fmtDelta(bt.ifWin && bt.ifWin[m.id])}</b></div>`;
   }
   const done = MATCHES.filter((x) => x.state === 'complete' && bt.perSet && bt.perSet[x.id] != null).reverse();
   if (done.length) {
@@ -785,7 +784,7 @@ async function runDemo() {
   await loadChars();
   STAGES = ['戦場', '終点', '小戦場', 'ポケモンスタジアム2', 'すま村', 'ホロウバスティオン', 'カロスポケモンリーグ'].map((name, i) => ({ id: 9001 + i, name }));
   const done0 = demoMatch(P, { id: 'd0', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
-  PRED = { p: { bt: { ifWin: { d1: 14.2 }, ifLose: { d1: -9.6 }, perSet: { d0: 6.8 } }, tjpr: { delta: 41.5 } } };
+  PRED = { p: { bt: { ifWin: { d1: 14.2 }, perSet: { d0: 6.8 } }, tjpr: { delta: 41.5 } } };
   if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)]; }
   if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('d1', 'conflict', R21, L12, P)]; }
   if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 8', pool: '' })];
