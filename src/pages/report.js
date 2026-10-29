@@ -441,12 +441,12 @@ function ftSet(m) {
   if (r === 0) return sd.b;
   return Math.abs(r) >= sd.from ? sd.b : sd.a;
 }
-/** 何先か: 運営の設定 → start.gg の何本勝負 (totalGames、奇数のとき) → 分からなければ null */
+/**
+ * 何先か: 運営の設定 → 分からなければ null。
+ * start.gg の totalGames は使わない (実際の大会では 2 先のラウンドでも全部 5 のまま、2026-10-30 確認)
+ */
 function ftOf(m) {
-  const n = ftSet(m);
-  if (n) return n;
-  const tg = m.totalGames;
-  return Number.isInteger(tg) && tg > 0 && tg % 2 === 1 ? (tg + 1) / 2 : null;
+  return ftSet(m);
 }
 const ftHtml = (m) => { const n = ftOf(m); return n ? `<span class="rp-ft">${escapeHtml(i18n('report.ft', { n }))}</span>` : ''; };
 
@@ -456,7 +456,7 @@ const SCORE_OTHER = 'x';
 /** 結果の入力欄。まとめて (既定) = 名前の隣でスコアを選ぶ・キャラ / 1 戦ごと = ゲームごとの勝者・キャラ・ステージ */
 function formHtml(m) {
   const ft = ftOf(m);
-  const n = ft ? 2 * ft - 1 : m.totalGames || MAX_GAMES;   // 1 戦ごとの欄の数 (何先が分からなければ最大まで、決着は勝ち越しで)
+  const n = ft ? 2 * ft - 1 : MAX_GAMES;   // 1 戦ごとの欄の数 (何先が分からなければ最大まで、決着は勝ち越しで)
   const stages = STAGES || [];
   const opt = (list, sel) => `<option value="">—</option>` + list.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${escapeHtml((x.emoji ? x.emoji + ' ' : '') + x.name)}</option>`).join('');
   const withChars = m.kind === 'startgg';
@@ -513,7 +513,7 @@ function wireForm(form, m) {
   const ft = ftOf(m);
   const games = Array.from(form.querySelectorAll('.rp-game'));
   const n = games.length;
-  const need = ft || (m.totalGames ? Math.floor(m.totalGames / 2) + 1 : null);   // null = 何先か分からない (勝ち越せば送れる)
+  const need = ft || null;   // null = 何先か分からない (勝ち越せば送れる)
   const picked = new Array(n).fill(null);
   let mode = 'sum';
   const mainOf = (slot) => (slot && slot.uid && W.__rpMain ? W.__rpMain[slot.uid] : null);
