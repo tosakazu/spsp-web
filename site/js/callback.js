@@ -17,7 +17,8 @@ import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 import SpspLogin from './login.js';
 import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
-import SpspStartggIdentity from './startgg_identity.js';   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
+import SpspStartggIdentity from './startgg_identity.js';
+import { REPORT_SETUP_KEY } from './report_auth.js';   // 試合結果の報告の受付 (reporter フロー)   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
 import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
@@ -238,9 +239,9 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
     // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
     // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
-    if ((intent === 'challonge' || intent === 'manager') && !hadNonce) {
+    if ((intent === 'challonge' || intent === 'manager' || intent === 'reporter') && !hadNonce) {
       reportError('state_missing', intent + ' ' + S.browserTag(navigator.userAgent));
-      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
+      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : intent === 'reporter' ? 'callback.reporter_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
       return;
     }
     if (intent === 'challonge') {
@@ -249,6 +250,10 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }
     if (intent === 'manager') {
       runManager(code, state, back);
+      return;
+    }
+    if (intent === 'reporter') {
+      runReporter(code, state, back);
       return;
     }
 
@@ -412,6 +417,43 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).catch(function () {
       reportError('network', 'manager fetch failed');
       show('error', i18n('callback.manager_title'), i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * reporter フロー (試合結果の報告の受付、src/pages/report.js): Worker が code を報告用の scope で交換し、運営か確かめて受付を始める
+   * (運営のトークンは Worker が暗号化して置く。ブラウザには返らない)。どのイベントかは報告ページが sessionStorage に置いたもの。
+   * 普段のセッションも受け取り、報告ページの運営の画面 (?c=<受付>&admin=1) に戻る。
+   */
+  function runReporter(code, state, back) {
+    var setup = null;
+    try { setup = JSON.parse(sessionStorage.getItem(REPORT_SETUP_KEY) || 'null'); } catch (_) { setup = null; }
+    if (!setup || !setup.event) {
+      show('error', i18n('callback.reporter_title'), i18n('callback.reporter_nosetup'), back);
+      return;
+    }
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'report_enable', code: code, state: state, event: setup.event, settings: setup.settings || undefined }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.report && json.token && json.user) {
+        AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        try { sessionStorage.removeItem(REPORT_SETUP_KEY); } catch (_) { /* 次の受付で上書きされる */ }
+        location.replace(back.replace(/[?#].*$/, '') + '?c=' + encodeURIComponent(json.report.code) + '&admin=1');
+        return;
+      }
+      var errCode = (json && json.error && json.error.code) || 'unknown';
+      reportError('reporter_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.reporter_failed'));
+      show('error', i18n('callback.reporter_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'reporter fetch failed');
+      show('error', i18n('callback.reporter_title'), i18n('callback.s28'), back);
     });
   }
 

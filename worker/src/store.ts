@@ -134,6 +134,25 @@ export interface ToolLogRow {
   event_id: number | null; event_name: string; phase_id: number | null; count: number | null; detail: string;
 }
 
+/** 試合結果の報告の受付 (report_events、migrations/0012)。token_enc は暗号化したトークン */
+export interface ReportEventRow {
+  code: string; kind: 'startgg' | 'challonge'; target_id: string;
+  event_id: number | null; tournament_id: number | null; class_id: number | null;
+  name: string; slug: string; admins: string; token_enc: string; token_exp_ms: number; settings: string;
+  status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
+}
+/** 受付中の一覧 (だれでも読める欄だけ) */
+export type ReportEventPublic = Pick<ReportEventRow, 'code' | 'kind' | 'event_id' | 'tournament_id' | 'class_id' | 'name' | 'slug' | 'expires_ms' | 'settings'>;
+/** report_sets の 1 行 */
+export interface ReportSetRow {
+  code: string; set_id: string; state: string; users: string; slots: string; applied: string; note: string;
+  floor_id: number; version: number; updated_ms: number;
+}
+/** report_submissions の 1 行 */
+export interface ReportSubmissionRow {
+  id?: number; code: string; set_id: string; user_id: string; side: number; ts_ms: number; result: string; outcome: string;
+}
+
 export interface Store {
   /** ログインの記録を 1 行足す。 */
   insertLogin(row: LoginRow): Promise<void>;
@@ -191,4 +210,33 @@ export interface Store {
   recordClassAction(action: string, guard: RateGuard): Promise<boolean>;
   /** 大会運営ツールの使用記録を 1 行足す。同じユーザーの当日分が maxPerDay 以上なら足さずに false */
   insertToolLog(row: ToolLogRow, maxPerDay: number): Promise<boolean>;
+  /** 報告の受付 (無ければ null)。 */
+  getReportEvent(code: string): Promise<ReportEventRow | null>;
+  /** 同じ大会 (kind, target_id) の受付 (無ければ null)。 */
+  getReportEventByTarget(kind: string, targetId: string): Promise<ReportEventRow | null>;
+  /** 受付を足す (同じ (kind, target_id) があれば、code と created_ms はそのままでほかを置き換える)。 */
+  upsertReportEvent(row: ReportEventRow): Promise<void>;
+  /** トークンだけ書き換える (延長したとき)。 */
+  updateReportEventToken(code: string, tokenEnc: string, tokenExpMs: number): Promise<void>;
+  /** 運営の設定 (JSON) を書き換える。 */
+  updateReportEventSettings(code: string, settings: string): Promise<void>;
+  /** 受付を止めてトークンを消す。 */
+  stopReportEvent(code: string): Promise<void>;
+  /** 期限を過ぎた受付のトークンを消して止める。 */
+  purgeReportTokens(nowMs: number): Promise<void>;
+  /** 受付中 (active かつ期限内) の一覧。 */
+  listActiveReportEvents(nowMs: number): Promise<ReportEventPublic[]>;
+  getReportSet(code: string, setId: string): Promise<ReportSetRow | null>;
+  /** prevVersion が null なら行が無いときだけ足す。数なら version がその値のときだけ置き換える (row.version は新しい値)。書けたら true */
+  casReportSet(row: ReportSetRow, prevVersion: number | null): Promise<boolean>;
+  listReportSets(code: string): Promise<ReportSetRow[]>;
+  /** その人が選手の行 (受付中の code のどれか)。 */
+  listReportSetsForUser(userId: string, codes: string[]): Promise<ReportSetRow[]>;
+  /** 1 行足して id を返す。 */
+  insertReportSubmission(row: ReportSubmissionRow): Promise<number>;
+  setReportSubmissionOutcome(id: number, outcome: string): Promise<void>;
+  /** その試合の報告 (id 順)。 */
+  listReportSubmissions(code: string, setId: string): Promise<ReportSubmissionRow[]>;
+  /** その人が sinceMs 以降に送った数と、最後に送った時刻。 */
+  reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }>;
 }

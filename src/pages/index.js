@@ -19,6 +19,7 @@ import SPSPLogo from '../../site/logo.js';
 import SPSPShare from '../../site/share.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
+import SpspReportNotice from '../../site/js/report_notice.js';
 /** 地域の暦日の時差 (region/config.js utcOffset。無ければ止まらないよう空 = UTC ではなく、設定は必ずある前提) */
 const SITE_UTC_OFFSET = /** @type {SpspSiteConfig} */ (window.SPSP.site).utcOffset;
 
@@ -181,6 +182,7 @@ async function loadData() {
     SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) ||
       (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
     SpspLive.showNotice(document.getElementById('live-notice')).catch(() => {});   // ログイン中の本人が出ている開催中の大会 (js/live.js)
+    SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {});   // そのうち結果報告を受付中のもの・報告の食い違い (js/report_notice.js)
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }

@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow,
+import type { LoginRow, ReportEventPublic, ReportEventRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -290,5 +290,97 @@ export class D1Store implements Store {
     const r = await this.db.prepare(
       'SELECT directive, blocked, path, sample, source, hits, first_seen, last_seen FROM csp_reports ORDER BY hits DESC, key ASC').all<CspRow>();
     return (r.results || []).map((x) => ({ ...x, hits: Number(x.hits) }));
+  }
+
+  async getReportEvent(code: string): Promise<ReportEventRow | null> {
+    return await this.db.prepare('SELECT * FROM report_events WHERE code = ?').bind(code).first<ReportEventRow>() ?? null;
+  }
+
+  async getReportEventByTarget(kind: string, targetId: string): Promise<ReportEventRow | null> {
+    return await this.db.prepare('SELECT * FROM report_events WHERE kind = ? AND target_id = ?').bind(kind, targetId).first<ReportEventRow>() ?? null;
+  }
+
+  async upsertReportEvent(r: ReportEventRow): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO report_events (code, kind, target_id, event_id, tournament_id, class_id, name, slug, admins, token_enc, token_exp_ms, status, created_ms, expires_ms, settings)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+       ON CONFLICT (kind, target_id) DO UPDATE SET event_id = ?4, tournament_id = ?5, class_id = ?6, name = ?7, slug = ?8, admins = ?9,
+         token_enc = ?10, token_exp_ms = ?11, status = ?12, expires_ms = ?14, settings = ?15`)
+      .bind(r.code, r.kind, r.target_id, r.event_id, r.tournament_id, r.class_id, r.name, r.slug, r.admins, r.token_enc, r.token_exp_ms, r.status, r.created_ms, r.expires_ms, r.settings)
+      .run();
+  }
+
+  async updateReportEventToken(code: string, tokenEnc: string, tokenExpMs: number): Promise<void> {
+    await this.db.prepare('UPDATE report_events SET token_enc = ?, token_exp_ms = ? WHERE code = ?').bind(tokenEnc, tokenExpMs, code).run();
+  }
+
+  async updateReportEventSettings(code: string, settings: string): Promise<void> {
+    await this.db.prepare('UPDATE report_events SET settings = ? WHERE code = ?').bind(settings, code).run();
+  }
+
+  async stopReportEvent(code: string): Promise<void> {
+    await this.db.prepare("UPDATE report_events SET status = 'stopped', token_enc = '' WHERE code = ?").bind(code).run();
+  }
+
+  async purgeReportTokens(nowMs: number): Promise<void> {
+    await this.db.prepare("UPDATE report_events SET status = 'stopped', token_enc = '' WHERE expires_ms < ? AND (token_enc <> '' OR status = 'active')").bind(nowMs).run();
+  }
+
+  async listActiveReportEvents(nowMs: number): Promise<ReportEventPublic[]> {
+    const r = await this.db.prepare(
+      "SELECT code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings FROM report_events WHERE status = 'active' AND expires_ms >= ? ORDER BY created_ms")
+      .bind(nowMs).all<ReportEventPublic>();
+    return r.results || [];
+  }
+
+  async getReportSet(code: string, setId: string): Promise<ReportSetRow | null> {
+    return await this.db.prepare('SELECT * FROM report_sets WHERE code = ? AND set_id = ?').bind(code, setId).first<ReportSetRow>() ?? null;
+  }
+
+  async casReportSet(r: ReportSetRow, prevVersion: number | null): Promise<boolean> {
+    const res = prevVersion === null
+      ? await this.db.prepare(
+        `INSERT OR IGNORE INTO report_sets (code, set_id, state, users, slots, applied, note, floor_id, version, updated_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(r.code, r.set_id, r.state, r.users, r.slots, r.applied, r.note, r.floor_id, r.version, r.updated_ms).run()
+      : await this.db.prepare(
+        `UPDATE report_sets SET state = ?, users = ?, slots = ?, applied = ?, note = ?, floor_id = ?, version = ?, updated_ms = ?
+         WHERE code = ? AND set_id = ? AND version = ?`)
+        .bind(r.state, r.users, r.slots, r.applied, r.note, r.floor_id, r.version, r.updated_ms, r.code, r.set_id, prevVersion).run();
+    return (res.meta?.changes ?? 0) > 0;
+  }
+
+  async listReportSets(code: string): Promise<ReportSetRow[]> {
+    const r = await this.db.prepare('SELECT * FROM report_sets WHERE code = ? ORDER BY updated_ms DESC').bind(code).all<ReportSetRow>();
+    return r.results || [];
+  }
+
+  async listReportSetsForUser(userId: string, codes: string[]): Promise<ReportSetRow[]> {
+    if (!codes.length) return [];
+    const marks = codes.map(() => '?').join(', ');
+    const r = await this.db.prepare(`SELECT * FROM report_sets WHERE users LIKE ? AND code IN (${marks}) ORDER BY updated_ms DESC LIMIT 50`)
+      .bind('%|' + userId + '|%', ...codes).all<ReportSetRow>();
+    return r.results || [];
+  }
+
+  async insertReportSubmission(r: ReportSubmissionRow): Promise<number> {
+    const res = await this.db.prepare('INSERT INTO report_submissions (code, set_id, user_id, side, ts_ms, result, outcome) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(r.code, r.set_id, r.user_id, r.side, r.ts_ms, r.result, r.outcome).run();
+    return Number(res.meta?.last_row_id ?? 0);
+  }
+
+  async setReportSubmissionOutcome(id: number, outcome: string): Promise<void> {
+    await this.db.prepare('UPDATE report_submissions SET outcome = ? WHERE id = ?').bind(outcome, id).run();
+  }
+
+  async listReportSubmissions(code: string, setId: string): Promise<ReportSubmissionRow[]> {
+    const r = await this.db.prepare('SELECT * FROM report_submissions WHERE code = ? AND set_id = ? ORDER BY id').bind(code, setId).all<ReportSubmissionRow>();
+    return (r.results || []).map((x) => ({ ...x, id: Number(x.id), side: Number(x.side), ts_ms: Number(x.ts_ms) }));
+  }
+
+  async reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }> {
+    const r = await this.db.prepare('SELECT COUNT(*) AS n, MAX(ts_ms) AS t FROM report_submissions WHERE user_id = ? AND ts_ms >= ?')
+      .bind(userId, sinceMs).first<{ n: number; t: number | null }>();
+    return { count: r ? Number(r.n) : 0, latestMs: r && r.t !== null ? Number(r.t) : null };
   }
 }

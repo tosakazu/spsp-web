@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.report.title">結果報告 | SPSP</title>
+<meta name="description" content="大会の自分の試合の結果を start.gg / Challonge に報告します。" data-i18n-attr="content:page.report.description">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="../css/player_card.css">
+<link rel="stylesheet" href="../css/report.css">
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+
+<!-- 試合結果の報告 (docs/self_report_design.md)。中身は src/pages/report.js が組み立てる -->
+<main class="rp-main">
+  <h1 id="rp-title" data-i18n="report.title">結果報告</h1>
+  <p class="subtitle" id="rp-sub"></p>
+  <div class="rp-top-actions">
+    <button type="button" class="rp-btn" id="rp-to-admin" hidden data-i18n="report.to_admin">運営の画面</button>
+    <button type="button" class="rp-btn" id="rp-to-player" hidden data-i18n="report.to_player">選手の画面</button>
+  </div>
+  <div class="rp-status" id="rp-status"></div>
+  <section class="rp-card-sec" id="rp-login" hidden>
+    <p data-i18n="report.login">結果を報告するには start.gg でログインしてください。</p>
+    <button type="button" class="rp-btn rp-primary" id="rp-login-btn" data-i18n="report.login_btn">start.gg でログイン</button>
+  </section>
+  <section class="rp-card-sec" id="rp-relogin" hidden>
+    <button type="button" class="rp-btn rp-primary" id="rp-relogin-btn" data-i18n="report.login_btn">start.gg でログイン</button>
+  </section>
+  <div id="rp-setup" hidden></div>
+  <div id="rp-player" hidden></div>
+  <div id="rp-admin" hidden></div>
+</main>
+
+<script src="../assets/report.js"></script>
+</body>
+</html>
