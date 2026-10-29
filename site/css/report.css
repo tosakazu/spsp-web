@@ -174,3 +174,17 @@ body {
 .rp-done .rp-ext, .rp-adm-head .rp-ext { font-size: 11px; }
 /* マッチングの間に相手のカードを裏で描いておく (画像の先読み) */
 .rp-card-warm { position: absolute; left: -10000px; top: 0; width: 360px; visibility: hidden; pointer-events: none; }
+/* キャラ選び: いちばん上の使用キャラ */
+.rp-cp-used { flex: none; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+.rp-cp-used[hidden] { display: none; }
+.rp-cp-used .rp-cp-grid { overflow: visible; }
+.rp-cp-u { background: #fffbeb; border-color: #f59e0b; }
+/* VS の名前の上の二つ名 */
+.rp-title { font-size: 11px; font-weight: 700; color: #b45309; letter-spacing: .03em; overflow-wrap: anywhere; }
+.rp-title[hidden] { display: none; }
+/* 保存した設定 */
+.rp-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 6px 0 10px; padding: 8px 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
+.rp-preset-l { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.rp-preset-l select { font: inherit; max-width: 14em; }
+.rp-preset-save { display: flex; gap: 6px; flex-basis: 100%; }
+.rp-preset-save input { font: inherit; flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; }

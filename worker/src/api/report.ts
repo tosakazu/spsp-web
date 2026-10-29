@@ -36,7 +36,7 @@ import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
-import { adminDecision, ftOf, parseResult, parseSettings, playerGate, reconcile } from './report_logic.ts';
+import { adminDecision, ftOf, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
 import type { HandlerResult } from './respond.ts';
@@ -487,6 +487,42 @@ export async function handleReportStop(cfg: Config, store: Store, req: Record<st
   if (!admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが止められます。', 'not_admin');
   await store.stopReportEvent(ev.code);
   return ok({ code: ev.code });
+}
+
+// ── 運営: 名前をつけて保存した設定 (アカウントごと) ─────────────────────
+
+const presetView = (r: { name: string; settings: string; updated_ms: number }) => ({ name: r.name, settings: parsePreset(safeJson(r.settings)), updated_ms: r.updated_ms });
+function safeJson(s: string): unknown { try { return JSON.parse(s); } catch (_) { return null; } }
+
+/** action: "report_presets" — 自分の保存した設定の一覧 */
+export async function handleReportPresets(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  return ok({ presets: (await store.listReportPresets(sess.id)).map(presetView).filter((p) => p.settings) });
+}
+
+/** action: "report_preset_save" — { token, name, settings } (同じ名前なら上書き) */
+export async function handleReportPresetSave(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const name = presetName(req.name);
+  if (!name) return err('bad_request', '設定の名前を 1〜40 文字で入れてください。', 'bad:name');
+  const p = parsePreset(req.settings);
+  if (!p) return err('bad_request', '設定の形式が正しくありません。', 'bad:settings');
+  if (!await store.saveReportPreset(sess.id, { name, settings: JSON.stringify(p), updated_ms: now }, PRESETS_MAX)) {
+    return err('rate_limited', '保存できる設定は ' + PRESETS_MAX + ' 個までです。使わないものを消してください。', 'presets_max');
+  }
+  return ok({ presets: (await store.listReportPresets(sess.id)).map(presetView).filter((x) => x.settings) });
+}
+
+/** action: "report_preset_delete" — { token, name } */
+export async function handleReportPresetDelete(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const name = presetName(req.name);
+  if (!name) return err('bad_request', '設定の名前が正しくありません。', 'bad:name');
+  await store.deleteReportPreset(sess.id, name);
+  return ok({ presets: (await store.listReportPresets(sess.id)).map(presetView).filter((x) => x.settings) });
 }
 
 /** action: "report_settings" — 運営の設定を変える { token, code, settings: { top_cut, classes_only } } */

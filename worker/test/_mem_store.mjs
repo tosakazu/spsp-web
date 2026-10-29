@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -210,6 +210,20 @@ export class MemStore {
   }
 
   async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
+
+  async listReportPresets(userId) {
+    this._rep(); return this.reportPresets.filter((x) => x.user_id === userId).sort((a, b) => b.updated_ms - a.updated_ms).map(({ name, settings, updated_ms }) => ({ name, settings, updated_ms }));
+  }
+
+  async saveReportPreset(userId, row, max) {
+    this._rep();
+    const old = this.reportPresets.find((x) => x.user_id === userId && x.name === row.name);
+    if (old) { old.settings = row.settings; old.updated_ms = row.updated_ms; return true; }
+    if (this.reportPresets.filter((x) => x.user_id === userId).length >= max) return false;
+    this.reportPresets.push({ user_id: userId, ...row }); return true;
+  }
+
+  async deleteReportPreset(userId, name) { this._rep(); this.reportPresets = this.reportPresets.filter((x) => !(x.user_id === userId && x.name === name)); }
 
   async stopReportEvent(code) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.status = 'stopped'; x.token_enc = ''; } }
 

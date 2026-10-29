@@ -142,6 +142,8 @@ export interface ReportEventRow {
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
+/** 名前をつけて保存した運営の設定 (report_presets) */
+export interface ReportPresetRow { name: string; settings: string; updated_ms: number }
 export type ReportEventPublic = Pick<ReportEventRow, 'code' | 'kind' | 'event_id' | 'tournament_id' | 'class_id' | 'name' | 'slug' | 'expires_ms' | 'settings'>;
 /** report_sets の 1 行 */
 export interface ReportSetRow {
@@ -220,6 +222,11 @@ export interface Store {
   updateReportEventToken(code: string, tokenEnc: string, tokenExpMs: number): Promise<void>;
   /** 運営の設定 (JSON) を書き換える。 */
   updateReportEventSettings(code: string, settings: string): Promise<void>;
+  /** その人の保存した設定 (新しい順)。 */
+  listReportPresets(userId: string): Promise<ReportPresetRow[]>;
+  /** 名前が同じなら置き換える。名前が新しくて既に max 件あれば足さずに false */
+  saveReportPreset(userId: string, row: ReportPresetRow, max: number): Promise<boolean>;
+  deleteReportPreset(userId: string, name: string): Promise<void>;
   /** 受付を止めてトークンを消す。 */
   stopReportEvent(code: string): Promise<void>;
   /** 期限を過ぎた受付のトークンを消して止める。 */

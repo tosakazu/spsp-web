@@ -376,6 +376,22 @@ test('運営: 一覧・直す (その後の選手の報告では動かない)・
   await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: true } });
   e.tick(5000);
   assert.strictEqual((await e.call({ action: 'report_submit', token: await e.tok(11), code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } })).error.code, 'not_allowed');
+  // 名前をつけて保存した設定 (アカウントごと)
+  const pre = { top_cut: 8, classes_only: false, phases: [{ name: 'Pools', i: 0, w: { a: 2, from: 4, fl: 'Winners Final', b: 3 }, l: { a: 2, from: null, b: 2 } }], junk: 1 };
+  const sv = await e.call({ action: 'report_preset_save', token: TO, name: ' いつもの ', settings: pre });
+  assert.deepStrictEqual(sv.presets.map((p) => p.name), ['いつもの']);
+  assert.deepStrictEqual(sv.presets[0].settings, { top_cut: 8, classes_only: false, phases: [{ name: 'Pools', i: 0, w: { a: 2, from: 4, fl: 'Winners Final', b: 3 }, l: { a: 2, from: null, b: 2, fl: null } }] });
+  assert.deepStrictEqual((await e.call({ action: 'report_presets', token: await e.tok(11) })).presets, []);   // ほかの人には見えない
+  e.tick(10);
+  await e.call({ action: 'report_preset_save', token: TO, name: 'いつもの', settings: { top_cut: null, classes_only: true } });   // 同じ名前 = 上書き
+  const ls = (await e.call({ action: 'report_presets', token: TO })).presets;
+  assert.deepStrictEqual([ls.length, ls[0].settings.classes_only, ls[0].settings.phases], [1, true, []]);
+  assert.strictEqual((await e.call({ action: 'report_preset_save', token: TO, name: '', settings: pre })).error.code, 'bad_request');
+  for (let i = 1; i < 20; i++) await e.call({ action: 'report_preset_save', token: TO, name: 'p' + i, settings: pre });
+  assert.strictEqual((await e.call({ action: 'report_preset_save', token: TO, name: 'p20', settings: pre })).error.code, 'rate_limited');   // 20 個まで
+  assert.strictEqual((await e.call({ action: 'report_preset_save', token: TO, name: 'p1', settings: pre })).ok, true);              // 上書きはできる
+  assert.strictEqual((await e.call({ action: 'report_preset_delete', token: TO, name: 'p1' })).presets.length, 19);
+  assert.strictEqual((await e.call({ action: 'report_presets' })).error.code, 'auth_failed');
   // 停止
   assert.strictEqual((await e.call({ action: 'report_stop', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
   assert.strictEqual((await e.call({ action: 'report_stop', token: TO, code: e.code })).ok, true);

@@ -99,18 +99,38 @@ function setChar(input, id) {
   const btn = input.parentElement && input.parentElement.querySelector('.rp-cp-btn');
   if (btn) btn.innerHTML = cpLabel(input.value);
 }
-function wireCharPickers(root) {
+function wireCharPickers(root, m) {
   for (const b of root.querySelectorAll('[data-cp-open]')) {
-    b.addEventListener('click', () => openCharPicker(b.parentElement.querySelector('input[type=hidden]'), b.getAttribute('aria-label') || ''));
+    const input = b.parentElement.querySelector('input[type=hidden]');
+    const k = Number(input.getAttribute('data-char') ?? input.getAttribute('data-sum-char'));
+    const slot = m && m.slots ? m.slots[k] : null;
+    if (slot && slot.uid) usedCharsOf(slot.uid);   // 開く前に読んでおく
+    b.addEventListener('click', () => openCharPicker(input, b.getAttribute('aria-label') || '', slot && slot.uid ? usedCharsOf(slot.uid) : null));
   }
 }
-function openCharPicker(input, title) {
+/** その人の使用キャラ (多い順、最大 6)。選手のデータ (characters) → 無ければ選手一覧のメインキャラ。ID は CHARS にあるものだけ */
+const USED = new Map();
+function usedCharsOf(uid) {
+  if (!USED.has(uid)) {
+    USED.set(uid, cardDataOf(uid).then((d) => {
+      const ids = ((d && d.player && d.player.characters) || []).map((c) => Number(c.id));
+      const main = W.__rpMain && W.__rpMain[uid];
+      if (!ids.length && main) ids.push(Number(main));
+      return Array.from(new Set(ids)).filter((id) => charById(id)).slice(0, 6);
+    }).catch(() => []));
+  }
+  return USED.get(uid);
+}
+/** used = 使用キャラの ID (Promise)。一覧はすぐ開き、読めたらいちばん上に足す */
+function openCharPicker(input, title, used) {
+  const cBtn = (c, cls) => `<button type="button" class="rp-cp-c${cls}${String(c.id) === input.value ? ' sel' : ''}" data-id="${c.id}" data-name="${escapeHtml(c.name)}"><span class="em">${escapeHtml(c.emoji || '🎮')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`;
   const ov = document.createElement('div');
   ov.className = 'rp-cp-ov';
   ov.innerHTML = `<div class="rp-cp-panel" role="dialog" aria-label="${escapeHtml(title)}">
     <div class="rp-cp-head"><b>${escapeHtml(title)}</b><button type="button" class="rp-link" data-cp-clear>${escapeHtml(i18n('report.char.clear'))}</button><button type="button" class="rp-cp-x" data-cp-close aria-label="${escapeHtml(i18n('report.char.close'))}">×</button></div>
     <input type="search" class="rp-cp-q" placeholder="${escapeHtml(i18n('report.char.search'))}" autocomplete="off">
-    <div class="rp-cp-grid">${(CHARS || []).map((c) => `<button type="button" class="rp-cp-c${String(c.id) === input.value ? ' sel' : ''}" data-id="${c.id}" data-name="${escapeHtml(c.name)}"><span class="em">${escapeHtml(c.emoji || '🎮')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`).join('')}</div>
+    <div class="rp-cp-used" hidden></div>
+    <div class="rp-cp-grid rp-cp-all">${(CHARS || []).map((c) => cBtn(c, '')).join('')}</div>
   </div>`;
   document.body.appendChild(ov);
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
@@ -120,11 +140,22 @@ function openCharPicker(input, title) {
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   ov.querySelector('[data-cp-close]').addEventListener('click', close);
   ov.querySelector('[data-cp-clear]').addEventListener('click', () => pick(null));
-  const btns = Array.from(ov.querySelectorAll('.rp-cp-c'));
-  for (const b of btns) b.addEventListener('click', () => pick(b.getAttribute('data-id')));
+  for (const b of ov.querySelectorAll('.rp-cp-c')) b.addEventListener('click', () => pick(b.getAttribute('data-id')));
+  const btns = Array.from(ov.querySelectorAll('.rp-cp-all .rp-cp-c'));
+  const usedBox = ov.querySelector('.rp-cp-used');
+  let hasUsed = false;
+  if (used) Promise.resolve(used).then((ids) => {
+    const list = (ids || []).map(charById).filter(Boolean);
+    if (!list.length || !ov.isConnected) return;
+    usedBox.innerHTML = `<div class="rp-muted">${escapeHtml(i18n('report.char.used'))}</div><div class="rp-cp-grid">${list.map((c) => cBtn(c, ' rp-cp-u')).join('')}</div>`;
+    for (const b of usedBox.querySelectorAll('.rp-cp-c')) b.addEventListener('click', () => pick(b.getAttribute('data-id')));
+    hasUsed = true;
+    usedBox.hidden = !!q.value.trim();
+  }).catch(() => { /* 使用キャラが出ないだけ */ });
   const q = ov.querySelector('.rp-cp-q');
   q.addEventListener('input', () => {
     const t = normChar(q.value.trim());
+    usedBox.hidden = !hasUsed || !!t;   // 絞り込み中は使用キャラの段を隠す
     let first = null;
     for (const b of btns) { const hit = !t || normChar(b.getAttribute('data-name')).includes(t); b.hidden = !hit; if (hit && !first) first = b; }
     for (const b of btns) b.classList.toggle('hit', !!t && b === first);
@@ -372,11 +403,29 @@ function seedHtml(slot) {
   return slot && slot.seed ? `<span class="rp-seed">${escapeHtml(i18n('report.seed', { n: slot.seed }))}</span>` : '';
 }
 
+/** 名前の上の二つ名 (カードの設定)。読めたものはすぐ出し、まだなら fillTitles が入れる */
+const TITLE_TXT = new Map();   // uid → 二つ名 ( = 無い)
+function titleSlotHtml(slot) {
+  if (!slot || !slot.uid) return '';
+  const t = TITLE_TXT.get(slot.uid);
+  return `<div class="rp-title" data-title-uid="${escapeHtml(slot.uid)}"${t ? '' : ' hidden'}>${escapeHtml(t || '')}</div>`;
+}
+function fillTitles(root) {
+  for (const el of root.querySelectorAll('[data-title-uid]')) {
+    const uid = el.getAttribute('data-title-uid');
+    if (TITLE_TXT.has(uid)) continue;
+    appliedOf(uid).then((x) => {
+      const t = (x && x.titleText) || '';
+      TITLE_TXT.set(uid, t);
+      for (const e of document.querySelectorAll(`[data-title-uid="${uid}"]`)) { e.textContent = t; e.hidden = !t; }
+    });
+  }
+}
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  return `<div class="rp-vs"><div class="rp-side rp-me"><div class="rp-name">${escapeHtml(me ? me.name : '')}</div>${seedHtml(me)}</div>`
+  return `<div class="rp-vs"><div class="rp-side rp-me">${titleSlotHtml(me)}<div class="rp-name">${escapeHtml(me ? me.name : '')}</div>${seedHtml(me)}</div>`
     + `<div class="rp-vs-mark">VS</div>`
-    + `<div class="rp-side rp-op"><div class="rp-name">${escapeHtml(op ? op.name : i18n('report.tbd'))}</div>${seedHtml(op)}</div></div>`;
+    + `<div class="rp-side rp-op">${titleSlotHtml(op)}<div class="rp-name">${escapeHtml(op ? op.name : i18n('report.tbd'))}</div>${seedHtml(op)}</div></div>`;
 }
 
 /** 報告の状態 (この試合の D1 の行) */
@@ -415,10 +464,15 @@ function appliedOf(uid) {
   if (!APPLIED.has(uid)) APPLIED.set(uid, fetchAppliedCard(uid).catch(() => null));
   return APPLIED.get(uid);
 }
+const CARD_DATA = new Map();  // uid → Promise (選手のデータ。カードと使用キャラで使う)
+function cardDataOf(uid) {
+  if (!CARD_DATA.has(uid)) CARD_DATA.set(uid, loadCardData(uid).catch(() => null));
+  return CARD_DATA.get(uid);
+}
 function cardModelOf(uid) {
   if (!CARD_DONE.has(uid)) {
     CARD_DONE.set(uid, (async () => {
-      const [data, x] = await Promise.all([loadCardData(uid).catch(() => null), appliedOf(uid)]);
+      const [data, x] = await Promise.all([cardDataOf(uid), appliedOf(uid)]);
       if (!data) return null;
       return buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
     })().catch(() => null));
@@ -522,13 +576,8 @@ function wireForm(form, m) {
   const need = ft || null;   // null = 何先か分からない (勝ち越せば送れる)
   const picked = new Array(n).fill(null);
   let mode = 'sum';
-  const mainOf = (slot) => (slot && slot.uid && W.__rpMain ? W.__rpMain[slot.uid] : null);
-  // 自分・相手のキャラの初期値 = メインキャラ (選手一覧の char)
-  for (const k of [0, 1]) {
-    const c = mainOf(m.slots[k]);
-    if (c) for (const inp of form.querySelectorAll(`input[data-char="${k}"], input[data-sum-char="${k}"]`)) setChar(inp, c);
-  }
-  wireCharPickers(form);
+  // キャラは空欄から (選ぶ一覧のいちばん上にその人の使用キャラを出す、2026-10-30)
+  wireCharPickers(form, m);
   const submit = form.querySelector('button[type=submit]');
   const setSum = (text, warn) => { const el = form.querySelector('.rp-sum'); el.textContent = text; el.classList.toggle('rp-warn', !!warn); };
   /** まとめてのスコア [側 0, 側 1] (どちらか未入力なら null) */
@@ -650,6 +699,9 @@ async function matchAnimation(m) {
   const opCard = op && op.uid ? cardModelOf(op.uid) : null;   // 相手のカードはアニメーションの間に読んでおく
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
+  // この後の VS の欄にも同じ二つ名を出す
+  if (me && me.uid && tMe) TITLE_TXT.set(me.uid, tMe);
+  if (op && op.uid && tOp) TITLE_TXT.set(op.uid, tOp);
   const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
   const ov = document.createElement('div');
   ov.className = 'rp-match-ov';
@@ -691,10 +743,10 @@ function renderPlayer() {
       ${stationHtml(cur)}
       ${vsHtml(cur)}
       ${matchLinks(cur)}
-      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
+      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
     </section>`;
   } else if (waiting) {
     h += `<section class="rp-card-sec">
@@ -735,6 +787,7 @@ function renderPlayer() {
     const m = MATCHES.find((x) => x.id === det.getAttribute('data-pred'));
     det.querySelector('.rp-pred').innerHTML = predHtml(m);
   });
+  fillTitles(root);
   fillCards(root);
 }
 
@@ -772,10 +825,12 @@ async function poll(force) {
       if (!CHARS) await loadChars();
       await loadMains();
       const cur = MATCHES.find((m) => m.state === 'open');
-      if (cur) await matchAnimation(cur);
+      // 画面は先に作って、アニメーションはその上に出す (カード・二つ名の読み込みを待たずに操作できる)
       const sig = matchesSig();
-      if (!document.querySelector('.rp-form:focus-within') || force || sig !== LAST_SIG) renderPlayer();
+      // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
+      if (!LAST_SIG || sig !== LAST_SIG) renderPlayer();
       LAST_SIG = sig;
+      if (cur) matchAnimation(cur);
       setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
     }
   } catch (e) {
@@ -900,6 +955,87 @@ const ADMIN_POLL_MS = 15000;
 let adminTimer = 0;
 let ADMIN_SIG = '';
 
+// ── 名前をつけて保存した設定 (アカウントごと、worker の report_presets) ──────────────
+// phase id は大会ごとに違うので、何先はフェーズ名・順番 (i)・切り替えのラウンド名 (fl) で持ち、呼び出すときにこの大会のフェーズに当てはめる
+const PRESET_PENDING = 'spsp_report_preset_pending';   // 受付を始める画面で選んだ設定 (受付の後に何先を当てはめる)
+const roundLabelOf = (ph, n) => { const r = (ph.rounds || []).find((x) => x.n === n); return r && r.label ? r.label : null; };
+function presetFrom(settings, ft) {
+  const phases = [];
+  (PHASES || []).forEach((ph, i) => {
+    const rule = ft && ft[ph.key];
+    if (!rule) return;
+    const side = (sd, sign) => ({ a: sd.a, from: sd.from, b: sd.b, fl: sd.from ? roundLabelOf(ph, sign * sd.from) : null });
+    phases.push({ name: ph.name || '', i, w: side(rule.w, 1), l: side(rule.l, -1) });
+  });
+  return { top_cut: settings.top_cut, classes_only: settings.classes_only, phases };
+}
+/** 保存した設定の何先を、この大会のフェーズに当てはめる。同じ名前のフェーズ → 無ければ同じ順番。当てはまらなかったフェーズ名も返す */
+function presetToFt(p) {
+  const ft = {}; const missed = []; const used = new Set();
+  for (const pp of (p && p.phases) || []) {
+    const ph = (PHASES || []).find((x) => pp.name && x.name === pp.name && !used.has(x.key))
+      || ((PHASES || [])[pp.i] && !used.has(PHASES[pp.i].key) ? PHASES[pp.i] : null);
+    if (!ph) { missed.push(pp.name || '#' + (pp.i + 1)); continue; }
+    used.add(ph.key);
+    const side = (sd, sign) => {
+      if (!sd.from) return { a: sd.a, from: null, b: sd.a };
+      const r = sd.fl ? (ph.rounds || []).find((x) => sign * x.n > 0 && x.label === sd.fl) : null;   // 同じ名前のラウンド (Winners Final など) から
+      return { a: sd.a, from: r ? Math.abs(r.n) : sd.from, b: sd.b };
+    };
+    ft[ph.key] = { w: side(pp.w, 1), l: side(pp.l, -1) };
+  }
+  return { ft: Object.keys(ft).length ? ft : null, missed };
+}
+function presetBarHtml(withSave) {
+  return `<div class="rp-presets">
+    <label class="rp-preset-l">${escapeHtml(i18n('report.preset.title'))}
+      <select id="rp-preset-sel"><option value="">${escapeHtml(i18n('report.loading'))}</option></select></label>
+    <button type="button" class="rp-btn" id="rp-preset-load" disabled>${escapeHtml(i18n('report.preset.load'))}</button>
+    <button type="button" class="rp-link" id="rp-preset-del" disabled>${escapeHtml(i18n('report.preset.delete'))}</button>
+    ${withSave ? `<div class="rp-preset-save"><input type="text" id="rp-preset-name" maxlength="40" placeholder="${escapeHtml(i18n('report.preset.name'))}">
+      <button type="button" class="rp-btn" id="rp-preset-save">${escapeHtml(i18n('report.preset.save'))}</button></div>` : ''}
+    <span class="rp-status" id="rp-preset-status"></span>
+  </div>`;
+}
+/** 保存した設定の欄を動かす。onLoad(preset, name) = 呼び出したとき、current() = 今の入力 (保存する中身) */
+function wirePresets(onLoad, current) {
+  const sel = $('rp-preset-sel'); const st = $('rp-preset-status');
+  let list = [];
+  const fill = (xs, pick) => {
+    list = xs || [];
+    sel.innerHTML = list.length ? `<option value="">—</option>` + list.map((p, i) => `<option value="${i}">${escapeHtml(p.name)}</option>`).join('')
+      : `<option value="">${escapeHtml(i18n('report.preset.none'))}</option>`;
+    const i = pick ? list.findIndex((p) => p.name === pick) : -1;
+    sel.value = i >= 0 ? String(i) : '';
+    sel.dispatchEvent(new Event('change'));
+  };
+  sel.addEventListener('change', () => { const on = sel.value !== ''; $('rp-preset-load').disabled = !on; $('rp-preset-del').disabled = !on; });
+  const sel1 = () => list[Number(sel.value)] || null;
+  $('rp-preset-load').addEventListener('click', () => { const p = sel1(); if (p) onLoad(p.settings, p.name); });
+  $('rp-preset-del').addEventListener('click', async () => {
+    const p = sel1(); if (!p || !confirm(i18n('report.preset.delete_confirm', { name: p.name }))) return;
+    const x = await api({ action: 'report_preset_delete', token: tok(), name: p.name });
+    if (x && x.ok) fill(x.presets); else setStatus(st, errText(x), 'err');
+  });
+  const save = $('rp-preset-save');
+  if (save) save.addEventListener('click', async () => {
+    const name = String($('rp-preset-name').value || '').trim();
+    if (!name) { setStatus(st, i18n('report.preset.need_name'), 'err'); return; }
+    if (list.some((p) => p.name === name) && !confirm(i18n('report.preset.overwrite', { name }))) return;
+    const x = await api({ action: 'report_preset_save', token: tok(), name, settings: current() });
+    if (x && x.ok) { fill(x.presets, name); setStatus(st, i18n('report.preset.saved', { name }), 'ok'); } else setStatus(st, errText(x), 'err');
+  });
+  (async () => {
+    const x = await api({ action: 'report_presets', token: tok() });
+    if (x && x.ok) fill(x.presets); else { fill([]); setStatus(st, errText(x), 'err'); }
+  })();
+}
+function applySettingsInputs(root, p) {
+  const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]');
+  if (top) top.value = p.top_cut ? String(p.top_cut) : '';
+  if (cls) cls.checked = !!p.classes_only;
+}
+
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
@@ -912,6 +1048,7 @@ async function renderAdmin() {
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
     <p class="rp-muted">${escapeHtml(i18n('report.admin.expires', { t: new Date(ev.expires_ms).toLocaleString() }))}</p>
     <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
+    ${presetBarHtml(true)}
     ${settingsFormHtml(ev.settings, ev.kind)}
     <h3>${escapeHtml(i18n('report.ft.title'))}</h3>
     <div id="rp-ft-set" class="rp-ft-set"><p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p></div>
@@ -921,18 +1058,37 @@ async function renderAdmin() {
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
   let curFt = ev.settings && ev.settings.ft ? ev.settings.ft : null;
-  (async () => {
-    if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; }
+  const drawFt = (ft) => {
     const box = $('rp-ft-set');
-    box.innerHTML = PHASES.length ? PHASES.map((ph) => ftPhaseHtml(ph, curFt && curFt[ph.key])).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.ft.no_phases'))}</p>`;
+    box.innerHTML = PHASES.length ? PHASES.map((ph) => ftPhaseHtml(ph, ft && ft[ph.key])).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.ft.no_phases'))}</p>`;
     wireFt(box);
+  };
+  const phasesP = (async () => {
+    if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; }
+    drawFt(curFt);
   })();
-  $('rp-save-set').addEventListener('click', async () => {
-    const settings = { ...readSettings(root), ft: PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt };
+  const formFt = () => (PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt);
+  const saveSettings = async (msg) => {
+    const settings = { ...readSettings(root), ft: formFt() };
     const x = await api({ action: 'report_settings', token: tok(), code: CODE, settings });
-    setStatus($('rp-set-status'), x && x.ok ? i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
+    setStatus($('rp-set-status'), x && x.ok ? msg || i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
     if (x && x.ok) { curFt = x.settings.ft || null; if (INFO) INFO.settings = x.settings; }
-  });
+    return !!(x && x.ok);
+  };
+  $('rp-save-set').addEventListener('click', () => saveSettings());
+  // 保存した設定を呼び出す = 入力に入れて、この大会の設定として保存する
+  const loadPreset = async (p, name) => {
+    await phasesP;
+    applySettingsInputs(root, p);
+    const { ft, missed } = presetToFt(p);
+    if (PHASES.length) drawFt(ft);
+    await saveSettings(i18n('report.preset.loaded', { name }) + (missed.length ? ' ' + i18n('report.preset.missed', { names: missed.join(', ') }) : ''));
+  };
+  wirePresets(loadPreset, () => presetFrom(readSettings(root), formFt()));
+  // 受付を始める画面で選んだ設定: 範囲は受付のときに入っているので、何先だけ当てはめる
+  let pend = null;
+  try { pend = JSON.parse(sessionStorage.getItem(PRESET_PENDING) || 'null'); sessionStorage.removeItem(PRESET_PENDING); } catch (e) { pend = null; }
+  if (pend && pend.settings && !curFt) loadPreset(pend.settings, pend.name || '');
   $('rp-stop').addEventListener('click', async () => {
     if (!confirm(i18n('report.admin.stop_confirm'))) return;
     const x = await api({ action: 'report_stop', token: tok(), code: CODE });
@@ -1019,18 +1175,22 @@ function renderSetup() {
     <p>${escapeHtml(i18n('report.setup.lead'))}</p>
     <p class="rp-links">${extLink(SGG, i18n('report.link.open_sgg'))}</p>
     <label class="rp-label">${escapeHtml(i18n('report.setup.event'))}<input type="url" id="rp-event" placeholder="https://www.start.gg/tournament/…/event/…"></label>
+    ${tok() || DEMO ? presetBarHtml(false) : ''}
     ${settingsFormHtml({ top_cut: null, classes_only: false }, 'startgg')}
     <button type="button" class="rp-btn rp-primary" id="rp-start">${escapeHtml(i18n('report.setup.start'))}</button>
     <div class="rp-status" id="rp-setup-status"></div>
     <p class="rp-muted">${escapeHtml(i18n('report.setup.scope'))}</p>
     <p class="rp-muted">${escapeHtml(i18n('report.setup.class'))}</p>
   </section>`;
+  let chosen = null;   // 呼び出した設定 (何先は受付の後、フェーズが分かってから当てはめる)
+  if ($('rp-preset-sel')) wirePresets((p, name) => { applySettingsInputs(root, p); chosen = { name, settings: p }; setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup', { name }), 'ok'); }, () => null);
   $('rp-start').addEventListener('click', async () => {
     const ev = String($('rp-event').value || '').trim();
     const st = $('rp-setup-status');
     if (!/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(ev) && !/^\d+$/.test(ev)) { setStatus(st, i18n('report.setup.bad_event'), 'err'); return; }
     setStatus(st, i18n('report.setup.going'), 'busy');
     if (DEMO) { setStatus(st, i18n('report.demo.nogo'), 'warn'); return; }
+    try { if (chosen) sessionStorage.setItem(PRESET_PENDING, JSON.stringify(chosen)); else sessionStorage.removeItem(PRESET_PENDING); } catch (e) { /* 何先は後で入れ直す */ }
     const okk = await SpspReportAuth.start({ event: ev, settings: readSettings(root) }, location.pathname);
     if (!okk) setStatus(st, i18n('report.err.generic'), 'err');
   });
@@ -1093,6 +1253,14 @@ let DEMO_P = [];
 /** 見本の何先: 予選 (p1) は 2 先・本戦 (p2) は勝者側 3 回戦・敗者側 4 回戦から 3 先・Challonge は全部 1 先 */
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
+let DEMO_PRESETS = [
+  { name: 'いつもの (予選 2 先・Top 8 から 3 先)', settings: { top_cut: 8, classes_only: false, phases: [
+    { name: 'Pools', i: 0, w: { a: 2, from: null, b: 2, fl: null }, l: { a: 2, from: null, b: 2, fl: null } },
+    { name: 'Top 32', i: 1, w: { a: 2, from: 4, b: 3, fl: 'Winners Final' }, l: { a: 2, from: 4, b: 3, fl: 'Losers Quarter-Final' } }] } },
+  { name: '全部 1 先', settings: { top_cut: null, classes_only: false, phases: [
+    { name: 'Pools', i: 0, w: { a: 1, from: null, b: 1, fl: null }, l: { a: 1, from: null, b: 1, fl: null } },
+    { name: 'Top 32', i: 1, w: { a: 1, from: null, b: 1, fl: null }, l: { a: 1, from: null, b: 1, fl: null } }] } },
+];
 const DEMO_PHASES = [
   { key: 'p1', name: 'Pools', rounds: [1, 2, 3, -1, -2, -3].map((n) => ({ n, label: null, bestOf: 3 })) },
   { key: 'p2', name: 'Top 32', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: 2, label: 'Winners Quarter-Final' }, { n: 3, label: 'Winners Semi-Final' }, { n: 4, label: 'Winners Final', bestOf: 5 },
@@ -1114,6 +1282,10 @@ async function demoApi(body) {
   }
   if (body.action === 'report_settings') return { ok: true, settings: body.settings };
   if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES };
+  // 保存した設定 (見本はこの画面の中だけ)
+  if (body.action === 'report_presets') return { ok: true, presets: DEMO_PRESETS };
+  if (body.action === 'report_preset_save') { DEMO_PRESETS = [{ name: body.name, settings: body.settings }, ...DEMO_PRESETS.filter((p) => p.name !== body.name)]; return { ok: true, presets: DEMO_PRESETS }; }
+  if (body.action === 'report_preset_delete') { DEMO_PRESETS = DEMO_PRESETS.filter((p) => p.name !== body.name); return { ok: true, presets: DEMO_PRESETS }; }
   return { ok: true, state: 'fixed', op: 'report' };
 }
 
@@ -1152,8 +1324,8 @@ async function runDemo() {
     VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), demoRow('90003', 'review', null, L12, P), demoRow('90004', 'reported', R21, null, P)];
   }
   const cur = MATCHES.find((m) => m.state === 'open');
-  if (cur) await matchAnimation(cur);
   renderPlayer();
+  if (cur) matchAnimation(cur);
 }
 
 // ── はじめ ─────────────────────────────────────────────────────────

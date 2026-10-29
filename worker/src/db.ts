@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow, ReportEventPublic, ReportEventRow, ReportSetRow, ReportSubmissionRow,
+import type { LoginRow, ReportEventPublic, ReportEventRow, ReportPresetRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -316,6 +316,26 @@ export class D1Store implements Store {
 
   async updateReportEventSettings(code: string, settings: string): Promise<void> {
     await this.db.prepare('UPDATE report_events SET settings = ? WHERE code = ?').bind(settings, code).run();
+  }
+
+  async listReportPresets(userId: string): Promise<ReportPresetRow[]> {
+    const r = await this.db.prepare('SELECT name, settings, updated_ms FROM report_presets WHERE user_id = ? ORDER BY updated_ms DESC').bind(userId).all<ReportPresetRow>();
+    return r.results ?? [];
+  }
+
+  async saveReportPreset(userId: string, row: ReportPresetRow, max: number): Promise<boolean> {
+    // 新しい名前は max 件未満のときだけ足す (1 文で数えて足す)
+    const r = await this.db.prepare(
+      `INSERT INTO report_presets (user_id, name, settings, updated_ms)
+       SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM report_presets WHERE user_id = ?1 AND name = ?2)
+         OR (SELECT COUNT(*) FROM report_presets WHERE user_id = ?1) < ?5
+       ON CONFLICT (user_id, name) DO UPDATE SET settings = ?3, updated_ms = ?4`)
+      .bind(userId, row.name, row.settings, row.updated_ms, max).run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async deleteReportPreset(userId: string, name: string): Promise<void> {
+    await this.db.prepare('DELETE FROM report_presets WHERE user_id = ? AND name = ?').bind(userId, name).run();
   }
 
   async stopReportEvent(code: string): Promise<void> {

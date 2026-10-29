@@ -102,6 +102,44 @@ export function parseSettings(v: unknown): ReportSettings {
   return s;
 }
 
+/**
+ * 名前をつけて保存する設定 (report_presets、2026-10-30)。phase id は大会ごとに違うので、何先はフェーズ名と順番 (i)、
+ * 切り替えのラウンドはラウンド名 (fl) と番号で持つ。大会に当てはめるのは画面 (report.js の presetApply)
+ */
+export interface PresetSide extends FtSide { fl: string | null }
+export interface PresetPhase { name: string; i: number; w: PresetSide; l: PresetSide }
+export interface ReportPreset { top_cut: number | null; classes_only: boolean; phases: PresetPhase[] }
+export const PRESET_NAME_MAX = 40;
+export const PRESETS_MAX = 20;
+
+const plainText = (v: unknown, max: number): string | null => {
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return s.length >= 1 && s.length <= max ? s : null;
+};
+export function presetName(v: unknown): string | null { return plainText(v, PRESET_NAME_MAX); }
+export function parsePreset(v: unknown): ReportPreset | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const base = parseSettings({ top_cut: o.top_cut, classes_only: o.classes_only });
+  const phases: PresetPhase[] = [];
+  for (const x of Array.isArray(o.phases) ? o.phases.slice(0, FT_PHASES_MAX) : []) {
+    if (!x || typeof x !== 'object') continue;
+    const p = x as Record<string, unknown>;
+    const i = Number(p.i);
+    const side = (y: unknown): PresetSide | null => {
+      const s = parseFtSide(y);
+      if (!s) return null;
+      const fl = s.from === null ? null : plainText((y as Record<string, unknown>).fl, 60);
+      return { ...s, fl };
+    };
+    const w = side(p.w); const l = side(p.l);
+    if (!w || !l || !Number.isInteger(i) || i < 0 || i >= FT_PHASES_MAX) continue;
+    phases.push({ name: plainText(p.name, 60) ?? '', i, w, l });
+  }
+  return { top_cut: base.top_cut, classes_only: base.classes_only, phases };
+}
+
 /** 選手が報告してよい試合か (運営の設定)。だめなら理由の符号 */
 export function playerGate(set: NSet, s: ReportSettings): 'top_cut' | 'classes_only' | null {
   if (s.classes_only && !set.isClass) return 'classes_only';

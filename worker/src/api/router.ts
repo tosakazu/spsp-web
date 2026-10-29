@@ -29,7 +29,7 @@ import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefre
 import { handleToolLog } from './tool_log.ts';
 import {
   handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportPhases, handleReportEnable, handleReportEnableClass, handleReportInfo, handleReportNotices,
-  handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
+  handleReportPresetDelete, handleReportPresets, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
@@ -136,6 +136,12 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleReportAdminFix(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_settings':
         res = await handleReportSettings(ctx.cfg, ctx.store, r, now); break;
+      case 'report_presets':
+        return (await handleReportPresets(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ。記録しない
+      case 'report_preset_save':
+        res = await handleReportPresetSave(ctx.cfg, ctx.store, r, now); break;
+      case 'report_preset_delete':
+        res = await handleReportPresetDelete(ctx.cfg, ctx.store, r, now); break;
       case 'report_stop':
         res = await handleReportStop(ctx.cfg, ctx.store, r, now); break;
       case 'class_waitlist':
