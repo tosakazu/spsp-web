@@ -362,35 +362,17 @@ const SGG = 'https://www.start.gg/';
 function eventSlug() { const sl = INFO && INFO.kind === 'startgg' ? String(INFO.slug || '') : ''; return /^tournament\/[\w-]+\/event\/[\w-]+$/.test(sl) ? sl : ''; }
 /** Challonge のトーナメントの URL (https://challonge.com/… だけ) */
 function challongeUrl() { const u = INFO && INFO.kind === 'challonge' ? String(INFO.slug || '') : ''; return /^https:\/\/([\w-]+\.)?challonge\.com\/[\w\/-]+$/.test(u) ? u : ''; }
-/** 試合のページ (start.gg の set / Challonge はトーナメント) */
-function setUrl(id) {
-  const sl = eventSlug();
-  if (sl && /^\d+$/.test(String(id))) return SGG + sl + '/set/' + id;
-  return challongeUrl();
-}
-/** ブラケット (プール) のページ */
+/** ブラケット (その試合のあるプール) のページ。リンクはこれ 1 つだけ出す (2026-10-30、多すぎたので)。m が無ければイベントのブラケット */
 function bracketUrl(m) {
   const sl = eventSlug();
   if (sl && m && m.phaseKey && m.groupId) return SGG + sl + '/brackets/' + m.phaseKey + '/' + m.groupId;
   return sl ? SGG + sl + '/brackets' : challongeUrl();
 }
 const extLink = (href, label) => (href ? `<a class="rp-ext" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(label)} ↗</a>` : '');
-/** 試合の見出しの横に出すリンク (試合・ブラケット) */
+/** その試合のあるトーナメント (ブラケット) へのリンク */
 function matchLinks(m) {
-  const site = m.kind === 'challonge' ? 'Challonge' : 'start.gg';
-  const a = m.kind === 'challonge' ? '' : extLink(setUrl(m.id), i18n('report.link.set', { site }));
-  const b = extLink(bracketUrl(m), i18n('report.link.bracket', { site }));
-  return a || b ? `<div class="rp-links">${a}${b}</div>` : '';
-}
-/** ページの上に出すリンク (イベント・大会) */
-function headerLinks() {
-  const el = $('rp-links');
-  if (!el) return;
-  const sl = eventSlug();
-  const h = sl ? extLink(SGG + sl, i18n('report.link.event')) + extLink(SGG + sl.replace(/\/event\/.*$/, ''), i18n('report.link.tournament'))
-    : extLink(challongeUrl(), i18n('report.link.challonge'));
-  el.innerHTML = h;
-  el.hidden = !h;
+  const b = extLink(bracketUrl(m), i18n('report.link.bracket', { site: INFO && INFO.kind === 'challonge' ? 'Challonge' : 'start.gg' }));
+  return b ? `<div class="rp-links">${b}</div>` : '';
 }
 
 function rowOf(setId) { return VIEW && VIEW.sets ? VIEW.sets.find((x) => x.set_id === setId) : null; }
@@ -764,7 +746,7 @@ function renderPlayer() {
       ${candidatesHtml(waiting)}
     </section>`;
   } else {
-    h += `<section class="rp-card-sec"><p>${escapeHtml(MATCHES.length ? i18n('report.no_current') : i18n('report.no_sets'))}</p></section>`;
+    h += `<section class="rp-card-sec"><p>${escapeHtml(MATCHES.length ? i18n('report.no_current') : i18n('report.no_sets'))}</p>${matchLinks(done[0] || null)}</section>`;
   }
   if (done.length) {
     h += `<section class="rp-card-sec"><h2>${escapeHtml(i18n('report.done'))}</h2><ul class="rp-done">` + done.map((m) => {
@@ -773,7 +755,6 @@ function renderPlayer() {
       const sc = m.score ? (m.mySide === 0 ? m.score[0] + '-' + m.score[1] : m.score[1] + '-' + m.score[0]) : '';
       return `<li><span class="rp-done-r">${m.winner === m.mySide ? '○' : '●'}</span> ${escapeHtml(m.round)} · ${escapeHtml(op ? op.name : '')} ${escapeHtml(sc)}`
         + `${row ? ` <span class="rp-tag rp-state-${escapeHtml(row.state)}">${escapeHtml(STATE_LABEL(row.state))}</span>` : ''}`
-        + (m.kind === 'startgg' && setUrl(m.id) ? ' ' + extLink(setUrl(m.id), 'start.gg') : '')
         + `${!gateOf(m) ? ` <button type="button" class="rp-link" data-redo="${escapeHtml(m.id)}">${escapeHtml(i18n('report.redo'))}</button>` : ''}</li>`
         + (FORM_OPEN === m.id ? `<li class="rp-redo-form">${formHtml(m)}</li>` : '');
     }).join('') + `</ul></section>`;
@@ -1053,6 +1034,7 @@ async function renderAdmin() {
     <h2>${escapeHtml(i18n('report.admin.share'))}</h2>
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
     <p class="rp-muted">${escapeHtml(i18n('report.admin.expires', { t: new Date(ev.expires_ms).toLocaleString() }))}</p>
+    ${matchLinks(null)}
     <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
     ${presetBarHtml(true)}
     ${settingsFormHtml(ev.settings, ev.kind)}
@@ -1133,7 +1115,7 @@ function renderAdminSets(sets) {
     const rep = (k) => { const x = s.reports && s.reports[k]; return x && x.result ? (x.result.w === 0 ? names[0] : names[1]) + ' ' + scoreText(x.result, 0) : '—'; };
     h += `<div class="rp-adm-row rp-state-${escapeHtml(s.state)}" data-set="${escapeHtml(s.set_id)}">
       <div class="rp-adm-head"><b>${escapeHtml(names.join(' vs '))}</b> <span class="rp-tag rp-state-${escapeHtml(s.state)}">${escapeHtml(STATE_LABEL(s.state))}</span>
-        <span class="rp-muted">#${escapeHtml(s.set_id)} · ${escapeHtml(new Date(s.updated_ms).toLocaleTimeString())}</span> ${extLink(setUrl(s.set_id), INFO && INFO.kind === 'challonge' ? 'Challonge' : 'start.gg')}</div>
+        <span class="rp-muted">#${escapeHtml(s.set_id)} · ${escapeHtml(new Date(s.updated_ms).toLocaleTimeString())}</span></div>
       <div class="rp-muted">${escapeHtml(i18n('report.admin.applied'))}: ${escapeHtml(s.applied ? (s.applied.w === 0 ? names[0] : names[1]) + ' ' + scoreText(s.applied, 0) : '—')}
         · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
       <div class="rp-adm-fix">
@@ -1306,7 +1288,6 @@ async function runDemo() {
     slug: DEMO === 'challonge' ? 'https://challonge.com/spsp_demo_b' : 'tournament/spsp-demo/event/singles',
     event_id: 0, active: true, expires_ms: Date.now() + 86400e3, settings: { top_cut: DEMO === 'gate' ? 8 : null, classes_only: false, ft: DEMO_FT } };
   $('rp-title').textContent = INFO.name;
-  headerLinks();
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin') { await renderAdmin(); return; }
@@ -1343,7 +1324,6 @@ async function main() {
   if (!info || !info.ok) { setStatus($('rp-status'), errText(info), 'err'); return; }
   INFO = info.report;
   $('rp-title').textContent = INFO.name || i18n('report.title');
-  headerLinks();
   const tags = [];
   if (INFO.kind === 'challonge') tags.push(i18n('report.kind.challonge'));
   $('rp-sub').textContent = tags.join(' · ');
