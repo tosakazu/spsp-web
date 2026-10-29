@@ -2,9 +2,10 @@
 // player_card_embed.js — プレイヤーページと同じプレイヤーカードを、ほかのページ (結果報告など) に置く (2026-10-30)。
 //   mountPlayerCard(el, uid, opts)  el (.pcard を付ける) に uid のカードを描く。データ・設定・二つ名・フォントはプレイヤーページと同じ
 //   cardDataOf(uid) / appliedOf(uid) 読んだものはページの中で使い回す (同じ選手を何度も読まない)
+//   cardTitleOf(uid)                カードに出る二つ名の文字 (前半 + 後半、既定の「スマブラSPプレイヤー」も含む)。選手のデータが無ければ ''
 //   ensureCardFonts()               カードの Web フォント (IBM Plex Sans JP / Zalando Sans) を読む <link> を足す (p/index.html と同じもの)
 // 見た目の CSS は css/player_card.css (ページの <head> で読む)。描くのは js/player_card.js の render (プレイヤーページと同じ)
-import SPSPPlayerCard from './player_card.js';
+import SPSPPlayerCard, { shownTitle } from './player_card.js';
 import SPSPViews from './views.js';
 import { buildCardModel, fetchAppliedCard, loadCardData } from './player_card_model.js';
 
@@ -53,6 +54,14 @@ export function appliedOf(uid) {
   return /** @type {Promise<any>} */ (APPLIED.get(uid));
 }
 
+/** カードに出る二つ名の文字 (カードと同じ: 設定の二つ名、選んでいない側は地域の既定) @param {string} uid @returns {Promise<string>} */
+export async function cardTitleOf(uid) {
+  const [data, x] = await Promise.all([cardDataOf(uid), appliedOf(uid)]);
+  if (!data) return '';
+  const t = shownTitle(buildCardModel(data, x ? x.settings : null, x ? x.titleText : null));
+  return t ? t.pre + t.post : '';
+}
+
 /**
  * el にカードを描く。プレイヤーページと同じく、設定は 2 秒まで待ち (遅ければ既定で描いて、届いたら描き直す)。
  * 戻り値: 描けたら true、選手のデータが無ければ false (el は触らない。呼ぶ側が「読み込めませんでした」などを出す)
@@ -77,4 +86,4 @@ export async function mountPlayerCard(el, uid) {
   return true;
 }
 
-export default { mountPlayerCard, cardDataOf, appliedOf, ensureCardFonts, CARD_FONTS_URL };
+export default { mountPlayerCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, CARD_FONTS_URL };

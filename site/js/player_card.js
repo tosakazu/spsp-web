@@ -50,6 +50,17 @@ export function defaultTitle() {
   return d && (d.pre || d.post) ? { pre: d.pre || '', post: d.post || '' } : null;
 }
 
+/** カードに出る二つ名 (前半・後半)。出さないなら null。ほかのページ (結果報告の VS など) もこれで同じ文字を出す
+ * @param {PCardModel} m @returns {{ pre: string, post: string } | null} */
+export function shownTitle(m) {
+  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
+  const def = defaultTitle() || { pre: '', post: '' };
+  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
+  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
+  const post = m.title && m.title.post != null ? m.title.post : def.post;
+  return pre || post ? { pre, post } : null;
+}
+
 function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
@@ -145,12 +156,7 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
-  const def = defaultTitle() || { pre: '', post: '' };
-  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
-  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
-  const post = m.title && m.title.post != null ? m.title.post : def.post;
-  const tt = pre || post ? { pre, post } : null;
+  const tt = shownTitle(m);
   const hasTitle = !!tt;
   // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
   const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
@@ -521,4 +527,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, capture, shownTitle, makeAchFitTester, COLORS, TEMPLATES };

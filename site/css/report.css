@@ -186,3 +186,8 @@ body {
 .rp-preset-l select { font: inherit; max-width: 14em; }
 .rp-preset-save { display: flex; gap: 6px; flex-basis: 100%; }
 .rp-preset-save input { font: inherit; flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; }
+/* 次の相手の候補: 前の試合ごと (入れ子は前の前の試合) */
+.rp-route { border-left: 3px solid #e5e7eb; padding-left: 8px; margin: 6px 0; }
+.rp-route-h { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 4px; }
+.rp-route .rp-route { margin-left: 2px; }
+.rp-cand-tbd { margin: 0; }

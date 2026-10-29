@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { appliedOf, cardDataOf, mountPlayerCard } from '../../site/js/player_card_embed.js';
+import { cardDataOf, cardTitleOf, mountPlayerCard } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -217,7 +217,7 @@ async function startggSets(gql) {
   // 試合待ち: 相手の枠の前の試合 (2 段まで) を読んで候補にする
   for (const m of out) {
     if (m.state !== 'waiting') continue;
-    m.prereq = await Promise.all(m.rawSlots.map((s, i) => (m.slots[i] ? null : prereqOf(gql, s, 2))));
+    m.prereq = await Promise.all(m.rawSlots.map((s, i) => (m.slots[i] ? null : prereqOf(gql, s, CAND_DEPTH))));
   }
   return out;
 }
@@ -261,6 +261,8 @@ function fromStartgg(s) {
 }
 
 /** 枠の前の試合 (候補)。depth 段までさかのぼる */
+/** 次の相手の候補をさかのぼる段数 (3 段 = 最大 8 人)。それより前は「まだ決まっていない枠」とだけ出す */
+const CAND_DEPTH = 3;
 async function prereqOf(gql, slot, depth) {
   if (!slot || slot.prereqType !== 'set' || !/^\d+$/.test(String(slot.prereqId)) || depth <= 0) return null;
   let d;
@@ -416,12 +418,13 @@ function fillTitles(root) {
   for (const el of root.querySelectorAll('[data-title-uid]')) {
     const uid = el.getAttribute('data-title-uid');
     if (TITLE_TXT.has(uid)) continue;
-    appliedOf(uid).then((x) => {
-      const t = (x && x.titleText) || '';
-      TITLE_TXT.set(uid, t);
-      for (const e of document.querySelectorAll(`[data-title-uid="${uid}"]`)) { e.textContent = t; e.hidden = !t; }
-    });
+    cardTitleOf(uid).then((t) => { if (!TITLE_TXT.get(uid)) setTitle(uid, t); }).catch(() => { /* 二つ名が出ないだけ */ });
   }
+}
+/** 二つ名を覚えて、出ている欄 (VS) にも入れる */
+function setTitle(uid, t) {
+  TITLE_TXT.set(uid, t);
+  for (const e of document.querySelectorAll(`[data-title-uid="${uid}"]`)) { e.textContent = t; e.hidden = !t; }
 }
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
@@ -444,20 +447,36 @@ function reportStateHtml(m) {
   return h + '</div>';
 }
 
+/**
+ * 次の相手の候補。人数は決まっていない (相手の枠の前の試合が終わっていれば 1 人、さかのぼるほど増える)。
+ * 前の試合ごとに「◯◯ の勝った方 / 負けた方」としてまとめ、まだ決まっていない枠は入れ子で前の試合を出す
+ */
 function candidatesHtml(m) {
-  const list = [];
-  const walk = (p) => {
-    if (!p) return;
-    p.slots.forEach((s, i) => { if (s) list.push({ s, p }); else walk(p.deeper && p.deeper[i]); });
-  };
-  m.prereq.forEach(walk);
-  if (!list.length) return `<p class="rp-muted">${escapeHtml(i18n('report.cand.none'))}</p>`;
+  let n = 0; let open = false;
+  const me = m.slots[m.mySide];
   const stateText = (p) => (p.state === 'playing' ? i18n('report.cand.playing') : p.state === 'complete' ? i18n('report.cand.done') : i18n('report.cand.pending'));
-  return `<div class="rp-cands">` + list.slice(0, 6).map(({ s, p }) => `<div class="rp-cand">
-      <div class="rp-cand-head"><b>${escapeHtml(s.name)}</b> ${seedHtml(s)}</div>
-      <div class="rp-muted">${escapeHtml((p.loser ? i18n('report.cand.loser') : i18n('report.cand.winner')) + ' · ' + (p.round ? p.round + ' · ' : '') + stateText(p))}${p.station ? ' · ' + escapeHtml(i18n('report.station', { n: p.station })) : ''}</div>
-      ${s.uid ? `<div class="rp-card rp-card-sm pcard" data-card-uid="${escapeHtml(s.uid)}"></div>` : ''}
-    </div>`).join('') + `</div>`;
+  const person = (sl) => {
+    n++;
+    return `<div class="rp-cand">
+      <div class="rp-cand-head"><b>${escapeHtml(sl.name)}</b> ${seedHtml(sl)}</div>
+      ${sl.uid ? `<div class="rp-card rp-card-sm pcard" data-card-uid="${escapeHtml(sl.uid)}"></div>` : ''}
+    </div>`;
+  };
+  const route = (p) => {
+    const who = p.loser ? i18n('report.cand.loser') : i18n('report.cand.winner');
+    const head = (p.round ? i18n('report.cand.route', { round: p.round, who }) : who) + ' · ' + stateText(p) + (p.station ? ' · ' + i18n('report.station', { n: p.station }) : '');
+    const body = p.slots.map((sl, i) => {
+      if (sl) return me && sl.id === me.id ? '' : person(sl);   // 自分は相手にならない
+      const d = p.deeper && p.deeper[i];
+      if (d) return route(d);
+      open = true;
+      return `<p class="rp-muted rp-cand-tbd">${escapeHtml(i18n('report.cand.tbd'))}</p>`;
+    }).join('');
+    return `<div class="rp-route"><div class="rp-route-h">${escapeHtml(head)}</div><div class="rp-cands">${body}</div></div>`;
+  };
+  const html = m.prereq.filter(Boolean).map(route).join('');
+  if (!n && !open) return `<p class="rp-muted">${escapeHtml(i18n('report.cand.none'))}</p>`;
+  return `<p class="rp-muted">${escapeHtml(open ? i18n('report.cand.count_more', { n }) : i18n('report.cand.count', { n }))}</p>` + html;
 }
 
 /** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。読めなければ一言 */
@@ -684,7 +703,7 @@ function markSeen(id) { try { const a = JSON.parse(sessionStorage.getItem(SEEN_K
 /** 二つ名 (カードの設定)。読めなければ空。待つのは長くても ms まで */
 function titleOf(uid, ms) {
   if (!uid) return Promise.resolve('');
-  const p = appliedOf(uid).then((x) => (x && x.titleText) || '');
+  const p = cardTitleOf(uid).catch(() => '');
   return Promise.race([p, new Promise((r) => setTimeout(() => r(''), ms))]);
 }
 async function matchAnimation(m) {
@@ -695,8 +714,8 @@ async function matchAnimation(m) {
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
   // この後の VS の欄にも同じ二つ名を出す
-  if (me && me.uid && tMe) TITLE_TXT.set(me.uid, tMe);
-  if (op && op.uid && tOp) TITLE_TXT.set(op.uid, tOp);
+  if (me && me.uid && tMe) setTitle(me.uid, tMe);
+  if (op && op.uid && tOp) setTitle(op.uid, tOp);
   const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
   const ov = document.createElement('div');
   ov.className = 'rp-match-ov';
