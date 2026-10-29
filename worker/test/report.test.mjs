@@ -7,8 +7,8 @@ import { issueSessionToken } from '../src/api/session.ts';
 import { openJson, sealJson } from '../src/api/report_crypto.ts';
 import { adminDecision, ftOf, mergeResults, parseFt, parseResult, parseSettings, playerGate, reconcile, sameOutcome } from '../src/api/report_logic.ts';
 import { reportExpiry } from '../src/api/report.ts';
-import { downstreamDoneOf, gameDataOf, parsePhases, parseStartggSet } from '../src/api/report_startgg.ts';
-import { cLPlacement, cSetOf, losersPlace, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
+import { downstreamDoneOf, gameDataOf, parsePhaseList, parseStartggSet, phaseInfoOf } from '../src/api/report_startgg.ts';
+import { cLPlacement, cRoundLabel, cSetOf, losersPlace, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
 import { MemStore } from './_mem_store.mjs';
 
 const G = (w, c0 = null, c1 = null, s = null) => ({ w, c: [c0, c1], s });
@@ -113,10 +113,19 @@ test('何先: 全部 N 先・勝者側/敗者側でラウンドから切り替�
   assert.ok('result' in parseResult(R(1, G(0), G(1), G(0), G(1), G(1)), 3, 3));    // 3 先なら start.gg の totalGames より多くてよい
 });
 
-test('フェーズとラウンドの一覧 (何先の設定用)', () => {
-  const ph = parsePhases({ event: { phases: [{ id: 7, name: 'Top 8', phaseGroups: { nodes: [{ rounds: [{ number: 1 }, { number: 2 }, { number: -1 }, { number: 3 }, { number: -2 }],
-    sets: { nodes: [{ round: 3, fullRoundText: 'Grand Final' }, { round: -2, fullRoundText: 'Losers Final' }] } }] } }] } });
-  assert.deepStrictEqual(ph, [{ key: '7', name: 'Top 8', rounds: [{ n: 1, label: null }, { n: 2, label: null }, { n: 3, label: 'Grand Final' }, { n: -1, label: null }, { n: -2, label: 'Losers Final' }] }]);
+test('ブラケットの構造: ラウンドがいちばん多いブロックの rounds と bestOf、試合の名前。Challonge は構造から名前を付ける', () => {
+  const list = parsePhaseList({ event: { phases: [{ id: 7, name: 'Top 8', phaseGroups: { nodes: [{ id: 70, rounds: [{ number: 1, bestOf: 3 }] },
+    { id: 71, rounds: [{ number: 1, bestOf: 3 }, { number: 2, bestOf: 5 }, { number: -1, bestOf: 3 }, { number: 3 }, { number: -2, bestOf: 5 }] }] } }] } });
+  assert.deepStrictEqual(list.map((x) => [x.key, x.group, x.rounds.size]), [['7', '71', 5]]);
+  const ph = phaseInfoOf(list[0], [{ round: 3, fullRoundText: 'Grand Final' }, { round: -2, fullRoundText: 'Losers Final' }, { round: 4, fullRoundText: 'Grand Final Reset' }]);
+  assert.deepStrictEqual(ph.rounds, [{ n: 1, label: null, bestOf: 3 }, { n: 2, label: null, bestOf: 5 }, { n: 3, label: 'Grand Final', bestOf: null },
+    { n: 4, label: 'Grand Final Reset', bestOf: null }, { n: -1, label: null, bestOf: 3 }, { n: -2, label: 'Losers Final', bestOf: 5 }]);
+  // Challonge 8 人: シングルは最後から Final / Semi / Quarter、ダブルは勝者側 3 回戦 = Winners Final、4 = Grand Final、敗者側の最後 = Losers Final
+  const parts = new Map(Array.from({ length: 8 }, (_, i) => [String(i), { name: 'p' + i, uid: null, seed: i + 1 }]));
+  const se = { participants: parts, matches: [1, 2, 3].map((r) => ({ round: r })) };
+  assert.deepStrictEqual([1, 2, 3].map((n) => cRoundLabel(se, n, false)), ['Quarter-Final', 'Semi-Final', 'Final']);
+  const de = { participants: parts, matches: [1, 2, 3, 4, 5, -1, -2, -3, -4].map((r) => ({ round: r })) };
+  assert.deepStrictEqual([1, 3, 4, 5, -1, -4].map((n) => cRoundLabel(de, n, true)), ['Winners Quarter-Final', 'Winners Final', 'Grand Final', 'Grand Final Reset', null, 'Losers Final']);
 });
 
 test('reportExpiry: 大会の終わりの翌日の終わり (JST)、短すぎ・長すぎは丸める', () => {
@@ -208,7 +217,8 @@ function fakeStartgg() {
     if (name === 'SpspClassAdmin') return j({ currentUser: { id: 4242 }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: st.admins } } });
     if (name === 'SpspClassAdminTours') return j({ currentUser: { tournaments: { nodes: [] } } });
     if (name === 'SpspReportSet') return j({ set: String(variables.id) === String(st.set.id) ? st.set : null });
-    if (name === 'SpspReportPhases') return j({ event: { phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ rounds: [{ number: 1 }, { number: -1 }], sets: { nodes: [{ round: 1, fullRoundText: 'Winners Round 1' }] } }] } }] } });
+    if (name === 'SpspReportPhases') return j({ event: { phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ id: 700, rounds: [{ number: 1, bestOf: 3 }, { number: -1, bestOf: null }] }] } }] } });
+    if (name === 'SpspReportGroupSets') return j({ phaseGroup: { sets: { pageInfo: { totalPages: 1 }, nodes: [{ round: 1, fullRoundText: 'Winners Round 1' }] } } });
     if (name === 'SpspReportNext') return j({ event: { sets: { nodes: st.next } } });
     if (name === 'SpspReportBracketSet' || name === 'SpspUpdateSet') {
       st.set.state = 3; st.set.winnerId = Number(variables.winnerId);
@@ -349,7 +359,7 @@ test('運営: 一覧・直す (その後の選手の報告では動かない)・
   assert.deepStrictEqual([p2.state, p2.op], ['reported', 'report']);
   // 何先: フェーズの一覧・設定するとスコアを確かめる
   const ph = await e.call({ action: 'report_phases', token: TO, code: e.code });
-  assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: -1, label: null }] }]);
+  assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1', bestOf: 3 }, { n: -1, label: null, bestOf: null }] }]);
   assert.strictEqual((await e.call({ action: 'report_phases', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
   const ft1 = { 77: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
   assert.deepStrictEqual((await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, ft: ft1 } })).settings.ft, ft1);

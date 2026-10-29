@@ -102,6 +102,27 @@ export function cLPlacement(d: CData, m: CMatch, double: boolean): number | null
   return losersPlace(Math.max(0, L - (r === 1 ? 1 : 2 * (r - 1))));
 }
 
+/**
+ * ラウンドの名前 (start.gg の fullRoundText に合わせる)。Challonge には名前が無いので構造から付ける。最後のほう以外は null (画面で「勝者側 n 回戦」)。
+ *   シングル: 最後 = Final、その前 = Semi-Final、Quarter-Final
+ *   ダブル:   勝者側の最後 (= ceil(log2 人数)) = Winners Final…、それより後 = Grand Final (2 つ目は Reset)・敗者側の最後 = Losers Final…
+ */
+export function cRoundLabel(d: CData, n: number, double: boolean): string | null {
+  const rounds = d.matches.map((x) => x.round || 0);
+  const names = ['Final', 'Semi-Final', 'Quarter-Final'];
+  if (!double) {
+    const R = Math.max(0, ...rounds);
+    return n > 0 && R - n < 3 ? names[R - n] : null;
+  }
+  if (n < 0) {
+    const L = Math.max(0, ...rounds.map((x) => -x));
+    return L + n < 3 && L + n >= 0 ? 'Losers ' + names[L + n] : null;
+  }
+  const rw = Math.max(1, Math.ceil(Math.log2(Math.max(2, d.participants.size))));
+  if (n > rw) return n === rw + 1 ? 'Grand Final' : 'Grand Final Reset';
+  return rw - n < 3 ? 'Winners ' + names[rw - n] : null;
+}
+
 export function cSetOf(d: CData, m: CMatch, double = false): NSet {
   const slot = (id: string | null): NSlot | null => {
     if (!id) return null;
@@ -162,7 +183,7 @@ export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, 
       if (!r.ok) return { ok: false, note: r.note };
       const ns = [...new Set(r.data.matches.map((x) => x.round).filter((n): n is number => n !== null && n !== 0))];
       ns.sort((a, b) => (a > 0) === (b > 0) ? Math.abs(a) - Math.abs(b) : b - a);
-      return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: null })) }] };
+      return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: cRoundLabel(r.data, n, double), bestOf: null })) }] };
     },
     async readSet(setId) {
       const r = await readChallonge(fetchFn, token, tid);

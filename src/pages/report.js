@@ -12,6 +12,7 @@ import SpspStartggIdentity from '../../site/js/startgg_identity.js';
 import SpspReportAuth from '../../site/js/report_auth.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import { charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
+import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
@@ -75,8 +76,62 @@ async function loadChars() {
   const tbl = await SPSPCharEmoji.load().catch(() => null);
   CHARS = Object.keys(tbl || {}).map(Number).filter((id) => id > 0 && !HIDDEN_CHAR_IDS.has(id))
     .map((id) => ({ id, name: charName(id, (tbl[id] && tbl[id].name) || String(id)), emoji: SPSPCharEmoji.emojiOf(id) || '' }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    .sort((a, b) => (FIGHTER_NUMBER[a.id] || 999) - (FIGHTER_NUMBER[b.id] || 999) || a.name.localeCompare(b.name, 'ja'));
   return CHARS;
+}
+
+// ── キャラ選び (キャラ投票と同じ: 名前で絞り込み + 絵文字の一覧) ──────────────────
+
+/** ひらがな→カタカナ + 小文字 (site/js/vote.js の normChar と同じ) */
+const normChar = (x) => String(x).replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase();
+const charById = (id) => (id && CHARS ? CHARS.find((x) => x.id === Number(id)) || null : null);
+function cpLabel(id) {
+  const c = charById(id);
+  return c ? `<span class="rp-cp-em">${escapeHtml(c.emoji || '🎮')}</span><span class="rp-cp-nm">${escapeHtml(c.name)}</span>`
+    : `<span class="rp-cp-nm rp-cp-none">${escapeHtml(i18n('report.char.pick'))}</span>`;
+}
+/** 入力欄 (hidden の値 = キャラ ID) とボタン。attr は data-char="0" など */
+function charPickHtml(attr, label) {
+  return `<div class="rp-cp"><span class="rp-cp-l">${escapeHtml(label)}</span><input type="hidden" ${attr} value=""><button type="button" class="rp-cp-btn" data-cp-open aria-label="${escapeHtml(label)}">${cpLabel(null)}</button></div>`;
+}
+function setChar(input, id) {
+  input.value = id ? String(id) : '';
+  const btn = input.parentElement && input.parentElement.querySelector('.rp-cp-btn');
+  if (btn) btn.innerHTML = cpLabel(input.value);
+}
+function wireCharPickers(root) {
+  for (const b of root.querySelectorAll('[data-cp-open]')) {
+    b.addEventListener('click', () => openCharPicker(b.parentElement.querySelector('input[type=hidden]'), b.getAttribute('aria-label') || ''));
+  }
+}
+function openCharPicker(input, title) {
+  const ov = document.createElement('div');
+  ov.className = 'rp-cp-ov';
+  ov.innerHTML = `<div class="rp-cp-panel" role="dialog" aria-label="${escapeHtml(title)}">
+    <div class="rp-cp-head"><b>${escapeHtml(title)}</b><button type="button" class="rp-link" data-cp-clear>${escapeHtml(i18n('report.char.clear'))}</button><button type="button" class="rp-cp-x" data-cp-close aria-label="${escapeHtml(i18n('report.char.close'))}">×</button></div>
+    <input type="search" class="rp-cp-q" placeholder="${escapeHtml(i18n('report.char.search'))}" autocomplete="off">
+    <div class="rp-cp-grid">${(CHARS || []).map((c) => `<button type="button" class="rp-cp-c${String(c.id) === input.value ? ' sel' : ''}" data-id="${c.id}" data-name="${escapeHtml(c.name)}"><span class="em">${escapeHtml(c.emoji || '🎮')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`).join('')}</div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const pick = (id) => { setChar(input, id); input.dispatchEvent(new Event('change', { bubbles: true })); close(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  ov.querySelector('[data-cp-close]').addEventListener('click', close);
+  ov.querySelector('[data-cp-clear]').addEventListener('click', () => pick(null));
+  const btns = Array.from(ov.querySelectorAll('.rp-cp-c'));
+  for (const b of btns) b.addEventListener('click', () => pick(b.getAttribute('data-id')));
+  const q = ov.querySelector('.rp-cp-q');
+  q.addEventListener('input', () => {
+    const t = normChar(q.value.trim());
+    let first = null;
+    for (const b of btns) { const hit = !t || normChar(b.getAttribute('data-name')).includes(t); b.hidden = !hit; if (hit && !first) first = b; }
+    for (const b of btns) b.classList.toggle('hit', !!t && b === first);
+  });
+  // Enter で絞り込みの先頭を選ぶ
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = btns.find((x) => !x.hidden); if (b) pick(b.getAttribute('data-id')); } });
+  try { q.focus(); } catch (e) { /* 入力欄に移れないだけ */ }
 }
 
 const STAGE_KEY = 'spsp_report_stages_v1';
@@ -99,7 +154,7 @@ async function loadStages(gql) {
 
 const SLOT_FIELDS = 'prereqType prereqId prereqPlacement entrant { id name initialSeedNum participants { user { id } player { gamerTag } } } standing { stats { score { value } } }';
 const setFields = (extra) => `id state round fullRoundText identifier totalGames winnerId lPlacement ${extra}
-  phaseGroup { displayIdentifier phase { id name } }
+  phaseGroup { id displayIdentifier phase { id name } }
   slots { ${SLOT_FIELDS} }
   games { orderNum winnerId stage { id } selections { entrant { id } character { id } } }`;
 const EXTRA = 'station { number } stream { streamName streamSource }';   // 台・配信台 (読めなければ外して読み直す)
@@ -162,6 +217,7 @@ function fromStartgg(s) {
   return {
     id: String(s.id), kind: 'startgg', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: Number(s.state) === 2,
     round: s.fullRoundText || '', pool: s.phaseGroup ? s.phaseGroup.displayIdentifier : '', phase,
+    groupId: s.phaseGroup && s.phaseGroup.id != null ? String(s.phaseGroup.id) : null,
     roundNum: Number.isInteger(s.round) ? s.round : null, phaseKey: s.phaseGroup && s.phaseGroup.phase && s.phaseGroup.phase.id != null ? String(s.phaseGroup.phase.id) : null,
     station: s.station && s.station.number ? s.station.number : null,
     stream: s.stream && s.stream.streamName ? { name: s.stream.streamName, source: s.stream.streamSource } : null,
@@ -264,6 +320,44 @@ function gateOf(m) {
   return '';
 }
 
+// ── start.gg / Challonge へのリンク ───────────────────────────────────
+
+const SGG = 'https://www.start.gg/';
+/** イベントの slug (tournament/x/event/y)。形が違えば '' */
+function eventSlug() { const sl = INFO && INFO.kind === 'startgg' ? String(INFO.slug || '') : ''; return /^tournament\/[\w-]+\/event\/[\w-]+$/.test(sl) ? sl : ''; }
+/** Challonge のトーナメントの URL (https://challonge.com/… だけ) */
+function challongeUrl() { const u = INFO && INFO.kind === 'challonge' ? String(INFO.slug || '') : ''; return /^https:\/\/([\w-]+\.)?challonge\.com\/[\w\/-]+$/.test(u) ? u : ''; }
+/** 試合のページ (start.gg の set / Challonge はトーナメント) */
+function setUrl(id) {
+  const sl = eventSlug();
+  if (sl && /^\d+$/.test(String(id))) return SGG + sl + '/set/' + id;
+  return challongeUrl();
+}
+/** ブラケット (プール) のページ */
+function bracketUrl(m) {
+  const sl = eventSlug();
+  if (sl && m && m.phaseKey && m.groupId) return SGG + sl + '/brackets/' + m.phaseKey + '/' + m.groupId;
+  return sl ? SGG + sl + '/brackets' : challongeUrl();
+}
+const extLink = (href, label) => (href ? `<a class="rp-ext" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(label)} ↗</a>` : '');
+/** 試合の見出しの横に出すリンク (試合・ブラケット) */
+function matchLinks(m) {
+  const site = m.kind === 'challonge' ? 'Challonge' : 'start.gg';
+  const a = m.kind === 'challonge' ? '' : extLink(setUrl(m.id), i18n('report.link.set', { site }));
+  const b = extLink(bracketUrl(m), i18n('report.link.bracket', { site }));
+  return a || b ? `<div class="rp-links">${a}${b}</div>` : '';
+}
+/** ページの上に出すリンク (イベント・大会) */
+function headerLinks() {
+  const el = $('rp-links');
+  if (!el) return;
+  const sl = eventSlug();
+  const h = sl ? extLink(SGG + sl, i18n('report.link.event')) + extLink(SGG + sl.replace(/\/event\/.*$/, ''), i18n('report.link.tournament'))
+    : extLink(challongeUrl(), i18n('report.link.challonge'));
+  el.innerHTML = h;
+  el.hidden = !h;
+}
+
 function rowOf(setId) { return VIEW && VIEW.sets ? VIEW.sets.find((x) => x.set_id === setId) : null; }
 
 /** 台・配信台 */
@@ -335,8 +429,8 @@ function fillCards(root) {
   }
 }
 
-/** 何先か (運営の設定。無ければ null)。worker/src/api/report_logic.ts の ftOf と同じ */
-function ftOf(m) {
+/** 運営の設定の何先 (無ければ null)。worker/src/api/report_logic.ts の ftOf と同じ。これがあるとサーバもスコアを確かめる */
+function ftSet(m) {
   const ft = INFO && INFO.settings && INFO.settings.ft;
   const rule = ft && m.phaseKey ? ft[m.phaseKey] : null;
   if (!rule) return null;
@@ -347,6 +441,13 @@ function ftOf(m) {
   if (r === 0) return sd.b;
   return Math.abs(r) >= sd.from ? sd.b : sd.a;
 }
+/** 何先か: 運営の設定 → start.gg の何本勝負 (totalGames、奇数のとき) → 分からなければ null */
+function ftOf(m) {
+  const n = ftSet(m);
+  if (n) return n;
+  const tg = m.totalGames;
+  return Number.isInteger(tg) && tg > 0 && tg % 2 === 1 ? (tg + 1) / 2 : null;
+}
 const ftHtml = (m) => { const n = ftOf(m); return n ? `<span class="rp-ft">${escapeHtml(i18n('report.ft', { n }))}</span>` : ''; };
 
 const MAX_GAMES = 9;   // worker の MAX_GAMES と同じ
@@ -356,7 +457,6 @@ const SCORE_OTHER = 'x';
 function formHtml(m) {
   const ft = ftOf(m);
   const n = ft ? 2 * ft - 1 : m.totalGames || MAX_GAMES;   // 1 戦ごとの欄の数 (何先が分からなければ最大まで、決着は勝ち越しで)
-  const chars = CHARS || [];
   const stages = STAGES || [];
   const opt = (list, sel) => `<option value="">—</option>` + list.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${escapeHtml((x.emoji ? x.emoji + ' ' : '') + x.name)}</option>`).join('');
   const withChars = m.kind === 'startgg';
@@ -369,22 +469,24 @@ function formHtml(m) {
         <button type="button" class="rp-pick" data-pick="${1 - m.mySide}">${escapeHtml(i18n('report.opp_won'))}</button>
       </div>
       ${withChars ? `<div class="rp-game-sel">
-        <label>${escapeHtml(i18n('report.my_char'))}<select data-char="${m.mySide}">${opt(chars, null)}</select></label>
-        <label>${escapeHtml(i18n('report.opp_char'))}<select data-char="${1 - m.mySide}">${opt(chars, null)}</select></label>
+        ${charPickHtml(`data-char="${m.mySide}"`, i18n('report.my_char'))}
+        ${charPickHtml(`data-char="${1 - m.mySide}"`, i18n('report.opp_char'))}
         ${stages.length ? `<label>${escapeHtml(i18n('report.stage'))}<select data-stage>${opt(stages, null)}</select></label>` : ''}
       </div>` : ''}
     </div>`;
   }
   // まとめて: 両者の名前の隣にスコア (0〜3・それ以外は数を入れる) と、start.gg ならキャラ。ステージは選べない
-  const scoreOpts = `<option value="">—</option>` + [0, 1, 2, 3].map((x) => `<option value="${x}">${x}</option>`).join('')
-    + `<option value="${SCORE_OTHER}">${escapeHtml(i18n('report.score_other'))}</option>`;
+  // 候補: 何先が分かれば 0〜N (運営の設定なら それ以外 は出さない)、分からなければ 0〜3 と それ以外
+  const top = ft || 3;
+  const scoreOpts = `<option value="">—</option>` + Array.from({ length: top + 1 }, (_, x) => `<option value="${x}">${x}</option>`).join('')
+    + (ftSet(m) ? '' : `<option value="${SCORE_OTHER}">${escapeHtml(i18n('report.score_other'))}</option>`);
   const sumRow = (k) => {
     const slot = m.slots[k];
     return `<div class="rp-sum-row" data-side="${k}">
       <div class="rp-sum-name">${escapeHtml(slot ? slot.name : '')}${k === m.mySide ? ` <span class="rp-muted">${escapeHtml(i18n('report.you'))}</span>` : ''}</div>
       <select class="rp-score" data-score="${k}" aria-label="${escapeHtml(i18n('report.score'))}">${scoreOpts}</select>
       <input class="rp-score-n" type="number" inputmode="numeric" min="0" max="${MAX_GAMES}" data-score-n="${k}" hidden aria-label="${escapeHtml(i18n('report.score'))}">
-      ${withChars ? `<select class="rp-sum-char" data-sum-char="${k}" aria-label="${escapeHtml(k === m.mySide ? i18n('report.my_char') : i18n('report.opp_char'))}">${opt(chars, null)}</select>` : ''}
+      ${withChars ? `<div class="rp-sum-char">${charPickHtml(`data-sum-char="${k}"`, k === m.mySide ? i18n('report.my_char') : i18n('report.opp_char'))}</div>` : ''}
     </div>`;
   };
   const sumPane = `<div class="rp-pane" data-pane="sum">
@@ -418,8 +520,9 @@ function wireForm(form, m) {
   // 自分・相手のキャラの初期値 = メインキャラ (選手一覧の char)
   for (const k of [0, 1]) {
     const c = mainOf(m.slots[k]);
-    if (c) for (const sel of form.querySelectorAll(`select[data-char="${k}"], select[data-sum-char="${k}"]`)) sel.value = String(c);
+    if (c) for (const inp of form.querySelectorAll(`input[data-char="${k}"], input[data-sum-char="${k}"]`)) setChar(inp, c);
   }
+  wireCharPickers(form);
   const submit = form.querySelector('button[type=submit]');
   const setSum = (text, warn) => { const el = form.querySelector('.rp-sum'); el.textContent = text; el.classList.toggle('rp-warn', !!warn); };
   /** まとめてのスコア [側 0, 側 1] (どちらか未入力なら null) */
@@ -439,7 +542,8 @@ function wireForm(form, m) {
     const mine = sc[m.mySide]; const opp = sc[1 - m.mySide];
     if (mine === opp) { setSum(i18n('report.sum_tie'), true); return; }
     if (mine + opp > MAX_GAMES) { setSum(i18n('report.sum_too_many'), true); return; }
-    if (ft && (Math.max(mine, opp) !== ft)) { setSum(i18n('report.sum_ft', { n: ft }), true); return; }
+    const strict = ftSet(m);
+    if (strict && Math.max(mine, opp) !== strict) { setSum(i18n('report.sum_ft', { n: strict }), true); return; }
     setSum(i18n('report.sum_' + (mine > opp ? 'win' : 'lose'), { a: mine, b: opp }));
     submit.disabled = false;
   };
@@ -478,9 +582,9 @@ function wireForm(form, m) {
         picked[i] = Number(btn.getAttribute('data-pick'));
         for (let j = i + 1; j < n; j++) if (games[j].hidden) picked[j] = null;
         // 次のゲームのキャラは前のゲームを引き継ぐ
-        if (i + 1 < n) for (const sel of g.querySelectorAll('select[data-char]')) {
-          const nx = games[i + 1].querySelector(`select[data-char="${sel.getAttribute('data-char')}"]`);
-          if (nx && sel.value) nx.value = sel.value;
+        if (i + 1 < n) for (const inp of g.querySelectorAll('input[data-char]')) {
+          const nx = games[i + 1].querySelector(`input[data-char="${inp.getAttribute('data-char')}"]`);
+          if (nx && inp.value) setChar(nx, inp.value);
         }
         refresh();
       });
@@ -496,14 +600,14 @@ function wireForm(form, m) {
       const sc = sumScore();
       if (sc[0] === null || sc[1] === null || sc[0] === sc[1]) return;
       // ゲームの順は分からないので、負けた側の勝ちを先に並べる (最後のゲームは勝った側)。キャラは全ゲーム同じ・ステージなし
-      const c = [v(form.querySelector('select[data-sum-char="0"]')), v(form.querySelector('select[data-sum-char="1"]'))];
+      const c = [v(form.querySelector('input[data-sum-char="0"]')), v(form.querySelector('input[data-sum-char="1"]'))];
       const ws = sc[0] > sc[1] ? 0 : 1;
       for (let i = 0; i < sc[1 - ws]; i++) g.push({ w: 1 - ws, c: c.slice(), s: null });
       for (let i = 0; i < sc[ws]; i++) g.push({ w: ws, c: c.slice(), s: null });
     } else {
       for (let i = 0; i < n; i++) {
         if (picked[i] === null || games[i].hidden) break;
-        g.push({ w: picked[i], c: [v(games[i].querySelector('select[data-char="0"]')), v(games[i].querySelector('select[data-char="1"]'))], s: v(games[i].querySelector('select[data-stage]')) });
+        g.push({ w: picked[i], c: [v(games[i].querySelector('input[data-char="0"]')), v(games[i].querySelector('input[data-char="1"]'))], s: v(games[i].querySelector('select[data-stage]')) });
       }
     }
     const a = g.filter((x) => x.w === 0).length; const b = g.filter((x) => x.w === 1).length;
@@ -571,6 +675,7 @@ function renderPlayer() {
       <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
       ${stationHtml(cur)}
       ${vsHtml(cur)}
+      ${matchLinks(cur)}
       ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
       ${reportStateHtml(cur)}
@@ -581,6 +686,7 @@ function renderPlayer() {
       <h2>${escapeHtml(i18n('report.waiting'))}</h2>
       <div class="rp-round">${escapeHtml([waiting.phase, waiting.pool, waiting.round].filter(Boolean).join(' · '))} ${ftHtml(waiting)}</div>
       ${stationHtml(waiting)}
+      ${matchLinks(waiting)}
       <h3>${escapeHtml(i18n('report.cand.title'))}</h3>
       ${candidatesHtml(waiting)}
     </section>`;
@@ -594,6 +700,7 @@ function renderPlayer() {
       const sc = m.score ? (m.mySide === 0 ? m.score[0] + '-' + m.score[1] : m.score[1] + '-' + m.score[0]) : '';
       return `<li><span class="rp-done-r">${m.winner === m.mySide ? '○' : '●'}</span> ${escapeHtml(m.round)} · ${escapeHtml(op ? op.name : '')} ${escapeHtml(sc)}`
         + `${row ? ` <span class="rp-tag rp-state-${escapeHtml(row.state)}">${escapeHtml(STATE_LABEL(row.state))}</span>` : ''}`
+        + (m.kind === 'startgg' && setUrl(m.id) ? ' ' + extLink(setUrl(m.id), 'start.gg') : '')
         + `${!gateOf(m) ? ` <button type="button" class="rp-link" data-redo="${escapeHtml(m.id)}">${escapeHtml(i18n('report.redo'))}</button>` : ''}</li>`
         + (FORM_OPEN === m.id ? `<li class="rp-redo-form">${formHtml(m)}</li>` : '');
     }).join('') + `</ul></section>`;
@@ -705,23 +812,44 @@ function ftModeOf(rule) {
   if (w.from == null && l.from == null && w.a === l.a && w.a <= 3) return 'all' + w.a;
   return 'split';
 }
+/** start.gg のラウンドの何本勝負 (bestOf) から、側ごとの { a, from, b } (切り替えが 1 回までのとき)。読めなければ null */
+const boFt = (bo) => (Number.isInteger(bo) && bo > 0 && bo % 2 === 1 ? (bo + 1) / 2 : null);
+function sggSide(ph, k) {
+  const rs = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 : r.n < 0) && boFt(r.bestOf));
+  if (!rs.length) return null;
+  const a = boFt(rs[0].bestOf);
+  const sw = rs.find((r) => boFt(r.bestOf) !== a);
+  return { a, from: sw ? Math.abs(sw.n) : null, b: sw ? boFt(sw.bestOf) : a, label: sw ? ftRoundLabel(sw) : '' };
+}
+/** start.gg の設定のまとめ (例: 勝者側 2 先 → Winners Final から 3 先) */
+function sggSummary(ph) {
+  const part = (k) => {
+    const sd = sggSide(ph, k);
+    if (!sd) return '';
+    const name = k === 'w' ? i18n('report.ft.winners') : i18n('report.ft.losers');
+    return name + ' ' + i18n('report.ft', { n: sd.a }) + (sd.from ? ' → ' + i18n('report.ft.from', { r: sd.label }) + ' ' + i18n('report.ft', { n: sd.b }) : '');
+  };
+  return [part('w'), part('l')].filter(Boolean).join(' · ');
+}
 function ftPhaseHtml(ph, rule) {
   const mode = ftModeOf(rule);
+  const sgg = sggSummary(ph);
   const nums = (sel) => Array.from({ length: FT_MAX }, (_, i) => `<option value="${i + 1}"${i + 1 === sel ? ' selected' : ''}>${escapeHtml(i18n('report.ft', { n: i + 1 }))}</option>`).join('');
   const side = (k) => {
     const rounds = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 : r.n < 0));
     if (k === 'l' && !rounds.length) return '';
-    const sd = rule ? rule[k] : { a: 2, from: null, b: 3 };
+    const sd = rule ? rule[k] : sggSide(ph, k) || { a: 2, from: null, b: 3 };   // 初期値は start.gg の設定
     const from = rounds.map((r) => `<option value="${Math.abs(r.n)}"${sd.from === Math.abs(r.n) ? ' selected' : ''}>${escapeHtml(i18n('report.ft.from', { r: ftRoundLabel(r) }))}</option>`).join('');
     return `<div class="rp-ft-side"><span class="rp-ft-k">${escapeHtml(k === 'w' ? i18n('report.ft.winners') : i18n('report.ft.losers'))}</span>
       <select data-ft-a="${k}">${nums(sd.a)}</select>
       <select data-ft-from="${k}"><option value="">${escapeHtml(i18n('report.ft.no_change'))}</option>${from}</select>
       <select data-ft-b="${k}"${sd.from == null ? ' hidden' : ''}>${nums(sd.b || 3)}</select></div>`;
   };
-  const modes = [['', i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')]];
+  const modes = [['', sgg ? i18n('report.ft.use_sgg') : i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')]];
   return `<div class="rp-ft-ph" data-ph="${escapeHtml(ph.key)}">
     <label>${escapeHtml(ph.name || i18n('report.ft.phase_all'))}
       <select data-ft-mode>${modes.map(([v, t]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
+    ${sgg ? `<div class="rp-muted">${escapeHtml(i18n('report.ft.sgg', { s: sgg }))}</div>` : ''}
     <div data-ft-split${mode === 'split' ? '' : ' hidden'}>${side('w')}${side('l')}</div>
   </div>`;
 }
@@ -828,7 +956,7 @@ function renderAdminSets(sets) {
     const rep = (k) => { const x = s.reports && s.reports[k]; return x && x.result ? (x.result.w === 0 ? names[0] : names[1]) + ' ' + scoreText(x.result, 0) : '—'; };
     h += `<div class="rp-adm-row rp-state-${escapeHtml(s.state)}" data-set="${escapeHtml(s.set_id)}">
       <div class="rp-adm-head"><b>${escapeHtml(names.join(' vs '))}</b> <span class="rp-tag rp-state-${escapeHtml(s.state)}">${escapeHtml(STATE_LABEL(s.state))}</span>
-        <span class="rp-muted">#${escapeHtml(s.set_id)} · ${escapeHtml(new Date(s.updated_ms).toLocaleTimeString())}</span></div>
+        <span class="rp-muted">#${escapeHtml(s.set_id)} · ${escapeHtml(new Date(s.updated_ms).toLocaleTimeString())}</span> ${extLink(setUrl(s.set_id), INFO && INFO.kind === 'challonge' ? 'Challonge' : 'start.gg')}</div>
       <div class="rp-muted">${escapeHtml(i18n('report.admin.applied'))}: ${escapeHtml(s.applied ? (s.applied.w === 0 ? names[0] : names[1]) + ' ' + scoreText(s.applied, 0) : '—')}
         · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
       <div class="rp-adm-fix">
@@ -874,6 +1002,7 @@ function renderSetup() {
   $('rp-title').textContent = i18n('report.setup.title');
   root.innerHTML = `<section class="rp-card-sec">
     <p>${escapeHtml(i18n('report.setup.lead'))}</p>
+    <p class="rp-links">${extLink(SGG, i18n('report.link.open_sgg'))}</p>
     <label class="rp-label">${escapeHtml(i18n('report.setup.event'))}<input type="url" id="rp-event" placeholder="https://www.start.gg/tournament/…/event/…"></label>
     ${settingsFormHtml({ top_cut: null, classes_only: false }, 'startgg')}
     <button type="button" class="rp-btn rp-primary" id="rp-start">${escapeHtml(i18n('report.setup.start'))}</button>
@@ -928,9 +1057,9 @@ function demoSlot(p, seed, side) {
 }
 
 function demoMatch(P, o) {
-  return Object.assign({ id: 'd1', kind: 'startgg', state: 'open', started: true, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
+  return Object.assign({ id: '90001', kind: 'startgg', state: 'open', started: true, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
     station: 12, stream: null, slots: [demoSlot(P[0], 5, 0), demoSlot(P[1], 28, 1)], mySide: 0, winner: null, score: null, games: [],
-    totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null], roundNum: 2, phaseKey: 'p1' }, o || {});
+    totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null], roundNum: 2, phaseKey: 'p1', groupId: '901' }, o || {});
 }
 
 function demoRow(id, state, mine, theirs, P) {
@@ -950,9 +1079,9 @@ let DEMO_P = [];
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
 const DEMO_PHASES = [
-  { key: 'p1', name: 'Pools', rounds: [1, 2, 3, -1, -2, -3].map((n) => ({ n, label: null })) },
-  { key: 'p2', name: 'Top 32', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: 2, label: 'Winners Quarter-Final' }, { n: 3, label: 'Winners Semi-Final' }, { n: 4, label: 'Winners Final' },
-    { n: 5, label: 'Grand Final' }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
+  { key: 'p1', name: 'Pools', rounds: [1, 2, 3, -1, -2, -3].map((n) => ({ n, label: null, bestOf: 3 })) },
+  { key: 'p2', name: 'Top 32', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: 2, label: 'Winners Quarter-Final' }, { n: 3, label: 'Winners Semi-Final' }, { n: 4, label: 'Winners Final', bestOf: 5 },
+    { n: 5, label: 'Grand Final', bestOf: 5 }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
     { n: -5, label: 'Losers Semi-Final' }, { n: -6, label: 'Losers Final' }] },
 ];
 async function demoApi(body) {
@@ -981,29 +1110,31 @@ async function runDemo() {
   const P = DEMO_P;
   DEMO_ME = P[0].uid;
   INFO = { code: 'demo', kind: DEMO === 'challonge' ? 'challonge' : 'startgg', name: i18n(DEMO === 'challonge' ? 'report.demo.class_name' : 'report.demo.event_name'),
+    slug: DEMO === 'challonge' ? 'https://challonge.com/spsp_demo_b' : 'tournament/spsp-demo/event/singles',
     event_id: 0, active: true, expires_ms: Date.now() + 86400e3, settings: { top_cut: DEMO === 'gate' ? 8 : null, classes_only: false, ft: DEMO_FT } };
   $('rp-title').textContent = INFO.name;
+  headerLinks();
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin') { await renderAdmin(); return; }
   await loadChars();
   STAGES = ['戦場', '終点', '小戦場', 'ポケモンスタジアム2', 'すま村', 'ホロウバスティオン', 'カロスポケモンリーグ'].map((name, i) => ({ id: 9001 + i, name }));
-  const done0 = demoMatch(P, { id: 'd0', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
-  PRED = { p: { bt: { ifWin: { d1: 14.2 }, perSet: { d0: 6.8 } }, tjpr: { delta: 41.5 } } };
-  if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)]; }
-  if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('d1', 'conflict', R21, L12, P)]; }
+  const done0 = demoMatch(P, { id: '90000', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
+  PRED = { p: { bt: { ifWin: { 90001: 14.2 }, perSet: { 90000: 6.8 } }, tjpr: { delta: 41.5 } } };
+  if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P)]; }
+  if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('90001', 'conflict', R21, L12, P)]; }
   if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 32', pool: '', phaseKey: 'p2', roundNum: 3 })];
   if (DEMO === 'challonge') { MATCHES = [demoMatch(P, { kind: 'challonge', station: null, phase: '', pool: 'A', round: i18n('report.round', { n: 1 }), totalGames: null, isClass: true, phaseKey: 'c', roundNum: 1 })]; PRED = { none: true }; }
   if (DEMO === 'waiting') {
     const pre = { id: 'p1', state: 'playing', round: 'Winners Round 2', station: 7, loser: false, slots: [demoSlot(P[2], 12, 0), demoSlot(P[3], 21, 1)], deeper: [null, null] };
-    MATCHES = [demoMatch(P, { id: 'd2', state: 'waiting', round: 'Winners Quarter-Final', station: null, slots: [demoSlot(P[0], 5, 0), null], prereq: [null, pre] }), done0];
-    VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)];
+    MATCHES = [demoMatch(P, { id: '90002', state: 'waiting', round: 'Winners Quarter-Final', station: null, slots: [demoSlot(P[0], 5, 0), null], prereq: [null, pre] }), done0];
+    VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P)];
   }
   if (DEMO === 'done') {
     MATCHES = [done0,
-      demoMatch(P, { id: 'd3', state: 'complete', round: 'Winners Round 2', slots: [demoSlot(P[0], 5, 0), demoSlot(P[6], 12, 1)], winner: 1, score: [1, 2] }),
-      demoMatch(P, { id: 'd4', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
-    VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P), demoRow('d3', 'review', null, L12, P), demoRow('d4', 'reported', R21, null, P)];
+      demoMatch(P, { id: '90003', state: 'complete', round: 'Winners Round 2', slots: [demoSlot(P[0], 5, 0), demoSlot(P[6], 12, 1)], winner: 1, score: [1, 2] }),
+      demoMatch(P, { id: '90004', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
+    VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), demoRow('90003', 'review', null, L12, P), demoRow('90004', 'reported', R21, null, P)];
   }
   const cur = MATCHES.find((m) => m.state === 'open');
   if (cur) await matchAnimation(cur);
@@ -1019,6 +1150,7 @@ async function main() {
   if (!info || !info.ok) { setStatus($('rp-status'), errText(info), 'err'); return; }
   INFO = info.report;
   $('rp-title').textContent = INFO.name || i18n('report.title');
+  headerLinks();
   const tags = [];
   if (INFO.kind === 'challonge') tags.push(i18n('report.kind.challonge'));
   $('rp-sub').textContent = tags.join(' · ');

@@ -12,7 +12,7 @@ export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z]
 
 export type ProviderResult = { ok: true } | { ok: false; note: string };
 /** 何先の設定に使うフェーズとラウンド (n = 勝者側 1, 2, …・敗者側 -1, -2, …、label = start.gg の名前。無ければ null) */
-export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null }[] }
+export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null; bestOf?: number | null }[] }
 export interface Provider {
   phases(): Promise<{ ok: true; phases: PhaseInfo[] } | { ok: false; note: string }>;
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
@@ -44,35 +44,65 @@ const UPDATE_MUTATION = `mutation SpspUpdateSet($setId: ID!, $winnerId: ID!, $ga
 }`;
 const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $setId) { id state } }`;
 
-/** フェーズと、最初のブロックのラウンド (rounds が読めなければ試合の round から) */
+/**
+ * ブラケットの構造: フェーズごとに、ラウンドがいちばん多いブロックのラウンド (number・bestOf) と、
+ * そのブロックの試合の fullRoundText (ラウンドの名前、Winners Semi-Final 等)。rounds が読めなければ試合の round だけで作る。
+ */
 const PHASES_QUERY = (withRounds: boolean) => `query SpspReportPhases($id: ID!) {
-  event(id: $id) { phases { id name phaseGroups(query: { page: 1, perPage: 1 }) { nodes {
-    ${withRounds ? 'rounds { number }' : ''}
-    sets(page: 1, perPage: 60, sortType: STANDARD) { nodes { round fullRoundText } }
-  } } } }
+  event(id: $id) { phases { id name phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id ${withRounds ? 'rounds { number bestOf }' : ''} } } } }
 }`;
+const GROUP_SETS_QUERY = `query SpspReportGroupSets($id: ID!, $page: Int!) {
+  phaseGroup(id: $id) { sets(page: $page, perPage: 80, sortType: STANDARD) { pageInfo { totalPages } nodes { round fullRoundText } } }
+}`;
+const PHASES_MAX = 12;
+const GROUP_PAGES_MAX = 4;
+const PHASE_CALLS_MAX = 30;
 
-export function parsePhases(data: unknown): PhaseInfo[] {
+type RawGroup = { id?: unknown; rounds?: unknown };
+/** フェーズの一覧と、名前を読むブロック (ラウンドがいちばん多いもの) */
+export function parsePhaseList(data: unknown): { key: string; name: string; group: string | null; rounds: Map<number, number | null> }[] {
   const ev = data ? (data as { event?: { phases?: unknown } | null }).event : null;
-  const phases = ev && Array.isArray(ev.phases) ? ev.phases : [];
-  const out: PhaseInfo[] = [];
+  const phases = ev && Array.isArray(ev.phases) ? ev.phases.slice(0, PHASES_MAX) : [];
+  const out = [];
   for (const p of phases) {
     const ph = p as { id?: unknown; name?: unknown; phaseGroups?: { nodes?: unknown[] } | null } | null;
     if (!ph || ph.id === undefined || ph.id === null) continue;
-    const g = ph.phaseGroups && Array.isArray(ph.phaseGroups.nodes) ? ph.phaseGroups.nodes[0] as { rounds?: unknown; sets?: { nodes?: unknown } | null } | undefined : undefined;
-    const labels = new Map<number, string | null>();
-    if (g && Array.isArray(g.rounds)) for (const r of g.rounds) { const n = Number((r as { number?: unknown }).number); if (Number.isInteger(n) && n !== 0) labels.set(n, null); }
-    const sets = g && g.sets && Array.isArray(g.sets.nodes) ? g.sets.nodes : [];
-    for (const s of sets) {
-      const x = s as { round?: unknown; fullRoundText?: unknown };
-      const n = Number(x.round);
-      if (!Number.isInteger(n) || n === 0) continue;
-      if (!labels.get(n)) labels.set(n, typeof x.fullRoundText === 'string' && x.fullRoundText ? x.fullRoundText.slice(0, 60) : null);
+    const groups = (ph.phaseGroups && Array.isArray(ph.phaseGroups.nodes) ? ph.phaseGroups.nodes : []) as RawGroup[];
+    let best: RawGroup | null = null; let bestN = -1;
+    for (const g of groups) {
+      const n = g && Array.isArray(g.rounds) ? g.rounds.length : 0;
+      if (g && g.id !== undefined && g.id !== null && n > bestN) { best = g; bestN = n; }
     }
-    const rounds = [...labels.entries()].map(([n, label]) => ({ n, label })).sort((a, b) => (a.n > 0) === (b.n > 0) ? Math.abs(a.n) - Math.abs(b.n) : b.n - a.n);
-    out.push({ key: String(ph.id), name: typeof ph.name === 'string' ? ph.name.slice(0, 80) : '', rounds });
+    const rounds = new Map<number, number | null>();
+    if (best && Array.isArray(best.rounds)) {
+      for (const r of best.rounds) {
+        const x = r as { number?: unknown; bestOf?: unknown };
+        const n = Number(x.number); const bo = Number(x.bestOf);
+        if (Number.isInteger(n) && n !== 0) rounds.set(n, Number.isInteger(bo) && bo > 0 ? bo : null);
+      }
+    }
+    out.push({ key: String(ph.id), name: typeof ph.name === 'string' ? ph.name.slice(0, 80) : '', group: best ? String(best.id) : null, rounds });
   }
   return out;
+}
+
+/** ラウンドの並び: 勝者側 1, 2, … のあとに敗者側 -1, -2, … */
+export function sortRounds<T extends { n: number }>(xs: T[]): T[] {
+  return xs.sort((a, b) => (a.n > 0) === (b.n > 0) ? Math.abs(a.n) - Math.abs(b.n) : b.n - a.n);
+}
+
+/** 1 つのフェーズ: 試合の round と名前を足して PhaseInfo に */
+export function phaseInfoOf(ph: { key: string; name: string; rounds: Map<number, number | null> }, sets: unknown[]): PhaseInfo {
+  const labels = new Map<number, string | null>();
+  for (const n of ph.rounds.keys()) labels.set(n, null);
+  for (const s of sets) {
+    const x = s as { round?: unknown; fullRoundText?: unknown } | null;
+    const n = Number(x && x.round);
+    if (!x || !Number.isInteger(n) || n === 0) continue;
+    if (!labels.get(n)) labels.set(n, typeof x.fullRoundText === 'string' && x.fullRoundText ? x.fullRoundText.slice(0, 60) : null);
+  }
+  const rounds = sortRounds([...labels.entries()].map(([n, label]) => ({ n, label, bestOf: ph.rounds.get(n) ?? null })));
+  return { key: ph.key, name: ph.name, rounds };
 }
 
 export const EVENT_QUERY = `query SpspReportEvent($slug: String, $id: ID) {
@@ -168,7 +198,23 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
       if (r.ok && Array.isArray(r.json.errors) && r.json.errors.length) r = await startggGql(fetchFn, token, PHASES_QUERY(false), { id: eventId });
       if (!r.ok) return { ok: false, note: r.note };
       if (!r.json.data || !r.json.data.event) return { ok: false, note: gqlNote(r.json) };
-      return { ok: true, phases: parsePhases(r.json.data) };
+      const list = parsePhaseList(r.json.data);
+      const out: PhaseInfo[] = [];
+      let calls = 0;
+      for (const ph of list) {
+        const sets: unknown[] = [];
+        for (let page = 1; ph.group && page <= GROUP_PAGES_MAX && calls < PHASE_CALLS_MAX; page++) {
+          calls++;
+          const g = await startggGql(fetchFn, token, GROUP_SETS_QUERY, { id: ph.group, page });
+          const pg = g.ok && g.json.data ? g.json.data.phaseGroup as { sets?: { pageInfo?: { totalPages?: unknown }; nodes?: unknown } } | null : null;
+          if (!pg || !pg.sets || !Array.isArray(pg.sets.nodes)) break;
+          sets.push(...pg.sets.nodes);
+          const total = Number(pg.sets.pageInfo && pg.sets.pageInfo.totalPages);
+          if (!Number.isFinite(total) || page >= total) break;
+        }
+        out.push(phaseInfoOf(ph, sets));
+      }
+      return { ok: true, phases: out };
     },
     async readSet(setId) {
       const r = await startggGql(fetchFn, token, SET_QUERY, { id: setId });

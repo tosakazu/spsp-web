@@ -144,3 +144,31 @@ body {
 .rp-ft-side { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
 .rp-ft-k { min-width: 3.5em; color: #374151; }
 .rp-ft-set select { font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827; min-width: 0; max-width: 100%; }
+
+/* キャラ選び (キャラ投票の一覧と同じ見た目) */
+.rp-cp { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 11px; color: #6b7280; }
+.rp-sum-char .rp-cp { flex-direction: row; align-items: center; gap: 6px; }
+.rp-cp-btn { font: inherit; font-size: 13px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; cursor: pointer; min-width: 0; text-align: left; }
+.rp-cp-em { font-size: 18px; line-height: 1; }
+.rp-cp-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-cp-none { color: #9ca3af; }
+.rp-cp-ov { position: fixed; inset: 0; z-index: 900; background: rgba(17, 24, 39, .45); display: flex; align-items: flex-end; justify-content: center; }
+.rp-cp-panel { background: #fff; width: 100%; max-width: 600px; max-height: 80vh; border-radius: 14px 14px 0 0; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.rp-cp-head { display: flex; align-items: center; gap: 8px; }
+.rp-cp-head b { flex: 1; font-size: 14px; }
+.rp-cp-x { font: inherit; font-size: 20px; line-height: 1; background: none; border: 0; cursor: pointer; color: #6b7280; padding: 2px 6px; }
+.rp-cp-q { font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }
+.rp-cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; overflow-y: auto; padding-bottom: 4px; }
+.rp-cp-c { font: inherit; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; background: #fff; color: #111827; border: 1px solid #d1d5db; border-radius: 10px; cursor: pointer; }
+.rp-cp-c[hidden] { display: none; }
+.rp-cp-c .em { font-size: 24px; line-height: 1.1; }
+.rp-cp-c .nm { font-size: 10px; color: #6b7280; line-height: 1.25; text-align: center; }
+.rp-cp-c.sel, .rp-cp-c.hit { border: 2px solid #2563eb; background: #eff6ff; padding: 7px 1px 5px; }
+@media (min-width: 640px) { .rp-cp-ov { align-items: center; } .rp-cp-panel { border-radius: 14px; } }
+
+/* start.gg / Challonge へのリンク */
+.rp-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0; font-size: 12px; }
+.rp-links[hidden] { display: none; }
+.rp-ext { color: #2563eb; text-decoration: none; white-space: nowrap; }
+.rp-ext:hover { text-decoration: underline; }
+.rp-done .rp-ext, .rp-adm-head .rp-ext { font-size: 11px; }
