@@ -743,10 +743,10 @@ function renderPlayer() {
       ${stationHtml(cur)}
       ${vsHtml(cur)}
       ${matchLinks(cur)}
-      <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
+      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
-      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
+      <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
     </section>`;
   } else if (waiting) {
     h += `<section class="rp-card-sec">
