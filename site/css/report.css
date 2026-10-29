@@ -125,4 +125,22 @@ body {
 .rp-tabs { display: flex; gap: 0; margin: 6px 0 8px; border-bottom: 1px solid #e5e7eb; }
 .rp-tab { font: inherit; font-size: 13px; padding: 7px 14px; background: none; border: 0; border-bottom: 2px solid transparent; color: #6b7280; cursor: pointer; margin-bottom: -1px; }
 .rp-tab.on { color: #dc2626; border-bottom-color: #dc2626; font-weight: 700; }
-.rp-scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 8px 0; }
+
+/* まとめて: 名前の隣にスコア */
+.rp-sum-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid #f3f4f6; }
+.rp-sum-name { font-weight: 700; overflow-wrap: anywhere; }
+.rp-sum-row .rp-sum-char { grid-column: 1 / -1; }
+.rp-score, .rp-score-n, .rp-sum-char { font: inherit; font-size: 15px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; min-width: 0; }
+.rp-score { min-width: 76px; font-weight: 700; }
+.rp-score-n { width: 64px; }
+.rp-sum.rp-warn { color: #b45309; }
+
+/* 何先 */
+.rp-ft { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: #dc2626; border-radius: 6px; padding: 1px 7px; vertical-align: 1px; }
+.rp-match-ft { font-size: 16px; font-weight: 800; color: #fde68a; letter-spacing: .1em; animation: rp-fade .8s; }
+.rp-ft-set { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; font-size: 12px; }
+.rp-ft-ph { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; }
+.rp-ft-ph > label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+.rp-ft-side { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
+.rp-ft-k { min-width: 3.5em; color: #374151; }
+.rp-ft-set select { font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827; min-width: 0; max-width: 100%; }

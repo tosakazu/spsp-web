@@ -28,7 +28,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportEnable, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportPhases, handleReportEnable, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -128,6 +128,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleReportNotices(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ。記録しない
       case 'report_submit':
         res = await handleReportSubmit(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_phases':
+        return (await handleReportPhases(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_admin':
         return (await handleReportAdmin(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_admin_fix':

@@ -5,9 +5,9 @@ import { dispatch } from '../src/api/router.ts';
 import { SESSION_TTL_MS_DEFAULT, STATE_TTL_MS_DEFAULT } from '../src/config.ts';
 import { issueSessionToken } from '../src/api/session.ts';
 import { openJson, sealJson } from '../src/api/report_crypto.ts';
-import { adminDecision, mergeResults, parseResult, parseSettings, playerGate, reconcile, sameOutcome } from '../src/api/report_logic.ts';
+import { adminDecision, ftOf, mergeResults, parseFt, parseResult, parseSettings, playerGate, reconcile, sameOutcome } from '../src/api/report_logic.ts';
 import { reportExpiry } from '../src/api/report.ts';
-import { downstreamDoneOf, gameDataOf, parseStartggSet } from '../src/api/report_startgg.ts';
+import { downstreamDoneOf, gameDataOf, parsePhases, parseStartggSet } from '../src/api/report_startgg.ts';
 import { cLPlacement, cSetOf, losersPlace, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
 import { MemStore } from './_mem_store.mjs';
 
@@ -95,6 +95,30 @@ test('運営の設定: トップ N からは運営・下位クラスだけ', () 
   assert.strictEqual(playerGate(set0({ isClass: true }), { top_cut: null, classes_only: true }), null);
 });
 
+test('何先: 全部 N 先・勝者側/敗者側でラウンドから切り替え・フェーズごと。スコアはちょうど N 先', () => {
+  const all = (n) => ({ w: { a: n, from: null, b: n }, l: { a: n, from: null, b: n } });
+  const st = parseSettings({ ft: { 10: all(1), 20: { w: { a: 2, from: 4, b: 3 }, l: { a: 2, from: 5, b: 3 } }, 'bad key!': all(2), 30: { w: { a: 9 } } } });
+  assert.deepStrictEqual(Object.keys(st.ft), ['10', '20']);                       // 変なキー・範囲外は捨てる
+  assert.deepStrictEqual(parseFt({ x: { w: { a: 2, from: 3 }, l: { a: 2 } } }).x.w, { a: 2, from: null, b: 2 });   // 切り替え先が無ければ切り替えない
+  assert.strictEqual(ftOf(set0({ phaseKey: '10', round: 3 }), st), 1);             // 予選: 全部 1 先
+  assert.strictEqual(ftOf(set0({ phaseKey: '20', round: 3 }), st), 2);
+  assert.strictEqual(ftOf(set0({ phaseKey: '20', round: 4 }), st), 3);             // 勝者側 4 回戦から 3 先
+  assert.strictEqual(ftOf(set0({ phaseKey: '20', round: -4 }), st), 2);
+  assert.strictEqual(ftOf(set0({ phaseKey: '20', round: -5 }), st), 3);            // 敗者側 5 回戦から 3 先
+  assert.strictEqual(ftOf(set0({ phaseKey: '99', round: 1 }), st), null);          // 設定なし
+  assert.strictEqual(ftOf(set0({ phaseKey: '20', round: null }), st), null);
+  assert.ok('result' in parseResult(R(0, G(0)), 3, 1));                            // 1 先 = 1-0
+  assert.strictEqual(parseResult(R(0, G(1), G(0), G(0)), 3, 1).bad, 'score_ft');
+  assert.strictEqual(parseResult(R(0, G(0), G(0)), 3, 3).bad, 'score_ft');         // 3 先で 2-0 は足りない
+  assert.ok('result' in parseResult(R(1, G(0), G(1), G(0), G(1), G(1)), 3, 3));    // 3 先なら start.gg の totalGames より多くてよい
+});
+
+test('フェーズとラウンドの一覧 (何先の設定用)', () => {
+  const ph = parsePhases({ event: { phases: [{ id: 7, name: 'Top 8', phaseGroups: { nodes: [{ rounds: [{ number: 1 }, { number: 2 }, { number: -1 }, { number: 3 }, { number: -2 }],
+    sets: { nodes: [{ round: 3, fullRoundText: 'Grand Final' }, { round: -2, fullRoundText: 'Losers Final' }] } }] } }] } });
+  assert.deepStrictEqual(ph, [{ key: '7', name: 'Top 8', rounds: [{ n: 1, label: null }, { n: 2, label: null }, { n: 3, label: 'Grand Final' }, { n: -1, label: null }, { n: -2, label: 'Losers Final' }] }]);
+});
+
 test('reportExpiry: 大会の終わりの翌日の終わり (JST)、短すぎ・長すぎは丸める', () => {
   const now = Date.parse('2026-11-01T01:00:00Z');           // 11/1 10:00 JST
   const end = Date.parse('2026-11-01T12:00:00Z') / 1000;     // 11/1 21:00 JST
@@ -161,7 +185,7 @@ test('Challonge の負けた人の順位: シングル・ダブル (8 人) は s
 // ── 偽の start.gg ──
 function fakeStartgg() {
   const st = {
-    set: { id: 100, state: 2, winnerId: null, totalGames: 3, lPlacement: 9, event: { id: 9, name: 'Singles' }, phaseGroup: { phase: { name: 'Pools' } },
+    set: { id: 100, state: 2, round: 1, winnerId: null, totalGames: 3, lPlacement: 9, event: { id: 9, name: 'Singles' }, phaseGroup: { phase: { id: 77, name: 'Pools' } },
       slots: [{ entrant: { id: 1, name: 'A', initialSeedNum: 1, participants: [{ user: { id: 11 } }] } }, { entrant: { id: 2, name: 'B', initialSeedNum: 2, participants: [{ user: { id: 22 } }] } }],
       games: null },
     next: [], admins: [{ id: 4242 }], calls: [], fail: null, tokens: [],
@@ -184,6 +208,7 @@ function fakeStartgg() {
     if (name === 'SpspClassAdmin') return j({ currentUser: { id: 4242 }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: st.admins } } });
     if (name === 'SpspClassAdminTours') return j({ currentUser: { tournaments: { nodes: [] } } });
     if (name === 'SpspReportSet') return j({ set: String(variables.id) === String(st.set.id) ? st.set : null });
+    if (name === 'SpspReportPhases') return j({ event: { phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ rounds: [{ number: 1 }, { number: -1 }], sets: { nodes: [{ round: 1, fullRoundText: 'Winners Round 1' }] } }] } }] } });
     if (name === 'SpspReportNext') return j({ event: { sets: { nodes: st.next } } });
     if (name === 'SpspReportBracketSet' || name === 'SpspUpdateSet') {
       st.set.state = 3; st.set.winnerId = Number(variables.winnerId);
@@ -322,6 +347,16 @@ test('運営: 一覧・直す (その後の選手の報告では動かない)・
   // 取り消し後は、その後の報告だけで決める
   const p2 = await e.call({ action: 'report_submit', token: await e.tok(22), code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1 }, { w: 1 }] } });
   assert.deepStrictEqual([p2.state, p2.op], ['reported', 'report']);
+  // 何先: フェーズの一覧・設定するとスコアを確かめる
+  const ph = await e.call({ action: 'report_phases', token: TO, code: e.code });
+  assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: -1, label: null }] }]);
+  assert.strictEqual((await e.call({ action: 'report_phases', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
+  const ft1 = { 77: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
+  assert.deepStrictEqual((await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, ft: ft1 } })).settings.ft, ft1);
+  assert.deepStrictEqual((await e.call({ action: 'report_info', code: e.code })).report.settings.ft, ft1);   // 選手の画面にも出す
+  e.tick(5000);
+  const bad = await e.call({ action: 'report_submit', token: await e.tok(22), code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1 }, { w: 1 }] } });
+  assert.deepStrictEqual([bad.error.code, bad.error.message], ['bad_request', 'この試合は 1 先です。スコアを確かめてください。']);
   // 設定
   const s = await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: 8, classes_only: false } });
   assert.deepStrictEqual(s.settings, { top_cut: 8, classes_only: false });

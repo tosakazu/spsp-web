@@ -9,6 +9,7 @@
  *   action: "report_enable_class" { startgg_token, challonge_token, challonge_exp, class_id } → { report }
  *                                 下位クラス (Challonge) の受付。作った本人か本戦の運営だけ
  *   action: "report_admin"        { token, code }  → { report, sets }  運営 (受付を始めた人) だけ
+ *   action: "report_phases"       { token, code }  → { phases }  何先の設定に使うフェーズとラウンド (運営だけ)
  *   action: "report_admin_fix"    { token, code, set_id, result | reset: true }  次の試合に結果が出るまで
  *   action: "report_stop"         { token, code }  受付を止めてトークンを消す
  * 選手:
@@ -35,7 +36,7 @@ import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
-import { adminDecision, parseResult, parseSettings, playerGate, reconcile } from './report_logic.ts';
+import { adminDecision, ftOf, parseResult, parseSettings, playerGate, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
 import type { HandlerResult } from './respond.ts';
@@ -296,8 +297,12 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   const gate = playerGate(set, parseSettings(o.ev.settings));
   if (gate === 'classes_only') return err('not_allowed', 'この大会では、下位クラスの試合だけ選手が報告できます。結果は運営に伝えてください。', gate);
   if (gate === 'top_cut') return err('not_allowed', 'この試合 (トップ ' + parseSettings(o.ev.settings).top_cut + ' から) は運営が結果を入力します。結果は運営に伝えてください。', gate);
-  const pr = parseResult(req.result, set.totalGames);
-  if ('bad' in pr) return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
+  const ft = ftOf(set, parseSettings(o.ev.settings));
+  const pr = parseResult(req.result, set.totalGames, ft);
+  if ('bad' in pr) {
+    if (pr.bad === 'score_ft') return err('bad_request', 'この試合は ' + ft + ' 先です。スコアを確かめてください。', 'bad:score_ft');
+    return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
+  }
 
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(pr.result), outcome: 'pending' });
   const r = await settle(store, p, o.ev.code, set, now, null, (row, latest) => reconcile(
@@ -428,6 +433,15 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   const sets = [];
   for (const r of await store.listReportSets(o.ev.code)) sets.push(await setView(store, r, null));
   return ok({ report: publicOf(o.ev, now), sets });
+}
+
+/** action: "report_phases" — 何先の設定に使うフェーズとラウンド */
+export async function handleReportPhases(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  const r = await providerOf(fetchFn, o).phases();
+  if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
+  return ok({ phases: r.phases });
 }
 
 /** action: "report_admin_fix" — 運営が直す ({ result }) か取り消す ({ reset: true })。次の試合に結果が出るまで */

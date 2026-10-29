@@ -99,7 +99,7 @@ async function loadStages(gql) {
 
 const SLOT_FIELDS = 'prereqType prereqId prereqPlacement entrant { id name initialSeedNum participants { user { id } player { gamerTag } } } standing { stats { score { value } } }';
 const setFields = (extra) => `id state round fullRoundText identifier totalGames winnerId lPlacement ${extra}
-  phaseGroup { displayIdentifier phase { name } }
+  phaseGroup { displayIdentifier phase { id name } }
   slots { ${SLOT_FIELDS} }
   games { orderNum winnerId stage { id } selections { entrant { id } character { id } } }`;
 const EXTRA = 'station { number } stream { streamName streamSource }';   // 台・配信台 (読めなければ外して読み直す)
@@ -162,6 +162,7 @@ function fromStartgg(s) {
   return {
     id: String(s.id), kind: 'startgg', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: Number(s.state) === 2,
     round: s.fullRoundText || '', pool: s.phaseGroup ? s.phaseGroup.displayIdentifier : '', phase,
+    roundNum: Number.isInteger(s.round) ? s.round : null, phaseKey: s.phaseGroup && s.phaseGroup.phase && s.phaseGroup.phase.id != null ? String(s.phaseGroup.phase.id) : null,
     station: s.station && s.station.number ? s.station.number : null,
     stream: s.stream && s.stream.streamName ? { name: s.stream.streamName, source: s.stream.streamSource } : null,
     slots, mySide, winner, score: complete && sc[0] !== null && sc[1] !== null ? sc : null, games,
@@ -202,6 +203,7 @@ function fromChallonge(c) {
     return {
       id: String(m.id), kind: 'challonge', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: false,
       round: m.round != null ? i18n('report.round', { n: m.round }) : '', pool: m.identifier || '', phase: '', station: null, stream: null,
+      roundNum: Number.isInteger(m.round) ? m.round : null, phaseKey: 'c',
       slots, mySide, winner: m.winner, score: m.score, games: [], totalGames: null, lPlacement: m.l_placement || null, isClass: true, prereq,
     };
   }).filter(Boolean);
@@ -333,17 +335,34 @@ function fillCards(root) {
   }
 }
 
-/** 結果の入力欄 */
+/** 何先か (運営の設定。無ければ null)。worker/src/api/report_logic.ts の ftOf と同じ */
+function ftOf(m) {
+  const ft = INFO && INFO.settings && INFO.settings.ft;
+  const rule = ft && m.phaseKey ? ft[m.phaseKey] : null;
+  if (!rule) return null;
+  const r = m.roundNum;
+  const sd = r !== null && r !== undefined && r < 0 ? rule.l : rule.w;
+  if (sd.from === null || sd.from === undefined) return sd.a;
+  if (r === null || r === undefined) return null;
+  if (r === 0) return sd.b;
+  return Math.abs(r) >= sd.from ? sd.b : sd.a;
+}
+const ftHtml = (m) => { const n = ftOf(m); return n ? `<span class="rp-ft">${escapeHtml(i18n('report.ft', { n }))}</span>` : ''; };
+
+const MAX_GAMES = 9;   // worker の MAX_GAMES と同じ
+const SCORE_OTHER = 'x';
+
+/** 結果の入力欄。まとめて (既定) = 名前の隣でスコアを選ぶ・キャラ / 1 戦ごと = ゲームごとの勝者・キャラ・ステージ */
 function formHtml(m) {
-  const n = m.totalGames || 3;
-  const need = Math.floor(n / 2) + 1;
+  const ft = ftOf(m);
+  const n = ft ? 2 * ft - 1 : m.totalGames || MAX_GAMES;   // 1 戦ごとの欄の数 (何先が分からなければ最大まで、決着は勝ち越しで)
   const chars = CHARS || [];
   const stages = STAGES || [];
   const opt = (list, sel) => `<option value="">—</option>` + list.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${escapeHtml((x.emoji ? x.emoji + ' ' : '') + x.name)}</option>`).join('');
   const withChars = m.kind === 'startgg';
   let rows = '';
   for (let i = 0; i < n; i++) {
-    rows += `<div class="rp-game" data-game="${i}"${i >= need ? ' data-extra="1"' : ''}>
+    rows += `<div class="rp-game" data-game="${i}">
       <div class="rp-game-no">${escapeHtml(i18n('report.game', { n: i + 1 }))}</div>
       <div class="rp-game-win">
         <button type="button" class="rp-pick" data-pick="${m.mySide}">${escapeHtml(i18n('report.i_won'))}</button>
@@ -356,27 +375,30 @@ function formHtml(m) {
       </div>` : ''}
     </div>`;
   }
-  // まとめて: スコアと (start.gg なら) 両者のキャラ。ステージは選べない
-  let scores = '';
-  for (let o = 0; o < need; o++) scores += `<button type="button" class="rp-pick" data-score="${need}-${o}">${need}-${o}</button>`;
-  for (let o = need - 1; o >= 0; o--) scores += `<button type="button" class="rp-pick" data-score="${o}-${need}">${o}-${need}</button>`;
+  // まとめて: 両者の名前の隣にスコア (0〜3・それ以外は数を入れる) と、start.gg ならキャラ。ステージは選べない
+  const scoreOpts = `<option value="">—</option>` + [0, 1, 2, 3].map((x) => `<option value="${x}">${x}</option>`).join('')
+    + `<option value="${SCORE_OTHER}">${escapeHtml(i18n('report.score_other'))}</option>`;
+  const sumRow = (k) => {
+    const slot = m.slots[k];
+    return `<div class="rp-sum-row" data-side="${k}">
+      <div class="rp-sum-name">${escapeHtml(slot ? slot.name : '')}${k === m.mySide ? ` <span class="rp-muted">${escapeHtml(i18n('report.you'))}</span>` : ''}</div>
+      <select class="rp-score" data-score="${k}" aria-label="${escapeHtml(i18n('report.score'))}">${scoreOpts}</select>
+      <input class="rp-score-n" type="number" inputmode="numeric" min="0" max="${MAX_GAMES}" data-score-n="${k}" hidden aria-label="${escapeHtml(i18n('report.score'))}">
+      ${withChars ? `<select class="rp-sum-char" data-sum-char="${k}" aria-label="${escapeHtml(k === m.mySide ? i18n('report.my_char') : i18n('report.opp_char'))}">${opt(chars, null)}</select>` : ''}
+    </div>`;
+  };
   const sumPane = `<div class="rp-pane" data-pane="sum">
-      <p class="rp-muted">${escapeHtml(i18n('report.form.help_sum'))}</p>
-      <div class="rp-scores">${scores}</div>
-      ${withChars ? `<div class="rp-game-sel">
-        <label>${escapeHtml(i18n('report.my_char'))}<select data-sum-char="${m.mySide}">${opt(chars, null)}</select></label>
-        <label>${escapeHtml(i18n('report.opp_char'))}<select data-sum-char="${1 - m.mySide}">${opt(chars, null)}</select></label>
-      </div>` : ''}
+      ${sumRow(m.mySide)}${sumRow(1 - m.mySide)}
     </div>`;
   return `<form class="rp-form" data-set="${escapeHtml(m.id)}">
-    <h3>${escapeHtml(i18n('report.form.title'))}</h3>
+    <h3>${escapeHtml(i18n('report.form.title'))} ${ftHtml(m)}</h3>
     <div class="rp-tabs" role="tablist">
-      <button type="button" role="tab" class="rp-tab on" data-mode="sum">${escapeHtml(i18n('report.mode.sum'))}</button>
-      <button type="button" role="tab" class="rp-tab" data-mode="each">${escapeHtml(i18n('report.mode.each'))}</button>
+      <button type="button" role="tab" class="rp-tab on" data-mode="sum" aria-selected="true">${escapeHtml(i18n('report.mode.sum'))}</button>
+      <button type="button" role="tab" class="rp-tab" data-mode="each" aria-selected="false">${escapeHtml(i18n('report.mode.each'))}</button>
     </div>
     ${sumPane}
     <div class="rp-pane" data-pane="each" hidden>
-    <p class="rp-muted">${escapeHtml(withChars ? i18n('report.form.help') : i18n('report.form.help_ch'))}</p>
+    ${withChars ? '' : `<p class="rp-muted">${escapeHtml(i18n('report.form.help_ch'))}</p>`}
     ${rows}
     </div>
     <div class="rp-form-foot"><span class="rp-sum"></span><button type="submit" class="rp-btn rp-primary">${escapeHtml(i18n('report.send'))}</button></div>
@@ -384,30 +406,64 @@ function formHtml(m) {
   </form>`;
 }
 
-/** 入力欄の動き。まとめて = スコアを押す / 1 戦ごと = ゲームの勝者を押すと、決着までのゲームだけ出す。キャラは前のゲームを引き継ぐ */
+/** 入力欄の動き。1 戦ごと = ゲームの勝者を押すと、決着までのゲームだけ出す。キャラは前のゲームを引き継ぐ */
 function wireForm(form, m) {
-  const n = m.totalGames || 3;
-  const need = Math.floor(n / 2) + 1;
+  const ft = ftOf(m);
   const games = Array.from(form.querySelectorAll('.rp-game'));
+  const n = games.length;
+  const need = ft || (m.totalGames ? Math.floor(m.totalGames / 2) + 1 : null);   // null = 何先か分からない (勝ち越せば送れる)
   const picked = new Array(n).fill(null);
   let mode = 'sum';
-  /** まとめての選択 [自分, 相手] */
-  let sumPick = null;
   const mainOf = (slot) => (slot && slot.uid && W.__rpMain ? W.__rpMain[slot.uid] : null);
   // 自分・相手のキャラの初期値 = メインキャラ (選手一覧の char)
   for (const k of [0, 1]) {
     const c = mainOf(m.slots[k]);
     if (c) for (const sel of form.querySelectorAll(`select[data-char="${k}"], select[data-sum-char="${k}"]`)) sel.value = String(c);
   }
-  const setSum = (text) => { form.querySelector('.rp-sum').textContent = text; };
+  const submit = form.querySelector('button[type=submit]');
+  const setSum = (text, warn) => { const el = form.querySelector('.rp-sum'); el.textContent = text; el.classList.toggle('rp-warn', !!warn); };
+  /** まとめてのスコア [側 0, 側 1] (どちらか未入力なら null) */
+  const sumScore = () => [0, 1].map((k) => {
+    const sel = form.querySelector(`select[data-score="${k}"]`);
+    if (sel.value === '') return null;
+    if (sel.value !== SCORE_OTHER) return Number(sel.value);
+    const v = form.querySelector(`input[data-score-n="${k}"]`).value;
+    const x = Number(v);
+    return v !== '' && Number.isInteger(x) && x >= 0 && x <= MAX_GAMES ? x : null;
+  });
   const refreshSum = () => {
-    for (const btn of form.querySelectorAll('[data-score]')) btn.classList.toggle('on', !!sumPick && btn.getAttribute('data-score') === sumPick.join('-'));
-    setSum(sumPick ? i18n('report.sum_' + (sumPick[0] > sumPick[1] ? 'win' : 'lose'), { a: sumPick[0], b: sumPick[1] }) : '');
-    form.querySelector('button[type=submit]').disabled = !sumPick;
+    for (const k of [0, 1]) form.querySelector(`input[data-score-n="${k}"]`).hidden = form.querySelector(`select[data-score="${k}"]`).value !== SCORE_OTHER;
+    const sc = sumScore();
+    submit.disabled = true;
+    if (sc[0] === null || sc[1] === null) { setSum(''); return; }
+    const mine = sc[m.mySide]; const opp = sc[1 - m.mySide];
+    if (mine === opp) { setSum(i18n('report.sum_tie'), true); return; }
+    if (mine + opp > MAX_GAMES) { setSum(i18n('report.sum_too_many'), true); return; }
+    if (ft && (Math.max(mine, opp) !== ft)) { setSum(i18n('report.sum_ft', { n: ft }), true); return; }
+    setSum(i18n('report.sum_' + (mine > opp ? 'win' : 'lose'), { a: mine, b: opp }));
+    submit.disabled = false;
   };
-  for (const btn of form.querySelectorAll('[data-score]')) {
-    btn.addEventListener('click', () => { sumPick = btn.getAttribute('data-score').split('-').map(Number); refreshSum(); });
+  for (const el of form.querySelectorAll('select[data-score], input[data-score-n]')) {
+    el.addEventListener('change', refreshSum);
+    el.addEventListener('input', refreshSum);
   }
+  const refresh = () => {
+    let a = 0; let b = 0; let last = -1;
+    const over = () => (need ? a >= need || b >= need : false);
+    for (let i = 0; i < n; i++) {
+      if (over()) { games[i].hidden = true; continue; }
+      games[i].hidden = i > 0 && picked[i - 1] === null;
+      if (picked[i] === null) continue;
+      if (picked[i] === 0) a++; else b++;
+      last = i;
+    }
+    for (let i = 0; i < n; i++) for (const btn of games[i].querySelectorAll('.rp-pick')) btn.classList.toggle('on', picked[i] !== null && Number(btn.getAttribute('data-pick')) === picked[i]);
+    const done = need ? a >= need || b >= need : a !== b;
+    const mine = m.mySide === 0 ? a : b; const opp = m.mySide === 0 ? b : a;
+    const sumKind = done ? (mine > opp ? 'win' : 'lose') : 'partial';
+    setSum(last < 0 ? '' : i18n('report.sum_' + sumKind, { a: mine, b: opp }));
+    submit.disabled = !done;
+  };
   for (const tab of form.querySelectorAll('.rp-tab')) {
     tab.addEventListener('click', () => {
       mode = tab.getAttribute('data-mode');
@@ -416,22 +472,6 @@ function wireForm(form, m) {
       if (mode === 'sum') refreshSum(); else refresh();
     });
   }
-  const refresh = () => {
-    let a = 0; let b = 0; let last = -1;
-    for (let i = 0; i < n; i++) {
-      if (a >= need || b >= need) { games[i].hidden = true; continue; }
-      games[i].hidden = i > 0 && picked[i - 1] === null;
-      if (picked[i] === null) continue;
-      if (picked[i] === 0) a++; else b++;
-      last = i;
-    }
-    for (let i = 0; i < n; i++) for (const btn of games[i].querySelectorAll('.rp-pick')) btn.classList.toggle('on', picked[i] !== null && Number(btn.getAttribute('data-pick')) === picked[i]);
-    const done = a >= need || b >= need;
-    const mine = m.mySide === 0 ? a : b; const opp = m.mySide === 0 ? b : a;
-    const sumKind = done ? (mine > opp ? 'win' : 'lose') : 'partial';
-    setSum(last < 0 ? '' : i18n('report.sum_' + sumKind, { a: mine, b: opp }));
-    form.querySelector('button[type=submit]').disabled = !done;
-  };
   games.forEach((g, i) => {
     for (const btn of g.querySelectorAll('.rp-pick')) {
       btn.addEventListener('click', () => {
@@ -449,21 +489,22 @@ function wireForm(form, m) {
   refreshSum();
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (submit.disabled) return;
     const g = [];
     const v = (sel) => (sel && sel.value ? Number(sel.value) : null);
     if (mode === 'sum') {
-      if (!sumPick) return;
+      const sc = sumScore();
+      if (sc[0] === null || sc[1] === null || sc[0] === sc[1]) return;
       // ゲームの順は分からないので、負けた側の勝ちを先に並べる (最後のゲームは勝った側)。キャラは全ゲーム同じ・ステージなし
       const c = [v(form.querySelector('select[data-sum-char="0"]')), v(form.querySelector('select[data-sum-char="1"]'))];
-      const [mine, opp] = sumPick;
-      const me = m.mySide; const op = 1 - me;
-      const loserSide = mine > opp ? op : me; const winnerSide = 1 - loserSide;
-      const lw = Math.min(mine, opp); const ww = Math.max(mine, opp);
-      for (let i = 0; i < lw; i++) g.push({ w: loserSide, c: c.slice(), s: null });
-      for (let i = 0; i < ww; i++) g.push({ w: winnerSide, c: c.slice(), s: null });
-    } else for (let i = 0; i < n; i++) {
-      if (picked[i] === null || games[i].hidden) break;
-      g.push({ w: picked[i], c: [v(games[i].querySelector('select[data-char="0"]')), v(games[i].querySelector('select[data-char="1"]'))], s: v(games[i].querySelector('select[data-stage]')) });
+      const ws = sc[0] > sc[1] ? 0 : 1;
+      for (let i = 0; i < sc[1 - ws]; i++) g.push({ w: 1 - ws, c: c.slice(), s: null });
+      for (let i = 0; i < sc[ws]; i++) g.push({ w: ws, c: c.slice(), s: null });
+    } else {
+      for (let i = 0; i < n; i++) {
+        if (picked[i] === null || games[i].hidden) break;
+        g.push({ w: picked[i], c: [v(games[i].querySelector('select[data-char="0"]')), v(games[i].querySelector('select[data-char="1"]'))], s: v(games[i].querySelector('select[data-stage]')) });
+      }
     }
     const a = g.filter((x) => x.w === 0).length; const b = g.filter((x) => x.w === 1).length;
     const result = { w: a > b ? 0 : 1, g };
@@ -472,9 +513,9 @@ function wireForm(form, m) {
     if (!confirm(i18n('report.confirm', { opp: op ? op.name : '', s: scoreText(result, m.mySide), r: won ? i18n('report.win') : i18n('report.lose') }))) return;
     const st = form.querySelector('[data-form-status]');
     setStatus(st, i18n('report.sending'), 'busy');
-    form.querySelector('button[type=submit]').disabled = true;
+    submit.disabled = true;
     const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
-    if (!r || !r.ok) { setStatus(st, errText(r), 'err'); form.querySelector('button[type=submit]').disabled = false; return; }
+    if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
     const sentKind = ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
@@ -503,6 +544,7 @@ async function matchAnimation(m) {
   ov.className = 'rp-match-ov';
   ov.innerHTML = `<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
     <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
+    ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}`;
   document.body.appendChild(ov);
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
@@ -526,7 +568,7 @@ function renderPlayer() {
     const gate = gateOf(cur);
     const op = cur.slots[1 - cur.mySide];
     h += `<section class="rp-card-sec rp-current">
-      <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))}</div>
+      <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
       ${stationHtml(cur)}
       ${vsHtml(cur)}
       ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
@@ -537,7 +579,7 @@ function renderPlayer() {
   } else if (waiting) {
     h += `<section class="rp-card-sec">
       <h2>${escapeHtml(i18n('report.waiting'))}</h2>
-      <div class="rp-round">${escapeHtml([waiting.phase, waiting.pool, waiting.round].filter(Boolean).join(' · '))}</div>
+      <div class="rp-round">${escapeHtml([waiting.phase, waiting.pool, waiting.round].filter(Boolean).join(' · '))} ${ftHtml(waiting)}</div>
       ${stationHtml(waiting)}
       <h3>${escapeHtml(i18n('report.cand.title'))}</h3>
       ${candidatesHtml(waiting)}
@@ -577,6 +619,12 @@ function renderPlayer() {
 // ── 読み直し ─────────────────────────────────────────────────────────
 
 let GQL = null;
+let LAST_SIG = '';
+/** 試合の状態の要約 (start.gg / Challonge 側で結果が変わったかを見る) */
+function matchesSig() {
+  return MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
+    + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '');
+}
 async function poll(force) {
   if (DEMO) { renderPlayer(); return; }
   clearTimeout(pollTimer);
@@ -603,7 +651,9 @@ async function poll(force) {
       await loadMains();
       const cur = MATCHES.find((m) => m.state === 'open');
       if (cur) await matchAnimation(cur);
-      if (!document.querySelector('.rp-form:focus-within') || force) renderPlayer();
+      const sig = matchesSig();
+      if (!document.querySelector('.rp-form:focus-within') || force || sig !== LAST_SIG) renderPlayer();
+      LAST_SIG = sig;
       setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
     }
   } catch (e) {
@@ -645,6 +695,68 @@ function readSettings(root) {
   return { top_cut: top && top.value ? Number(top.value) : null, classes_only: !!(cls && cls.checked) };
 }
 
+/** 何先の設定 (フェーズごと)。rule = { w: {a, from, b}, l: {a, from, b} } (worker/src/api/report_logic.ts の FtRule) */
+const FT_MAX = 5;
+let PHASES = null;   // report_phases の phases (1 回だけ読む)
+const ftRoundLabel = (r) => r.label || (r.n > 0 ? i18n('report.ft.round_w', { n: r.n }) : i18n('report.ft.round_l', { n: -r.n }));
+function ftModeOf(rule) {
+  if (!rule) return '';
+  const { w, l } = rule;
+  if (w.from == null && l.from == null && w.a === l.a && w.a <= 3) return 'all' + w.a;
+  return 'split';
+}
+function ftPhaseHtml(ph, rule) {
+  const mode = ftModeOf(rule);
+  const nums = (sel) => Array.from({ length: FT_MAX }, (_, i) => `<option value="${i + 1}"${i + 1 === sel ? ' selected' : ''}>${escapeHtml(i18n('report.ft', { n: i + 1 }))}</option>`).join('');
+  const side = (k) => {
+    const rounds = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 : r.n < 0));
+    if (k === 'l' && !rounds.length) return '';
+    const sd = rule ? rule[k] : { a: 2, from: null, b: 3 };
+    const from = rounds.map((r) => `<option value="${Math.abs(r.n)}"${sd.from === Math.abs(r.n) ? ' selected' : ''}>${escapeHtml(i18n('report.ft.from', { r: ftRoundLabel(r) }))}</option>`).join('');
+    return `<div class="rp-ft-side"><span class="rp-ft-k">${escapeHtml(k === 'w' ? i18n('report.ft.winners') : i18n('report.ft.losers'))}</span>
+      <select data-ft-a="${k}">${nums(sd.a)}</select>
+      <select data-ft-from="${k}"><option value="">${escapeHtml(i18n('report.ft.no_change'))}</option>${from}</select>
+      <select data-ft-b="${k}"${sd.from == null ? ' hidden' : ''}>${nums(sd.b || 3)}</select></div>`;
+  };
+  const modes = [['', i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')]];
+  return `<div class="rp-ft-ph" data-ph="${escapeHtml(ph.key)}">
+    <label>${escapeHtml(ph.name || i18n('report.ft.phase_all'))}
+      <select data-ft-mode>${modes.map(([v, t]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
+    <div data-ft-split${mode === 'split' ? '' : ' hidden'}>${side('w')}${side('l')}</div>
+  </div>`;
+}
+function wireFt(root) {
+  for (const ph of root.querySelectorAll('.rp-ft-ph')) {
+    const mode = ph.querySelector('[data-ft-mode]');
+    mode.addEventListener('change', () => { ph.querySelector('[data-ft-split]').hidden = mode.value !== 'split'; });
+    for (const from of ph.querySelectorAll('[data-ft-from]')) {
+      from.addEventListener('change', () => { ph.querySelector(`[data-ft-b="${from.getAttribute('data-ft-from')}"]`).hidden = !from.value; });
+    }
+  }
+}
+function readFt(root) {
+  const out = {};
+  for (const ph of root.querySelectorAll('.rp-ft-ph')) {
+    const mode = ph.querySelector('[data-ft-mode]').value;
+    if (!mode) continue;
+    if (mode !== 'split') { const n = Number(mode.slice(3)); out[ph.getAttribute('data-ph')] = { w: { a: n, from: null, b: n }, l: { a: n, from: null, b: n } }; continue; }
+    const sd = (k) => {
+      const a = ph.querySelector(`[data-ft-a="${k}"]`);
+      if (!a) return null;
+      const from = ph.querySelector(`[data-ft-from="${k}"]`).value;
+      const b = Number(ph.querySelector(`[data-ft-b="${k}"]`).value);
+      return { a: Number(a.value), from: from ? Number(from) : null, b: from ? b : Number(a.value) };
+    };
+    const w = sd('w'); const l = sd('l');
+    if (w || l) out[ph.getAttribute('data-ph')] = { w: w || l, l: l || w };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+const ADMIN_POLL_MS = 15000;
+let adminTimer = 0;
+let ADMIN_SIG = '';
+
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
@@ -652,18 +764,64 @@ async function renderAdmin() {
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
   const ev = r.report;
   const url = pageUrl(CODE, false);
-  let h = `<section class="rp-card-sec">
+  root.innerHTML = `<section class="rp-card-sec">
     <h2>${escapeHtml(i18n('report.admin.share'))}</h2>
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
     <p class="rp-muted">${escapeHtml(i18n('report.admin.expires', { t: new Date(ev.expires_ms).toLocaleString() }))}</p>
     <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
     ${settingsFormHtml(ev.settings, ev.kind)}
+    <h3>${escapeHtml(i18n('report.ft.title'))}</h3>
+    <div id="rp-ft-set" class="rp-ft-set"><p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p></div>
     <button type="button" class="rp-btn" id="rp-save-set">${escapeHtml(i18n('report.admin.save'))}</button> <span class="rp-status" id="rp-set-status"></span>
-  </section>`;
-  const sets = r.sets || [];
+  </section>
+  <section class="rp-card-sec" id="rp-adm-sets"></section>
+  <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
+  $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
+  let curFt = ev.settings && ev.settings.ft ? ev.settings.ft : null;
+  (async () => {
+    if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; }
+    const box = $('rp-ft-set');
+    box.innerHTML = PHASES.length ? PHASES.map((ph) => ftPhaseHtml(ph, curFt && curFt[ph.key])).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.ft.no_phases'))}</p>`;
+    wireFt(box);
+  })();
+  $('rp-save-set').addEventListener('click', async () => {
+    const settings = { ...readSettings(root), ft: PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt };
+    const x = await api({ action: 'report_settings', token: tok(), code: CODE, settings });
+    setStatus($('rp-set-status'), x && x.ok ? i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
+    if (x && x.ok) { curFt = x.settings.ft || null; if (INFO) INFO.settings = x.settings; }
+  });
+  $('rp-stop').addEventListener('click', async () => {
+    if (!confirm(i18n('report.admin.stop_confirm'))) return;
+    const x = await api({ action: 'report_stop', token: tok(), code: CODE });
+    if (x && x.ok) location.reload(); else alert(errText(x));
+  });
+  renderAdminSets(r.sets || []);
+  if (!DEMO) {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAdminSets(true); });
+    adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
+  }
+}
+
+/** 試合の一覧だけ読み直す (設定の入力は消さない)。直している最中は待つ */
+async function refreshAdminSets(force) {
+  clearTimeout(adminTimer);
+  const box = $('rp-adm-sets');
+  const busy = !!box && box.contains(document.activeElement);
+  if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
+    const r = await api({ action: 'report_admin', token: tok(), code: CODE });
+    if (r && r.ok) renderAdminSets(r.sets || []);
+  }
+  adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
+}
+
+function renderAdminSets(sets) {
+  const box = $('rp-adm-sets');
+  const sig = sets.map((s) => s.set_id + ':' + s.state + ':' + s.updated_ms).join('|');
+  if (sig === ADMIN_SIG && box.childElementCount) return;
+  ADMIN_SIG = sig;
   const order = { review: 0, conflict: 1, reported: 2, reset: 3, agreed: 4, fixed: 5 };
   sets.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || b.updated_ms - a.updated_ms);
-  h += `<section class="rp-card-sec"><h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}</h2>`;
+  let h = `<h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}</h2>`;
   if (!sets.length) h += `<p class="rp-muted">${escapeHtml(i18n('report.admin.empty'))}</p>`;
   for (const s of sets) {
     const names = (s.slots || []).map((x) => (x ? x.name : '?'));
@@ -675,27 +833,15 @@ async function renderAdmin() {
         · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
       <div class="rp-adm-fix">
         <select data-fix-w><option value="0">${escapeHtml(i18n('report.admin.winner', { name: names[0] }))}</option><option value="1">${escapeHtml(i18n('report.admin.winner', { name: names[1] }))}</option></select>
-        <select data-fix-s>${['2-0', '2-1', '3-0', '3-1', '3-2', '1-0'].map((x) => `<option>${x}</option>`).join('')}</select>
+        <select data-fix-s>${['1-0', '2-0', '2-1', '3-0', '3-1', '3-2'].map((x) => `<option>${x}</option>`).join('')}</select>
         <button type="button" class="rp-btn" data-fix>${escapeHtml(i18n('report.admin.fix'))}</button>
         <button type="button" class="rp-btn" data-reset>${escapeHtml(i18n('report.admin.reset'))}</button>
         <span class="rp-status" data-fix-status></span>
       </div>
     </div>`;
   }
-  h += `</section><section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
-  root.innerHTML = h;
-  $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
-  $('rp-save-set').addEventListener('click', async () => {
-    const x = await api({ action: 'report_settings', token: tok(), code: CODE, settings: readSettings(root) });
-    setStatus($('rp-set-status'), x && x.ok ? i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
-    if (x && x.ok && INFO) INFO.settings = x.settings;
-  });
-  $('rp-stop').addEventListener('click', async () => {
-    if (!confirm(i18n('report.admin.stop_confirm'))) return;
-    const x = await api({ action: 'report_stop', token: tok(), code: CODE });
-    if (x && x.ok) location.reload(); else alert(errText(x));
-  });
-  for (const row of root.querySelectorAll('.rp-adm-row')) {
+  box.innerHTML = h;
+  for (const row of box.querySelectorAll('.rp-adm-row')) {
     const setId = row.getAttribute('data-set');
     const st = row.querySelector('[data-fix-status]');
     row.querySelector('[data-fix]').addEventListener('click', async () => {
@@ -708,14 +854,14 @@ async function renderAdmin() {
       setStatus(st, i18n('report.sending'), 'busy');
       const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result: { w, g } });
       setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
-      if (x && x.ok) setTimeout(renderAdmin, 800);
+      if (x && x.ok && !DEMO) setTimeout(() => refreshAdminSets(true), 800);
     });
     row.querySelector('[data-reset]').addEventListener('click', async () => {
       if (!confirm(i18n('report.admin.reset_confirm'))) return;
       setStatus(st, i18n('report.sending'), 'busy');
       const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, reset: true });
       setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
-      if (x && x.ok) setTimeout(renderAdmin, 800);
+      if (x && x.ok && !DEMO) setTimeout(() => refreshAdminSets(true), 800);
     });
   }
 }
@@ -784,7 +930,7 @@ function demoSlot(p, seed, side) {
 function demoMatch(P, o) {
   return Object.assign({ id: 'd1', kind: 'startgg', state: 'open', started: true, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
     station: 12, stream: null, slots: [demoSlot(P[0], 5, 0), demoSlot(P[1], 28, 1)], mySide: 0, winner: null, score: null, games: [],
-    totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null] }, o || {});
+    totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null], roundNum: 2, phaseKey: 'p1' }, o || {});
 }
 
 function demoRow(id, state, mine, theirs, P) {
@@ -800,6 +946,15 @@ const R21 = { w: 0, g: [{ w: 0, c: [null, null], s: null }, { w: 1, c: [null, nu
 const L12 = { w: 1, g: [{ w: 1, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }, { w: 1, c: [null, null], s: null }] };
 
 let DEMO_P = [];
+/** 見本の何先: 予選 (p1) は 2 先・本戦 (p2) は勝者側 3 回戦・敗者側 4 回戦から 3 先・Challonge は全部 1 先 */
+const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
+  c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
+const DEMO_PHASES = [
+  { key: 'p1', name: 'Pools', rounds: [1, 2, 3, -1, -2, -3].map((n) => ({ n, label: null })) },
+  { key: 'p2', name: 'Top 32', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: 2, label: 'Winners Quarter-Final' }, { n: 3, label: 'Winners Semi-Final' }, { n: 4, label: 'Winners Final' },
+    { n: 5, label: 'Grand Final' }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
+    { n: -5, label: 'Losers Semi-Final' }, { n: -6, label: 'Losers Final' }] },
+];
 async function demoApi(body) {
   const P = DEMO_P;
   if (body.action === 'report_submit') {
@@ -810,10 +965,11 @@ async function demoApi(body) {
   }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [{ id: 'a', name: P[i].name }, { id: 'b', name: P[i + 1].name }] });
-    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: 8, classes_only: false } },
+    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: 8, classes_only: false, ft: DEMO_FT } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
   }
   if (body.action === 'report_settings') return { ok: true, settings: body.settings };
+  if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES };
   return { ok: true, state: 'fixed', op: 'report' };
 }
 
@@ -825,7 +981,7 @@ async function runDemo() {
   const P = DEMO_P;
   DEMO_ME = P[0].uid;
   INFO = { code: 'demo', kind: DEMO === 'challonge' ? 'challonge' : 'startgg', name: i18n(DEMO === 'challonge' ? 'report.demo.class_name' : 'report.demo.event_name'),
-    event_id: 0, active: true, expires_ms: Date.now() + 86400e3, settings: { top_cut: DEMO === 'gate' ? 8 : null, classes_only: false } };
+    event_id: 0, active: true, expires_ms: Date.now() + 86400e3, settings: { top_cut: DEMO === 'gate' ? 8 : null, classes_only: false, ft: DEMO_FT } };
   $('rp-title').textContent = INFO.name;
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
@@ -836,8 +992,8 @@ async function runDemo() {
   PRED = { p: { bt: { ifWin: { d1: 14.2 }, perSet: { d0: 6.8 } }, tjpr: { delta: 41.5 } } };
   if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('d0', 'agreed', R20, R20, P)]; }
   if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('d1', 'conflict', R21, L12, P)]; }
-  if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 8', pool: '' })];
-  if (DEMO === 'challonge') { MATCHES = [demoMatch(P, { kind: 'challonge', station: null, phase: '', pool: 'A', round: i18n('report.round', { n: 1 }), totalGames: null, isClass: true })]; PRED = { none: true }; }
+  if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 32', pool: '', phaseKey: 'p2', roundNum: 3 })];
+  if (DEMO === 'challonge') { MATCHES = [demoMatch(P, { kind: 'challonge', station: null, phase: '', pool: 'A', round: i18n('report.round', { n: 1 }), totalGames: null, isClass: true, phaseKey: 'c', roundNum: 1 })]; PRED = { none: true }; }
   if (DEMO === 'waiting') {
     const pre = { id: 'p1', state: 'playing', round: 'Winners Round 2', station: 7, loser: false, slots: [demoSlot(P[2], 12, 0), demoSlot(P[3], 21, 1)], deeper: [null, null] };
     MATCHES = [demoMatch(P, { id: 'd2', state: 'waiting', round: 'Winners Quarter-Final', station: null, slots: [demoSlot(P[0], 5, 0), null], prereq: [null, pre] }), done0];

@@ -32,11 +32,64 @@ export interface NSet {
   lPlacement: number | null;
   /** 下位クラス (Bクラス等) の試合 */
   isClass: boolean;
+  /** ラウンド (勝者側 1, 2, …・敗者側 -1, -2, …。Challonge の 3 位決定戦は 0)。分からなければ null */
+  round?: number | null;
+  /** 何先の設定を引くフェーズ (start.gg の phase id。Challonge は 'c') */
+  phaseKey?: string;
 }
 
+/**
+ * 何先 (first to N) の設定。側ごとに「a 先、ラウンド from (絶対値) からは b 先」(from = null なら全部 a 先)。
+ * 「全部 2 先」= w・l とも { a: 2, from: null, b: 2 }。フェーズごと (キー = phase id、Challonge は 'c') に持つ (2026-10-30)。
+ */
+export interface FtSide { a: number; from: number | null; b: number }
+export interface FtRule { w: FtSide; l: FtSide }
+export const FT_MAX = 5;
+const FT_PHASES_MAX = 30;
+
 /** 運営の設定 (report_events.settings) */
-export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean }
+export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule> }
 export const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
+
+function ftNum(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= FT_MAX ? n : null;
+}
+function parseFtSide(v: unknown): FtSide | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const a = ftNum(o.a);
+  if (a === null) return null;
+  const from = Number(o.from);
+  const b = ftNum(o.b);
+  if (o.from === null || o.from === undefined || !Number.isInteger(from) || from < 1 || from > 99 || b === null) return { a, from: null, b: a };
+  return { a, from, b };
+}
+export function parseFt(v: unknown): Record<string, FtRule> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out: Record<string, FtRule> = {};
+  let n = 0;
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (!/^[\w-]{1,20}$/.test(k) || !x || typeof x !== 'object') continue;
+    const w = parseFtSide((x as Record<string, unknown>).w); const l = parseFtSide((x as Record<string, unknown>).l);
+    if (!w || !l) continue;
+    out[k] = { w, l };
+    if (++n >= FT_PHASES_MAX) break;
+  }
+  return n ? out : null;
+}
+
+/** この試合が何先か (設定が無ければ null)。site/js の report.js の ftOf と同じ */
+export function ftOf(set: NSet, s: ReportSettings): number | null {
+  const rule = s.ft && set.phaseKey !== undefined ? s.ft[set.phaseKey] : undefined;
+  if (!rule) return null;
+  const r = set.round;
+  const sd = r !== null && r !== undefined && r < 0 ? rule.l : rule.w;
+  if (sd.from === null) return sd.a;
+  if (r === null || r === undefined) return null;   // ラウンドが分からないと決められない
+  if (r === 0) return sd.b;                         // Challonge の 3 位決定戦 = 最後のほう
+  return Math.abs(r) >= sd.from ? sd.b : sd.a;
+}
 
 export function parseSettings(v: unknown): ReportSettings {
   let o: Record<string, unknown> = {};
@@ -44,6 +97,8 @@ export function parseSettings(v: unknown): ReportSettings {
   const tc = Number(o.top_cut);
   const s: ReportSettings = { top_cut: TOP_CUTS.includes(tc) ? tc : null, classes_only: o.classes_only === true };
   if (o.double === true) s.double = true;
+  const ft = parseFt(o.ft);
+  if (ft) s.ft = ft;
   return s;
 }
 
@@ -74,13 +129,13 @@ function side(v: unknown): Side | null {
  * 送られた結果を確かめる (形だけ。勝敗の数の整合もここで見る)。違えば理由の符号。
  * DQ・不戦勝は受け付けない (ゲームが 1 つ以上必要。運営が start.gg で入れる、2026-10-29 決定)。
  */
-export function parseResult(v: unknown, totalGames: number | null): { result: Result } | { bad: string } {
+export function parseResult(v: unknown, totalGames: number | null, ft: number | null = null): { result: Result } | { bad: string } {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { bad: 'result' };
   const o = v as Record<string, unknown>;
   const w = side(o.w);
   if (w === null) return { bad: 'winner' };
   if (!Array.isArray(o.g) || o.g.length < 1 || o.g.length > MAX_GAMES) return { bad: 'games' };
-  if (totalGames && o.g.length > totalGames) return { bad: 'games_over' };
+  if (!ft && totalGames && o.g.length > totalGames) return { bad: 'games_over' };
   const g: Game[] = [];
   for (const x of o.g) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return { bad: 'game' };
@@ -96,7 +151,10 @@ export function parseResult(v: unknown, totalGames: number | null): { result: Re
   }
   const [a, b] = score({ w, g });
   if ((w === 0 ? a <= b : b <= a)) return { bad: 'score' };   // 勝った側がゲームを多く取っている
-  if (totalGames) {
+  if (ft) {
+    // 何先が決まっている: 勝った側はちょうど ft、負けた側は ft 未満 (1 先なら 1-0 だけ)
+    if ((w === 0 ? a : b) !== ft || (w === 0 ? b : a) >= ft) return { bad: 'score_ft' };
+  } else if (totalGames) {
     const need = Math.floor(totalGames / 2) + 1;
     if ((w === 0 ? a : b) > need) return { bad: 'score' };      // 3 本勝負で 3 勝などは無い
   }

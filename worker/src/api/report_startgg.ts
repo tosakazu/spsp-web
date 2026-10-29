@@ -11,7 +11,10 @@ import type { NSet, NSlot, Result, Side } from './report_logic.ts';
 export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z])[BCDE][\s_\-]*class(?![A-Za-z])/i;
 
 export type ProviderResult = { ok: true } | { ok: false; note: string };
+/** 何先の設定に使うフェーズとラウンド (n = 勝者側 1, 2, …・敗者側 -1, -2, …、label = start.gg の名前。無ければ null) */
+export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null }[] }
 export interface Provider {
+  phases(): Promise<{ ok: true; phases: PhaseInfo[] } | { ok: false; note: string }>;
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
@@ -19,9 +22,9 @@ export interface Provider {
 
 const SET_QUERY = `query SpspReportSet($id: ID!) {
   set(id: $id) {
-    id state winnerId totalGames lPlacement
+    id state round winnerId totalGames lPlacement
     event { id name }
-    phaseGroup { phase { name } }
+    phaseGroup { phase { id name } }
     slots { entrant { id name initialSeedNum participants { user { id } } } }
     games { orderNum winnerId }
   }
@@ -40,6 +43,37 @@ const UPDATE_MUTATION = `mutation SpspUpdateSet($setId: ID!, $winnerId: ID!, $ga
   updateBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) { id state }
 }`;
 const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $setId) { id state } }`;
+
+/** フェーズと、最初のブロックのラウンド (rounds が読めなければ試合の round から) */
+const PHASES_QUERY = (withRounds: boolean) => `query SpspReportPhases($id: ID!) {
+  event(id: $id) { phases { id name phaseGroups(query: { page: 1, perPage: 1 }) { nodes {
+    ${withRounds ? 'rounds { number }' : ''}
+    sets(page: 1, perPage: 60, sortType: STANDARD) { nodes { round fullRoundText } }
+  } } } }
+}`;
+
+export function parsePhases(data: unknown): PhaseInfo[] {
+  const ev = data ? (data as { event?: { phases?: unknown } | null }).event : null;
+  const phases = ev && Array.isArray(ev.phases) ? ev.phases : [];
+  const out: PhaseInfo[] = [];
+  for (const p of phases) {
+    const ph = p as { id?: unknown; name?: unknown; phaseGroups?: { nodes?: unknown[] } | null } | null;
+    if (!ph || ph.id === undefined || ph.id === null) continue;
+    const g = ph.phaseGroups && Array.isArray(ph.phaseGroups.nodes) ? ph.phaseGroups.nodes[0] as { rounds?: unknown; sets?: { nodes?: unknown } | null } | undefined : undefined;
+    const labels = new Map<number, string | null>();
+    if (g && Array.isArray(g.rounds)) for (const r of g.rounds) { const n = Number((r as { number?: unknown }).number); if (Number.isInteger(n) && n !== 0) labels.set(n, null); }
+    const sets = g && g.sets && Array.isArray(g.sets.nodes) ? g.sets.nodes : [];
+    for (const s of sets) {
+      const x = s as { round?: unknown; fullRoundText?: unknown };
+      const n = Number(x.round);
+      if (!Number.isInteger(n) || n === 0) continue;
+      if (!labels.get(n)) labels.set(n, typeof x.fullRoundText === 'string' && x.fullRoundText ? x.fullRoundText.slice(0, 60) : null);
+    }
+    const rounds = [...labels.entries()].map(([n, label]) => ({ n, label })).sort((a, b) => (a.n > 0) === (b.n > 0) ? Math.abs(a.n) - Math.abs(b.n) : b.n - a.n);
+    out.push({ key: String(ph.id), name: typeof ph.name === 'string' ? ph.name.slice(0, 80) : '', rounds });
+  }
+  return out;
+}
 
 export const EVENT_QUERY = `query SpspReportEvent($slug: String, $id: ID) {
   event(slug: $slug, id: $id) { id name slug state tournament { id name slug endAt } }
@@ -71,7 +105,7 @@ function slotOf(s: unknown): NSlot | null {
 /** start.gg の set を判定用の形に (eventId と違うイベントの set なら null) */
 export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
   const s = raw as { id?: unknown; state?: unknown; winnerId?: unknown; totalGames?: unknown; lPlacement?: unknown; event?: { id?: unknown; name?: unknown } | null;
-    phaseGroup?: { phase?: { name?: unknown } | null } | null; slots?: unknown[]; games?: unknown[] | null } | null;
+    round?: unknown; phaseGroup?: { phase?: { id?: unknown; name?: unknown } | null } | null; slots?: unknown[]; games?: unknown[] | null } | null;
   if (!s || s.id === undefined || !s.event || String(s.event.id) !== eventId) return null;
   const slots = Array.isArray(s.slots) ? s.slots : [];
   const sl: [NSlot | null, NSlot | null] = [slotOf(slots[0]), slotOf(slots[1])];
@@ -91,9 +125,12 @@ export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
   const tg = Number(s.totalGames);
   const lp = Number(s.lPlacement);
   const phaseName = s.phaseGroup && s.phaseGroup.phase && typeof s.phaseGroup.phase.name === 'string' ? s.phaseGroup.phase.name : '';
+  const phaseId = s.phaseGroup && s.phaseGroup.phase && s.phaseGroup.phase.id !== undefined && s.phaseGroup.phase.id !== null ? String(s.phaseGroup.phase.id) : undefined;
+  const round = Number(s.round);
   const eventName = typeof s.event.name === 'string' ? s.event.name : '';
   return { id: String(s.id), complete, slots: sl, remote, totalGames: Number.isInteger(tg) && tg > 0 ? tg : null, downstreamDone: false,
-    lPlacement: Number.isInteger(lp) && lp > 0 ? lp : null, isClass: LOWER_CLASS_NAME_PAT.test(phaseName) || LOWER_CLASS_NAME_PAT.test(eventName) };
+    lPlacement: Number.isInteger(lp) && lp > 0 ? lp : null, isClass: LOWER_CLASS_NAME_PAT.test(phaseName) || LOWER_CLASS_NAME_PAT.test(eventName),
+    round: s.round !== null && s.round !== undefined && Number.isInteger(round) ? round : null, phaseKey: phaseId };
 }
 
 /** この set を前提 (prereq) にする set のうち、結果が入ったものがあるか */
@@ -126,6 +163,13 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
     return { ok: true };
   };
   return {
+    async phases() {
+      let r = await startggGql(fetchFn, token, PHASES_QUERY(true), { id: eventId });
+      if (r.ok && Array.isArray(r.json.errors) && r.json.errors.length) r = await startggGql(fetchFn, token, PHASES_QUERY(false), { id: eventId });
+      if (!r.ok) return { ok: false, note: r.note };
+      if (!r.json.data || !r.json.data.event) return { ok: false, note: gqlNote(r.json) };
+      return { ok: true, phases: parsePhases(r.json.data) };
+    },
     async readSet(setId) {
       const r = await startggGql(fetchFn, token, SET_QUERY, { id: setId });
       if (!r.ok) return { ok: false, code: 'provider_error', note: r.note };

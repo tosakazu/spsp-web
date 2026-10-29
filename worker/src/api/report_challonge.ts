@@ -123,7 +123,8 @@ export function cSetOf(d: CData, m: CMatch, double = false): NSet {
       remote = { w, g };
     }
   }
-  return { id: m.id, complete, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cLPlacement(d, m, double), isClass: true };
+  return { id: m.id, complete, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cLPlacement(d, m, double), isClass: true,
+    round: m.round, phaseKey: 'c' };
 }
 
 async function getAll(fetchFn: FetchFn, token: string, path: string): Promise<{ ok: true; items: unknown[] } | { ok: false; note: string }> {
@@ -156,6 +157,13 @@ export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, 
     return r.ok ? { ok: true } : { ok: false, note: r.note + (r.message ? ':' + r.message.replace(/[^\x20-\x7e]/g, '').slice(0, 60) : '') };
   };
   return {
+    async phases() {
+      const r = await readChallonge(fetchFn, token, tid);
+      if (!r.ok) return { ok: false, note: r.note };
+      const ns = [...new Set(r.data.matches.map((x) => x.round).filter((n): n is number => n !== null && n !== 0))];
+      ns.sort((a, b) => (a > 0) === (b > 0) ? Math.abs(a) - Math.abs(b) : b - a);
+      return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: null })) }] };
+    },
     async readSet(setId) {
       const r = await readChallonge(fetchFn, token, tid);
       if (!r.ok) return { ok: false, code: 'provider_error', note: r.note };
