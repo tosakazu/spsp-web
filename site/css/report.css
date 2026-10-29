@@ -120,3 +120,9 @@ body {
 .rp-demo-links { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
 .rp-demo-links a { color: #1d4ed8; }
 .rp-demo-links a.on { font-weight: 700; text-decoration: none; color: #111827; }
+
+/* 入力のタブ (まとめて / 1 戦ごと) */
+.rp-tabs { display: flex; gap: 0; margin: 6px 0 8px; border-bottom: 1px solid #e5e7eb; }
+.rp-tab { font: inherit; font-size: 13px; padding: 7px 14px; background: none; border: 0; border-bottom: 2px solid transparent; color: #6b7280; cursor: pointer; margin-bottom: -1px; }
+.rp-tab.on { color: #dc2626; border-bottom-color: #dc2626; font-weight: 700; }
+.rp-scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 8px 0; }

@@ -356,26 +356,65 @@ function formHtml(m) {
       </div>` : ''}
     </div>`;
   }
+  // まとめて: スコアと (start.gg なら) 両者のキャラ。ステージは選べない
+  let scores = '';
+  for (let o = 0; o < need; o++) scores += `<button type="button" class="rp-pick" data-score="${need}-${o}">${need}-${o}</button>`;
+  for (let o = need - 1; o >= 0; o--) scores += `<button type="button" class="rp-pick" data-score="${o}-${need}">${o}-${need}</button>`;
+  const sumPane = `<div class="rp-pane" data-pane="sum">
+      <p class="rp-muted">${escapeHtml(i18n('report.form.help_sum'))}</p>
+      <div class="rp-scores">${scores}</div>
+      ${withChars ? `<div class="rp-game-sel">
+        <label>${escapeHtml(i18n('report.my_char'))}<select data-sum-char="${m.mySide}">${opt(chars, null)}</select></label>
+        <label>${escapeHtml(i18n('report.opp_char'))}<select data-sum-char="${1 - m.mySide}">${opt(chars, null)}</select></label>
+      </div>` : ''}
+    </div>`;
   return `<form class="rp-form" data-set="${escapeHtml(m.id)}">
     <h3>${escapeHtml(i18n('report.form.title'))}</h3>
+    <div class="rp-tabs" role="tablist">
+      <button type="button" role="tab" class="rp-tab on" data-mode="sum">${escapeHtml(i18n('report.mode.sum'))}</button>
+      <button type="button" role="tab" class="rp-tab" data-mode="each">${escapeHtml(i18n('report.mode.each'))}</button>
+    </div>
+    ${sumPane}
+    <div class="rp-pane" data-pane="each" hidden>
     <p class="rp-muted">${escapeHtml(withChars ? i18n('report.form.help') : i18n('report.form.help_ch'))}</p>
     ${rows}
+    </div>
     <div class="rp-form-foot"><span class="rp-sum"></span><button type="submit" class="rp-btn rp-primary">${escapeHtml(i18n('report.send'))}</button></div>
     <div class="rp-status" data-form-status></div>
   </form>`;
 }
 
-/** 入力欄の動き: ゲームの勝者を押すと、決着までのゲームだけ出す。キャラは前のゲームを引き継ぐ */
+/** 入力欄の動き。まとめて = スコアを押す / 1 戦ごと = ゲームの勝者を押すと、決着までのゲームだけ出す。キャラは前のゲームを引き継ぐ */
 function wireForm(form, m) {
   const n = m.totalGames || 3;
   const need = Math.floor(n / 2) + 1;
   const games = Array.from(form.querySelectorAll('.rp-game'));
   const picked = new Array(n).fill(null);
+  let mode = 'sum';
+  /** まとめての選択 [自分, 相手] */
+  let sumPick = null;
   const mainOf = (slot) => (slot && slot.uid && W.__rpMain ? W.__rpMain[slot.uid] : null);
   // 自分・相手のキャラの初期値 = メインキャラ (選手一覧の char)
   for (const k of [0, 1]) {
     const c = mainOf(m.slots[k]);
-    if (c) for (const sel of form.querySelectorAll(`select[data-char="${k}"]`)) sel.value = String(c);
+    if (c) for (const sel of form.querySelectorAll(`select[data-char="${k}"], select[data-sum-char="${k}"]`)) sel.value = String(c);
+  }
+  const setSum = (text) => { form.querySelector('.rp-sum').textContent = text; };
+  const refreshSum = () => {
+    for (const btn of form.querySelectorAll('[data-score]')) btn.classList.toggle('on', !!sumPick && btn.getAttribute('data-score') === sumPick.join('-'));
+    setSum(sumPick ? i18n('report.sum_' + (sumPick[0] > sumPick[1] ? 'win' : 'lose'), { a: sumPick[0], b: sumPick[1] }) : '');
+    form.querySelector('button[type=submit]').disabled = !sumPick;
+  };
+  for (const btn of form.querySelectorAll('[data-score]')) {
+    btn.addEventListener('click', () => { sumPick = btn.getAttribute('data-score').split('-').map(Number); refreshSum(); });
+  }
+  for (const tab of form.querySelectorAll('.rp-tab')) {
+    tab.addEventListener('click', () => {
+      mode = tab.getAttribute('data-mode');
+      for (const t of form.querySelectorAll('.rp-tab')) { t.classList.toggle('on', t === tab); t.setAttribute('aria-selected', String(t === tab)); }
+      for (const p of form.querySelectorAll('.rp-pane')) p.hidden = p.getAttribute('data-pane') !== mode;
+      if (mode === 'sum') refreshSum(); else refresh();
+    });
   }
   const refresh = () => {
     let a = 0; let b = 0; let last = -1;
@@ -390,7 +429,7 @@ function wireForm(form, m) {
     const done = a >= need || b >= need;
     const mine = m.mySide === 0 ? a : b; const opp = m.mySide === 0 ? b : a;
     const sumKind = done ? (mine > opp ? 'win' : 'lose') : 'partial';
-    form.querySelector('.rp-sum').textContent = last < 0 ? '' : i18n('report.sum_' + sumKind, { a: mine, b: opp });
+    setSum(last < 0 ? '' : i18n('report.sum_' + sumKind, { a: mine, b: opp }));
     form.querySelector('button[type=submit]').disabled = !done;
   };
   games.forEach((g, i) => {
@@ -407,13 +446,23 @@ function wireForm(form, m) {
       });
     }
   });
-  refresh();
+  refreshSum();
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const g = [];
-    for (let i = 0; i < n; i++) {
+    const v = (sel) => (sel && sel.value ? Number(sel.value) : null);
+    if (mode === 'sum') {
+      if (!sumPick) return;
+      // ゲームの順は分からないので、負けた側の勝ちを先に並べる (最後のゲームは勝った側)。キャラは全ゲーム同じ・ステージなし
+      const c = [v(form.querySelector('select[data-sum-char="0"]')), v(form.querySelector('select[data-sum-char="1"]'))];
+      const [mine, opp] = sumPick;
+      const me = m.mySide; const op = 1 - me;
+      const loserSide = mine > opp ? op : me; const winnerSide = 1 - loserSide;
+      const lw = Math.min(mine, opp); const ww = Math.max(mine, opp);
+      for (let i = 0; i < lw; i++) g.push({ w: loserSide, c: c.slice(), s: null });
+      for (let i = 0; i < ww; i++) g.push({ w: winnerSide, c: c.slice(), s: null });
+    } else for (let i = 0; i < n; i++) {
       if (picked[i] === null || games[i].hidden) break;
-      const v = (sel) => (sel && sel.value ? Number(sel.value) : null);
       g.push({ w: picked[i], c: [v(games[i].querySelector('select[data-char="0"]')), v(games[i].querySelector('select[data-char="1"]'))], s: v(games[i].querySelector('select[data-stage]')) });
     }
     const a = g.filter((x) => x.w === 0).length; const b = g.filter((x) => x.w === 1).length;
