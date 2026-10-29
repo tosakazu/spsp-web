@@ -18,15 +18,15 @@ const set0 = (o = {}) => ({ id: '100', complete: false, slots: [{ id: 'e1', name
 
 // ── 判定 ──
 test('parseResult: 勝者・スコア・ゲーム数・キャラ/ステージの ID を確かめる。DQ (ゲーム無し) は受け付けない', () => {
-  assert.ok('result' in parseResult(R(0, G(0, 1293, 1302, 3), G(1), G(0)), 3));
-  assert.strictEqual(parseResult(R(0), 3).bad, 'games');                       // ゲーム無し = DQ・不戦勝は運営
-  assert.strictEqual(parseResult(R(1, G(0), G(0)), 3).bad, 'score');           // 勝者がゲームを取っていない
-  assert.strictEqual(parseResult(R(0, G(0), G(0), G(0)), 3).bad, 'score');     // 3 本勝負で 3 勝
-  assert.strictEqual(parseResult(R(0, G(0), G(1), G(0), G(0)), 3).bad, 'games_over');
-  assert.strictEqual(parseResult(R(0, G(0, 'x')), 1).bad, 'chars');
-  assert.strictEqual(parseResult(R(0, G(0, null, null, -1)), 1).bad, 'stage');
-  assert.strictEqual(parseResult({ w: 2, g: [G(0)] }, 1).bad, 'winner');
-  assert.deepStrictEqual(parseResult({ w: 0, g: [{ w: 0, c: ['1293', null], s: '7' }] }, 1).result, R(0, G(0, 1293, null, 7)));
+  assert.ok('result' in parseResult(R(0, G(0, 1293, 1302, 3), G(1), G(0))));
+  assert.strictEqual(parseResult(R(0)).bad, 'games');                       // ゲーム無し = DQ・不戦勝は運営
+  assert.strictEqual(parseResult(R(1, G(0), G(0))).bad, 'score');           // 勝者がゲームを取っていない
+  assert.ok('result' in parseResult(R(0, G(0), G(0), G(0))));                 // 何先の設定なし = 勝ち越していればよい (3-0)
+  assert.ok('result' in parseResult(R(0, G(0), G(1), G(0), G(0))));          // 3-1
+  assert.strictEqual(parseResult(R(0, G(0, 'x'))).bad, 'chars');
+  assert.strictEqual(parseResult(R(0, G(0, null, null, -1))).bad, 'stage');
+  assert.strictEqual(parseResult({ w: 2, g: [G(0)] }).bad, 'winner');
+  assert.deepStrictEqual(parseResult({ w: 0, g: [{ w: 0, c: ['1293', null], s: '7' }] }).result, R(0, G(0, 1293, null, 7)));
 });
 
 test('sameOutcome は勝者とスコアだけを比べる (キャラ・ステージ・ゲームの順は見ない)', () => {
@@ -107,10 +107,10 @@ test('何先: 全部 N 先・勝者側/敗者側でラウンドから切り替�
   assert.strictEqual(ftOf(set0({ phaseKey: '20', round: -5 }), st), 3);            // 敗者側 5 回戦から 3 先
   assert.strictEqual(ftOf(set0({ phaseKey: '99', round: 1 }), st), null);          // 設定なし
   assert.strictEqual(ftOf(set0({ phaseKey: '20', round: null }), st), null);
-  assert.ok('result' in parseResult(R(0, G(0)), 3, 1));                            // 1 先 = 1-0
-  assert.strictEqual(parseResult(R(0, G(1), G(0), G(0)), 3, 1).bad, 'score_ft');
-  assert.strictEqual(parseResult(R(0, G(0), G(0)), 3, 3).bad, 'score_ft');         // 3 先で 2-0 は足りない
-  assert.ok('result' in parseResult(R(1, G(0), G(1), G(0), G(1), G(1)), 3, 3));    // 3 先なら start.gg の totalGames より多くてよい
+  assert.ok('result' in parseResult(R(0, G(0)), 1));                            // 1 先 = 1-0
+  assert.strictEqual(parseResult(R(0, G(1), G(0), G(0)), 1).bad, 'score_ft');
+  assert.strictEqual(parseResult(R(0, G(0), G(0)), 3).bad, 'score_ft');         // 3 先で 2-0 は足りない
+  assert.ok('result' in parseResult(R(1, G(0), G(1), G(0), G(1), G(1)), 3));    // 3 先で 3-2
 });
 
 test('ブラケットの構造: ラウンドがいちばん多いブロックの rounds と bestOf、試合の名前。Challonge は構造から名前を付ける', () => {

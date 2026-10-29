@@ -129,13 +129,12 @@ function side(v: unknown): Side | null {
  * 送られた結果を確かめる (形だけ。勝敗の数の整合もここで見る)。違えば理由の符号。
  * DQ・不戦勝は受け付けない (ゲームが 1 つ以上必要。運営が start.gg で入れる、2026-10-29 決定)。
  */
-export function parseResult(v: unknown, totalGames: number | null, ft: number | null = null): { result: Result } | { bad: string } {
+export function parseResult(v: unknown, ft: number | null = null): { result: Result } | { bad: string } {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { bad: 'result' };
   const o = v as Record<string, unknown>;
   const w = side(o.w);
   if (w === null) return { bad: 'winner' };
   if (!Array.isArray(o.g) || o.g.length < 1 || o.g.length > MAX_GAMES) return { bad: 'games' };
-  if (!ft && totalGames && o.g.length > totalGames) return { bad: 'games_over' };
   const g: Game[] = [];
   for (const x of o.g) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return { bad: 'game' };
@@ -154,10 +153,8 @@ export function parseResult(v: unknown, totalGames: number | null, ft: number | 
   if (ft) {
     // 何先が決まっている: 勝った側はちょうど ft、負けた側は ft 未満 (1 先なら 1-0 だけ)
     if ((w === 0 ? a : b) !== ft || (w === 0 ? b : a) >= ft) return { bad: 'score_ft' };
-  } else if (totalGames) {
-    const need = Math.floor(totalGames / 2) + 1;
-    if ((w === 0 ? a : b) > need) return { bad: 'score' };      // 3 本勝負で 3 勝などは無い
   }
+  // 何先が決まっていなければ勝ち越していればよい (start.gg の totalGames は実際の大会では常に 5 で当てにならない)
   return { result: { w, g } };
 }
 

@@ -172,3 +172,5 @@ body {
 .rp-ext { color: #2563eb; text-decoration: none; white-space: nowrap; }
 .rp-ext:hover { text-decoration: underline; }
 .rp-done .rp-ext, .rp-adm-head .rp-ext { font-size: 11px; }
+/* マッチングの間に相手のカードを裏で描いておく (画像の先読み) */
+.rp-card-warm { position: absolute; left: -10000px; top: 0; width: 360px; visibility: hidden; pointer-events: none; }

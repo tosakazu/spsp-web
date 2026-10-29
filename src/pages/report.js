@@ -409,23 +409,29 @@ function candidatesHtml(m) {
     </div>`).join('') + `</div>`;
 }
 
-const CARD_DONE = new Map();   // uid → Promise (同じカードを何度も読まない)
+const APPLIED = new Map();     // uid → Promise (カードの設定・二つ名。同じものを何度も読まない)
+const CARD_DONE = new Map();   // uid → Promise (カードの中身)
+function appliedOf(uid) {
+  if (!APPLIED.has(uid)) APPLIED.set(uid, fetchAppliedCard(uid).catch(() => null));
+  return APPLIED.get(uid);
+}
+function cardModelOf(uid) {
+  if (!CARD_DONE.has(uid)) {
+    CARD_DONE.set(uid, (async () => {
+      const [data, x] = await Promise.all([loadCardData(uid).catch(() => null), appliedOf(uid)]);
+      if (!data) return null;
+      return buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
+    })().catch(() => null));
+  }
+  return CARD_DONE.get(uid);
+}
+function renderCardInto(el, model) {
+  if (!model) { el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`; return; }
+  try { SPSPPlayerCard.render(el, model); } catch (e) { el.textContent = ''; }
+}
 function fillCards(root) {
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    const uid = el.getAttribute('data-card-uid');
-    if (!CARD_DONE.has(uid)) {
-      CARD_DONE.set(uid, (async () => {
-        const data = await loadCardData(uid).catch(() => null);
-        if (!data) return null;
-        const x = await fetchAppliedCard(uid).catch(() => null);
-        return buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
-      })());
-    }
-    CARD_DONE.get(uid).then((model) => {
-      if (!el.isConnected) return;
-      if (!model) { el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`; return; }
-      try { SPSPPlayerCard.render(el, model); } catch (e) { el.textContent = ''; }
-    });
+    cardModelOf(el.getAttribute('data-card-uid')).then((model) => { if (el.isConnected) renderCardInto(el, model); });
   }
 }
 
@@ -634,13 +640,14 @@ function markSeen(id) { try { const a = JSON.parse(sessionStorage.getItem(SEEN_K
 /** 二つ名 (カードの設定)。読めなければ空。待つのは長くても ms まで */
 function titleOf(uid, ms) {
   if (!uid) return Promise.resolve('');
-  const p = fetchAppliedCard(uid).then((x) => (x && x.titleText) || '').catch(() => '');
+  const p = appliedOf(uid).then((x) => (x && x.titleText) || '');
   return Promise.race([p, new Promise((r) => setTimeout(() => r(''), ms))]);
 }
 async function matchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
+  const opCard = op && op.uid ? cardModelOf(op.uid) : null;   // 相手のカードはアニメーションの間に読んでおく
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
   const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
@@ -651,6 +658,14 @@ async function matchAnimation(m) {
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}`;
   document.body.appendChild(ov);
+  if (opCard) {
+    // 見えないところに一度描いて、カードの画像も読み込ませておく (アニメーションが終わったらすぐ出る)
+    const warm = document.createElement('div');
+    warm.className = 'rp-card pcard rp-card-warm';
+    warm.setAttribute('aria-hidden', 'true');
+    ov.appendChild(warm);
+    opCard.then((model) => { if (warm.isConnected && model) renderCardInto(warm, model); });
+  }
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
   return new Promise((res) => {
     const done = () => { ov.classList.add('out'); setTimeout(() => { ov.remove(); res(); }, 350); };

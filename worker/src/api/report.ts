@@ -298,7 +298,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   if (gate === 'classes_only') return err('not_allowed', 'この大会では、下位クラスの試合だけ選手が報告できます。結果は運営に伝えてください。', gate);
   if (gate === 'top_cut') return err('not_allowed', 'この試合 (トップ ' + parseSettings(o.ev.settings).top_cut + ' から) は運営が結果を入力します。結果は運営に伝えてください。', gate);
   const ft = ftOf(set, parseSettings(o.ev.settings));
-  const pr = parseResult(req.result, set.totalGames, ft);
+  const pr = parseResult(req.result, ft);
   if ('bad' in pr) {
     if (pr.bad === 'score_ft') return err('bad_request', 'この試合は ' + ft + ' 先です。スコアを確かめてください。', 'bad:score_ft');
     return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
@@ -461,7 +461,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   const kind = req.reset === true ? 'reset' : 'fix';
   let result: Result | null = null;
   if (kind === 'fix') {
-    const pr = parseResult(req.result, set.totalGames);
+    const pr = parseResult(req.result);
     if ('bad' in pr) return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
     result = pr.result;
   }
