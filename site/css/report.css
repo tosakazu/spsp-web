@@ -41,8 +41,8 @@ body {
 .rp-name { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
 .rp-vs-mark { font-weight: 900; color: #dc2626; font-size: 18px; }
 .rp-seed { display: inline-block; font-size: 11px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 1px 6px; margin-top: 2px; }
-.rp-card { margin: 8px auto; width: 100%; max-width: 420px; }
-.rp-card-sm { max-width: 260px; margin: 6px 0 0; }
+.rp-card { margin: 8px auto; width: 100%; max-width: 514px; }   /* 514px = カードの原寸 (プレイヤーページと同じ大きさまで) */
+.rp-card-sm { max-width: 420px; margin: 6px 0 0; }
 
 .rp-more { margin: 10px 0; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 10px; }
 .rp-more summary { cursor: pointer; font-size: 12px; color: #374151; font-weight: 600; }
@@ -172,8 +172,6 @@ body {
 .rp-ext { color: #2563eb; text-decoration: none; white-space: nowrap; }
 .rp-ext:hover { text-decoration: underline; }
 .rp-done .rp-ext, .rp-adm-head .rp-ext { font-size: 11px; }
-/* マッチングの間に相手のカードを裏で描いておく (画像の先読み) */
-.rp-card-warm { position: absolute; left: -10000px; top: 0; width: 360px; visibility: hidden; pointer-events: none; }
 /* キャラ選び: いちばん上の使用キャラ */
 .rp-cp-used { flex: none; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
 .rp-cp-used[hidden] { display: none; }

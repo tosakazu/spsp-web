@@ -11,12 +11,11 @@ import SpspLogin from '../../site/js/login.js';
 import SpspStartggIdentity from '../../site/js/startgg_identity.js';
 import SpspReportAuth from '../../site/js/report_auth.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
-import { charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
+import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import SPSPPlayerCard from '../../site/js/player_card.js';
-import { buildCardModel, fetchAppliedCard, loadCardData } from '../../site/js/player_card_model.js';
+import { appliedOf, cardDataOf, mountPlayerCard } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -71,11 +70,13 @@ function scoreText(r, mySide) {
 
 // ── キャラ・ステージの一覧 ───────────────────────────────────────────
 
+/** 報告では 1 体ずつ選ぶ。使い手ランキングでまとめている代表 id の名前 (「サムス / ダークサムス」) は前半だけにする */
+const singleName = (id, name) => (CHAR_MERGE_CANONICAL[id] === id ? String(name).split(' / ')[0] : name);
 async function loadChars() {
   if (CHARS) return CHARS;
   const tbl = await SPSPCharEmoji.load().catch(() => null);
   CHARS = Object.keys(tbl || {}).map(Number).filter((id) => id > 0 && !HIDDEN_CHAR_IDS.has(id))
-    .map((id) => ({ id, name: charName(id, (tbl[id] && tbl[id].name) || String(id)), emoji: SPSPCharEmoji.emojiOf(id) || '' }))
+    .map((id) => ({ id, name: singleName(id, charName(id, (tbl[id] && tbl[id].name) || String(id))), emoji: SPSPCharEmoji.emojiOf(id) || '' }))
     .sort((a, b) => (FIGHTER_NUMBER[a.id] || 999) - (FIGHTER_NUMBER[b.id] || 999) || a.name.localeCompare(b.name, 'ja'));
   return CHARS;
 }
@@ -185,7 +186,7 @@ async function loadStages(gql) {
 
 const SLOT_FIELDS = 'prereqType prereqId prereqPlacement entrant { id name initialSeedNum participants { user { id } player { gamerTag } } } standing { stats { score { value } } }';
 const setFields = (extra) => `id state round fullRoundText identifier totalGames winnerId lPlacement ${extra}
-  phaseGroup { id displayIdentifier phase { id name } }
+  phaseGroup { id displayIdentifier phase { id name groupCount } }
   slots { ${SLOT_FIELDS} }
   games { orderNum winnerId stage { id } selections { entrant { id } character { id } } }`;
 const EXTRA = 'station { number } stream { streamName streamSource }';   // 台・配信台 (読めなければ外して読み直す)
@@ -247,7 +248,8 @@ function fromStartgg(s) {
   const phase = s.phaseGroup && s.phaseGroup.phase ? s.phaseGroup.phase.name : '';
   return {
     id: String(s.id), kind: 'startgg', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: Number(s.state) === 2,
-    round: s.fullRoundText || '', pool: s.phaseGroup ? s.phaseGroup.displayIdentifier : '', phase,
+    round: s.fullRoundText || '', pool: s.phaseGroup && !(s.phaseGroup.phase && s.phaseGroup.phase.groupCount === 1) ? s.phaseGroup.displayIdentifier : '', phase,   // ブロックが 1 つだけのフェーズは番号 (「1」) を出さない
+   
     groupId: s.phaseGroup && s.phaseGroup.id != null ? String(s.phaseGroup.id) : null,
     roundNum: Number.isInteger(s.round) ? s.round : null, phaseKey: s.phaseGroup && s.phaseGroup.phase && s.phaseGroup.phase.id != null ? String(s.phaseGroup.phase.id) : null,
     station: s.station && s.station.number ? s.station.number : null,
@@ -458,34 +460,12 @@ function candidatesHtml(m) {
     </div>`).join('') + `</div>`;
 }
 
-const APPLIED = new Map();     // uid → Promise (カードの設定・二つ名。同じものを何度も読まない)
-const CARD_DONE = new Map();   // uid → Promise (カードの中身)
-function appliedOf(uid) {
-  if (!APPLIED.has(uid)) APPLIED.set(uid, fetchAppliedCard(uid).catch(() => null));
-  return APPLIED.get(uid);
-}
-const CARD_DATA = new Map();  // uid → Promise (選手のデータ。カードと使用キャラで使う)
-function cardDataOf(uid) {
-  if (!CARD_DATA.has(uid)) CARD_DATA.set(uid, loadCardData(uid).catch(() => null));
-  return CARD_DATA.get(uid);
-}
-function cardModelOf(uid) {
-  if (!CARD_DONE.has(uid)) {
-    CARD_DONE.set(uid, (async () => {
-      const [data, x] = await Promise.all([cardDataOf(uid), appliedOf(uid)]);
-      if (!data) return null;
-      return buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
-    })().catch(() => null));
-  }
-  return CARD_DONE.get(uid);
-}
-function renderCardInto(el, model) {
-  if (!model) { el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`; return; }
-  try { SPSPPlayerCard.render(el, model); } catch (e) { el.textContent = ''; }
-}
+/** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。読めなければ一言 */
 function fillCards(root) {
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    cardModelOf(el.getAttribute('data-card-uid')).then((model) => { if (el.isConnected) renderCardInto(el, model); });
+    mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
+      if (!ok && el.isConnected) el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`;
+    }).catch(() => { /* カードが出ないだけ */ });
   }
 }
 
@@ -513,6 +493,21 @@ const ftHtml = (m) => { const n = ftOf(m); return n ? `<span class="rp-ft">${esc
 const MAX_GAMES = 9;   // worker の MAX_GAMES と同じ
 const SCORE_OTHER = 'x';
 
+/**
+ * ステージの選択肢: 大会でよく使うステージ (start.gg の stage id) を先に表示言語の名前で、残りは「その他」に start.gg の名前で。
+ * start.gg の一覧は 100 以上あって英語名なので、そのままでは選びにくい (2026-10-30 実データで確認)
+ */
+const COMMON_STAGES = [311, 484, 328, 378, 387, 397, 348, 513, 497, 407, 353, 406];
+function stageOpts(stages) {
+  const o = (id, name) => `<option value="${id}">${escapeHtml(name)}</option>`;
+  const ids = new Set(stages.map((x) => x.id));
+  const common = COMMON_STAGES.filter((id) => ids.has(id));
+  const rest = stages.filter((x) => !COMMON_STAGES.includes(x.id));
+  if (!common.length) return `<option value="">—</option>` + rest.map((x) => o(x.id, x.name)).join('');
+  return `<option value="">—</option>` + common.map((id) => o(id, i18n('report.stage.' + id))).join('')
+    + (rest.length ? `<optgroup label="${escapeHtml(i18n('report.stage_other'))}">${rest.map((x) => o(x.id, x.name)).join('')}</optgroup>` : '');
+}
+
 /** 結果の入力欄。まとめて (既定) = 名前の隣でスコアを選ぶ・キャラ / 1 戦ごと = ゲームごとの勝者・キャラ・ステージ */
 function formHtml(m) {
   const ft = ftOf(m);
@@ -531,7 +526,7 @@ function formHtml(m) {
       ${withChars ? `<div class="rp-game-sel">
         ${charPickHtml(`data-char="${m.mySide}"`, i18n('report.my_char'))}
         ${charPickHtml(`data-char="${1 - m.mySide}"`, i18n('report.opp_char'))}
-        ${stages.length ? `<label>${escapeHtml(i18n('report.stage'))}<select data-stage>${opt(stages, null)}</select></label>` : ''}
+        ${stages.length ? `<label>${escapeHtml(i18n('report.stage'))}<select data-stage>${stageOpts(stages)}</select></label>` : ''}
       </div>` : ''}
     </div>`;
   }
@@ -696,7 +691,7 @@ async function matchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  const opCard = op && op.uid ? cardModelOf(op.uid) : null;   // 相手のカードはアニメーションの間に読んでおく
+  if (op && op.uid) cardDataOf(op.uid);   // 相手のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
   // この後の VS の欄にも同じ二つ名を出す
@@ -710,14 +705,6 @@ async function matchAnimation(m) {
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}`;
   document.body.appendChild(ov);
-  if (opCard) {
-    // 見えないところに一度描いて、カードの画像も読み込ませておく (アニメーションが終わったらすぐ出る)
-    const warm = document.createElement('div');
-    warm.className = 'rp-card pcard rp-card-warm';
-    warm.setAttribute('aria-hidden', 'true');
-    ov.appendChild(warm);
-    opCard.then((model) => { if (warm.isConnected && model) renderCardInto(warm, model); });
-  }
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
   return new Promise((res) => {
     const done = () => { ov.classList.add('out'); setTimeout(() => { ov.remove(); res(); }, 350); };
