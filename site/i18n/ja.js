@@ -2072,4 +2072,6 @@ window.SPSP_I18N.ja = {
   'report.demo.event_name': '見本の大会 / シングルス',
   'report.demo.class_name': '見本の大会 Bクラス',
   'report.demo.nogo': '見本なので start.gg には移動しません',
+  'report.demo.title_me': '見本の二つ名',
+  'report.demo.title_op': '見本の二つ名 その2',
 };

@@ -310,7 +310,7 @@ function candidatesHtml(m) {
   return `<div class="rp-cands">` + list.slice(0, 6).map(({ s, p }) => `<div class="rp-cand">
       <div class="rp-cand-head"><b>${escapeHtml(s.name)}</b> ${seedHtml(s)}</div>
       <div class="rp-muted">${escapeHtml((p.loser ? i18n('report.cand.loser') : i18n('report.cand.winner')) + ' · ' + (p.round ? p.round + ' · ' : '') + stateText(p))}${p.station ? ' · ' + escapeHtml(i18n('report.station', { n: p.station })) : ''}</div>
-      ${s.uid ? `<div class="rp-card rp-card-sm" data-card-uid="${escapeHtml(s.uid)}"></div>` : ''}
+      ${s.uid ? `<div class="rp-card rp-card-sm pcard" data-card-uid="${escapeHtml(s.uid)}"></div>` : ''}
     </div>`).join('') + `</div>`;
 }
 
@@ -438,14 +438,23 @@ function wireForm(form, m) {
 const SEEN_KEY = 'spsp_report_seen_v1';
 function seen(id) { try { return (JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')).includes(id); } catch (e) { return false; } }
 function markSeen(id) { try { const a = JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]'); a.push(id); sessionStorage.setItem(SEEN_KEY, JSON.stringify(a.slice(-50))); } catch (e) { /* 毎回出るだけ */ } }
-function matchAnimation(m) {
-  if (!DEMO && seen(m.id)) return Promise.resolve();
+/** 二つ名 (カードの設定)。読めなければ空。待つのは長くても ms まで */
+function titleOf(uid, ms) {
+  if (!uid) return Promise.resolve('');
+  const p = fetchAppliedCard(uid).then((x) => (x && x.titleText) || '').catch(() => '');
+  return Promise.race([p, new Promise((r) => setTimeout(() => r(''), ms))]);
+}
+async function matchAnimation(m) {
+  if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
+  let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
+  if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
+  const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
   const ov = document.createElement('div');
   ov.className = 'rp-match-ov';
   ov.innerHTML = `<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
-    <div class="rp-match-names"><span class="rp-match-l">${escapeHtml(me ? me.name : '')}</span><span class="rp-match-vs">VS</span><span class="rp-match-r">${escapeHtml(op ? op.name : '')}</span></div>
+    <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}`;
   document.body.appendChild(ov);
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
@@ -472,7 +481,7 @@ function renderPlayer() {
       <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))}</div>
       ${stationHtml(cur)}
       ${vsHtml(cur)}
-      ${op && op.uid ? `<div class="rp-card" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
+      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}

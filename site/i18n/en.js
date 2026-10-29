@@ -2019,4 +2019,6 @@ window.SPSP_I18N.en = {
   'report.demo.event_name': 'Sample Cup / Singles',
   'report.demo.class_name': 'Sample Cup B class',
   'report.demo.nogo': 'This is a sample, so it does not go to start.gg',
+  'report.demo.title_me': 'Sample title',
+  'report.demo.title_op': 'Sample title 2',
 };

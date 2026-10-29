@@ -41,7 +41,7 @@ body {
 .rp-name { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
 .rp-vs-mark { font-weight: 900; color: #dc2626; font-size: 18px; }
 .rp-seed { display: inline-block; font-size: 11px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 1px 6px; margin-top: 2px; }
-.rp-card { margin: 8px auto; max-width: 420px; }
+.rp-card { margin: 8px auto; width: 100%; max-width: 420px; }
 .rp-card-sm { max-width: 260px; margin: 6px 0 0; }
 
 .rp-more { margin: 10px 0; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 10px; }
@@ -103,7 +103,8 @@ body {
 .rp-match-ov.out { opacity: 0; transition: opacity .35s; }
 .rp-match-title { font-size: 15px; letter-spacing: .2em; opacity: .85; animation: rp-pop .5s ease-out; }
 .rp-match-names { display: flex; align-items: center; gap: 14px; font-size: 24px; font-weight: 900; max-width: 100%; }
-.rp-match-l, .rp-match-r { overflow-wrap: anywhere; max-width: 40vw; }
+.rp-match-p { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow-wrap: anywhere; max-width: 40vw; text-align: center; }
+.rp-match-t { font-size: 12px; font-weight: 700; color: #fde68a; letter-spacing: .04em; }
 .rp-match-l { animation: rp-in-l .55s cubic-bezier(.2, .9, .3, 1.2); }
 .rp-match-r { animation: rp-in-r .55s cubic-bezier(.2, .9, .3, 1.2); }
 .rp-match-vs { color: #fca5a5; font-size: 30px; animation: rp-pop .7s ease-out; }
