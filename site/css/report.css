@@ -126,7 +126,47 @@ body {
 @keyframes rp-pop { 0% { transform: scale(.3); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes rp-in-l { from { transform: translateX(-60vw); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes rp-in-r { from { transform: translateX(60vw); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .rp-match-ov, .rp-match-ov * { animation: none !important; } }
+/* マッチングの演出の案 (?anim=)。サイトの白・濃い灰・赤 (#dc2626) に合わせる */
+/* 案 A 白と赤: 白地に赤い斜めの線が走る。名前は黒、二つ名は灰、VS と何先は赤 */
+.rp-anim-light { background: #fff; color: #111827; overflow: hidden; }
+.rp-anim-light::before, .rp-anim-light::after { content: ''; position: absolute; left: -20vw; right: -20vw; height: 10px; background: #dc2626; transform: rotate(-8deg); animation: rp-sweep .6s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-light::before { top: 22%; }
+.rp-anim-light::after { bottom: 22%; height: 4px; background: #111827; animation-delay: .08s; }
+.rp-anim-light .rp-match-title { color: #dc2626; font-weight: 700; opacity: 1; }
+.rp-anim-light .rp-match-t { color: #6b7280; }
+.rp-anim-light .rp-match-vs { color: #dc2626; font-style: italic; }
+.rp-anim-light .rp-match-ft { color: #fff; background: #dc2626; border-radius: 8px; padding: 2px 12px; }
+.rp-anim-light .rp-match-station { background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; }
+.rp-anim-light .rp-match-skip { color: #6b7280; opacity: 1; }
+@keyframes rp-sweep { from { transform: rotate(-8deg) translateX(-120%); } to { transform: rotate(-8deg) translateX(0); } }
+
+/* 案 B 赤い帯: 白地の真ん中を赤い帯が横切り、その上に白い名前 */
+.rp-anim-band { background: #f9fafb; color: #111827; padding: 16px 0; }
+.rp-anim-band .rp-match-names { width: 100%; justify-content: center; background: #dc2626; color: #fff; padding: 18px 16px; box-shadow: 0 6px 0 #b91c1c; animation: rp-band .45s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-band .rp-match-title { color: #374151; font-weight: 700; opacity: 1; }
+.rp-anim-band .rp-match-t { color: #fecaca; }
+.rp-anim-band .rp-match-vs { color: #fff; opacity: .9; font-style: italic; }
+.rp-anim-band .rp-match-ft { color: #dc2626; }
+.rp-anim-band .rp-match-station { background: #fff; color: #111827; border: 1px solid #e5e7eb; }
+.rp-anim-band .rp-match-skip { color: #6b7280; opacity: 1; }
+@keyframes rp-band { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* 案 C カード: 白っぽい地に 2 人のプレイヤーカードが左右から入る (縦長の画面では上下) */
+.rp-anim-cards { background: #f3f4f6; color: #111827; gap: 12px; }
+.rp-anim-cards .rp-match-title { color: #dc2626; font-weight: 700; opacity: 1; }
+.rp-anim-cards .rp-match-names { flex-direction: column; gap: 6px; }
+.rp-anim-cards .rp-match-p { max-width: none; }
+.rp-anim-cards .rp-match-card { display: block; width: min(80vw, 340px, calc((100vh - 200px) / 2 * 514 / 333)); aspect-ratio: 514 / 333; border-radius: 14px; background: #e5e7eb; box-shadow: 0 8px 24px rgba(17, 24, 39, .18); }
+.rp-anim-cards .rp-match-vs { color: #dc2626; font-style: italic; font-size: 26px; line-height: 1; }
+.rp-anim-cards .rp-match-ft { color: #fff; background: #dc2626; border-radius: 8px; padding: 2px 12px; }
+.rp-anim-cards .rp-match-station { background: #fff; color: #111827; border: 1px solid #e5e7eb; }
+.rp-anim-cards .rp-match-skip { color: #6b7280; opacity: 1; }
+@media (min-aspect-ratio: 4/3) {
+  .rp-anim-cards .rp-match-names { flex-direction: row; gap: 18px; }
+  .rp-anim-cards .rp-match-card { width: min(40vw, 420px); }
+}
+
+@media (prefers-reduced-motion: reduce) { .rp-match-ov, .rp-match-ov *, .rp-match-ov::before, .rp-match-ov::after { animation: none !important; } }
 
 /* 見本の画面 (?demo=) */
 .rp-demo { background: #eff6ff; border: 1px solid #93c5fd; color: #1e3a8a; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; }

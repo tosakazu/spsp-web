@@ -271,7 +271,7 @@ export function buildCardModel(data, settings, titleText) {
 export function noDataCardModel(name) {
   return {
     name: SPSPFormat.stripTeamTag(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
-    color: DEFAULT_SETTINGS.color, achMode: 'auto', achievements: [], latest: null, totalTournaments: 0, totalMatches: 0,
+    color: DEFAULT_SETTINGS.color, achMode: /** @type {'auto'} */ ('auto'), achievements: [], latest: null, totalTournaments: 0, totalMatches: 0,
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: i18n('player.card.latest'),
       overall: i18n('ranking.tab.ensemble'), national: i18n('common.national'), equivalent: i18n('player.equivalent'), noAch: 'NO DATA',
