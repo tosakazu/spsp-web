@@ -752,7 +752,7 @@ async function matchAnimation(m) {
     <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}
-    <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}${DEMO ? ' · ' + escapeHtml(animLabelOf(anim)) : ''}</div>`;
+    <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   // 案 cards: 二つ名はカードに出ているので、カードそのものを出す (データが無い人は NO DATA のカード)
   // 描き終わる (データ・カードの設定・Web フォント) まで中身は隠し、そろってから動かす (あとから表示がずれないように。最大 3 秒)
   const mounts = [...ov.querySelectorAll('.rp-match-card')].map((el) => {
@@ -1464,7 +1464,7 @@ async function demoPlayers() {
   return rows;
 }
 
-/** 演出の案の名前 (見本の切り替えリンクとスキップの案内) @param {string} k */
+/** 演出の案の名前 (見本の切り替えリンク) @param {string} k */
 function animLabelOf(k) {
   return /** @type {Record<string, string>} */ ({
     '': i18n('report.demo.anim_random'), dark: i18n('report.demo.anim_now'), light: i18n('report.demo.anim_light'), band: i18n('report.demo.anim_band'),
