@@ -1911,7 +1911,6 @@ window.SPSP_I18N.en = {
   'report.match_skip': 'Tap to skip',
   'report.station': 'Station {n}',
   'report.stream': 'Stream',
-  'report.seed': 'Seed {n}',
   'report.tbd': 'TBD',
   'report.round': 'Round {n}',
   'report.more': 'Score change forecast',

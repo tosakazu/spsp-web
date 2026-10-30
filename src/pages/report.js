@@ -1,5 +1,5 @@
 // 試合結果の報告 (site/report/index.html、docs/self_report_design.md)。
-//   ?c=<受付>          選手の画面: 自分の試合 (台・相手のカード・シード)・結果の報告・試合待ちの次の相手の候補
+//   ?c=<受付>          選手の画面: 自分の試合 (台・相手のカード)・結果の報告・試合待ちの次の相手の候補
 //   ?c=<受付>&admin=1  運営の画面: 試合ごとの状態・両者の報告・直す / 取り消す・設定・受付の停止
 //   (c なし)            運営が受付を始める画面 (start.gg のイベント)。下位クラス (Challonge) は下位クラス作成のページから
 // start.gg の試合は、ブラウザが本人のログインのトークン (user.identity) で 15 秒ごとに読む。報告は Worker (action report_submit) が
@@ -411,10 +411,6 @@ function stationHtml(m) {
   return parts.length ? `<div class="rp-stations">${parts.join('')}</div>` : '';
 }
 
-function seedHtml(slot) {
-  return slot && slot.seed ? `<span class="rp-seed">${escapeHtml(i18n('report.seed', { n: slot.seed }))}</span>` : '';
-}
-
 /**
  * VS = 自分のカード・VS・相手のカード (2026-10-30、名前の文字の VS はやめた)。二つ名・名前はカードに出る。
  * カードが読み込まれるまでとカードが無い人 (start.gg のアカウントが無い・相手が未定・データが無い) は名前の札を出す
@@ -425,7 +421,7 @@ function vsCardHtml(slot, cls) {
   const body = slot && slot.uid
     ? `<div class="rp-card rp-vs-card pcard" data-card-uid="${escapeHtml(slot.uid)}" data-card-plate="1">${plate}</div>`
     : plate;
-  return `<div class="rp-vs-side ${cls}">${body}${seedHtml(slot)}</div>`;
+  return `<div class="rp-vs-side ${cls}">${body}</div>`;
 }
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
@@ -457,7 +453,7 @@ function candidatesHtml(m) {
   const person = (sl) => {
     n++;
     return `<div class="rp-cand">
-      <div class="rp-cand-head"><b>${escapeHtml(sl.name)}</b> ${seedHtml(sl)}</div>
+      <div class="rp-cand-head"><b>${escapeHtml(sl.name)}</b></div>
       ${sl.uid ? `<div class="rp-card rp-card-sm pcard" data-card-uid="${escapeHtml(sl.uid)}"></div>` : ''}
     </div>`;
   };

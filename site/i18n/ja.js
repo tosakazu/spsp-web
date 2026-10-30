@@ -1964,7 +1964,6 @@ window.SPSP_I18N.ja = {
   'report.match_skip': 'タップでスキップ',
   'report.station': '{n} 番台',
   'report.stream': '配信台',
-  'report.seed': 'シード {n}',
   'report.tbd': '未定',
   'report.round': '{n} 回戦',
   'report.more': 'スコア変動予想',
