@@ -318,15 +318,36 @@ async function perform(p: Provider, set: NSet, d: Decision): Promise<{ ok: true 
   return p.apply(set, d.result as Result, d.op === 'update' ? 'update' : 'report');
 }
 
+/** 送っている最中の行の印 (note)。これが付いている間はほかの報告は待つ。古すぎる印 (Worker が途中で落ちた等) は無視する */
+const SENDING = 'sending';
+const SENDING_STALE_MS = 60 * 1000;
+const SENDING_WAIT_MS = 400;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
  * D1 の行を版つきで書いてから start.gg / Challonge に送る (同時に 2 人が送っても 2 回送らない)。
- * decide は最新の行と報告から判定を作る。送るのに失敗したら行を review にして理由を残す。
+ * decide は最新の行・報告・start.gg の set から判定を作る。送るのに失敗したら行を review にして理由を残す。
+ *
+ * 順番 (2 人がほぼ同時に送ったとき、古い set で判定しないように):
+ *   行を読む → (送っている最中なら待つ) → set を読む → 行が変わっていなければ判定して、行の版を確かめて書く (印つき) → 送る → 印を外す
+ * first は呼ぶ側が先に読んだ set、seenVersion はそれを読む前の行の版 (行が無ければ null)。行がその後に変わっていたら set を読み直す。
  */
-async function settle(store: Store, p: Provider, code: string, set: NSet, now: number, floorTo: number | null,
-  decide: (row: ReportSetRow | null, latest: [Latest | null, Latest | null]) => Decision | { locked: true }): Promise<
+async function settle(store: Store, p: Provider, code: string, first: NSet, seenVersion: number | null, now: number, floorTo: number | null,
+  decide: (row: ReportSetRow | null, latest: [Latest | null, Latest | null], set: NSet) => Decision | { locked: true }): Promise<
   { ok: true; d: Decision } | { ok: false; why: 'busy' | 'locked' | 'provider'; note: string }> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let set = first;
+  let seen = seenVersion;
+  for (let attempt = 0; attempt < 10; attempt++) {
     const row = await store.getReportSet(code, set.id);
+    if (row && row.note === SENDING && now - row.updated_ms < SENDING_STALE_MS) { await sleep(SENDING_WAIT_MS); continue; }   // ほかの報告が送っている最中
+    const ver = row ? row.version : null;
+    if (ver !== seen) {   // set を読んだ後に行が変わった (ほかの報告が送り終えた等) → set を読み直してからもう一度
+      const rs = await p.readSet(set.id);
+      if (!rs.ok) return { ok: false, why: 'provider', note: rs.note };
+      set = rs.set;
+      seen = ver;
+      continue;
+    }
     const floor = floorTo !== null ? floorTo : row ? row.floor_id : 0;
     const subs = (await store.listReportSubmissions(code, set.id)).filter((s) => (s.id || 0) > floor && s.side >= 0);
     const latest: [Latest | null, Latest | null] = [null, null];
@@ -334,20 +355,26 @@ async function settle(store: Store, p: Provider, code: string, set: NSet, now: n
       const r = parseApplied(s.result);
       if (r) latest[s.side as Side] = { result: r, ts: s.ts_ms };
     }
-    const d = decide(row, latest);
+    const d = decide(row, latest, set);
     if ('locked' in d) return { ok: false, why: 'locked', note: 'locked' };
     const applied = d.op === 'reset' ? '' : d.op === 'none' ? (row ? row.applied : '') : JSON.stringify(d.result);
-    const next: ReportSetRow = {
+    const done: ReportSetRow = {
       code, set_id: set.id, state: d.state, users: usersKey(set), slots: slotsJson(set), applied, note: d.note,
       floor_id: floor, version: (row ? row.version : 0) + 1, updated_ms: now,
     };
-    if (!(await store.casReportSet(next, row ? row.version : null))) continue;
+    if (d.op === 'none') {   // 送らない: そのまま書く
+      if (!(await store.casReportSet(done, ver))) { seen = -1; continue; }
+      return { ok: true, d };
+    }
+    const sending: ReportSetRow = { ...done, note: SENDING };
+    if (!(await store.casReportSet(sending, ver))) { seen = -1; continue; }   // 先を越された → 読み直し
     const r = await perform(p, set, d);
     if (!r.ok) {
-      const back: ReportSetRow = { ...next, state: 'review', note: 'error:' + r.note.slice(0, 100), applied: row ? row.applied : '', version: next.version + 1 };
-      await store.casReportSet(back, next.version);
+      const back: ReportSetRow = { ...done, state: 'review', note: 'error:' + r.note.slice(0, 100), applied: row ? row.applied : '', version: done.version + 1 };
+      await store.casReportSet(back, done.version);
       return { ok: false, why: 'provider', note: r.note };
     }
+    await store.casReportSet({ ...done, version: done.version + 1 }, done.version);   // 印を外す
     return { ok: true, d };
   }
   return { ok: false, why: 'busy', note: 'busy' };
@@ -376,6 +403,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   const p = providerOf(fetchFn, o);
+  const before = await store.getReportSet(o.ev.code, setId);   // set を読む前の行の版 (settle が、この後に変わったかを見る)
   const rs = await p.readSet(setId);
   if (!rs.ok) return rs.code === 'not_found' ? err('not_found', 'この大会にその試合はありません。', rs.note) : err('provider_error', providerMessage(o.ev.kind, rs.note), rs.note);
   const set = rs.set;
@@ -395,8 +423,8 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   }
 
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(pr.result), outcome: 'pending' });
-  const r = await settle(store, p, o.ev.code, set, now, null, (row, latest) => reconcile(
-    row ? { state: row.state as ReportState, applied: parseApplied(row.applied) } : null, latest, set));
+  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, null, (row, latest, cur) => reconcile(
+    row ? { state: row.state as ReportState, applied: parseApplied(row.applied) } : null, latest, cur));
   if (!r.ok) {
     await store.setReportSubmissionOutcome(subId, 'error:' + r.note.slice(0, 100));
     if (r.why === 'busy') return err('busy', 'ほかの報告と重なりました。もう一度送ってください。', 'busy');
@@ -427,7 +455,7 @@ async function setView(store: Store, row: ReportSetRow, uid: string | null) {
   }
   let slots: unknown = [];
   try { slots = JSON.parse(row.slots); } catch (_) { slots = []; }
-  return { code: row.code, set_id: row.set_id, state: row.state, note: row.note, applied: parseApplied(row.applied), slots, reports: latest, updated_ms: row.updated_ms };
+  return { code: row.code, set_id: row.set_id, state: row.state, note: row.note === SENDING ? '' : row.note, applied: parseApplied(row.applied), slots, reports: latest, updated_ms: row.updated_ms };
 }
 
 /** Challonge の参加者・試合 (Worker の cache に 15 秒) */
@@ -560,6 +588,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   const act = await store.reportSubmissionActivity(uid, now - DAY);
   if (act.count >= REPORT_ADMIN_MAX_PER_DAY) return err('rate_limited', '今日はこれ以上直せません。', 'rate');
   const p = providerOf(fetchFn, o);
+  const before = await store.getReportSet(o.ev.code, setId);
   const rs = await p.readSet(setId);
   if (!rs.ok) return rs.code === 'not_found' ? err('not_found', 'この大会にその試合はありません。', rs.note) : err('provider_error', providerMessage(o.ev.kind, rs.note), rs.note);
   const set = rs.set;
@@ -572,7 +601,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
     result = pr.result;
   }
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: uid, side: -1, ts_ms: now, result: result ? JSON.stringify(result) : '', outcome: 'pending' });
-  const r = await settle(store, p, o.ev.code, set, now, subId, (row) => adminDecision(kind, result, set, row ? parseApplied(row.applied) : null));
+  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, subId, (row, _latest, cur) => adminDecision(kind, result, cur, row ? parseApplied(row.applied) : null));
   if (!r.ok) {
     await store.setReportSubmissionOutcome(subId, 'error:' + r.note.slice(0, 100));
     if (r.why === 'locked') return err('locked', '次の試合の結果が入っているため、ここでは直せません。start.gg / Challonge で直してください。', 'locked');

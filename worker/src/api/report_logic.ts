@@ -28,6 +28,8 @@ export interface NSet {
   totalGames: number | null;
   /** この試合の勝者・敗者が進んだ次の試合に、もう結果が入っている */
   downstreamDone: boolean;
+  /** 次の試合が始まっている (start.gg state 2)。選手の報告から自動で取り消し・入れ直しはしない (試合中の人を引き戻さない)。運営の直しは止めない */
+  downstreamStarted?: boolean;
   /** 負けた人の順位 (start.gg の lPlacement。Challonge は残り人数から) */
   lPlacement: number | null;
   /** 下位クラス (Bクラス等) の試合 */
@@ -262,6 +264,7 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
   const byUs = set.complete && !!ours && sameOutcome(ours, set.remote);
   const external = set.complete && !byUs;
   const [a, b] = latest;
+  const locked = set.downstreamDone || !!set.downstreamStarted;   // 勝者が変わる取り消し・入れ直しは、次の試合に結果がある・始まっているならしない (キャラだけの update は結果があるときだけ止める)
 
   if (a && b) {
     if (sameOutcome(a.result, b.result)) {
@@ -270,12 +273,12 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
       if (external) return sameOutcome(target, set.remote) ? none('agreed') : none('review', 'external_mismatch');
       if (sameFull(ours, target)) return none('agreed');
       if (sameOutcome(ours, target)) return set.downstreamDone ? none('agreed') : { op: 'update', state: 'agreed', result: target, note: '' };
-      return set.downstreamDone ? none('review', 'locked_change') : { op: 'rereport', state: 'agreed', result: target, note: '' };
+      return locked ? none('review', 'locked_change') : { op: 'rereport', state: 'agreed', result: target, note: '' };
     }
     // 食い違い
     if (!set.complete) return none('conflict');
     if (external) return none('review', 'external_mismatch');
-    if (set.downstreamDone) return none('review', 'locked_conflict');
+    if (locked) return none('review', 'locked_conflict');
     return { op: 'reset', state: 'conflict', result: null, note: '' };
   }
 
@@ -286,7 +289,7 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
   if (external) return sameOutcome(r, set.remote) ? none('agreed') : none('review', 'external_mismatch');
   if (sameFull(ours, r)) return none(prev ? prev.state : 'reported');
   if (sameOutcome(ours, r)) return set.downstreamDone ? none(prev ? prev.state : 'reported') : { op: 'update', state: 'reported', result: r, note: '' };
-  return set.downstreamDone ? none('review', 'locked_change') : { op: 'rereport', state: 'reported', result: r, note: '' };
+  return locked ? none('review', 'locked_change') : { op: 'rereport', state: 'reported', result: r, note: '' };
 }
 
 /** 運営が直す・取り消すときの判定。次の試合に結果が出ていたら locked */

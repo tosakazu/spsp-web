@@ -30,11 +30,13 @@ const SET_QUERY = `query SpspReportSet($id: ID!) {
   }
 }`;
 
-const NEXT_QUERY = `query SpspReportNext($eventId: ID!, $entrantIds: [ID]) {
-  event(id: $eventId) { sets(perPage: 40, page: 1, filters: { entrantIds: $entrantIds, hideEmpty: true }) {
+const NEXT_QUERY = `query SpspReportNext($eventId: ID!, $entrantIds: [ID], $page: Int!) {
+  event(id: $eventId) { sets(perPage: 60, page: $page, filters: { entrantIds: $entrantIds, hideEmpty: true }) {
+    pageInfo { totalPages }
     nodes { id state slots { prereqType prereqId } }
   } }
 }`;
+const NEXT_PAGES_MAX = 3;   // 2 人の試合を 180 まで (総当たりのプールが続いても足りる)
 
 const REPORT_MUTATION = `mutation SpspReportBracketSet($setId: ID!, $winnerId: ID!, $gameData: [BracketSetGameDataInput]) {
   reportBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) { id state }
@@ -164,11 +166,11 @@ export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
 }
 
 /** この set を前提 (prereq) にする set のうち、結果が入ったものがあるか */
-export function downstreamDoneOf(nodes: unknown, setId: string): boolean {
+export function downstreamDoneOf(nodes: unknown, setId: string, state = 3): boolean {
   if (!Array.isArray(nodes)) return false;
   return nodes.some((n) => {
     const x = n as { id?: unknown; state?: unknown; slots?: { prereqType?: unknown; prereqId?: unknown }[] } | null;
-    if (!x || String(x.id) === setId || Number(x.state) !== 3 || !Array.isArray(x.slots)) return false;
+    if (!x || String(x.id) === setId || Number(x.state) !== state || !Array.isArray(x.slots)) return false;
     return x.slots.some((sl) => sl && sl.prereqType === 'set' && String(sl.prereqId) === setId);
   });
 }
@@ -222,11 +224,19 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
       const set = parseStartggSet(r.json.data ? r.json.data.set : null, eventId);
       if (!set) return Array.isArray(r.json.errors) && r.json.errors.length ? { ok: false, code: 'provider_error', note: gqlNote(r.json) } : { ok: false, code: 'not_found', note: 'set_not_found' };
       if (set.complete && set.slots[0] && set.slots[1]) {
-        const n = await startggGql(fetchFn, token, NEXT_QUERY, { eventId, entrantIds: [set.slots[0].id, set.slots[1].id] });
-        if (!n.ok) return { ok: false, code: 'provider_error', note: 'next:' + n.note };
-        const ev = n.json.data ? n.json.data.event as { sets?: { nodes?: unknown } } | null : null;
-        if (!ev || !ev.sets) return { ok: false, code: 'provider_error', note: 'next:' + gqlNote(n.json) };
-        set.downstreamDone = downstreamDoneOf(ev.sets.nodes, set.id);
+        // 2 人が出る試合から「この試合の勝者・敗者が進んだ試合」を探す (ページをまたぐ)
+        const nodes: unknown[] = [];
+        for (let page = 1; page <= NEXT_PAGES_MAX; page++) {
+          const n = await startggGql(fetchFn, token, NEXT_QUERY, { eventId, entrantIds: [set.slots[0].id, set.slots[1].id], page });
+          if (!n.ok) return { ok: false, code: 'provider_error', note: 'next:' + n.note };
+          const ev = n.json.data ? n.json.data.event as { sets?: { nodes?: unknown; pageInfo?: { totalPages?: unknown } } } | null : null;
+          if (!ev || !ev.sets) return { ok: false, code: 'provider_error', note: 'next:' + gqlNote(n.json) };
+          if (Array.isArray(ev.sets.nodes)) nodes.push(...ev.sets.nodes);
+          const total = Number(ev.sets.pageInfo && ev.sets.pageInfo.totalPages);
+          if (!Number.isFinite(total) || page >= total) break;
+        }
+        set.downstreamDone = downstreamDoneOf(nodes, set.id);
+        set.downstreamStarted = downstreamDoneOf(nodes, set.id, 2);
       }
       return { ok: true, set };
     },

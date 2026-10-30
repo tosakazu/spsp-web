@@ -541,3 +541,120 @@ test('Challonge の下位クラス: 作った本人が受付 → 選手の報告
   assert.strictEqual(fake.matches[50].state, 'open');
   assert.ok(fake.calls.every((c) => !c.includes('application')), 'TO のトークンで /tournaments を使う');
 });
+
+// ── 2 人がほぼ同時に送る (1 人目が start.gg に送っている最中に 2 人目) ──
+/** 1 人目の書き込み (reportBracketSet) を gate が開くまで止める偽の start.gg */
+function gatedStartgg() {
+  const fake = fakeStartgg();
+  const inner = fake.fetch;
+  let open; fake.gate = new Promise((r) => { open = r; }); fake.open = () => open();
+  fake.held = false;
+  fake.fetch = async (url, init) => {
+    if (!url.includes('/oauth/') && /mutation\s+SpspReportBracketSet/.test(JSON.parse(init.body).query) && !fake.held) {
+      fake.held = true;
+      await fake.gate;
+    }
+    return inner(url, init);
+  };
+  return fake;
+}
+const until = async (fn) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 5)); };
+
+test('同時に送る: 1 人目が送っている間に 2 人目が違う結果 → 1 人目が送り終えてから判定して取り消す (結果が残らない)', async () => {
+  const fake = gatedStartgg();
+  const e = await enabled(fake);
+  const A = await e.tok(11); const B = await e.tok(22);
+  const pa = e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, null] }, { w: 0, c: [null, null] }] } });
+  await until(() => fake.held);   // A が start.gg に送っている最中
+  const pb = e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1, c: [null, null] }, { w: 1, c: [null, null] }] } });
+  await new Promise((r) => setTimeout(r, 50));
+  // 送っている最中の行は画面に「送信中」の印を見せない
+  const v = await e.call({ action: 'report_view', token: A, code: e.code });
+  assert.strictEqual(v.sets[0].note, '');
+  fake.open();
+  const [ra, rb] = await Promise.all([pa, pb]);
+  assert.deepStrictEqual([ra.ok, ra.op], [true, 'report']);
+  assert.deepStrictEqual([rb.ok, rb.state, rb.op], [true, 'conflict', 'reset'], JSON.stringify(rb));
+  assert.strictEqual(fake.set.state, 1, 'start.gg の結果は取り消されている');
+  const row = await e.store.getReportSet(e.code, '100');
+  assert.deepStrictEqual([row.state, row.note, row.applied], ['conflict', '', '']);
+});
+
+test('同時に送る: 2 人目が同じ結果 → 1 人目が送り終えてからキャラを足す (エラーにしない)', async () => {
+  const fake = gatedStartgg();
+  const e = await enabled(fake);
+  const A = await e.tok(11); const B = await e.tok(22);
+  const pa = e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [1293, null] }, { w: 0, c: [1293, null] }] } });
+  await until(() => fake.held);
+  const pb = e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, 1310] }, { w: 0, c: [null, 1310] }] } });
+  await new Promise((r) => setTimeout(r, 50));
+  fake.open();
+  const [ra, rb] = await Promise.all([pa, pb]);
+  assert.deepStrictEqual([ra.ok, ra.op], [true, 'report']);
+  assert.deepStrictEqual([rb.ok, rb.state, rb.op], [true, 'agreed', 'update'], JSON.stringify(rb));
+  assert.deepStrictEqual(fake.last.gameData[0].selections, [{ entrantId: '1', characterId: '1293' }, { entrantId: '2', characterId: '1310' }]);
+  const row = await e.store.getReportSet(e.code, '100');
+  assert.deepStrictEqual([row.state, row.note], ['agreed', '']);
+});
+
+test('送っている最中の印が古すぎる (Worker が途中で落ちた) ときは待たずに読み直して進む', async () => {
+  const fake = fakeStartgg();
+  const e = await enabled(fake);
+  const A = await e.tok(11);
+  // 60 秒より前に「送信中」のまま残った行 (start.gg には届いていない)
+  await e.store.casReportSet({ code: e.code, set_id: '100', state: 'reported', users: '|11|22|', slots: '[]', applied: JSON.stringify({ w: 1, g: [{ w: 1, c: [null, null], s: null }] }),
+    note: 'sending', floor_id: 0, version: 1, updated_ms: e.ctx.now() - 61000 }, null);
+  const r = await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, null] }, { w: 0, c: [null, null] }] } });
+  assert.deepStrictEqual([r.ok, r.op, r.state], [true, 'report', 'reported'], JSON.stringify(r));
+  assert.strictEqual(fake.set.state, 3);
+});
+
+test('運営の受付用ログイン (reporter) の state は、普段のログイン・投稿・大会運営用ログインでは使えない', async () => {
+  for (const action of ['login', 'post', 'manager_login']) {
+    const fake = fakeStartgg();
+    const e = await envWith(fake);
+    const b = await e.call({ action: 'report_begin', nonce: 'N', returnPath: '/jp/report/' });
+    const state = new URL(b.url).searchParams.get('state');
+    const r = await e.call({ action, code: 'C', state, body: 'こんにちは', nonce: 'N' });
+    assert.strictEqual(r.ok, false, action);
+    assert.strictEqual(r.error.code, 'state_invalid', action + ': ' + JSON.stringify(r));
+    assert.ok(!fake.calls.some((c) => String(c).startsWith('exchange')), action + ': start.gg に code を送らない');
+  }
+});
+
+test('次の試合が始まっている (state 2): 選手の報告で自動に取り消さない (review)。キャラだけの update と運営の直しは止めない', () => {
+  const a = { result: R(0, G(0), G(0)), ts: 1 };
+  const bad = { result: R(1, G(1), G(1)), ts: 2 };
+  const started = set0({ complete: true, remote: R(0, G(0), G(0)), downstreamStarted: true });
+  assert.deepStrictEqual(reconcile({ state: 'reported', applied: a.result }, [a, bad], started), { op: 'none', state: 'review', result: null, note: 'locked_conflict' });
+  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [bad, null], started).note, 'locked_change');
+  const chars = { result: R(0, G(0, 1293), G(0)), ts: 3 };
+  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [chars, null], started).op, 'update');
+  assert.strictEqual(adminDecision('reset', null, started).op, 'reset');
+  assert.ok(downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100', 2));
+});
+
+test('次の試合の探し方: 2 人の試合が 60 件より多くてもページをまたいで見つける', async () => {
+  const fake = fakeStartgg();
+  const filler = (n) => Array.from({ length: n }, (_, i) => ({ id: 1000 + i, state: 3, slots: [{ prereqType: 'set', prereqId: 1 }] }));
+  const pages = [filler(60), [...filler(10), { id: 101, state: 3, slots: [{ prereqType: 'set', prereqId: 100 }] }]];
+  const inner = fake.fetch;
+  fake.fetch = async (url, init) => {
+    if (!url.includes('/oauth/')) {
+      const { query, variables } = JSON.parse(init.body);
+      if (/query SpspReportNext/.test(query)) {
+        fake.calls.push('SpspReportNext:' + variables.page);
+        return new Response(JSON.stringify({ data: { event: { sets: { pageInfo: { totalPages: 2 }, nodes: pages[variables.page - 1] || [] } } } }), { status: 200 });
+      }
+    }
+    return inner(url, init);
+  };
+  const e = await enabled(fake);
+  const A = await e.tok(11); const B = await e.tok(22);
+  await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, null] }, { w: 0, c: [null, null] }] } });
+  e.tick(5000);
+  const r = await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1, c: [null, null] }, { w: 1, c: [null, null] }] } });
+  assert.deepStrictEqual([r.state, r.note], ['review', 'locked_conflict'], JSON.stringify(r));
+  assert.ok(fake.calls.includes('SpspReportNext:2'), '2 ページ目も読む');
+  assert.strictEqual(fake.set.state, 3, '取り消していない');
+});
