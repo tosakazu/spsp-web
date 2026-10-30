@@ -146,7 +146,6 @@ window.SPSP_I18N.en = {
   'dupes.h.event': 'Tournament',
   'dupes.event_url': 'start.gg URL of the tournament (an event page also works)',
   'dupes.load': 'Check',
-  'dupes.privacy': 'Entrant data stays in this browser and is never sent to the SPSP server.',
   'dupes.print': 'Print / PDF',
   'dupes.csv': 'CSV',
   'dupes.show_diff': 'Also show pairs judged to be different people',

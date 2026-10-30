@@ -148,7 +148,6 @@ window.SPSP_I18N.ja = {
   'dupes.h.event': '大会',
   'dupes.event_url': '大会の start.gg の URL (イベントのページでも可)',
   'dupes.load': '調べる',
-  'dupes.privacy': '参加者の情報はこのブラウザの中だけで使い、SPSP のサーバには送りません。',
   'dupes.print': '印刷 / PDF',
   'dupes.csv': 'CSV',
   'dupes.show_diff': '別人と判断した組も出す',
