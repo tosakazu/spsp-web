@@ -1,7 +1,6 @@
 /* dupes.css — 重複参加チェック (dupes/index.html)。フォームは下位クラス作成 (class_bracket.css) と同じ、結果の表とカードはここ */
 .dp-main { max-width: 900px; }
 .dp-form { max-width: 560px; }
-.dp-privacy { font-size: 11px; color: #6b7280; margin: 8px 0 0; }
 
 .dp-report { margin-top: 20px; display: grid; gap: 14px; }
 .dp-report-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
