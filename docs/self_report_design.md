@@ -85,6 +85,7 @@
 - `src/pages/report.js` + `site/report/index.html` + `site/css/report.css`。
 - 入口: `site/js/report_notice.js` (トップの速報の上・自分のプレイヤーページ)。速報の index.json で本人の開催中の大会を見て、受付中のものと食い違いを出す。速報に載っていない受付中の大会は、本人の start.gg のトークンで出場しているイベント (currentUser.events の新しい 50 件) を見る。見本 = `?demo=report_notice` (トップ・どのプレイヤーページでも)。
 - 報告ページ: ログインしていなければログインを促す。ログインしても出場者に居なければエラー (試合が無いときに currentUser.events と出場者の名前検索で確かめる。試合が出てきたら普通の画面)。
+- 運営の食い違いの解決 (2026-10-31): 食い違い・運営の確認待ち (次の試合に結果が無いもの) の試合に「<名前> の報告を採用」(action report_admin_fix の adopt: 0|1)。勝敗・スコア・ステージは採用した側、キャラは各側の本人の入力 (運営が最後に直した後の報告だけを見る)。両方とも間違っているときは「スコアを入力して直す」(下の手動の欄)。
 - 運営の直し: 選手と同じ入力欄 (まとめて / 1 戦ごと、キャラ・ステージ)。「自分 / 相手」の代わりに両者の名前。何先は分からないので 0〜3 と それ以外。
 - 見本の場面: match / conflict / waiting / done / gate / challonge / login (ログイン前) / not_entrant (出場していない人) / admin / setup_login (運営のログイン) / setup。
 - 「勝ったら」「ここまでの変化」は `site/js/live_predict.js` (ifWin / perSet) を流用。速報に載っている start.gg の大会だけ。

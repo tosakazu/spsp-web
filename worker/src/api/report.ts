@@ -39,7 +39,7 @@ import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
-import { adminDecision, ftOf, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
+import { adminDecision, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
 import type { HandlerResult } from './respond.ts';
@@ -578,7 +578,21 @@ export async function handleReportPhases(cfg: Config, store: Store, fetchFn: Fet
   return ok({ phases: r.phases });
 }
 
-/** action: "report_admin_fix" — 運営が直す ({ result }) か取り消す ({ reset: true })。次の試合に結果が出るまで */
+/** 運営が採用する側の報告 (adopt) から結果を作る: 勝敗・スコア・ステージはその側、キャラは各側の本人の入力 (選手の報告がそろったときと同じ)。
+ *  数えるのは運営が最後に直した・取り消した後の報告だけ (floor_id) */
+async function adoptedResult(store: Store, code: string, setId: string, side: Side): Promise<Result | null> {
+  const row = await store.getReportSet(code, setId);
+  const floor = row ? row.floor_id : 0;
+  const latest: [Result | null, Result | null] = [null, null];
+  for (const sub of await store.listReportSubmissions(code, setId)) {
+    if ((sub.id || 0) <= floor || sub.side < 0) continue;
+    const r = parseApplied(sub.result);
+    if (r) latest[sub.side as Side] = r;
+  }
+  return latest[side] ? mergeResults(latest, side) : null;
+}
+
+/** action: "report_admin_fix" — 運営が直す ({ result })・片方の報告を採用する ({ adopt: 0 | 1 }、食い違いの解決)・取り消す ({ reset: true })。次の試合に結果が出るまで */
 export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
@@ -595,7 +609,10 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
   const kind = req.reset === true ? 'reset' : 'fix';
   let result: Result | null = null;
-  if (kind === 'fix') {
+  if (kind === 'fix' && (req.adopt === 0 || req.adopt === 1)) {
+    result = await adoptedResult(store, o.ev.code, setId, req.adopt);
+    if (!result) return err('bad_request', 'その選手の報告がありません。', 'bad:adopt');
+  } else if (kind === 'fix') {
     const pr = parseResult(req.result);
     if ('bad' in pr) return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
     result = pr.result;
@@ -608,7 +625,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
     if (r.why === 'busy') return err('busy', 'ほかの報告と重なりました。もう一度やり直してください。', 'busy');
     return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   }
-  await store.setReportSubmissionOutcome(subId, 'admin_' + kind + ':' + r.d.op);
+  await store.setReportSubmissionOutcome(subId, 'admin_' + (kind === 'fix' && (req.adopt === 0 || req.adopt === 1) ? 'adopt' + req.adopt : kind) + ':' + r.d.op);
   return ok({ set_id: setId, state: r.d.state, op: r.d.op });
 }
 

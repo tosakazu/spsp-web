@@ -1246,6 +1246,11 @@ function adminModel(s) {
   const slots = (s.slots || []).map((x) => (x ? { id: String(x.id), name: String(x.name || ''), uid: x.users && x.users[0] ? String(x.users[0]) : null, seed: x.seed || null } : null));
   return { id: s.set_id, kind: INFO ? INFO.kind : 'startgg', admin: true, mySide: 0, slots, phaseKey: null, roundNum: null };
 }
+/** 食い違い (と、次の試合に結果が出ていない運営の確認待ち) の試合で、採用できる側 (報告がある側) */
+function adoptable(s) {
+  const open = s.state === 'conflict' || (s.state === 'review' && !/^locked_/.test(s.note || ''));
+  return open ? [0, 1].filter((k) => s.reports && s.reports[String(k)] && s.reports[String(k)].result && s.slots && s.slots[k]) : [];
+}
 let ADMIN_FORM_OPEN = null;   // 直しの欄を開いている試合
 let LAST_ADMIN_SETS = [];
 function renderAdminSets(sets, force) {
@@ -1268,7 +1273,8 @@ function renderAdminSets(sets, force) {
       <div class="rp-muted">${escapeHtml(i18n('report.admin.applied'))}: ${escapeHtml(s.applied ? (s.applied.w === 0 ? names[0] : names[1]) + ' ' + scoreText(s.applied, 0) : '—')}
         · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
       <div class="rp-adm-fix">
-        <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : i18n('report.admin.fix_open'))}</button>
+        ${adoptable(s).map((k) => `<button type="button" class="rp-btn rp-primary" data-adopt="${k}">${escapeHtml(i18n('report.admin.adopt', { name: names[k] }))}</button>`).join('')}
+        <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : adoptable(s).length ? i18n('report.admin.fix_manual') : i18n('report.admin.fix_open'))}</button>
         <button type="button" class="rp-btn" data-reset>${escapeHtml(i18n('report.admin.reset'))}</button>
         <span class="rp-status" data-fix-status></span>
       </div>
@@ -1298,6 +1304,20 @@ function renderAdminSets(sets, force) {
           if (x && x.ok) { ADMIN_FORM_OPEN = null; if (!DEMO) setTimeout(() => refreshAdminSets(true), 800); else setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 800); }
         },
       }));
+    }
+    for (const b of row.querySelectorAll('[data-adopt]')) {
+      b.addEventListener('click', async () => {
+        const k = Number(b.getAttribute('data-adopt'));
+        const s = sets.find((x) => x.set_id === setId);
+        const res = s.reports[String(k)].result;
+        const wn = s.slots && s.slots[res.w] ? s.slots[res.w].name : '';
+        if (!confirm(i18n('report.admin.adopt_confirm', { name: s.slots[k].name, w: wn, s: scoreText(res, res.w) }))) return;
+        setStatus(st, i18n('report.sending'), 'busy');
+        const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, adopt: k });
+        setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
+        if (!(x && x.ok)) return;
+        if (DEMO) { Object.assign(s, { state: 'fixed', note: '', applied: res, updated_ms: Date.now() }); setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 600); } else setTimeout(() => refreshAdminSets(true), 800);
+      });
     }
     row.querySelector('[data-reset]').addEventListener('click', async () => {
       if (!confirm(i18n('report.admin.reset_confirm'))) return;

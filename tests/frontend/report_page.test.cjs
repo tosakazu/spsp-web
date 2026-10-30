@@ -142,3 +142,26 @@ test('受付を始める画面: 何先と受付の開始の欄がある', { skip
   assert.ok(p.d.querySelector('[data-set-open]').value, '開始の既定値が入っている');
   p.close();
 });
+
+test('運営の画面: 食い違いは片方の報告を採用して解決できる・手動でスコアを入れて直す欄もある', { skip }, async () => {
+  const p = await open('?demo=admin');
+  assert.ok(await until(() => p.d.querySelector('.rp-adm-row[data-set="102"]')), '試合の一覧');
+  const row = () => p.d.querySelector('.rp-adm-row[data-set="102"]');   // 見本の食い違い
+  const adopt = [...row().querySelectorAll('[data-adopt]')];
+  assert.strictEqual(adopt.length, 2, '両者の採用ボタン');
+  assert.ok(/報告を採用/.test(adopt[1].textContent));
+  assert.strictEqual(row().querySelector('[data-fix-open]').textContent, 'スコアを入力して直す');
+  // 次の試合に結果が出ている (locked) 確認待ちには採用ボタンを出さない
+  assert.strictEqual(p.d.querySelector('.rp-adm-row[data-set="101"]').querySelectorAll('[data-adopt]').length, 0);
+  // 手動: 欄が開く
+  row().querySelector('[data-fix-open]').click();
+  assert.ok(await until(() => row().querySelector('form.rp-form')), '入力欄が開く');
+  row().querySelector('[data-fix-open]').click();
+  await until(() => !row().querySelector('form.rp-form'));
+  // 採用 → 確定 (見本はこの画面の中だけ)
+  p.w.confirm = () => true;
+  row().querySelector('[data-adopt="1"]').click();
+  assert.ok(await until(() => row() && row().classList.contains('rp-state-fixed'), 3000), '確定した');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});

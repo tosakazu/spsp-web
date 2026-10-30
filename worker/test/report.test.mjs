@@ -654,3 +654,32 @@ test('次の試合の探し方: 2 人の試合が 60 件より多くてもペー
   assert.ok(fake.calls.includes('SpspReportNext:2'), '2 ページ目も読む');
   assert.strictEqual(fake.set.state, 3, '取り消していない');
 });
+
+test('運営: 食い違いは片方の報告を採用して解決できる (キャラは各側の本人の入力)。報告の無い側は採用できない', async () => {
+  const fake = fakeStartgg();
+  const e = await enabled(fake);
+  const A = await e.tok(11); const B = await e.tok(22);
+  await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [1293, 1300], s: 3 }, { w: 0, c: [1293, null] }] } });
+  e.tick(5000);
+  let r = await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1, c: [null, 1310], s: 5 }, { w: 0, c: [null, 1310] }, { w: 1, c: [null, 1311] }] } });
+  assert.strictEqual(r.state, 'conflict');
+  assert.strictEqual(fake.set.state, 1);
+  e.tick(5000);
+  // 運営以外は使えない
+  r = await e.call({ action: 'report_admin_fix', token: A, code: e.code, set_id: '100', adopt: 1 });
+  assert.strictEqual(r.error.code, 'not_admin');
+  // B の報告を採用
+  r = await e.call({ action: 'report_admin_fix', token: e.login.token, code: e.code, set_id: '100', adopt: 1 });
+  assert.deepStrictEqual([r.ok, r.state, r.op], [true, 'fixed', 'report'], JSON.stringify(r));
+  assert.strictEqual(fake.set.state, 3);
+  assert.strictEqual(fake.last.winnerId, '2');
+  assert.strictEqual(fake.last.gameData.length, 3);
+  assert.deepStrictEqual(fake.last.gameData[0].selections, [{ entrantId: '1', characterId: '1293' }, { entrantId: '2', characterId: '1310' }], 'キャラは各側の本人の入力');
+  assert.strictEqual(fake.last.gameData[0].stageId, '5', 'ステージは採用した側');
+  const row = await e.store.getReportSet(e.code, '100');
+  assert.strictEqual(row.state, 'fixed');
+  // 運営が直した後は、その前の報告を採用できない (報告が無い)
+  e.tick(5000);
+  r = await e.call({ action: 'report_admin_fix', token: e.login.token, code: e.code, set_id: '100', adopt: 0 });
+  assert.strictEqual(r.error.code, 'bad_request');
+});
