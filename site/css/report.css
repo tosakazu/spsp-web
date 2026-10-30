@@ -34,10 +34,10 @@ body {
 
 /* いまの試合 */
 .rp-round { font-size: 12px; color: #6b7280; }
-.rp-stations { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-.rp-station, .rp-stream { font-size: 18px; font-weight: 800; padding: 6px 12px; border-radius: 10px; background: #111827; color: #fff; }
+.rp-stations { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.rp-station, .rp-stream { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #111827; color: #fff; line-height: 1.5; }
 .rp-stream { background: #7c3aed; }
-/* VS: 自分のカードの上に相手のカード。VS の文字は斜体にしない (斜体は右に寄って見える)、和文フォントは英字が上下にずれるので欧文フォント + text-box で大文字の高さに詰めて真ん中に。
+/* VS: 自分のカードの下に相手のカード。VS の文字は斜体にしない (斜体は右に寄って見える)、和文フォントは英字が上下にずれるので欧文フォント + text-box で大文字の高さに詰めて真ん中に。
    VS の丸は 2 枚の間 (高さ 0 の行の真ん中に置くので、カードの境目にちょうど重なる)。
    シードは自分 = カードの上・相手 = カードの下 (間に何も入れない) */
 .rp-vs { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0; }

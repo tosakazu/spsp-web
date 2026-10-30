@@ -780,6 +780,23 @@ async function matchAnimation(m) {
   });
 }
 
+/** アニメーションの後、相手のカードが画面の上に来るところまでスクロールする (1 試合 1 回。その下に台・試合開始・入力欄が続く) */
+const SCROLLED = new Set();
+function scrollToMatch(m) {
+  if (!m || SCROLLED.has(m.id)) return;
+  SCROLLED.add(m.id);
+  const op = document.querySelector('.rp-current .rp-op');
+  if (!op) return;
+  let top = 0;   // 上に貼り付くヘッダーの高さ
+  for (const el of document.querySelectorAll('header, .site-header, nav')) {
+    const cs = getComputedStyle(el);
+    if ((cs.position === 'sticky' || cs.position === 'fixed') && el.getBoundingClientRect().top <= 0) top = Math.max(top, el.getBoundingClientRect().bottom);
+  }
+  const y = op.getBoundingClientRect().top + window.scrollY - top - 8;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+}
+
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
@@ -802,11 +819,12 @@ function renderPlayer() {
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
   if (cur) {
     const gate = gateOf(cur);
+    // スマホで探さずに報告できるよう、カード → (相手のカードを画面の上に) → ラウンド・台・試合開始 → 入力欄 の順 (2026-10-30)
     h += `<section class="rp-card-sec rp-current">
+      ${vsHtml(cur)}
       <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
       ${stationHtml(cur)}
       ${startHtml(cur)}
-      ${vsHtml(cur)}
       ${matchLinks(cur)}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
@@ -904,7 +922,7 @@ async function poll(force) {
       // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
       if (!LAST_SIG || sig !== LAST_SIG) renderPlayer(); else refreshStart();
       LAST_SIG = sig;
-      if (cur) matchAnimation(cur);
+      if (cur) matchAnimation(cur).then(() => scrollToMatch(cur));
       setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
     }
   } catch (e) {
@@ -1554,7 +1572,7 @@ async function runDemo() {
   }
   const cur = MATCHES.find((m) => m.state === 'open');
   renderPlayer();
-  if (cur) matchAnimation(cur);
+  if (cur) matchAnimation(cur).then(() => scrollToMatch(cur));
 }
 
 // ── はじめ ─────────────────────────────────────────────────────────
