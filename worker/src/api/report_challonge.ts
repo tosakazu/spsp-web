@@ -3,6 +3,7 @@
  *   読む:   GET /tournaments/{id}/participants.json・matches.json (100 件ずつ、取得側 smash_database と同じ)
  *   報告:   PUT /tournaments/{id}/matches/{mid}.json  { data: { type: 'Match', attributes: { match: [{participant_id, score_set, advancing}], tie } } }
  *   取り消し: PUT /tournaments/{id}/matches/{mid}/change_state.json  { data: { type: 'MatchState', attributes: { state: 'reopen' } } }
+ *   試合開始: 同じ change_state で state: 'mark_as_underway'
  * 選手は participant の misc (startgg:<ユーザー ID>[:nocount]、class_bracket.ts) で見分ける。
  * Challonge にはキャラ・ステージの欄が無いので、勝敗とスコアだけを送る (キャラは D1 の記録にだけ残る)。
  * v2.1 の試合の項目名 (player1_id / relationships・prereq) は両方の形を読む (実物での確認は docs §8 の確認事項)。
@@ -22,6 +23,7 @@ export interface CMatch {
   winner: string | null;
   points: Record<string, number>;
   completedAt: string;
+  underway: boolean;
 }
 export interface CData { participants: Map<string, CParticipant>; matches: CMatch[] }
 
@@ -58,6 +60,7 @@ export function parseMatch(m: unknown): CMatch | null {
     p, prereq: [str(a.player1_prereq_match_id), str(a.player2_prereq_match_id)],
     prereqLoser: [a.player1_is_prereq_match_loser === true, a.player2_is_prereq_match_loser === true],
     winner: str(a.winner_id), points, completedAt: typeof ts.completed_at === 'string' ? ts.completed_at : '',
+    underway: !!(ts.underway_at || a.underway_at),
   };
 }
 
@@ -144,7 +147,7 @@ export function cSetOf(d: CData, m: CMatch, double = false): NSet {
       remote = { w, g };
     }
   }
-  return { id: m.id, complete, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cLPlacement(d, m, double), isClass: true,
+  return { id: m.id, complete, started: m.underway, slots, remote, totalGames: null, downstreamDone: complete && cDownstreamDone(d, m), lPlacement: cLPlacement(d, m, double), isClass: true,
     round: m.round, phaseKey: 'c' };
 }
 
@@ -203,6 +206,9 @@ export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, 
     },
     reset(set) {
       return call(path(set.id) + '/change_state.json', { data: { type: 'MatchState', attributes: { state: 'reopen' } } });
+    },
+    start(set) {
+      return call(path(set.id) + '/change_state.json', { data: { type: 'MatchState', attributes: { state: 'mark_as_underway' } } });
     },
   };
 }

@@ -21,6 +21,8 @@ export interface NSet {
   id: string;
   /** 結果が入っている (start.gg state 3 / Challonge complete) */
   complete: boolean;
+  /** 試合中 (start.gg state 2 / Challonge underway)。読めないときは無し */
+  started?: boolean;
   slots: [NSlot | null, NSlot | null];
   /** start.gg / Challonge に入っている結果 (キャラは見ない)。g が空ならスコア不明 */
   remote: Result | null;

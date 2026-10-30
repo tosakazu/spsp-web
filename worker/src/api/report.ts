@@ -19,6 +19,7 @@
  *   action: "report_info"         { code }  → { report }  だれでも
  *   action: "report_view"         { token, code }  → { me, admin, sets, challonge? }  自分の試合の状態 (Challonge は試合も)
  *   action: "report_submit"       { token, code, set_id, result }  → { state, op }
+ *   action: "report_start"        { token, code, set_id }  → { started }  試合を「試合中」にする (押さずに報告してもよい)
  *   action: "report_notices"      { token? }  → { events, mine }  受付中の大会と、自分の試合の食い違い (トップのお知らせ)
  *
  * トークンは暗号化したまま D1 に置き (report_crypto.ts)、応答・ログ・errors の note には出さない。
@@ -468,7 +469,7 @@ function challongeMine(d: CData, uid: string, double: boolean) {
       const pm = d.matches.find((x) => x.id === id);
       return pm ? { match_id: id, loser: m.prereqLoser[i], state: pm.state, slots: cSetOf(d, pm).slots } : null;
     });
-    return { id: m.id, state: m.state, round: m.round, identifier: m.identifier, slots: set.slots, winner: set.remote ? set.remote.w : null, l_placement: set.lPlacement,
+    return { id: m.id, state: m.state, started: m.underway, round: m.round, identifier: m.identifier, slots: set.slots, winner: set.remote ? set.remote.w : null, l_placement: set.lPlacement,
       score: set.remote && set.remote.g.length ? [set.remote.g.filter((g) => g.w === 0).length, set.remote.g.filter((g) => g.w === 1).length] : null, prereq };
   };
   return { participant: me, matches: d.matches.filter((m) => m.p[0] === me.id || m.p[1] === me.id).map(view) };
@@ -548,6 +549,30 @@ export async function handleReportPhases(cfg: Config, store: Store, fetchFn: Fet
   const r = await providerOf(fetchFn, o).phases();
   if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   return ok({ phases: r.phases });
+}
+
+/** action: "report_start" — 選手 (か運営) が試合を「試合中」にする { token, code, set_id }。押さずに報告してもよい */
+export async function handleReportStart(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const setId = typeof req.set_id === 'string' || typeof req.set_id === 'number' ? String(req.set_id) : '';
+  if (!SET_ID_RE.test(setId)) return err('bad_request', '試合の指定が正しくありません。', 'bad:set_id');
+  const o = await openEvent(cfg, store, fetchFn, req.code, now);
+  if (!o.ok) return o.res;
+  const opens = parseSettings(o.ev.settings).opens_ms;
+  if (opens && now < opens) return err('not_allowed', 'まだ結果報告の受付が始まっていません。', 'not_open');
+  const p = providerOf(fetchFn, o);
+  const rs = await p.readSet(setId);
+  if (!rs.ok) return rs.code === 'not_found' ? err('not_found', 'この大会にその試合はありません。', rs.note) : err('provider_error', providerMessage(o.ev.kind, rs.note), rs.note);
+  const set = rs.set;
+  if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
+  const isPlayer = set.slots[0].users.includes(sess.id) || set.slots[1].users.includes(sess.id);
+  if (!isPlayer && !admins(o.ev).includes(sess.id)) return err('not_player', 'この試合の選手だけが試合を始められます。', 'not_player');
+  if (set.complete) return err('not_allowed', 'この試合はもう結果が入っています。', 'complete');
+  if (set.started) return ok({ set_id: setId, started: true });
+  const r = await p.start(set);
+  if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
+  return ok({ set_id: setId, started: true });
 }
 
 /** action: "report_admin_fix" — 運営が直す ({ result }) か取り消す ({ reset: true })。次の試合に結果が出るまで */

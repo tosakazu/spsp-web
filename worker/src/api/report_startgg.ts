@@ -18,6 +18,8 @@ export interface Provider {
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
+  /** 試合中にする (選手の「試合開始」、2026-10-30)。結果は変えない */
+  start(set: NSet): Promise<ProviderResult>;
 }
 
 const SET_QUERY = `query SpspReportSet($id: ID!) {
@@ -43,6 +45,7 @@ const UPDATE_MUTATION = `mutation SpspUpdateSet($setId: ID!, $winnerId: ID!, $ga
   updateBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) { id state }
 }`;
 const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $setId) { id state } }`;
+const START_MUTATION = `mutation SpspStartSet($setId: ID!) { markSetInProgress(setId: $setId) { id state } }`;
 
 /**
  * ブラケットの構造: フェーズごとに、ラウンドがいちばん多いブロックのラウンド (number・bestOf) と、
@@ -158,7 +161,7 @@ export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
   const phaseId = s.phaseGroup && s.phaseGroup.phase && s.phaseGroup.phase.id !== undefined && s.phaseGroup.phase.id !== null ? String(s.phaseGroup.phase.id) : undefined;
   const round = Number(s.round);
   const eventName = typeof s.event.name === 'string' ? s.event.name : '';
-  return { id: String(s.id), complete, slots: sl, remote, totalGames: Number.isInteger(tg) && tg > 0 ? tg : null, downstreamDone: false,
+  return { id: String(s.id), complete, started: Number(s.state) === 2, slots: sl, remote, totalGames: Number.isInteger(tg) && tg > 0 ? tg : null, downstreamDone: false,
     lPlacement: Number.isInteger(lp) && lp > 0 ? lp : null, isClass: LOWER_CLASS_NAME_PAT.test(phaseName) || LOWER_CLASS_NAME_PAT.test(eventName),
     round: s.round !== null && s.round !== undefined && Number.isInteger(round) ? round : null, phaseKey: phaseId };
 }
@@ -237,6 +240,9 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
     },
     reset(set) {
       return mutate(RESET_MUTATION, { setId: set.id });
+    },
+    start(set) {
+      return mutate(START_MUTATION, { setId: set.id });
     },
   };
 }

@@ -312,7 +312,7 @@ function fromChallonge(c) {
     const prereq = (m.prereq || [null, null]).map((p) => (p ? { id: String(p.match_id), state: p.state === 'complete' ? 'complete' : p.state === 'open' ? 'playing' : 'pending', round: '',
       station: null, loser: !!p.loser, slots: (p.slots || []).map((s) => (s ? { id: String(s.id), name: s.name || '', uid: s.users && s.users[0] ? String(s.users[0]) : null, seed: s.seed || null } : null)), deeper: [null, null] } : null));
     return {
-      id: String(m.id), kind: 'challonge', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: false,
+      id: String(m.id), kind: 'challonge', state: complete ? 'complete' : slots[0] && slots[1] ? 'open' : 'waiting', started: !!m.started,
       round: m.round != null ? i18n('report.round', { n: m.round }) : '', pool: m.identifier || '', phase: '', station: null, stream: null,
       roundNum: Number.isInteger(m.round) ? m.round : null, phaseKey: 'c',
       slots, mySide, winner: m.winner, score: m.score, games: [], totalGames: null, lPlacement: m.l_placement || null, isClass: true, prereq,
@@ -399,6 +399,37 @@ function matchLinks(m) {
 function rowOf(setId) { return VIEW && VIEW.sets ? VIEW.sets.find((x) => x.set_id === setId) : null; }
 
 /** 台・配信台 */
+/** 試合開始のボタン (押すと start.gg / Challonge で試合中になる。押さずに報告してもよい)。試合中なら「試合中」 */
+function startHtml(m) {
+  if (m.state !== 'open' || gateOf(m)) return '';
+  if (m.started) return `<div class="rp-start" data-start-box="1"><span class="rp-playing">${escapeHtml(i18n('report.start.playing'))}</span></div>`;
+  return `<div class="rp-start" data-start-box="0"><button type="button" class="rp-btn" data-start="${escapeHtml(m.id)}">${escapeHtml(i18n('report.start.btn'))}</button>
+    <span class="rp-muted">${escapeHtml(i18n('report.start.help'))}</span><span class="rp-status" data-start-st></span></div>`;
+}
+function wireStart(root) {
+  const b = root.querySelector('[data-start]');
+  if (!b) return;
+  b.addEventListener('click', async () => {
+    const m = MATCHES.find((x) => x.id === b.getAttribute('data-start'));
+    if (!m) return;
+    b.disabled = true;
+    const x = DEMO ? { ok: true } : await api({ action: 'report_start', token: tok(), code: CODE, set_id: m.id });
+    if (!x || !x.ok) { b.disabled = false; setStatus(b.parentElement.querySelector('[data-start-st]'), errText(x), 'err'); return; }
+    m.started = true;
+    refreshStart();
+  });
+}
+/** 試合開始の欄だけ描き直す (入力欄はそのまま。相手が押したときも読み直しで変わる) */
+function refreshStart() {
+  const box = document.querySelector('[data-start-box]');
+  const cur = MATCHES.find((m) => m.state === 'open');
+  if (!box || !cur || box.getAttribute('data-start-box') === (cur.started ? '1' : '0')) return;
+  const t = document.createElement('div');
+  t.innerHTML = startHtml(cur);
+  if (!t.firstElementChild) return;
+  box.replaceWith(t.firstElementChild);
+  wireStart(document.getElementById('rp-player'));
+}
 function stationHtml(m) {
   const parts = [];
   if (m.station) parts.push(`<span class="rp-station">🎮 ${escapeHtml(i18n('report.station', { n: m.station }))}</span>`);
@@ -774,6 +805,7 @@ function renderPlayer() {
     h += `<section class="rp-card-sec rp-current">
       <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
       ${stationHtml(cur)}
+      ${startHtml(cur)}
       ${vsHtml(cur)}
       ${matchLinks(cur)}
       ${reportStateHtml(cur)}
@@ -808,6 +840,7 @@ function renderPlayer() {
     const m = MATCHES.find((x) => x.id === form.getAttribute('data-set'));
     if (m) wireForm(form, m);
   }
+  wireStart(root);
   for (const b of root.querySelectorAll('[data-reopen],[data-redo]')) {
     b.addEventListener('click', () => { FORM_OPEN = b.getAttribute('data-reopen') || b.getAttribute('data-redo'); renderPlayer(); });
   }
@@ -869,7 +902,7 @@ async function poll(force) {
       // 画面は先に作って、アニメーションはその上に出す (カード・二つ名の読み込みを待たずに操作できる)
       const sig = matchesSig();
       // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
-      if (!LAST_SIG || sig !== LAST_SIG) renderPlayer();
+      if (!LAST_SIG || sig !== LAST_SIG) renderPlayer(); else refreshStart();
       LAST_SIG = sig;
       if (cur) matchAnimation(cur);
       setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
@@ -1417,7 +1450,7 @@ function demoSlot(p, seed, side) {
 }
 
 function demoMatch(P, o) {
-  return Object.assign({ id: '90001', kind: 'startgg', state: 'open', started: true, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
+  return Object.assign({ id: '90001', kind: 'startgg', state: 'open', started: false, round: 'Winners Round 2', pool: 'B3', phase: 'Pools',
     station: 12, stream: null, slots: [demoSlot(P[0], 5, 0), demoSlot(P[1], 28, 1)], mySide: 0, winner: null, score: null, games: [],
     totalGames: 3, lPlacement: 33, isClass: false, prereq: [null, null], roundNum: 2, phaseKey: 'p1', groupId: '901' }, o || {});
 }
