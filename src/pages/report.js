@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
+import { CARD_FONTS_URL, cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -31,9 +31,11 @@ const CODE = (Q.get('c') || '').toLowerCase();
 const WANT_ADMIN = Q.get('admin') === '1' || Q.get('demo') === 'admin';
 /** 見本の画面 (?demo=list|match|conflict|waiting|done|gate|challonge|admin|setup)。見本のデータで描くだけで、API にも start.gg にも送らない */
 const DEMO = Q.get('demo') || '';
-/** マッチングの演出の案 (?anim=light|band|cards、無ければ今の暗い演出)。案を比べるための仮の切り替え */
-const ANIMS = ['', 'light', 'band', 'cards'];
+/** マッチングの演出の案 (?anim=light|band|cards|combo、無ければ今の暗い演出)。案を比べるための仮の切り替え。
+ * combo = 白と赤の線が先に走り (その間にカードを読む)、そのあとカードが入る */
+const ANIMS = ['', 'light', 'band', 'cards', 'combo'];
 const ANIM = ANIMS.includes(Q.get('anim') || '') ? Q.get('anim') || '' : '';
+const ANIM_CARDS = ANIM === 'cards' || ANIM === 'combo';
 const POLL_MS = 15000;
 const ULT = 1386;   // start.gg の videogame (スマブラ SP)
 const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];   // worker/src/api/report_logic.ts と同じ
@@ -727,13 +729,15 @@ async function matchAnimation(m) {
   for (const sl of [me, op]) if (sl && sl.uid) cardDataOf(sl.uid);   // VS のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
   // 幕は先に (同じ処理の中で) 出して、下の画面が見えないようにする。中身は二つ名を読んでから (最大 1.2 秒)
   const ov = document.createElement('div');
-  ov.className = 'rp-match-ov' + (ANIM ? ' rp-anim-' + ANIM : '');
+  ov.className = 'rp-match-ov' + (ANIM ? ' rp-anim-' + ANIM : '') + (ANIM === 'combo' ? ' rp-anim-cards' : '');
   document.body.appendChild(ov);
   let skipped = false;
-  ov.addEventListener('click', () => { skipped = true; }, { once: true });
+  let onSkip = () => {};
+  const skipP = new Promise((r) => { onSkip = r; });
+  ov.addEventListener('click', () => { skipped = true; onSkip(); }, { once: true });
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
-  const side = ANIM === 'cards'
+  const side = ANIM_CARDS
     ? (slot, title, cls) => `<span class="rp-match-p ${cls}"><span class="rp-match-card pcard"${slot && slot.uid ? ` data-uid="${escapeHtml(String(slot.uid))}"` : ''} data-name="${escapeHtml(slot ? slot.name : '')}"></span></span>`
     : (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
   ov.innerHTML = `<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
@@ -742,11 +746,17 @@ async function matchAnimation(m) {
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}
     <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   // 案 cards: 二つ名はカードに出ているので、カードそのものを出す (データが無い人は NO DATA のカード)
-  for (const el of ov.querySelectorAll('.rp-match-card')) {
+  // 描き終わる (データ・カードの設定・Web フォント) まで中身は隠し、そろってから動かす (あとから表示がずれないように。最大 3 秒)
+  const mounts = [...ov.querySelectorAll('.rp-match-card')].map((el) => {
     const nd = () => mountNoDataCard(el, el.getAttribute('data-name') || '');
     const uid = el.getAttribute('data-uid');
-    if (uid) mountPlayerCard(el, uid).then((ok) => { if (!ok) nd(); }).catch(nd); else nd();
-  }
+    return uid ? mountPlayerCard(el, uid).then((ok) => { if (!ok) nd(); }).catch(nd) : (nd(), Promise.resolve());
+  });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // combo: 線が走りきるまで (0.7 秒) はカードを出さない。読み込みが遅くても最大 3 秒
+  const ready = Promise.all([Promise.all(mounts).then(cardFontsReady), ANIM === 'combo' ? sleep(700) : null]);
+  if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
+  ov.classList.add('go');
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
   // タップ (クリック)・Esc / Enter / Space で飛ばす。飛ばしたときは短く消す
   return new Promise((res) => {
@@ -762,9 +772,18 @@ async function matchAnimation(m) {
     const onKey = (e) => { if (['Escape', 'Enter', ' '].includes(e.key)) { e.preventDefault(); done(true); } };
     ov.addEventListener('click', () => done(true));
     document.addEventListener('keydown', onKey);
-    const timer = setTimeout(() => done(false), ANIM === 'cards' ? 2800 : 2200);
+    const timer = setTimeout(() => done(false), ANIM_CARDS ? 2800 : 2200);
     if (skipped) done(true);   // 二つ名を読んでいる間にタップされた
   });
+}
+
+/** カードの Web フォントが読み終わるまで (読み込みの link → 描いた文字で使われるフォント) */
+async function cardFontsReady() {
+  const l = /** @type {HTMLLinkElement | null} */ (document.querySelector(`link[href="${CARD_FONTS_URL}"]`));
+  if (l && !l.sheet) await new Promise((r) => { l.addEventListener('load', r, { once: true }); l.addEventListener('error', r, { once: true }); });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // 描いた文字のフォントの読み込みが始まるまで
+  const f = /** @type {any} */ (document).fonts;
+  if (f && f.ready) await f.ready;
 }
 
 /** アニメーションの後、相手のカードが画面の上に来るところまでスクロールする (1 試合 1 回。その下に台・試合開始・入力欄が続く) */
@@ -1440,7 +1459,7 @@ async function demoPlayers() {
 function demoBanner() {
   const an = ANIM ? '&anim=' + ANIM : '';
   const links = DEMO_SCENES.map((k) => '<a href="?demo=' + k + an + '"' + (k === DEMO ? ' class="on"' : '') + '>' + escapeHtml(i18n('report.demo.' + k)) + '</a>').join('');
-  const animLabel = { '': i18n('report.demo.anim_now'), light: i18n('report.demo.anim_light'), band: i18n('report.demo.anim_band'), cards: i18n('report.demo.anim_cards') };
+  const animLabel = { '': i18n('report.demo.anim_now'), light: i18n('report.demo.anim_light'), band: i18n('report.demo.anim_band'), cards: i18n('report.demo.anim_cards'), combo: i18n('report.demo.anim_combo') };
   const anims = ANIMS.map((k) => '<a href="?demo=' + (DEMO === 'newcomer' ? 'newcomer' : 'match') + (k ? '&anim=' + k : '') + '"' + (k === ANIM ? ' class="on"' : '') + '>' + escapeHtml(animLabel[k]) + '</a>').join('');
   const el = document.createElement('div');
   el.className = 'rp-demo';

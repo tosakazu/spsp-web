@@ -2092,6 +2092,7 @@ window.SPSP_I18N.en = {
   'report.demo.anim_now': 'Current (dark)',
   'report.demo.anim_light': 'A: white & red',
   'report.demo.anim_band': 'B: red band',
+  'report.demo.anim_combo': 'D: lines → cards',
   'report.demo.anim_cards': 'C: cards',
   'report.demo.title': 'Match report samples',
   'report.demo.match': 'Match ready',

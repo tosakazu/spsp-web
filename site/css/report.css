@@ -153,6 +153,9 @@ body {
 
 /* 案 C カード: 白っぽい地に 2 人のプレイヤーカードが左右から入る (縦長の画面では上下) */
 .rp-anim-cards { background: #f3f4f6; color: #111827; gap: 12px; }
+/* カードを描き終わるまで (.go が付くまで) は中身を隠して止めておく。visibility なので大きさの計算 (文字の詰め) はできる */
+.rp-anim-cards:not(.go) > :not(.rp-match-skip) { visibility: hidden; }
+.rp-anim-cards:not(.go) * { animation: none !important; }
 .rp-anim-cards .rp-match-title { color: #dc2626; font-weight: 700; opacity: 1; }
 .rp-anim-cards .rp-match-names { flex-direction: column; gap: 6px; }
 .rp-anim-cards .rp-match-p { max-width: none; }
@@ -161,6 +164,14 @@ body {
 .rp-anim-cards .rp-match-ft { color: #fff; background: #dc2626; border-radius: 8px; padding: 2px 12px; }
 .rp-anim-cards .rp-match-station { background: #fff; color: #111827; border: 1px solid #e5e7eb; }
 .rp-anim-cards .rp-match-skip { color: #6b7280; opacity: 1; }
+/* 案 D 線→カード: 案 C の上に、先に走る白と赤の線 (真ん中を斜めに、カードの後ろ)。題は線と一緒に先に出す */
+.rp-anim-combo { background: #fff; overflow: hidden; }
+.rp-anim-combo::before, .rp-anim-combo::after { content: ''; position: absolute; left: -20vw; right: -20vw; top: 50%; height: 14px; margin-top: -7px; background: #dc2626; transform: rotate(-8deg); animation: rp-sweep .6s cubic-bezier(.2, .8, .2, 1) both; z-index: 0; }
+.rp-anim-combo::after { height: 4px; margin-top: 14px; background: #111827; animation-delay: .1s; }
+.rp-anim-combo > * { position: relative; z-index: 1; }
+.rp-anim-combo > .rp-match-skip { position: absolute; }
+.rp-anim-combo:not(.go) > .rp-match-title { visibility: visible; }
+@media (prefers-reduced-motion: no-preference) { .rp-anim-combo .rp-match-title { animation: rp-pop .5s ease-out !important; } }
 @media (min-aspect-ratio: 4/3) {
   .rp-anim-cards .rp-match-names { flex-direction: row; gap: 18px; }
   .rp-anim-cards .rp-match-card { width: min(40vw, 420px); }

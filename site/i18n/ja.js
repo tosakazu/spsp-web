@@ -2145,6 +2145,7 @@ window.SPSP_I18N.ja = {
   'report.demo.anim_now': '今の (暗い)',
   'report.demo.anim_light': '案 A 白と赤',
   'report.demo.anim_band': '案 B 赤い帯',
+  'report.demo.anim_combo': '案 D 線→カード',
   'report.demo.anim_cards': '案 C カード',
   'report.demo.title': '結果報告の見本',
   'report.demo.match': '試合が決まった',
