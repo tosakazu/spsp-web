@@ -12,7 +12,7 @@
  *   action: "report_enable_class" { startgg_token, challonge_token, challonge_exp, class_id } → { report }
  *                                 下位クラス (Challonge) の受付。作った本人か本戦の運営だけ
  *   action: "report_admin"        { token, code }  → { report, sets }  運営 (受付を始めた人) だけ
- *   action: "report_phases"       { token, code }  → { phases }  何先の設定に使うフェーズとラウンド (運営だけ)
+ *   action: "report_phases"       { token, code } | { token, event }  → { phases }  何先の設定に使うフェーズとラウンド (運営だけ。event は受付の前)
  *   action: "report_admin_fix"    { token, code, set_id, result | reset: true }  次の試合に結果が出るまで
  *   action: "report_stop"         { token, code }  受付を止めてトークンを消す
  * 選手:
@@ -141,7 +141,7 @@ async function grantOf(cfg: Config, store: Store, fetchFn: FetchFn, uid: string,
 
 const TOURS_QUERY = `query SpspReportTours($page: Int!) {
   currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-    nodes { id name slug startAt endAt events { id name slug numEntrants videogame { id } } } } }
+    nodes { id name slug startAt endAt events { id name slug startAt numEntrants videogame { id } } } } }
 }`;
 /** 一覧に出す大会: 開催中 (前後半日) → これから (近い順) → 終わった (新しい順、2 日まで)。最大 30 */
 export function sortTournaments<T extends { startAt: number | null; endAt: number | null }>(list: T[], nowSec: number): (T & { live: boolean })[] {
@@ -163,7 +163,7 @@ export async function handleReportTournaments(cfg: Config, store: Store, fetchFn
   await store.purgeReportTokens(now);
   const g = await grantOf(cfg, store, fetchFn, sess.id, now);
   if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
-  type T = { id: number; name: string; slug: string; startAt: number | null; endAt: number | null; events: { id: number; name: string; slug: string; entrants: number | null; game: number | null }[] };
+  type T = { id: number; name: string; slug: string; startAt: number | null; endAt: number | null; events: { id: number; name: string; slug: string; startAt: number | null; entrants: number | null; game: number | null }[] };
   const all: T[] = [];
   for (let page = 1; page <= 4; page++) {
     const r = await startggGql(fetchFn, g.at, TOURS_QUERY, { page });
@@ -176,7 +176,7 @@ export async function handleReportTournaments(cfg: Config, store: Store, fetchFn
       all.push({
         id: Number(n.id), name: String(n.name || ''), slug: String(n.slug || ''), startAt: Number(n.startAt) || null, endAt: Number(n.endAt) || null,
         events: evs.filter((e) => e && e.id !== undefined).map((e) => ({
-          id: Number(e.id), name: String(e.name || ''), slug: String(e.slug || ''), entrants: Number.isFinite(Number(e.numEntrants)) ? Number(e.numEntrants) : null,
+          id: Number(e.id), name: String(e.name || ''), slug: String(e.slug || ''), startAt: Number(e.startAt) || null, entrants: Number.isFinite(Number(e.numEntrants)) ? Number(e.numEntrants) : null,
           game: e.videogame && (e.videogame as { id?: unknown }).id !== undefined ? Number((e.videogame as { id: unknown }).id) : null,
         })),
       });
@@ -382,6 +382,8 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
   const side: Side | null = set.slots[0].users.includes(sess.id) ? 0 : set.slots[1].users.includes(sess.id) ? 1 : null;
   if (side === null) return err('not_player', 'この試合の選手だけが報告できます。', 'not_player');
+  const opens = parseSettings(o.ev.settings).opens_ms;
+  if (opens && now < opens) return err('not_allowed', 'まだ結果報告の受付が始まっていません。', 'not_open');
   const gate = playerGate(set, parseSettings(o.ev.settings));
   if (gate === 'classes_only') return err('not_allowed', 'この大会では、下位クラスの試合だけ選手が報告できます。結果は運営に伝えてください。', gate);
   if (gate === 'top_cut') return err('not_allowed', 'この試合 (トップ ' + parseSettings(o.ev.settings).top_cut + ' から) は運営が結果を入力します。結果は運営に伝えてください。', gate);
@@ -492,7 +494,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
 /** action: "report_notices" — 受付中の大会 (だれでも) と、ログイン中なら自分の試合の食い違い・運営確認 */
 export async function handleReportNotices(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   await store.purgeReportTokens(now);
-  const events = await store.listActiveReportEvents(now);
+  const events = (await store.listActiveReportEvents(now)).filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now));   // 受付の開始前はお知らせに出さない
   const sess = req.token ? await sessionOf(cfg, req, now) : null;
   const mine = [];
   if (sess) {
@@ -523,8 +525,24 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   return ok({ report: publicOf(o.ev, now), sets });
 }
 
-/** action: "report_phases" — 何先の設定に使うフェーズとラウンド */
+/** action: "report_phases" — 何先の設定に使うフェーズとラウンド。受付の前 (受付を始める画面) は { token, event } で、運営のログインのトークンで読む */
 export async function handleReportPhases(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  if (req.code === undefined && req.event !== undefined) {
+    const sess = await sessionOf(cfg, req, now);
+    if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+    const vars = eventVars(req.event);
+    if (!vars) return err('bad_request', 'start.gg のイベントの URL を確かめてください。', 'bad:event');
+    const g = await grantOf(cfg, store, fetchFn, sess.id, now);
+    if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
+    const q = await startggGql(fetchFn, g.at, EVENT_QUERY, vars);
+    if (!q.ok) return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'event:' + q.note);
+    const evRaw = q.json.data ? q.json.data.event as { id?: unknown; startAt?: unknown; tournament?: { startAt?: unknown } | null } | null : null;
+    if (!evRaw || evRaw.id === undefined || evRaw.id === null) return err('bad_request', 'start.gg でイベントが見つかりません。', 'event_not_found');
+    const r = await startggProvider(fetchFn, g.at, String(evRaw.id)).phases();
+    if (!r.ok) return err('provider_error', providerMessage('startgg', r.note), r.note);
+    const startAt = Number(evRaw.startAt) || Number(evRaw.tournament && evRaw.tournament.startAt) || null;   // 受付の開始の既定値 (秒)
+    return ok({ phases: r.phases, startAt });
+  }
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
   const r = await providerOf(fetchFn, o).phases();

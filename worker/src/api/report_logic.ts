@@ -48,7 +48,8 @@ export const FT_MAX = 5;
 const FT_PHASES_MAX = 30;
 
 /** 運営の設定 (report_events.settings) */
-export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule> }
+/** opens_ms = 選手が報告できるようになる時刻 (無ければ受付を始めたときから、2026-10-30) */
+export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule>; opens_ms?: number }
 export const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
 
 function ftNum(v: unknown): number | null {
@@ -97,6 +98,8 @@ export function parseSettings(v: unknown): ReportSettings {
   const tc = Number(o.top_cut);
   const s: ReportSettings = { top_cut: TOP_CUTS.includes(tc) ? tc : null, classes_only: o.classes_only === true };
   if (o.double === true) s.double = true;
+  const op = Number(o.opens_ms);
+  if (Number.isInteger(op) && op > 0 && op < 4102444800000) s.opens_ms = op;
   const ft = parseFt(o.ft);
   if (ft) s.ft = ft;
   return s;

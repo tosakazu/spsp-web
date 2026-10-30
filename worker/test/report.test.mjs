@@ -260,6 +260,15 @@ async function enabled(fake, settings) {
   return { ...e, code: r.report.code, enable: r, login: l };
 }
 
+test('受付の前: 運営のログインのトークンでイベントのフェーズを読む (受付を始める画面の何先)', async () => {
+  const e = await envWith(fakeStartgg());
+  const l = await toLogin(e);
+  const ph = await e.call({ action: 'report_phases', token: l.token, event: 'https://www.start.gg/tournament/t/event/singles' });
+  assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1', bestOf: 3 }, { n: -1, label: null, bestOf: null }] }]);
+  assert.strictEqual((await e.call({ action: 'report_phases', token: l.token, event: 'x' })).error.code, 'bad_request');
+  assert.strictEqual((await e.call({ action: 'report_phases', token: await e.tok(11), event: 'tournament/t/event/singles' })).error.code, 'no_grant');
+});
+
 test('受付: 運営の reporter トークンを暗号化して置き、応答にもログにも出さない', async () => {
   const fake = fakeStartgg();
   const e = await enabled(fake);
@@ -417,6 +426,13 @@ test('運営: 一覧・直す (その後の選手の報告では動かない)・
   await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: true } });
   e.tick(5000);
   assert.strictEqual((await e.call({ action: 'report_submit', token: await e.tok(11), code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } })).error.code, 'not_allowed');
+  // 受付の開始前は報告できない・お知らせにも出さない
+  const later = (await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, opens_ms: e.ctx.now() + 3600e3 } })).settings;
+  assert.ok(later.opens_ms > 0);
+  e.tick(5000);
+  assert.strictEqual((await e.call({ action: 'report_submit', token: await e.tok(11), code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } })).error.message, 'まだ結果報告の受付が始まっていません。');
+  assert.deepStrictEqual((await e.call({ action: 'report_notices' })).events, []);
+  await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: true } });
   // 名前をつけて保存した設定 (アカウントごと)
   const pre = { top_cut: 8, classes_only: false, phases: [{ name: 'Pools', i: 0, w: { a: 2, from: 4, fl: 'Winners Final', b: 3 }, l: { a: 2, from: null, b: 2 } }], junk: 1 };
   const sv = await e.call({ action: 'report_preset_save', token: TO, name: ' いつもの ', settings: pre });

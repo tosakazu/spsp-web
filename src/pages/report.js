@@ -370,6 +370,7 @@ function predHtml(m) {
 
 function gateOf(m) {
   const s = (INFO && INFO.settings) || {};
+  if (s.opens_ms && Date.now() < s.opens_ms) return i18n('report.gate.not_open', { t: fmtOpen(s.opens_ms) });
   if (s.classes_only && !m.isClass) return i18n('report.gate.classes_only');
   if (s.top_cut && m.lPlacement && m.lPlacement <= s.top_cut) return i18n('report.gate.top_cut', { n: s.top_cut });
   return '';
@@ -879,17 +880,34 @@ function noteText(note) {
   return i18n('report.note.' + k) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
 }
 
+/** 受付の開始 (datetime-local の値 ⇔ ms、端末の時刻で) */
+const pad2 = (n) => String(n).padStart(2, '0');
+function toLocalInput(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function fromLocalInput(v) {
+  const t = v ? new Date(v).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+const fmtOpen = (ms) => new Date(ms).toLocaleString(undefined, { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
 function settingsFormHtml(s, kind) {
   const tc = s && s.top_cut ? s.top_cut : '';
   return `<div class="rp-settings">
+    <label>${escapeHtml(i18n('report.set.opens'))}
+      <input type="datetime-local" data-set-open value="${escapeHtml(toLocalInput(s && s.opens_ms))}"></label>
     <label>${escapeHtml(i18n('report.set.top_cut'))}
       <select data-set-top><option value="">${escapeHtml(i18n('report.set.top_none'))}</option>${TOP_CUTS.map((n) => `<option value="${n}"${n === tc ? ' selected' : ''}>${escapeHtml(i18n('report.set.top_n', { n }))}</option>`).join('')}</select></label>
     ${kind === 'challonge' ? '' : `<label class="rp-check"><input type="checkbox" data-set-cls${s && s.classes_only ? ' checked' : ''}> ${escapeHtml(i18n('report.set.classes_only'))}</label>`}
   </div>`;
 }
 function readSettings(root) {
-  const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]');
-  return { top_cut: top && top.value ? Number(top.value) : null, classes_only: !!(cls && cls.checked) };
+  const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]'); const op = root.querySelector('[data-set-open]');
+  const out = { top_cut: top && top.value ? Number(top.value) : null, classes_only: !!(cls && cls.checked) };
+  const ms = op ? fromLocalInput(op.value) : null;
+  if (ms) out.opens_ms = ms;
+  return out;
 }
 
 /** 何先の設定 (フェーズごと)。rule = { w: {a, from, b}, l: {a, from, b} } (worker/src/api/report_logic.ts の FtRule) */
@@ -1272,16 +1290,56 @@ async function renderSetup() {
     <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
     ${presetBarHtml(false)}
     ${settingsFormHtml({ top_cut: null, classes_only: false }, 'startgg')}
+    <h3>${escapeHtml(i18n('report.ft.title'))}</h3>
+    <div id="rp-ft-set" class="rp-ft-set"><p class="rp-muted">${escapeHtml(i18n('report.setup.ft_pick'))}</p></div>
     <button type="button" class="rp-btn rp-primary" id="rp-start">${escapeHtml(i18n('report.setup.start'))}</button>
     <div class="rp-status" id="rp-setup-status"></div>
   </section>`;
+  let chosen = null;   // 呼び出した設定 (何先はイベントのフェーズが分かってから当てはめる)
+  // 何先: イベントを選ぶとフェーズを読む。受付の開始の既定値 = start.gg のイベント (無ければ大会) の開始
+  const ftBox = $('rp-ft-set');
+  const startOf = new Map();
+  for (const t of tours) for (const e of t.events || []) startOf.set(e.slug || String(e.id), e.startAt || t.startAt || null);
+  const setOpen = (sec) => { const op = root.querySelector('[data-set-open]'); if (op) op.value = sec ? toLocalInput(sec * 1000) : ''; };
+  const drawFt = (ft) => {
+    ftBox.innerHTML = PHASES.length ? PHASES.map((ph) => ftPhaseHtml(ph, ft && ft[ph.key])).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.ft.no_phases'))}</p>`;
+    wireFt(ftBox);
+  };
+  const presetFt = () => (chosen ? presetToFt(chosen.settings) : { ft: null, missed: [] });
+  let seq = 0;
+  const pickEvent = async (ev) => {
+    const my = ++seq;
+    PHASES = null;
+    if (startOf.has(ev)) setOpen(startOf.get(ev));
+    ftBox.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>`;
+    const p = await api({ action: 'report_phases', token: tok(), event: ev });
+    if (my !== seq) return;
+    if (!p || !p.ok) { PHASES = null; ftBox.innerHTML = `<p class="rp-err">${escapeHtml(errText(p))}</p>`; return; }
+    PHASES = p.phases || [];
+    if (!startOf.has(ev)) { startOf.set(ev, p.startAt || null); setOpen(p.startAt); }
+    drawFt(presetFt().ft);
+  };
+  for (const x of root.querySelectorAll('input[name="rp-ev"]')) {
+    x.addEventListener('change', () => { if (x.checked) { $('rp-event').value = ''; pickEvent(x.value); } });
+  }
+  $('rp-event').addEventListener('input', () => { if ($('rp-event').value.trim()) for (const x of root.querySelectorAll('input[name="rp-ev"]')) x.checked = false; });
+  $('rp-event').addEventListener('change', () => {
+    const url = String($('rp-event').value || '').trim();
+    if (/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(url) || /^\d+$/.test(url)) pickEvent(url);
+  });
   // 開催中のスマブラのイベントが 1 つだけなら選んでおく
   const live = tours.filter((t) => t.live).flatMap((t) => (t.events || []).filter((e) => e.game === ULT && !e.code));
-  if (live.length === 1) { const v = live[0].slug || String(live[0].id); const x = Array.from(root.querySelectorAll('input[name="rp-ev"]')).find((i) => i.value === v); if (x) x.checked = true; }
-  $('rp-event').addEventListener('input', () => { if ($('rp-event').value.trim()) for (const x of root.querySelectorAll('input[name="rp-ev"]')) x.checked = false; });
+  if (live.length === 1) { const v = live[0].slug || String(live[0].id); const x = Array.from(root.querySelectorAll('input[name="rp-ev"]')).find((i) => i.value === v); if (x) { x.checked = true; pickEvent(v); } }
   $('rp-relogin-mgr').addEventListener('click', () => { if (!DEMO) SpspReportAuth.start(location.pathname); });
-  let chosen = null;   // 呼び出した設定 (何先は受付の後、フェーズが分かってから当てはめる)
-  wirePresets((p, name) => { applySettingsInputs(root, p); chosen = { name, settings: p }; setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup', { name }), 'ok'); }, () => null);
+  wirePresets((p, name) => {
+    applySettingsInputs(root, p);
+    chosen = { name, settings: p };
+    if (PHASES && PHASES.length) {
+      const { ft, missed } = presetFt();
+      drawFt(ft);
+      setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup2', { name }) + (missed.length ? ' ' + i18n('report.preset.missed', { names: missed.join(', ') }) : ''), 'ok');
+    } else setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup', { name }), 'ok');
+  }, () => null);
   $('rp-start').addEventListener('click', async () => {
     const st = $('rp-setup-status');
     const picked = root.querySelector('input[name="rp-ev"]:checked');
@@ -1291,13 +1349,14 @@ async function renderSetup() {
     if (url && !/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(url) && !/^\d+$/.test(url)) { setStatus(st, i18n('report.setup.bad_event'), 'err'); return; }
     if (DEMO) { setStatus(st, i18n('report.demo.nogo'), 'warn'); return; }
     setStatus(st, i18n('report.setup.starting'), 'busy');
-    const x = await api({ action: 'report_enable', token: tok(), event: ev, settings: readSettings(root) });
+    const ftNow = PHASES && PHASES.length ? readFt(ftBox) : null;
+    const x = await api({ action: 'report_enable', token: tok(), event: ev, settings: { ...readSettings(root), ...(ftNow ? { ft: ftNow } : {}) } });
     if (!x || !x.ok) {
       if (x && x.error && x.error.code === 'no_grant') { loginView(i18n('report.setup.login_expired')); return; }
       setStatus(st, errText(x), 'err');
       return;
     }
-    try { if (chosen) sessionStorage.setItem(PRESET_PENDING, JSON.stringify(chosen)); else sessionStorage.removeItem(PRESET_PENDING); } catch (e) { /* 何先は後で入れ直す */ }
+    try { if (chosen && !(PHASES && PHASES.length)) sessionStorage.setItem(PRESET_PENDING, JSON.stringify(chosen)); else sessionStorage.removeItem(PRESET_PENDING); } catch (e) { /* 何先は後で入れ直す */ }
     location.href = pageUrl(x.report.code, true);
   });
 }

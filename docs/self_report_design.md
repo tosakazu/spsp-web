@@ -68,6 +68,7 @@
 | 運営が取り消した | reset。その前の報告は数えない (floor_id) | reset |
 
 - 同時の報告は `report_sets.version` で直列化する (D1 に書いてから送る。送れなかったら review + 理由)。
+- 受付の開始 (2026-10-30): `settings.opens_ms`。受付を始める画面の既定値は start.gg のイベント (無ければ大会) の startAt。これより前は report_submit を断り (`not_open`)、トップのお知らせにも出さない。何先も受付を始める画面で設定できる (report_phases に `{ token, event }` を渡すと、受付の前でも運営のログインのトークンでフェーズを読む)。
 - 運営の設定: `top_cut` は start.gg の `lPlacement` (負けた人の順位) ≤ N で運営に回す。Challonge は残り人数 (負け数がシングル 1・ダブル 2 未満) で近似。`classes_only` はフェーズ名・イベント名が下位クラス (`LOWER_CLASS_NAME_PAT`)。
 
 ## 5. API (worker/src/api/report.ts)

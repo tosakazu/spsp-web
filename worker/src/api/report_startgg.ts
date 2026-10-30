@@ -106,7 +106,7 @@ export function phaseInfoOf(ph: { key: string; name: string; rounds: Map<number,
 }
 
 export const EVENT_QUERY = `query SpspReportEvent($slug: String, $id: ID) {
-  event(slug: $slug, id: $id) { id name slug state tournament { id name slug endAt } }
+  event(slug: $slug, id: $id) { id name slug state startAt tournament { id name slug startAt endAt } }
 }`;
 
 type Gql = { data?: Record<string, unknown> | null; errors?: unknown[] };
