@@ -365,3 +365,6 @@ body {
 .rp-ev-url summary { cursor: pointer; color: #374151; }
 /* 長い名前 (選手・大会・イベント) は折り返して全部出す */
 .rp-pick, .rp-cand-head, .rp-done li, .rp-ev-n, .rp-tour-h, .rp-match-n, .rp-match-t, .rp-adm-head, #rp-title { overflow-wrap: anywhere; min-width: 0; }
+
+/* この画面のプレイヤーカード (VS・次の相手の候補・演出) はリンクを押せない (試合の画面から離れないように) */
+.rp-main .pcard a, .rp-match-ov .pcard a { pointer-events: none; cursor: default; }

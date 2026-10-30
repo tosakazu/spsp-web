@@ -1633,4 +1633,10 @@ $('rp-login-btn').addEventListener('click', () => { if (!DEMO) SpspLogin.startLo
 $('rp-relogin-btn').addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search));
 $('rp-to-admin').addEventListener('click', () => { location.href = pageUrl(CODE, true); });
 $('rp-to-player').addEventListener('click', () => { location.href = pageUrl(CODE, false); });
+// この画面のプレイヤーカードのリンクは押せない (CSS で止める。キーボードの Enter もここで止める)
+document.addEventListener('click', (e) => {
+  const t = /** @type {Element | null} */ (e.target instanceof Element ? e.target : null);
+  if (t && t.closest('.pcard a')) e.preventDefault();
+}, true);
+
 main().catch((e) => setStatus($('rp-status'), String((e && e.message) || e), 'err'));
