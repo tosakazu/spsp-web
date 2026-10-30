@@ -1964,7 +1964,7 @@ window.SPSP_I18N.en = {
   'report.ft.unset': 'Not set',
   'report.link.bracket': '{site}',
   'report.ft.use_sgg': 'As set on start.gg',
-  'report.char.pick': 'Pick',
+  'report.char.pick': 'Character',
   'report.char.clear': 'None',
   'report.char.close': 'Close',
   'report.stage.311': 'Battlefield',

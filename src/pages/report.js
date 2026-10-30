@@ -555,7 +555,7 @@ function formHtml(m) {
       </div>` : ''}
     </div>`;
   }
-  // まとめて: 両者の名前の隣にスコア (0〜3・それ以外は数を入れる) と、start.gg ならキャラ。ステージは選べない
+  // まとめて: 両者の名前・キャラ (start.gg だけ、「キャラ選択」のボタン → 選ぶとキャラ名)・スコア (0〜3・それ以外は数を入れる) を 1 行に。ステージは選べない
   // 候補: 何先が分かれば 0〜N (運営の設定なら それ以外 は出さない)、分からなければ 0〜3 と それ以外。既定は 0 (2026-10-30)
   const top = ft || 3;
   const scoreOpts = Array.from({ length: top + 1 }, (_, x) => `<option value="${x}"${x === 0 ? " selected" : ""}>${x}</option>`).join('')
@@ -564,9 +564,9 @@ function formHtml(m) {
     const slot = m.slots[k];
     return `<div class="rp-sum-row" data-side="${k}">
       <div class="rp-sum-name">${escapeHtml(slot ? slot.name : '')}${k === m.mySide && !m.admin ? ` <span class="rp-muted">${escapeHtml(i18n('report.you'))}</span>` : ''}</div>
+      ${withChars ? `<div class="rp-sum-char">${charPickHtml(`data-sum-char="${k}"`, charLabel(m, k))}</div>` : ''}
       <select class="rp-score" data-score="${k}" aria-label="${escapeHtml(i18n('report.score'))}">${scoreOpts}</select>
       <input class="rp-score-n" type="number" inputmode="numeric" min="0" max="${MAX_GAMES}" data-score-n="${k}" hidden aria-label="${escapeHtml(i18n('report.score'))}">
-      ${withChars ? `<div class="rp-sum-char">${charPickHtml(`data-sum-char="${k}"`, charLabel(m, k))}</div>` : ''}
     </div>`;
   };
   const sumPane = `<div class="rp-pane" data-pane="sum">
