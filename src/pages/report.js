@@ -396,9 +396,9 @@ function matchLinks(m) {
   const b = bracketLink(m);
   return b ? `<div class="rp-links">${b}</div>` : '';
 }
-/** プール・ラウンド・何先と、ブラケットへのリンク (1 行) */
+/** プール・ラウンドと、ブラケットへのリンク (1 行)。何先は「結果を報告」の見出しに出す */
 function roundHtml(m) {
-  return `<div class="rp-round">${escapeHtml([m.phase, m.pool, m.round].filter(Boolean).join(' · '))} ${ftHtml(m)} ${bracketLink(m)}</div>`;
+  return `<div class="rp-round">${escapeHtml([m.phase, m.pool, m.round].filter(Boolean).join(' · '))} ${bracketLink(m)}</div>`;
 }
 
 function rowOf(setId) { return VIEW && VIEW.sets ? VIEW.sets.find((x) => x.set_id === setId) : null; }
