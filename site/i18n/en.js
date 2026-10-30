@@ -1963,7 +1963,6 @@ window.SPSP_I18N.en = {
   'report.ft.unset': 'Not set',
   'report.link.bracket': 'Bracket on {site}',
   'report.ft.use_sgg': 'As set on start.gg',
-  'report.ft.sgg': 'On start.gg: {s}',
   'report.char.pick': 'Pick',
   'report.char.clear': 'None',
   'report.char.close': 'Close',

@@ -939,7 +939,6 @@ function ftPhaseHtml(ph, rule) {
   return `<div class="rp-ft-ph" data-ph="${escapeHtml(ph.key)}">
     <label>${escapeHtml(ph.name || i18n('report.ft.phase_all'))}
       <select data-ft-mode>${modes.map(([v, t]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
-    ${sgg ? `<div class="rp-muted">${escapeHtml(i18n('report.ft.sgg', { s: sgg }))}</div>` : ''}
     <div data-ft-split${mode === 'split' ? '' : ' hidden'}>${side('w')}${side('l')}</div>
   </div>`;
 }
@@ -1361,7 +1360,7 @@ let DEMO_P = [];
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
 let DEMO_PRESETS = [
-  { name: 'いつもの (予選 2 先・Top 8 から 3 先)', settings: { top_cut: 8, classes_only: false, phases: [
+  { name: 'いつもの (予選 2 先・Top 8 から 3 先)', settings: { top_cut: null, classes_only: false, phases: [
     { name: 'Pools', i: 0, w: { a: 2, from: null, b: 2, fl: null }, l: { a: 2, from: null, b: 2, fl: null } },
     { name: 'Top 32', i: 1, w: { a: 2, from: 4, b: 3, fl: 'Winners Final' }, l: { a: 2, from: 4, b: 3, fl: 'Losers Quarter-Final' } }] } },
   { name: '全部 1 先', settings: { top_cut: null, classes_only: false, phases: [
@@ -1384,7 +1383,7 @@ async function demoApi(body) {
   }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
-    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: 8, classes_only: false, ft: DEMO_FT } },
+    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
   }
   if (body.action === 'report_tournaments') {

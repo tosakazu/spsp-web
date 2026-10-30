@@ -2016,7 +2016,6 @@ window.SPSP_I18N.ja = {
   'report.ft.unset': '設定しない',
   'report.link.bracket': '{site} のブラケット',
   'report.ft.use_sgg': 'start.gg の設定どおり',
-  'report.ft.sgg': 'start.gg の設定: {s}',
   'report.char.pick': '選ぶ',
   'report.char.clear': '選ばない',
   'report.char.close': '閉じる',
