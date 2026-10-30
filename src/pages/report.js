@@ -389,30 +389,21 @@ function seedHtml(slot) {
   return slot && slot.seed ? `<span class="rp-seed">${escapeHtml(i18n('report.seed', { n: slot.seed }))}</span>` : '';
 }
 
-/** 名前の上の二つ名 (カードの設定)。読めたものはすぐ出し、まだなら fillTitles が入れる */
-const TITLE_TXT = new Map();   // uid → 二つ名 ( = 無い)
-function titleSlotHtml(slot) {
-  if (!slot || !slot.uid) return '';
-  const t = TITLE_TXT.get(slot.uid);
-  return `<div class="rp-title" data-title-uid="${escapeHtml(slot.uid)}"${t ? '' : ' hidden'}>${escapeHtml(t || '')}</div>`;
-}
-function fillTitles(root) {
-  for (const el of root.querySelectorAll('[data-title-uid]')) {
-    const uid = el.getAttribute('data-title-uid');
-    if (TITLE_TXT.has(uid)) continue;
-    cardTitleOf(uid).then((t) => { if (!TITLE_TXT.get(uid)) setTitle(uid, t); }).catch(() => { /* 二つ名が出ないだけ */ });
-  }
-}
-/** 二つ名を覚えて、出ている欄 (VS) にも入れる */
-function setTitle(uid, t) {
-  TITLE_TXT.set(uid, t);
-  for (const e of document.querySelectorAll(`[data-title-uid="${uid}"]`)) { e.textContent = t; e.hidden = !t; }
+/**
+ * VS = 自分のカード・VS・相手のカード (2026-10-30、名前の文字の VS はやめた)。二つ名・名前はカードに出る。
+ * カードが読み込まれるまでとカードが無い人 (start.gg のアカウントが無い・相手が未定・データが無い) は名前の札を出す
+ */
+function vsCardHtml(slot, cls) {
+  const name = slot ? slot.name : i18n('report.tbd');
+  const plate = `<div class="rp-plate"><span class="rp-plate-n">${escapeHtml(name)}</span></div>`;
+  const body = slot && slot.uid
+    ? `<div class="rp-card rp-vs-card pcard" data-card-uid="${escapeHtml(slot.uid)}" data-card-plate="1">${plate}</div>`
+    : plate;
+  return `<div class="rp-vs-side ${cls}">${body}${seedHtml(slot)}</div>`;
 }
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  return `<div class="rp-vs"><div class="rp-side rp-me">${titleSlotHtml(me)}<div class="rp-name">${escapeHtml(me ? me.name : '')}</div>${seedHtml(me)}</div>`
-    + `<div class="rp-vs-mark">VS</div>`
-    + `<div class="rp-side rp-op">${titleSlotHtml(op)}<div class="rp-name">${escapeHtml(op ? op.name : i18n('report.tbd'))}</div>${seedHtml(op)}</div></div>`;
+  return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mark">VS</div>${vsCardHtml(op, 'rp-op')}</div>`;
 }
 
 /** 報告の状態 (この試合の D1 の行) */
@@ -465,7 +456,9 @@ function candidatesHtml(m) {
 function fillCards(root) {
   for (const el of root.querySelectorAll('[data-card-uid]')) {
     mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
-      if (!ok && el.isConnected) el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`;
+      if (ok || !el.isConnected) return;
+      if (el.hasAttribute('data-card-plate')) el.classList.remove('pcard', 'rp-card');   // VS: 名前の札のまま
+      else el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`;
     }).catch(() => { /* カードが出ないだけ */ });
   }
 }
@@ -692,12 +685,9 @@ async function matchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  if (op && op.uid) cardDataOf(op.uid);   // 相手のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
+  for (const sl of [me, op]) if (sl && sl.uid) cardDataOf(sl.uid);   // VS のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
-  // この後の VS の欄にも同じ二つ名を出す
-  if (me && me.uid && tMe) setTitle(me.uid, tMe);
-  if (op && op.uid && tOp) setTitle(op.uid, tOp);
   const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
   const ov = document.createElement('div');
   ov.className = 'rp-match-ov';
@@ -725,13 +715,11 @@ function renderPlayer() {
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
   if (cur) {
     const gate = gateOf(cur);
-    const op = cur.slots[1 - cur.mySide];
     h += `<section class="rp-card-sec rp-current">
       <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
       ${stationHtml(cur)}
       ${vsHtml(cur)}
       ${matchLinks(cur)}
-      ${op && op.uid ? `<div class="rp-card pcard" data-card-uid="${escapeHtml(op.uid)}"></div>` : ''}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
@@ -774,7 +762,6 @@ function renderPlayer() {
     const m = MATCHES.find((x) => x.id === det.getAttribute('data-pred'));
     det.querySelector('.rp-pred').innerHTML = predHtml(m);
   });
-  fillTitles(root);
   fillCards(root);
 }
 
