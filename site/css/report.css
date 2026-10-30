@@ -37,15 +37,18 @@ body {
 .rp-stations { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .rp-station, .rp-stream { font-size: 18px; font-weight: 800; padding: 6px 12px; border-radius: 10px; background: #111827; color: #fff; }
 .rp-stream { background: #7c3aed; }
-/* VS: 自分のカードの上に相手のカード、間に VS の丸 (カードに少しかぶせる) */
-.rp-vs { display: flex; flex-direction: column; align-items: center; margin: 10px 0; }
+/* VS: 自分のカードの上に相手のカード。VS の丸は 2 枚の間 (高さ 0 の行の真ん中に置くので、カードの境目にちょうど重なる)。
+   シードは自分 = カードの上・相手 = カードの下 (間に何も入れない) */
+.rp-vs { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0; }
 .rp-vs-side { width: 100%; max-width: 514px; display: flex; flex-direction: column; align-items: flex-start; }
 .rp-vs-side .rp-card { margin: 0; }
-.rp-vs-mark { position: relative; z-index: 2; margin: -14px 0 -10px; width: 44px; height: 44px; border-radius: 50%; background: #dc2626; color: #fff; font-weight: 900; font-size: 16px; font-style: italic; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.rp-vs-mid { position: relative; z-index: 2; height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.rp-vs-mark { flex: none; width: 46px; height: 46px; border-radius: 50%; background: #dc2626; color: #fff; font-weight: 900; font-size: 16px; font-style: italic; line-height: 1; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .rp-plate { width: 100%; height: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; padding: 10px; border-radius: 12px; background: #f3f4f6; border: 1px solid #e5e7eb; }
 .rp-vs-card .rp-plate { border-radius: inherit; }
 .rp-plate-n { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; text-align: center; }
-.rp-vs-side .rp-seed { order: -1; margin: 0 0 4px; }   /* シードはカードの上 (下は VS の丸がかぶる) */
+.rp-vs-side .rp-seed { margin: 4px 0 0; }
+.rp-vs-side.rp-me .rp-seed { order: -1; margin: 0 0 4px; }
 .rp-seed { display: inline-block; font-size: 11px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 1px 6px; margin-top: 2px; }
 .rp-card { margin: 8px auto; width: 100%; max-width: 514px; }   /* 514px = カードの原寸 (プレイヤーページと同じ大きさまで) */
 .rp-card-sm { max-width: 420px; margin: 6px 0 0; }

@@ -403,7 +403,7 @@ function vsCardHtml(slot, cls) {
 }
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mark">VS</div>${vsCardHtml(op, 'rp-op')}</div>`;
+  return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mid"><div class="rp-vs-mark">VS</div></div>${vsCardHtml(op, 'rp-op')}</div>`;
 }
 
 /** 報告の状態 (この試合の D1 の行) */
