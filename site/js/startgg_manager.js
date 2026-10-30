@@ -87,7 +87,8 @@ export async function start(returnPath) {
  *   [ start.gg でログイン | API キー ]   ← 切り替え (API が無い配信 = ConoHa のプレビューなどでは出さず、API キーだけ)
  *   ログイン: 「● 名前 でログイン中 · 〇/〇 まで  [ログアウト]」/ 未ログインなら「[start.gg でログイン] 説明」
  *   API キー: keyBlock (ページの API キー欄) をそのまま中に入れる
- * @param {{ root: HTMLElement, keyBlock: HTMLElement, onChange?: () => void, beforeLogin?: () => void }} opts
+ * @param {{ root: HTMLElement, keyBlock: HTMLElement, onChange?: () => void, beforeLogin?: () => void, notice?: boolean }} opts
+ *   notice = false で「API キーなしで使えるようになりました」の案内を出さない (ログインができてから作ったページ)
  *   onChange = 使うトークンが変わった (切り替え・ログイン・ログアウト。別のタブでの変化も)。beforeLogin = start.gg に移る直前 (入力の保存など)
  */
 export function mount(opts) {
@@ -164,7 +165,7 @@ export function mount(opts) {
   });
   window.addEventListener('storage', e => { if (e.key === KEY || e.key === MODE_KEY || e.key === null) changed(); });
   render();
-  maybeNotice(opts);
+  if (opts.notice !== false) maybeNotice(opts);
 }
 
 const NOTICE_KEY = 'spsp_startgg_login_notice';   // 案内を出した印 (3 ページで共通、1 回だけ)

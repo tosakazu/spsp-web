@@ -1,0 +1,62 @@
+/* dupes.css — 重複参加チェック (dupes/index.html)。フォームは下位クラス作成 (class_bracket.css) と同じ、結果の表とカードはここ */
+.dp-main { max-width: 900px; }
+.dp-form { max-width: 560px; }
+.dp-privacy { font-size: 11px; color: #6b7280; margin: 8px 0 0; }
+
+.dp-report { margin-top: 20px; display: grid; gap: 14px; }
+.dp-report-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.dp-report-title { font-size: 17px; margin: 0; flex: 1 1 100%; }
+.dp-report-meta { font-size: 12px; color: #6b7280; flex: 1 1 auto; }
+.dp-actions { display: flex; gap: 6px; }
+.dp-h { font-size: 14px; margin: 8px 0 0; }
+
+/* 判定の札 */
+.dp-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.dp-v-same { color: #b42318; background: #fdecea; }
+.dp-v-likely { color: #b54708; background: #fef3e2; }
+.dp-v-unknown { color: #475467; background: #eef0f4; }
+.dp-v-prob_diff, .dp-v-diff { color: #1a7f4b; background: #e6f4ec; }
+.dp-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: #6b7280; align-items: center; }
+.dp-filter { font-size: 12px; color: #374151; }
+.dp-filter input { accent-color: #dc2626; }
+
+.dp-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+.dp-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.dp-table th, .dp-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+.dp-table th { font-size: 11px; color: #6b7280; font-weight: 600; background: #fafafa; }
+.dp-table tr:last-child td { border-bottom: 0; }
+.dp-table td:nth-child(2) { white-space: nowrap; }
+.dp-table a { color: inherit; }
+.dp-empty { font-size: 13px; color: #6b7280; margin: 0; }
+
+.dp-cards { display: grid; gap: 12px; }
+.dp-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; background: #fff; }
+.dp-card-h { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.dp-card-h h4 { font-size: 14px; margin: 0; }
+.dp-kinds { font-size: 11px; color: #6b7280; }
+.dp-accts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+.dp-acct { border: 1px solid #eef0f4; border-radius: 8px; padding: 8px 10px; font-size: 12px; min-width: 0; }
+.dp-acct-name { font-weight: 700; font-size: 13px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.dp-acct-name a { color: inherit; }
+.dp-disc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6b7280; font-size: 11px; }
+.dp-kv { display: grid; grid-template-columns: 6em 1fr; gap: 2px 8px; margin: 0; }
+.dp-kv dt { color: #6b7280; }
+.dp-kv dd { margin: 0; overflow-wrap: anywhere; }
+.dp-reasons { margin: 0; padding-left: 1.2em; font-size: 12.5px; display: grid; gap: 3px; }
+.dp-reasons .warn { color: #b54708; }
+.dp-ev { font-size: 12px; color: #374151; margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
+
+.dp-similar summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 4px 0; }
+.dp-similar .dp-cards { margin-top: 10px; }
+.dp-notes ul { margin: 6px 0 0; padding-left: 1.2em; font-size: 12px; color: #4b5563; display: grid; gap: 4px; }
+
+/* 印刷 (PDF): 結果だけ。カードはページの途中で切らない */
+@media print {
+  #nav-root, .dp-form, .dp-main > h1, .dp-main > .subtitle, .dp-actions, .dp-filter { display: none !important; }
+  .dp-main { max-width: none; padding: 0; }
+  .dp-report { margin-top: 0; }
+  .dp-similar:not([open]) { display: none; }
+  .dp-card, .dp-table tr { break-inside: avoid; }
+  .dp-pill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .dp-table-wrap { overflow: visible; }
+}
