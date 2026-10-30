@@ -391,9 +391,14 @@ function bracketUrl(m) {
 }
 const extLink = (href, label) => (href ? `<a class="rp-ext" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(label)} ↗</a>` : '');
 /** その試合のあるトーナメント (ブラケット) へのリンク */
+const bracketLink = (m) => extLink(bracketUrl(m), i18n('report.link.bracket', { site: INFO && INFO.kind === 'challonge' ? 'Challonge' : 'start.gg' }));
 function matchLinks(m) {
-  const b = extLink(bracketUrl(m), i18n('report.link.bracket', { site: INFO && INFO.kind === 'challonge' ? 'Challonge' : 'start.gg' }));
+  const b = bracketLink(m);
   return b ? `<div class="rp-links">${b}</div>` : '';
+}
+/** プール・ラウンド・何先と、ブラケットへのリンク (1 行) */
+function roundHtml(m) {
+  return `<div class="rp-round">${escapeHtml([m.phase, m.pool, m.round].filter(Boolean).join(' · '))} ${ftHtml(m)} ${bracketLink(m)}</div>`;
 }
 
 function rowOf(setId) { return VIEW && VIEW.sets ? VIEW.sets.find((x) => x.set_id === setId) : null; }
@@ -791,9 +796,8 @@ function renderPlayer() {
     // スマホで探さずに報告できるよう、カード → (相手のカードを画面の上に) → ラウンド・台 → 入力欄 の順 (2026-10-30)
     h += `<section class="rp-card-sec rp-current">
       ${vsHtml(cur)}
-      <div class="rp-round">${escapeHtml([cur.phase, cur.pool, cur.round].filter(Boolean).join(' · '))} ${ftHtml(cur)}</div>
+      ${roundHtml(cur)}
       ${stationHtml(cur)}
-      ${matchLinks(cur)}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
@@ -801,9 +805,8 @@ function renderPlayer() {
   } else if (waiting) {
     h += `<section class="rp-card-sec">
       <h2>${escapeHtml(i18n('report.waiting'))}</h2>
-      <div class="rp-round">${escapeHtml([waiting.phase, waiting.pool, waiting.round].filter(Boolean).join(' · '))} ${ftHtml(waiting)}</div>
+      ${roundHtml(waiting)}
       ${stationHtml(waiting)}
-      ${matchLinks(waiting)}
       <h3>${escapeHtml(i18n('report.cand.title'))}</h3>
       ${candidatesHtml(waiting)}
     </section>`;

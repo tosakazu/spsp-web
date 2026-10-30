@@ -2015,7 +2015,7 @@ window.SPSP_I18N.ja = {
   'report.sum_ft': 'この試合は {n} 先です',
   'report.ft.title': '何先',
   'report.ft.unset': '設定しない',
-  'report.link.bracket': '{site} のブラケット',
+  'report.link.bracket': '{site} を開く',
   'report.ft.use_sgg': 'start.gg の設定どおり',
   'report.char.pick': '選ぶ',
   'report.char.clear': '選ばない',

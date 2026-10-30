@@ -1962,7 +1962,7 @@ window.SPSP_I18N.en = {
   'report.sum_ft': 'This set is first to {n}',
   'report.ft.title': 'Set length',
   'report.ft.unset': 'Not set',
-  'report.link.bracket': 'Bracket on {site}',
+  'report.link.bracket': 'Open {site}',
   'report.ft.use_sgg': 'As set on start.gg',
   'report.char.pick': 'Pick',
   'report.char.clear': 'None',
