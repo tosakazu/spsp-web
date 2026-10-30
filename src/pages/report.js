@@ -765,7 +765,10 @@ async function matchAnimation(m) {
   const ready = Promise.all([Promise.all(mounts).then(cardFontsReady), lines ? sleep(700) : null]);
   if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
   ov.classList.add('go');
-  try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
+  // 振動: 飛ばしたときは鳴らさない。ブラウザ (Android の Chrome など) はページに一度も触れていないと振動させない
+  // (呼んでも無視される。iPhone の Safari はそもそも無い) ので、触れたことがあるときだけ呼ぶ
+  const ua = /** @type {any} */ (navigator).userActivation;
+  if (!skipped && (!ua || ua.hasBeenActive)) { try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ } }
   // タップ (クリック)・Esc / Enter / Space で飛ばす。飛ばしたときは短く消す
   return new Promise((res) => {
     let over = false;
