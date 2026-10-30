@@ -153,9 +153,10 @@ body {
 
 /* 案 C カード: 白っぽい地に 2 人のプレイヤーカードが左右から入る (縦長の画面では上下) */
 .rp-anim-cards { background: #f3f4f6; color: #111827; gap: 12px; }
-/* カードを描き終わるまで (.go が付くまで) は中身を隠して止めておく。visibility なので大きさの計算 (文字の詰め) はできる */
-.rp-anim-cards:not(.go) > :not(.rp-match-skip) { visibility: hidden; }
-.rp-anim-cards:not(.go) * { animation: none !important; }
+/* カードを描き終わるまで (.go が付くまで) はカード・何先・台を隠して止めておく。visibility なので大きさの計算 (文字の詰め) はできる */
+.rp-anim-cards:not(.go) > .rp-match-names, .rp-anim-cards:not(.go) > .rp-match-ft, .rp-anim-cards:not(.go) > .rp-match-station { visibility: hidden; }
+.rp-anim-cards:not(.go) .rp-match-names, .rp-anim-cards:not(.go) .rp-match-names *, .rp-anim-cards:not(.go) .rp-match-ft, .rp-anim-cards:not(.go) .rp-match-station { animation: none !important; }
+.rp-anim-cards:not(.go):not(.rp-anim-lines) > .rp-match-title { visibility: hidden; animation: none !important; }
 .rp-anim-cards .rp-match-title { color: #dc2626; font-weight: 700; opacity: 1; }
 .rp-anim-cards .rp-match-names { flex-direction: column; gap: 6px; }
 .rp-anim-cards .rp-match-p { max-width: none; }
@@ -164,18 +165,66 @@ body {
 .rp-anim-cards .rp-match-ft { color: #fff; background: #dc2626; border-radius: 8px; padding: 2px 12px; }
 .rp-anim-cards .rp-match-station { background: #fff; color: #111827; border: 1px solid #e5e7eb; }
 .rp-anim-cards .rp-match-skip { color: #6b7280; opacity: 1; }
-/* 案 D 線→カード: 案 C の上に、先に走る白と赤の線 (真ん中を斜めに、カードの後ろ)。題は線と一緒に先に出す */
-.rp-anim-combo { background: #fff; overflow: hidden; }
-.rp-anim-combo::before, .rp-anim-combo::after { content: ''; position: absolute; left: -20vw; right: -20vw; top: 50%; height: 14px; margin-top: -7px; background: #dc2626; transform: rotate(-8deg); animation: rp-sweep .6s cubic-bezier(.2, .8, .2, 1) both; z-index: 0; }
-.rp-anim-combo::after { height: 4px; margin-top: 14px; background: #111827; animation-delay: .1s; }
-.rp-anim-combo > * { position: relative; z-index: 1; }
-.rp-anim-combo > .rp-match-skip { position: absolute; }
-.rp-anim-combo:not(.go) > .rp-match-title { visibility: visible; }
-@media (prefers-reduced-motion: no-preference) { .rp-anim-combo .rp-match-title { animation: rp-pop .5s ease-out !important; } }
 @media (min-aspect-ratio: 4/3) {
   .rp-anim-cards .rp-match-names { flex-direction: row; gap: 18px; }
   .rp-anim-cards .rp-match-card { width: min(40vw, 420px); }
 }
+
+/* 線→カードの案 (D〜H) の共通: 白地、線は後ろ (z 0)、題は線と一緒に先に出す */
+.rp-anim-lines { background: #fff; overflow: hidden; }
+.rp-anim-lines::before, .rp-anim-lines::after { content: ''; position: absolute; z-index: 0; pointer-events: none; }
+.rp-anim-lines > * { position: relative; z-index: 1; }
+.rp-anim-lines > .rp-match-skip { position: absolute; }
+.rp-anim-lines > .rp-match-fx { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .rp-anim-lines .rp-match-title { animation: rp-pop .5s ease-out !important; } }
+
+/* 案 D 線→カード: 真ん中を斜めに赤い線と細い黒い線。カードは左右から */
+.rp-anim-combo::before, .rp-anim-combo::after { left: -20vw; right: -20vw; top: 50%; height: 14px; margin-top: -7px; background: #dc2626; transform: rotate(-8deg); animation: rp-sweep .6s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-combo::after { height: 4px; margin-top: 14px; background: #111827; animation-delay: .1s; }
+
+/* 案 E 交差: 赤い線 2 本が反対から来て真ん中で X に。カードは上と下から */
+.rp-anim-cross::before, .rp-anim-cross::after { left: -30vw; right: -30vw; top: 50%; height: 10px; margin-top: -5px; background: #dc2626; }
+.rp-anim-cross::before { transform: rotate(-18deg); animation: rp-cross-a .55s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-cross::after { transform: rotate(18deg); background: #111827; height: 6px; margin-top: -3px; animation: rp-cross-b .55s .08s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-cross .rp-match-l { animation: rp-in-t .5s cubic-bezier(.2, .9, .3, 1.15); }
+.rp-anim-cross .rp-match-r { animation: rp-in-b .5s cubic-bezier(.2, .9, .3, 1.15); }
+@keyframes rp-cross-a { from { transform: rotate(-18deg) translateX(-130%); } to { transform: rotate(-18deg); } }
+@keyframes rp-cross-b { from { transform: rotate(18deg) translateX(130%); } to { transform: rotate(18deg); } }
+@keyframes rp-in-t { from { transform: translateY(-70vh); } to { transform: none; } }
+@keyframes rp-in-b { from { transform: translateY(70vh); } to { transform: none; } }
+
+/* 案 F 赤い面: 太い赤い帯 (面) が斜めに画面を横切り、その上にカード。VS は白 */
+.rp-anim-wipe::before { left: -30vw; right: -30vw; top: 50%; height: 34vh; margin-top: -17vh; background: #dc2626; transform: rotate(-10deg); animation: rp-wipe .5s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-wipe::after { left: -30vw; right: -30vw; top: 50%; height: 4px; margin-top: calc(17vh + 10px); background: #111827; transform: rotate(-10deg); animation: rp-wipe .5s .1s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-wipe .rp-match-vs { color: #fff; text-shadow: 0 2px 0 #991b1b; }
+.rp-anim-wipe .rp-match-card { box-shadow: 0 10px 28px rgba(17, 24, 39, .35); }
+@keyframes rp-wipe { from { transform: rotate(-10deg) scaleX(0); transform-origin: left; } to { transform: rotate(-10deg) scaleX(1); transform-origin: left; } }
+
+/* 案 G 流れる線: 赤と黒の細い線が右から左へ流れ続ける (スピード感)。カードは少し傾いて飛び込む */
+.rp-match-fx i { position: absolute; right: -60%; height: 3px; width: 55%; background: #dc2626; border-radius: 2px; animation: rp-stream .7s linear infinite; }
+.rp-match-fx i:nth-child(even) { background: #111827; height: 2px; }
+.rp-match-fx i:nth-child(1) { top: 12%; animation-delay: 0s; }
+.rp-match-fx i:nth-child(2) { top: 24%; animation-delay: .25s; width: 35%; }
+.rp-match-fx i:nth-child(3) { top: 37%; animation-delay: .1s; }
+.rp-match-fx i:nth-child(4) { top: 50%; animation-delay: .4s; width: 70%; height: 5px; }
+.rp-match-fx i:nth-child(5) { top: 63%; animation-delay: .18s; }
+.rp-match-fx i:nth-child(6) { top: 76%; animation-delay: .5s; width: 40%; }
+.rp-match-fx i:nth-child(7) { top: 88%; animation-delay: .3s; }
+.rp-anim-speed .rp-match-l { animation: rp-dash-l .45s cubic-bezier(.2, .9, .3, 1.1); }
+.rp-anim-speed .rp-match-r { animation: rp-dash-r .45s cubic-bezier(.2, .9, .3, 1.1); }
+@keyframes rp-stream { from { transform: translateX(0); } to { transform: translateX(-280%); } }
+@keyframes rp-dash-l { from { transform: translateX(-90vw) skewX(-12deg); } 70% { transform: translateX(3vw) skewX(4deg); } to { transform: none; } }
+@keyframes rp-dash-r { from { transform: translateX(90vw) skewX(-12deg); } 70% { transform: translateX(-3vw) skewX(4deg); } to { transform: none; } }
+
+/* 案 H 回転: 上下の線が真ん中から左右へ伸び、カードがくるっと回って表を向く (自分 → 相手の順) */
+.rp-anim-flip::before, .rp-anim-flip::after { left: 8%; right: 8%; height: 6px; background: #dc2626; animation: rp-grow .5s cubic-bezier(.2, .8, .2, 1) both; }
+.rp-anim-flip::before { top: 9%; }
+.rp-anim-flip::after { bottom: 9%; height: 3px; background: #111827; animation-delay: .1s; }
+.rp-anim-flip .rp-match-names { perspective: 1000px; }
+.rp-anim-flip .rp-match-l, .rp-anim-flip .rp-match-r { animation: rp-flip .6s cubic-bezier(.2, .8, .3, 1.1) both; }
+.rp-anim-flip .rp-match-r { animation-delay: .25s; }
+@keyframes rp-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes rp-flip { from { transform: rotateY(90deg) scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) { .rp-match-ov, .rp-match-ov *, .rp-match-ov::before, .rp-match-ov::after { animation: none !important; } }
 
