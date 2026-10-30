@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -242,6 +242,17 @@ test('試合結果の報告: 受付の upsert (code は変えない)・期限切
   assert.deepStrictEqual((await store.listReportPresets('11')).map((x) => [x.name, x.settings]), [['a', '{"x":1}'], ['b', '{}']]);
   await store.deleteReportPreset('11', 'a');
   assert.deepStrictEqual((await store.listReportPresets('11')).map((x) => x.name), ['b']);
+
+  // 運営のログインのトークン: 置き直し・期限・消す
+  await store.putReportGrant({ user_id: '11', token_enc: 'v1.a', token_exp_ms: 10, expires_ms: 5000 });
+  await store.putReportGrant({ user_id: '11', token_enc: 'v1.b', token_exp_ms: 20, expires_ms: 6000 });
+  assert.strictEqual((await store.getReportGrant('11', 5500)).token_enc, 'v1.b');
+  assert.strictEqual(await store.getReportGrant('11', 6001), null);
+  await store.purgeReportTokens(7000);
+  assert.strictEqual(await store.getReportGrant('11', 0), null, '期限を過ぎたら消す');
+  await store.putReportGrant({ user_id: '22', token_enc: 'v1.c', token_exp_ms: 20, expires_ms: 9000 });
+  await store.deleteReportGrant('22');
+  assert.strictEqual(await store.getReportGrant('22', 0), null);
 
   const row = { code: 'abcdefghjk', set_id: '100', state: 'reported', users: '|11|22|', slots: '[]', applied: '{}', note: '', floor_id: 0, version: 1, updated_ms: 1 };
   assert.strictEqual(await store.casReportSet(row, null), true);

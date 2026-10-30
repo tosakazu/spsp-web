@@ -82,6 +82,8 @@ export const CLASS_PARTICIPANTS_MAX = 512;
 export const REPORT_MIN_INTERVAL_MS = 3 * 1000;
 export const REPORT_MAX_PER_DAY = 300;
 export const REPORT_ADMIN_MAX_PER_DAY = 2000;
+/** 運営のログイン (report_login) のトークンを預かる長さ。受付を始めるまでの間だけ (始めたらイベントの受付に写す) */
+export const REPORT_GRANT_MS = 12 * 3600 * 1000;
 export const REPORT_MIN_OPEN_MS = 6 * 3600 * 1000;        // 受付は少なくともこれだけ開ける
 export const REPORT_MAX_OPEN_MS = 8 * 24 * 3600 * 1000;   // 長くてもこれまで (大会が延びたら運営が受付し直す)
 export const REPORT_CHALLONGE_CACHE_S = 15;               // Challonge の試合一覧を Worker で持つ秒数

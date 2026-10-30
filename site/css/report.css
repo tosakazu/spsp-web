@@ -199,3 +199,16 @@ body {
 .rp-route-h { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 4px; }
 .rp-route .rp-route { margin-left: 2px; }
 .rp-cand-tbd { margin: 0; }
+
+/* 受付を始める: 管理している大会とイベント (2026-10-30、運営のログインが先) */
+.rp-tours { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; }
+.rp-tour { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; background: #fff; }
+.rp-tour-h { font-size: 13px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.rp-live { background: #dc2626; color: #fff; border-color: #dc2626; }
+.rp-ev { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 2px; font-size: 13px; cursor: pointer; border-top: 1px dashed #f3f4f6; }
+.rp-ev:first-of-type { border-top: 0; }
+.rp-ev input { margin: 0; }
+.rp-ev-n { font-weight: 700; }
+.rp-ev-on { cursor: default; color: #6b7280; }
+.rp-ev-url { margin: 4px 0 8px; font-size: 12px; }
+.rp-ev-url summary { cursor: pointer; color: #374151; }

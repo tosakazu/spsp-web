@@ -1468,7 +1468,7 @@ function render() {
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
   // 自分のページなら、参加中の大会の結果報告ページへの入口 (受付中のものだけ。js/report_notice.js)
-  SpspLogin.verify().then(() => { if (SpspLogin.isSelf(UID)) SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {}); });
+  SpspLogin.verify().then(() => { if (SpspLogin.isSelf(UID) || SpspReportNotice.isDemo()) SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {}); });
   buildRivalsSection();
 }
 

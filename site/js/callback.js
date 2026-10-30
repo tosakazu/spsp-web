@@ -17,8 +17,7 @@ import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 import SpspLogin from './login.js';
 import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
-import SpspStartggIdentity from './startgg_identity.js';
-import { REPORT_SETUP_KEY } from './report_auth.js';   // 試合結果の報告の受付 (reporter フロー)   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
+import SpspStartggIdentity from './startgg_identity.js';   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
 import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
@@ -421,29 +420,22 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
   }
 
   /**
-   * reporter フロー (試合結果の報告の受付、src/pages/report.js): Worker が code を報告用の scope で交換し、運営か確かめて受付を始める
-   * (運営のトークンは Worker が暗号化して置く。ブラウザには返らない)。どのイベントかは報告ページが sessionStorage に置いたもの。
-   * 普段のセッションも受け取り、報告ページの運営の画面 (?c=<受付>&admin=1) に戻る。
+   * reporter フロー (試合結果の報告の受付、src/pages/report.js): 運営のログインを先にする (2026-10-30)。Worker が code を報告用の scope で交換して
+   * 暗号化して預かり (受付を始めるまで)、普段のセッションを返す。ブラウザには運営のトークンは返らない。
+   * 報告ページ (受付を始める画面) に戻り、管理している大会の一覧から選んで受付を始める
    */
   function runReporter(code, state, back) {
-    var setup = null;
-    try { setup = JSON.parse(sessionStorage.getItem(REPORT_SETUP_KEY) || 'null'); } catch (_) { setup = null; }
-    if (!setup || !setup.event) {
-      show('error', i18n('callback.reporter_title'), i18n('callback.reporter_nosetup'), back);
-      return;
-    }
     fetch(CFG.GAS_ENDPOINT, {
       method: 'POST',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'report_enable', code: code, state: state, event: setup.event, settings: setup.settings || undefined }),
+      body: JSON.stringify({ action: 'report_login', code: code, state: state }),
     }).then(function (res) {
       return res.json();
     }).then(function (json) {
-      if (json && json.ok && json.report && json.token && json.user) {
+      if (json && json.ok && json.token && json.user) {
         AUTH.save({ token: json.token, user: json.user, exp: json.exp });
-        try { sessionStorage.removeItem(REPORT_SETUP_KEY); } catch (_) { /* 次の受付で上書きされる */ }
-        location.replace(back.replace(/[?#].*$/, '') + '?c=' + encodeURIComponent(json.report.code) + '&admin=1');
+        location.replace(back);
         return;
       }
       var errCode = (json && json.error && json.error.code) || 'unknown';

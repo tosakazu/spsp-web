@@ -30,8 +30,11 @@
 ## 2. 流れ
 
 ```
-運営  /jp/report/ (受付を始める) ─ start.gg (scope tournament.reporter) ─ callback.html (f=reporter)
-        → action report_enable: 運営か確かめる (checkStartggAdmin) → トークンを暗号化して D1 report_events → /jp/report/?c=…&admin=1
+運営  /jp/report/ (受付を始める) ─ 先に「start.gg で運営としてログイン」(scope tournament.reporter) ─ callback.html (f=reporter)
+        → action report_login: トークンを暗号化して D1 report_grants (受付を始めるまで、12 時間) + 普段のセッション → /jp/report/ に戻る
+        → action report_tournaments: 管理している大会 (開催中 → これから → 終わって 2 日まで) とイベントの一覧 (受付中のものは code つき)
+        → イベントを選ぶ (一覧に無ければ URL) + 設定 → action report_enable: 運営か確かめる (checkStartggAdmin) → report_grants のトークンを
+          report_events に写す → /jp/report/?c=…&admin=1   (2026-10-30 からログインが先。シード作成・下位クラス作成と同じ)
       下位クラス作成の「結果報告」→ action report_enable_class (Challonge のトークンを暗号化して預かる)
 選手  /jp/report/?c=…  15 秒ごと:
         start.gg: ブラウザが本人のトークンで event.sets(filters:{playerIds}) を読む (台 station・配信台 stream・前の試合 prereq も)
@@ -45,7 +48,7 @@
 | 相手 | scope / 方法 | 置き場所 |
 |---|---|---|
 | 選手 | 普段のログイン `user.identity` (変更なし) | ブラウザ (js/startgg_identity.js) |
-| 運営 (start.gg) | `user.identity tournament.reporter` (flow `reporter`) | D1 `report_events.token_enc` (AES-GCM、鍵 = HKDF(SESSION_SECRET))。access + refresh。期限 10 分前に延長 |
+| 運営 (start.gg) | `user.identity tournament.reporter` (flow `reporter`) | ログインから受付を始めるまで D1 `report_grants.token_enc` (12 時間で消す)、受付中は D1 `report_events.token_enc` (AES-GCM、鍵 = HKDF(SESSION_SECRET))。access + refresh。期限 10 分前に延長 |
 | 運営 (Challonge) | 下位クラス作成のログイン (Challonge OAuth) | 同上。延長はしない (切れたら受付し直し) |
 
 - 受付の期限 = 大会の終わりの翌日の終わり (6 時間〜8 日に丸める)。Challonge は 2 日。期限切れ・停止でトークンを消す (`purgeReportTokens` を毎回の要求で実行)。
@@ -69,12 +72,15 @@
 
 ## 5. API (worker/src/api/report.ts)
 
-`report_begin` / `report_enable` / `report_enable_class` / `report_info` / `report_view` / `report_submit` / `report_notices` / `report_admin` / `report_admin_fix` / `report_settings` / `report_stop`。D1 は migrations/0012_reports.sql (`report_events` / `report_sets` / `report_submissions`)。
+`report_begin` / `report_login` / `report_tournaments` / `report_enable` / `report_enable_class` / `report_info` / `report_view` / `report_submit` / `report_notices` / `report_admin` / `report_admin_fix` / `report_settings` / `report_stop`。D1 は migrations/0012_reports.sql (`report_events` / `report_sets` / `report_submissions`)・0013 (`report_presets`)・0014 (`report_grants`)。
 
 ## 6. 画面
 
 - `src/pages/report.js` + `site/report/index.html` + `site/css/report.css`。
-- 入口: `site/js/report_notice.js` (トップの速報の上・自分のプレイヤーページ)。速報の index.json で本人の開催中の大会を見て、受付中のものと食い違いを出す。
+- 入口: `site/js/report_notice.js` (トップの速報の上・自分のプレイヤーページ)。速報の index.json で本人の開催中の大会を見て、受付中のものと食い違いを出す。速報に載っていない受付中の大会は、本人の start.gg のトークンで出場しているイベント (currentUser.events の新しい 50 件) を見る。見本 = `?demo=report_notice` (トップ・どのプレイヤーページでも)。
+- 報告ページ: ログインしていなければログインを促す。ログインしても出場者に居なければエラー (試合が無いときに currentUser.events と出場者の名前検索で確かめる。試合が出てきたら普通の画面)。
+- 運営の直し: 選手と同じ入力欄 (まとめて / 1 戦ごと、キャラ・ステージ)。「自分 / 相手」の代わりに両者の名前。何先は分からないので 0〜3 と それ以外。
+- 見本の場面: match / conflict / waiting / done / gate / challonge / login (ログイン前) / not_entrant (出場していない人) / admin / setup_login (運営のログイン) / setup。
 - 「勝ったら」「ここまでの変化」は `site/js/live_predict.js` (ifWin / perSet) を流用。速報に載っている start.gg の大会だけ。
 
 ## 7. テスト

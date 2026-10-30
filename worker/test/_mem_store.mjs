@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -225,10 +225,15 @@ export class MemStore {
 
   async deleteReportPreset(userId, name) { this._rep(); this.reportPresets = this.reportPresets.filter((x) => !(x.user_id === userId && x.name === name)); }
 
+  async getReportGrant(userId, nowMs) { this._rep(); const r = this.reportGrants.find((x) => x.user_id === userId && x.expires_ms >= nowMs); return r ? { ...r } : null; }
+  async putReportGrant(row) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== row.user_id).concat([{ ...row }]); }
+  async deleteReportGrant(userId) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== userId); }
+
   async stopReportEvent(code) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.status = 'stopped'; x.token_enc = ''; } }
 
   async purgeReportTokens(nowMs) {
     this._rep(); for (const x of this.reportEvents) if (x.expires_ms < nowMs) { x.status = 'stopped'; x.token_enc = ''; }
+    this.reportGrants = this.reportGrants.filter((x) => x.expires_ms >= nowMs);
   }
 
   async listActiveReportEvents(nowMs) {

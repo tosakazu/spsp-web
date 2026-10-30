@@ -3,9 +3,12 @@
  *
  * 運営:
  *   action: "report_begin"        { nonce, returnPath }  → { url }  (scope REPORTER_SCOPE の認可画面。state は f='reporter')
- *   action: "report_enable"       { code, state, event }  → { report, token, user, exp }
+ *   action: "report_login"        { code, state }  → { token, user, exp }  運営のログイン (先にする、2026-10-30)。
+ *                                 運営のトークン (access + refresh) を暗号化して report_grants に置き (受付を始めるまで、REPORT_GRANT_MS)、普段のログインのセッションを返す
+ *   action: "report_tournaments"  { token }  → { tournaments }  ログインした運営が管理している大会とイベント (受付中の受付の code つき)
+ *   action: "report_enable"       { token, event, settings? }  → { report }
  *                                 event = start.gg のイベントの slug (tournament/x/event/y) か ID。運営か確かめて受付を始め、
- *                                 運営のトークン (access + refresh) を暗号化して D1 に置く。普段のログインのセッションも返す
+ *                                 report_grants のトークンをそのイベントの受付 (report_events) に写す
  *   action: "report_enable_class" { startgg_token, challonge_token, challonge_exp, class_id } → { report }
  *                                 下位クラス (Challonge) の受付。作った本人か本戦の運営だけ
  *   action: "report_admin"        { token, code }  → { report, sets }  運営 (受付を始めた人) だけ
@@ -24,7 +27,7 @@
 import type { Config } from '../config.ts';
 import {
   REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_CHALLONGE_CACHE_S, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
-  REPORT_MIN_OPEN_MS,
+  REPORT_GRANT_MS, REPORT_MIN_OPEN_MS,
 } from '../config.ts';
 import type { ReportEventRow, ReportSetRow, Store } from '../store.ts';
 import { checkStartggAdmin, startggCurrentUser, startggGql } from './class_bracket.ts';
@@ -100,11 +103,11 @@ function eventVars(v: unknown): Record<string, unknown> | null {
   return m ? { slug: m[1].toLowerCase() } : null;
 }
 
-/** action: "report_enable" — 認可コードを運営のトークンに換え、運営か確かめて受付を始める */
-export async function handleReportEnable(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+const MSG_GRANT = '運営のログインが切れています。もう一度 start.gg でログインしてください。';
+
+/** action: "report_login" — 認可コードを運営のトークンに換えて預かる (受付を始めるまで)。普段のログインのセッションも返す */
+export async function handleReportLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || !req.code || req.code.length > 1024) return err('bad_request', '認証コードがありません。');
-  const vars = eventVars(req.event);
-  if (!vars) return err('bad_request', 'start.gg のイベントの URL を確かめてください。', 'bad:event');
   const st = await checkStateToken(cfg, store, req.state, true, now);
   if ('reason' in st) return err('state_invalid', MSG_STATE, st.reason);
   if (st.payload.f !== 'reporter') return err('state_invalid', MSG_STATE, 'wrong_flow');
@@ -112,6 +115,93 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
   if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
   const user = await fetchCurrentUser(ex.token, fetchFn);
   if (!user) return err('auth_failed', oauthErrorMessage('no_user'), 'no_user');
+  const sealed: Sealed = { at: ex.token, rt: ex.refreshToken ?? null, exp: now + (ex.expiresIn ? ex.expiresIn * 1000 : DAY) };
+  await store.purgeReportTokens(now);
+  await store.putReportGrant({ user_id: user.id, token_enc: await sealJson(cfg, sealed), token_exp_ms: sealed.exp, expires_ms: now + REPORT_GRANT_MS });
+  const token = await issueSessionToken(cfg, user, now);
+  const sess = await verifySessionToken(cfg, token, now);
+  await logLogin(store, user.id, 'reporter', now);
+  return ok({ token, user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag }, exp: sess ? sess.exp : null });
+}
+
+/** 預かっている運営のトークン (切れそうなら更新して置き直す) */
+async function grantOf(cfg: Config, store: Store, fetchFn: FetchFn, uid: string, now: number): Promise<Sealed | null> {
+  const g = await store.getReportGrant(uid, now);
+  if (!g) return null;
+  const s = await openJson<Sealed>(cfg, g.token_enc);
+  if (!s || !s.at) return null;
+  if (s.exp - now >= 10 * 60 * 1000) return s;
+  if (!s.rt) return null;
+  const r = await refreshAccessToken(cfg, s.rt, fetchFn, REPORTER_SCOPE);
+  if (!r.token) return null;
+  const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY) };
+  await store.putReportGrant({ ...g, token_enc: await sealJson(cfg, next), token_exp_ms: next.exp });
+  return next;
+}
+
+const TOURS_QUERY = `query SpspReportTours($page: Int!) {
+  currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
+    nodes { id name slug startAt endAt events { id name slug numEntrants videogame { id } } } } }
+}`;
+/** 一覧に出す大会: 開催中 (前後半日) → これから (近い順) → 終わった (新しい順、2 日まで)。最大 30 */
+export function sortTournaments<T extends { startAt: number | null; endAt: number | null }>(list: T[], nowSec: number): (T & { live: boolean })[] {
+  const H = 12 * 3600;
+  const rank = (t: T): [number, number] => {
+    const st = t.startAt || 0; const en = t.endAt || st;
+    if (st <= nowSec + H && en >= nowSec - H) return [0, -st];
+    if (st > nowSec) return [1, st];
+    return [2, -en];
+  };
+  return list.filter((t) => rank(t)[0] < 2 || (t.endAt || t.startAt || 0) >= nowSec - 2 * 86400)
+    .map((t) => ({ t, k: rank(t) })).sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1]).slice(0, 30).map((x) => ({ ...x.t, live: x.k[0] === 0 }));
+}
+
+/** action: "report_tournaments" — 運営が管理している大会とイベント */
+export async function handleReportTournaments(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  await store.purgeReportTokens(now);
+  const g = await grantOf(cfg, store, fetchFn, sess.id, now);
+  if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
+  type T = { id: number; name: string; slug: string; startAt: number | null; endAt: number | null; events: { id: number; name: string; slug: string; entrants: number | null; game: number | null }[] };
+  const all: T[] = [];
+  for (let page = 1; page <= 4; page++) {
+    const r = await startggGql(fetchFn, g.at, TOURS_QUERY, { page });
+    if (!r.ok) return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'tours:' + r.note);
+    const cu = r.json.data && (r.json.data.currentUser as { tournaments?: { nodes?: unknown[] } | null } | null);
+    const nodes = cu && cu.tournaments && Array.isArray(cu.tournaments.nodes) ? cu.tournaments.nodes as Record<string, unknown>[] : [];
+    for (const n of nodes) {
+      if (!n || n.id === undefined) continue;
+      const evs = Array.isArray(n.events) ? n.events as Record<string, unknown>[] : [];
+      all.push({
+        id: Number(n.id), name: String(n.name || ''), slug: String(n.slug || ''), startAt: Number(n.startAt) || null, endAt: Number(n.endAt) || null,
+        events: evs.filter((e) => e && e.id !== undefined).map((e) => ({
+          id: Number(e.id), name: String(e.name || ''), slug: String(e.slug || ''), entrants: Number.isFinite(Number(e.numEntrants)) ? Number(e.numEntrants) : null,
+          game: e.videogame && (e.videogame as { id?: unknown }).id !== undefined ? Number((e.videogame as { id: unknown }).id) : null,
+        })),
+      });
+    }
+    if (nodes.length < 50) break;
+  }
+  const active = await store.listActiveReportEvents(now);
+  const codeOf = new Map(active.filter((a) => a.kind === 'startgg' && a.event_id !== null).map((a) => [Number(a.event_id), a.code]));
+  const tournaments = sortTournaments(all, Math.floor(now / 1000)).map((t) => ({
+    ...t, events: t.events.map((e) => ({ ...e, code: codeOf.get(e.id) || null })),
+  }));
+  return ok({ tournaments });
+}
+
+/** action: "report_enable" — ログインした運営のトークンで、運営か確かめて受付を始める */
+export async function handleReportEnable(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const vars = eventVars(req.event);
+  if (!vars) return err('bad_request', 'start.gg のイベントの URL を確かめてください。', 'bad:event');
+  await store.purgeReportTokens(now);
+  const g = await grantOf(cfg, store, fetchFn, sess.id, now);
+  if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
+  const ex = { token: g.at };
+  const user = { id: sess.id };
 
   const q = await startggGql(fetchFn, ex.token, EVENT_QUERY, vars);
   const evRaw = q.ok && q.json.data ? q.json.data.event as { id?: unknown; name?: unknown; slug?: unknown; tournament?: { id?: unknown; name?: unknown; endAt?: unknown } | null } | null : null;
@@ -125,7 +215,8 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
   }
   const t = evRaw.tournament;
   const name = [typeof t.name === 'string' ? t.name : '', typeof evRaw.name === 'string' ? evRaw.name : ''].filter(Boolean).join(' / ').slice(0, 200);
-  const sealed: Sealed = { at: ex.token, rt: ex.refreshToken ?? null, exp: now + (ex.expiresIn ? ex.expiresIn * 1000 : DAY) };
+  if (adm.userId !== sess.id) return err('not_admin', 'ログイン中のアカウントと運営のログインが違います。もう一度 start.gg でログインしてください。', 'user_mismatch');
+  const sealed: Sealed = g;
   const old = await store.getReportEventByTarget('startgg', String(eventId));
   const row: ReportEventRow = {
     code: old ? old.code : newReportCode(), kind: 'startgg', target_id: String(eventId), event_id: eventId, tournament_id: adm.tournamentId, class_id: null,
@@ -136,10 +227,7 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
   };
   await store.upsertReportEvent(row);
   const saved = (await store.getReportEventByTarget('startgg', String(eventId))) || row;
-  const token = await issueSessionToken(cfg, user, now);
-  const sess = await verifySessionToken(cfg, token, now);
-  await logLogin(store, user.id, 'reporter', now);
-  return ok({ report: publicOf(saved, now), token, user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag }, exp: sess ? sess.exp : null });
+  return ok({ report: publicOf(saved, now) });
 }
 
 const tokenOk = (v: unknown, max: number): v is string => typeof v === 'string' && !!v && v.length <= max && !/\s/.test(v);

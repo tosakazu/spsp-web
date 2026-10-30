@@ -11,7 +11,7 @@ export type ErrorCode =
   | 'invalid_session' | 'bad_settings'
   | 'not_admin' | 'duplicate' | 'startgg_error' | 'not_found' | 'challonge_auth' | 'challonge_error' | 'already_imported'
   | 'title_not_owned'
-  | 'report_closed' | 'provider_error' | 'not_ready' | 'not_allowed' | 'busy' | 'locked';
+  | 'report_closed' | 'provider_error' | 'not_ready' | 'not_allowed' | 'busy' | 'locked' | 'no_grant';
 
 export interface OkBody { ok: true; [k: string]: unknown }
 /** 失敗でも添える情報があることがある (class_create: 作れたトーナメントの challonge:{id,url})。 */

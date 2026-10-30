@@ -243,14 +243,21 @@ async function envWith(fake) {
   return { store, cfg, ctx, call, tok, tick: (ms) => { now += ms; } };
 }
 
-async function enabled(fake, settings) {
-  const e = await envWith(fake);
+/** 運営のログイン (先にする): report_begin → report_login。セッションを返す */
+async function toLogin(e) {
   const b = await e.call({ action: 'report_begin', nonce: 'N', returnPath: '/jp/report/' });
   assert.ok(new URL(b.url).searchParams.get('scope') === 'user.identity tournament.reporter');
-  const state = new URL(b.url).searchParams.get('state');
-  const r = await e.call({ action: 'report_enable', code: 'C', state, event: 'https://www.start.gg/tournament/t/event/singles', settings });
+  const l = await e.call({ action: 'report_login', code: 'C', state: new URL(b.url).searchParams.get('state') });
+  assert.strictEqual(l.ok, true, JSON.stringify(l));
+  return l;
+}
+
+async function enabled(fake, settings) {
+  const e = await envWith(fake);
+  const l = await toLogin(e);
+  const r = await e.call({ action: 'report_enable', token: l.token, event: 'https://www.start.gg/tournament/t/event/singles', settings });
   assert.strictEqual(r.ok, true, JSON.stringify(r));
-  return { ...e, code: r.report.code, enable: r };
+  return { ...e, code: r.report.code, enable: r, login: l };
 }
 
 test('受付: 運営の reporter トークンを暗号化して置き、応答にもログにも出さない', async () => {
@@ -258,26 +265,60 @@ test('受付: 運営の reporter トークンを暗号化して置き、応答�
   const e = await enabled(fake);
   assert.match(e.code, /^[a-z0-9]{10}$/);
   assert.ok(fake.calls.includes('exchange:user.identity tournament.reporter'));
-  assert.ok(!JSON.stringify(e.enable).includes('AT-1') && !JSON.stringify(e.enable).includes('RT-1'));
+  for (const x of [e.enable, e.login]) assert.ok(!JSON.stringify(x).includes('AT-1') && !JSON.stringify(x).includes('RT-1'));
   const row = await e.store.getReportEvent(e.code);
   assert.ok(row.token_enc && !row.token_enc.includes('AT-1'));
   assert.strictEqual(row.admins, '4242');
-  assert.ok(e.enable.token, 'セッションも返す');
-  // f='manager' の state では受付できない
+  assert.ok(e.login.token, 'ログインでセッションを返す');
+  const g = e.store.reportGrants[0];
+  assert.ok(g && g.user_id === '4242' && !g.token_enc.includes('AT-1'), 'ログインのトークンも暗号化して預かる');
+  // f='manager' の state ではログインできない
   const m = await e.call({ action: 'manager_begin', nonce: 'N' });
-  const r2 = await e.call({ action: 'report_enable', code: 'C', state: new URL(m.url).searchParams.get('state'), event: '9' });
+  const r2 = await e.call({ action: 'report_login', code: 'C', state: new URL(m.url).searchParams.get('state') });
   assert.strictEqual(r2.error.code, 'state_invalid');
+  // ログインしていない人 (預かったトークンが無い) は受付できない
+  const r3 = await e.call({ action: 'report_enable', token: await e.tok(77), event: '9' });
+  assert.strictEqual(r3.error.code, 'no_grant');
+  // 預かるのは REPORT_GRANT_MS まで
+  e.tick(13 * 3600 * 1000);
+  const r4 = await e.call({ action: 'report_tournaments', token: e.login.token });
+  assert.ok(r4.error.code === 'no_grant' || r4.error.code === 'auth_failed', JSON.stringify(r4));
+  assert.strictEqual(e.store.reportGrants.length, 0);
   // 普段のログインに reporter の state は使えない
   const b = await e.call({ action: 'report_begin', nonce: 'N' });
   assert.strictEqual((await e.call({ action: 'login', code: 'C', state: new URL(b.url).searchParams.get('state') })).error.code, 'state_invalid');
+});
+
+test('運営の大会一覧: 管理している大会を開催中 → これから の順に、受付中の code つきで', async () => {
+  const fake = fakeStartgg();
+  const now = Math.floor(Date.now() / 1000);
+  const base = fake.fetch;
+  fake.fetch = async (url, init) => {
+    if (!url.includes('/oauth/') && JSON.parse(init.body).query.includes('SpspReportTours')) {
+      return new Response(JSON.stringify({ data: { currentUser: { tournaments: { nodes: [
+        { id: 6, name: 'Next Cup', slug: 'tournament/n', startAt: now + 5 * 86400, endAt: now + 5 * 86400, events: [{ id: 60, name: 'Singles', slug: 'tournament/n/event/s', numEntrants: 10, videogame: { id: 1386 } }] },
+        { id: 7, name: 'Old Cup', slug: 'tournament/o', startAt: now - 30 * 86400, endAt: now - 30 * 86400, events: [] },
+        { id: 5, name: 'Test Cup', slug: 'tournament/t', startAt: now - 3600, endAt: now + 3600, events: [{ id: 9, name: 'Singles', slug: 'tournament/t/event/singles', numEntrants: 64, videogame: { id: 1386 } }] },
+      ] } } } }), { status: 200 });
+    }
+    return base(url, init);
+  };
+  const e = await enabled(fake);
+  const r = await e.call({ action: 'report_tournaments', token: e.login.token });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual(r.tournaments.map((t) => [t.name, t.live]), [['Test Cup', true], ['Next Cup', false]], '終わって 2 日を過ぎた大会は出さない');
+  assert.strictEqual(r.tournaments[0].events[0].code, e.code, '受付中のイベントには code');
+  assert.strictEqual(r.tournaments[1].events[0].code, null);
+  assert.ok(!JSON.stringify(r).includes('AT-1'));
+  assert.strictEqual((await e.call({ action: 'report_tournaments', token: 'x' })).error.code, 'auth_failed');
 });
 
 test('管理者でなければ受付できない', async () => {
   const fake = fakeStartgg();
   fake.admins = [];
   const e = await envWith(fake);
-  const b = await e.call({ action: 'report_begin', nonce: 'N' });
-  const r = await e.call({ action: 'report_enable', code: 'C', state: new URL(b.url).searchParams.get('state'), event: '9' });
+  const l = await toLogin(e);
+  const r = await e.call({ action: 'report_enable', token: l.token, event: '9' });
   assert.strictEqual(r.error.code, 'not_admin');
   assert.strictEqual(e.store.reportEvents ? e.store.reportEvents.length : 0, 0);
 });

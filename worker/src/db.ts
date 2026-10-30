@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow, ReportEventPublic, ReportEventRow, ReportPresetRow, ReportSetRow, ReportSubmissionRow,
+import type { LoginRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportPresetRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -338,12 +338,28 @@ export class D1Store implements Store {
     await this.db.prepare('DELETE FROM report_presets WHERE user_id = ? AND name = ?').bind(userId, name).run();
   }
 
+  async getReportGrant(userId: string, nowMs: number): Promise<ReportGrantRow | null> {
+    return await this.db.prepare('SELECT * FROM report_grants WHERE user_id = ? AND expires_ms >= ?').bind(userId, nowMs).first<ReportGrantRow>() ?? null;
+  }
+
+  async putReportGrant(row: ReportGrantRow): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO report_grants (user_id, token_enc, token_exp_ms, expires_ms) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT (user_id) DO UPDATE SET token_enc = ?2, token_exp_ms = ?3, expires_ms = ?4`)
+      .bind(row.user_id, row.token_enc, row.token_exp_ms, row.expires_ms).run();
+  }
+
+  async deleteReportGrant(userId: string): Promise<void> {
+    await this.db.prepare('DELETE FROM report_grants WHERE user_id = ?').bind(userId).run();
+  }
+
   async stopReportEvent(code: string): Promise<void> {
     await this.db.prepare("UPDATE report_events SET status = 'stopped', token_enc = '' WHERE code = ?").bind(code).run();
   }
 
   async purgeReportTokens(nowMs: number): Promise<void> {
     await this.db.prepare("UPDATE report_events SET status = 'stopped', token_enc = '' WHERE expires_ms < ? AND (token_enc <> '' OR status = 'active')").bind(nowMs).run();
+    await this.db.prepare('DELETE FROM report_grants WHERE expires_ms < ?').bind(nowMs).run();
   }
 
   async listActiveReportEvents(nowMs: number): Promise<ReportEventPublic[]> {

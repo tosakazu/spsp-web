@@ -39,6 +39,9 @@ let INFO = null;      // report_info の report
 let VIEW = null;      // report_view の応答
 let MATCHES = [];     // 自分の試合 (start.gg / Challonge を同じ形に)
 let ME_PID = null;    // start.gg の player id
+let ME_TAG = '';      // start.gg の gamerTag (出場しているかを名前で探す)
+/** この大会に出場しているか (true / false / null = まだ分からない)。false ならエラーを出す (読み直しは続け、試合が出てきたら普通の画面に) */
+let ENTRANT = null;
 let STAGES = null;    // [{id, name}]
 let CHARS = null;     // [{id, name, emoji}]
 let PRED = null;      // live_predict の予想 (start.gg の大会だけ)
@@ -200,8 +203,9 @@ async function gqlData(gql, query, vars) {
 
 async function startggSets(gql) {
   if (!ME_PID) {
-    const d = await gqlData(gql, 'query SpspReportMe { currentUser { id player { id } } }', {});
+    const d = await gqlData(gql, 'query SpspReportMe { currentUser { id player { id gamerTag } } }', {});
     ME_PID = d.currentUser && d.currentUser.player ? String(d.currentUser.player.id) : null;
+    ME_TAG = d.currentUser && d.currentUser.player ? String(d.currentUser.player.gamerTag || '') : '';
     if (!ME_PID) return [];
   }
   const q = (ex) => `query SpspReportMine($eventId: ID!, $pid: ID!) { event(id: $eventId) {
@@ -214,12 +218,28 @@ async function startggSets(gql) {
   }
   const nodes = (d.event && d.event.sets && d.event.sets.nodes) || [];
   const out = nodes.map(fromStartgg).filter(Boolean);
+  // 試合が無いとき: 出場しているか (ブラケットが始まる前は試合が無い)。出ている大会の一覧 (新しい順) か、出場者を名前で探して本人が居るか
+  if (out.length) ENTRANT = true;
+  else if (ENTRANT !== true) ENTRANT = await isEntrant(gql).catch(() => null);
   // 試合待ち: 相手の枠の前の試合 (2 段まで) を読んで候補にする
   for (const m of out) {
     if (m.state !== 'waiting') continue;
     m.prereq = await Promise.all(m.rawSlots.map((s, i) => (m.slots[i] ? null : prereqOf(gql, s, CAND_DEPTH))));
   }
   return out;
+}
+
+/** 本人がこのイベントの出場者か (分からなければ null) */
+async function isEntrant(gql) {
+  const ev = String(INFO.event_id);
+  const u = await gqlData(gql, 'query SpspReportMyEvents { currentUser { events(query: { perPage: 50, page: 1 }) { nodes { id } } } }', {}).catch(() => null);
+  const evs = u && u.currentUser && u.currentUser.events ? u.currentUser.events.nodes || [] : null;
+  if (evs && evs.some((e) => e && String(e.id) === ev)) return true;
+  if (!ME_TAG) return evs ? false : null;
+  const d = await gqlData(gql, `query SpspReportEntrant($eventId: ID!, $name: String) { event(id: $eventId) {
+    entrants(query: { perPage: 20, page: 1, filter: { name: $name } }) { nodes { participants { user { id } } } } } }`, { eventId: INFO.event_id, name: ME_TAG });
+  const ns = (d.event && d.event.entrants && d.event.entrants.nodes) || [];
+  return ns.some((n) => (n.participants || []).some((p) => p.user && String(p.user.id) === myUid()));
 }
 
 function slotFromStartgg(s) {
@@ -502,7 +522,12 @@ function stageOpts(stages) {
     + (rest.length ? `<optgroup label="${escapeHtml(i18n('report.stage_other'))}">${rest.map((x) => o(x.id, x.name)).join('')}</optgroup>` : '');
 }
 
-/** 結果の入力欄。まとめて (既定) = 名前の隣でスコアを選ぶ・キャラ / 1 戦ごと = ゲームごとの勝者・キャラ・ステージ */
+/**
+ * 結果の入力欄。まとめて (既定) = 名前の隣でスコアを選ぶ・キャラ / 1 戦ごと = ゲームごとの勝者・キャラ・ステージ。
+ * 運営の直し (m.admin、運営の画面) も同じ欄で、「自分 / 相手」の代わりに両者の名前を出す (mySide = 0)
+ */
+const winLabel = (m, k) => (m.admin ? i18n('report.admin.winner', { name: m.slots[k] ? m.slots[k].name : '' }) : (k === m.mySide ? i18n('report.i_won') : i18n('report.opp_won')));
+const charLabel = (m, k) => (m.admin ? i18n('report.admin.char', { name: m.slots[k] ? m.slots[k].name : '' }) : (k === m.mySide ? i18n('report.my_char') : i18n('report.opp_char')));
 function formHtml(m) {
   const ft = ftOf(m);
   const n = ft ? 2 * ft - 1 : MAX_GAMES;   // 1 戦ごとの欄の数 (何先が分からなければ最大まで、決着は勝ち越しで)
@@ -514,12 +539,12 @@ function formHtml(m) {
     rows += `<div class="rp-game" data-game="${i}">
       <div class="rp-game-no">${escapeHtml(i18n('report.game', { n: i + 1 }))}</div>
       <div class="rp-game-win">
-        <button type="button" class="rp-pick" data-pick="${m.mySide}">${escapeHtml(i18n('report.i_won'))}</button>
-        <button type="button" class="rp-pick" data-pick="${1 - m.mySide}">${escapeHtml(i18n('report.opp_won'))}</button>
+        <button type="button" class="rp-pick" data-pick="${m.mySide}">${escapeHtml(winLabel(m, m.mySide))}</button>
+        <button type="button" class="rp-pick" data-pick="${1 - m.mySide}">${escapeHtml(winLabel(m, 1 - m.mySide))}</button>
       </div>
       ${withChars ? `<div class="rp-game-sel">
-        ${charPickHtml(`data-char="${m.mySide}"`, i18n('report.my_char'))}
-        ${charPickHtml(`data-char="${1 - m.mySide}"`, i18n('report.opp_char'))}
+        ${charPickHtml(`data-char="${m.mySide}"`, charLabel(m, m.mySide))}
+        ${charPickHtml(`data-char="${1 - m.mySide}"`, charLabel(m, 1 - m.mySide))}
         ${stages.length ? `<label>${escapeHtml(i18n('report.stage'))}<select data-stage>${stageOpts(stages)}</select></label>` : ''}
       </div>` : ''}
     </div>`;
@@ -532,17 +557,17 @@ function formHtml(m) {
   const sumRow = (k) => {
     const slot = m.slots[k];
     return `<div class="rp-sum-row" data-side="${k}">
-      <div class="rp-sum-name">${escapeHtml(slot ? slot.name : '')}${k === m.mySide ? ` <span class="rp-muted">${escapeHtml(i18n('report.you'))}</span>` : ''}</div>
+      <div class="rp-sum-name">${escapeHtml(slot ? slot.name : '')}${k === m.mySide && !m.admin ? ` <span class="rp-muted">${escapeHtml(i18n('report.you'))}</span>` : ''}</div>
       <select class="rp-score" data-score="${k}" aria-label="${escapeHtml(i18n('report.score'))}">${scoreOpts}</select>
       <input class="rp-score-n" type="number" inputmode="numeric" min="0" max="${MAX_GAMES}" data-score-n="${k}" hidden aria-label="${escapeHtml(i18n('report.score'))}">
-      ${withChars ? `<div class="rp-sum-char">${charPickHtml(`data-sum-char="${k}"`, k === m.mySide ? i18n('report.my_char') : i18n('report.opp_char'))}</div>` : ''}
+      ${withChars ? `<div class="rp-sum-char">${charPickHtml(`data-sum-char="${k}"`, charLabel(m, k))}</div>` : ''}
     </div>`;
   };
   const sumPane = `<div class="rp-pane" data-pane="sum">
       ${sumRow(m.mySide)}${sumRow(1 - m.mySide)}
     </div>`;
   return `<form class="rp-form" data-set="${escapeHtml(m.id)}">
-    <h3>${escapeHtml(i18n('report.form.title'))} ${ftHtml(m)}</h3>
+    ${m.admin ? '' : `<h3>${escapeHtml(i18n('report.form.title'))} ${ftHtml(m)}</h3>`}
     <div class="rp-tabs" role="tablist">
       <button type="button" role="tab" class="rp-tab on" data-mode="sum" aria-selected="true">${escapeHtml(i18n('report.mode.sum'))}</button>
       <button type="button" role="tab" class="rp-tab" data-mode="each" aria-selected="false">${escapeHtml(i18n('report.mode.each'))}</button>
@@ -552,7 +577,7 @@ function formHtml(m) {
     ${withChars ? '' : `<p class="rp-muted">${escapeHtml(i18n('report.form.help_ch'))}</p>`}
     ${rows}
     </div>
-    <div class="rp-form-foot"><span class="rp-sum"></span><button type="submit" class="rp-btn rp-primary">${escapeHtml(i18n('report.send'))}</button></div>
+    <div class="rp-form-foot"><span class="rp-sum"></span><button type="submit" class="rp-btn rp-primary">${escapeHtml(m.admin ? i18n('report.admin.fix') : i18n('report.send'))}</button></div>
     <div class="rp-status" data-form-status></div>
   </form>`;
 }
@@ -568,6 +593,13 @@ function wireForm(form, m) {
   // キャラは空欄から (選ぶ一覧のいちばん上にその人の使用キャラを出す、2026-10-30)
   wireCharPickers(form, m);
   const submit = form.querySelector('button[type=submit]');
+  /** 「2-0 で勝ち」(運営: 「A の 2-0 勝ち」)。mine / opp = mySide 側から見た数 */
+  const sumText = (mine, opp, done) => {
+    if (!done) return i18n('report.sum_partial', { a: mine, b: opp });
+    if (!m.admin) return mine > opp ? i18n('report.sum_win', { a: mine, b: opp }) : i18n('report.sum_lose', { a: mine, b: opp });
+    const w = mine > opp ? m.mySide : 1 - m.mySide;
+    return i18n('report.admin.sum', { name: m.slots[w] ? m.slots[w].name : '', a: Math.max(mine, opp), b: Math.min(mine, opp) });
+  };
   const setSum = (text, warn) => { const el = form.querySelector('.rp-sum'); el.textContent = text; el.classList.toggle('rp-warn', !!warn); };
   /** まとめてのスコア [側 0, 側 1] (どちらか未入力なら null) */
   const sumScore = () => [0, 1].map((k) => {
@@ -588,7 +620,7 @@ function wireForm(form, m) {
     if (mine + opp > MAX_GAMES) { setSum(i18n('report.sum_too_many'), true); return; }
     const strict = ftSet(m);
     if (strict && Math.max(mine, opp) !== strict) { setSum(i18n('report.sum_ft', { n: strict }), true); return; }
-    setSum(i18n('report.sum_' + (mine > opp ? 'win' : 'lose'), { a: mine, b: opp }));
+    setSum(sumText(mine, opp, true));
     submit.disabled = false;
   };
   for (const el of form.querySelectorAll('select[data-score], input[data-score-n]')) {
@@ -608,8 +640,7 @@ function wireForm(form, m) {
     for (let i = 0; i < n; i++) for (const btn of games[i].querySelectorAll('.rp-pick')) btn.classList.toggle('on', picked[i] !== null && Number(btn.getAttribute('data-pick')) === picked[i]);
     const done = need ? a >= need || b >= need : a !== b;
     const mine = m.mySide === 0 ? a : b; const opp = m.mySide === 0 ? b : a;
-    const sumKind = done ? (mine > opp ? 'win' : 'lose') : 'partial';
-    setSum(last < 0 ? '' : i18n('report.sum_' + sumKind, { a: mine, b: opp }));
+    setSum(last < 0 ? '' : sumText(mine, opp, done));
     submit.disabled = !done;
   };
   for (const tab of form.querySelectorAll('.rp-tab')) {
@@ -658,6 +689,7 @@ function wireForm(form, m) {
     const result = { w: a > b ? 0 : 1, g };
     const op = m.slots[1 - m.mySide];
     const won = result.w === m.mySide;
+    if (m.admin) { await m.onSubmit(result, form); return; }
     if (!confirm(i18n('report.confirm', { opp: op ? op.name : '', s: scoreText(result, m.mySide), r: won ? i18n('report.win') : i18n('report.lose') }))) return;
     const st = form.querySelector('[data-form-status]');
     setStatus(st, i18n('report.sending'), 'busy');
@@ -712,6 +744,17 @@ function renderPlayer() {
   const done = MATCHES.filter((m) => m.state === 'complete');
   const notices = (VIEW && VIEW.sets ? VIEW.sets : []).filter((r) => r.state === 'conflict');
   let h = '';
+  if (ENTRANT === false && !MATCHES.length) {
+    // ログインしているが出場者に居ない: 報告できない (別のアカウントなら入り直す)
+    const s = sess();
+    root.innerHTML = `<section class="rp-card-sec">
+      <p class="rp-err">${escapeHtml(i18n('report.not_entrant'))}</p>
+      <p class="rp-muted">${escapeHtml(i18n('report.not_entrant_who', { name: DEMO ? i18n('report.demo.to_name') : s && s.user ? s.user.gamerTag || '' : '' }))}</p>
+      <button type="button" class="rp-btn" data-other-login>${escapeHtml(i18n('report.not_entrant_relogin'))}</button>
+    </section>`;
+    root.querySelector('[data-other-login]').addEventListener('click', () => { if (!DEMO) SpspLogin.startLogin(location.pathname + location.search); });
+    return;
+  }
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
   if (cur) {
     const gate = gateOf(cur);
@@ -772,7 +815,7 @@ let LAST_SIG = '';
 /** 試合の状態の要約 (start.gg / Challonge 側で結果が変わったかを見る) */
 function matchesSig() {
   return MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
-    + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '');
+    + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '');
 }
 async function poll(force) {
   if (DEMO) { renderPlayer(); return; }
@@ -787,7 +830,10 @@ async function poll(force) {
     } else {
       VIEW = v;
       if (v.admin) $('rp-to-admin').hidden = false;
-      if (INFO.kind === 'challonge') MATCHES = fromChallonge(v.challonge);
+      if (INFO.kind === 'challonge') {
+        MATCHES = fromChallonge(v.challonge);
+        if (v.challonge && !v.challonge.error) ENTRANT = !!v.challonge.participant;
+      }
       else {
         const tok = await SpspStartggIdentity.token();
         if (!tok) { setStatus(st, i18n('report.need_relogin'), 'warn'); $('rp-relogin').hidden = false; return; }
@@ -1069,6 +1115,12 @@ async function renderAdmin() {
     const x = await api({ action: 'report_stop', token: tok(), code: CODE });
     if (x && x.ok) location.reload(); else alert(errText(x));
   });
+  // 直しの欄のキャラ・ステージ (ステージは start.gg の一覧。普段のログインのトークンが無ければステージは出さない)
+  await loadChars();
+  if (INFO && INFO.kind === 'startgg' && !STAGES) {
+    const t = DEMO ? null : await SpspStartggIdentity.token().catch(() => null);
+    await loadStages(t ? makeGql(t, 1000000) : null);
+  }
   renderAdminSets(r.sets || []);
   if (!DEMO) {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAdminSets(true); });
@@ -1080,7 +1132,7 @@ async function renderAdmin() {
 async function refreshAdminSets(force) {
   clearTimeout(adminTimer);
   const box = $('rp-adm-sets');
-  const busy = !!box && box.contains(document.activeElement);
+  const busy = !!box && (box.contains(document.activeElement) || !!ADMIN_FORM_OPEN);
   if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
     const r = await api({ action: 'report_admin', token: tok(), code: CODE });
     if (r && r.ok) renderAdminSets(r.sets || []);
@@ -1088,10 +1140,19 @@ async function refreshAdminSets(force) {
   adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
 }
 
-function renderAdminSets(sets) {
+/** 運営の直しの欄の試合 (formHtml / wireForm にそのまま渡す)。何先は分からないので、0〜3 と それ以外 */
+function adminModel(s) {
+  const slots = (s.slots || []).map((x) => (x ? { id: String(x.id), name: String(x.name || ''), uid: x.users && x.users[0] ? String(x.users[0]) : null, seed: x.seed || null } : null));
+  return { id: s.set_id, kind: INFO ? INFO.kind : 'startgg', admin: true, mySide: 0, slots, phaseKey: null, roundNum: null };
+}
+let ADMIN_FORM_OPEN = null;   // 直しの欄を開いている試合
+let LAST_ADMIN_SETS = [];
+function renderAdminSets(sets, force) {
   const box = $('rp-adm-sets');
+  LAST_ADMIN_SETS = sets;
   const sig = sets.map((s) => s.set_id + ':' + s.state + ':' + s.updated_ms).join('|');
-  if (sig === ADMIN_SIG && box.childElementCount) return;
+  if (!force && sig === ADMIN_SIG && box.childElementCount) return;
+  if (!force && ADMIN_FORM_OPEN && box.childElementCount) return;   // 直している途中は描き直さない
   ADMIN_SIG = sig;
   const order = { review: 0, conflict: 1, reported: 2, reset: 3, agreed: 4, fixed: 5 };
   sets.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || b.updated_ms - a.updated_ms);
@@ -1106,30 +1167,37 @@ function renderAdminSets(sets) {
       <div class="rp-muted">${escapeHtml(i18n('report.admin.applied'))}: ${escapeHtml(s.applied ? (s.applied.w === 0 ? names[0] : names[1]) + ' ' + scoreText(s.applied, 0) : '—')}
         · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
       <div class="rp-adm-fix">
-        <select data-fix-w><option value="0">${escapeHtml(i18n('report.admin.winner', { name: names[0] }))}</option><option value="1">${escapeHtml(i18n('report.admin.winner', { name: names[1] }))}</option></select>
-        <select data-fix-s>${['1-0', '2-0', '2-1', '3-0', '3-1', '3-2'].map((x) => `<option>${x}</option>`).join('')}</select>
-        <button type="button" class="rp-btn" data-fix>${escapeHtml(i18n('report.admin.fix'))}</button>
+        <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : i18n('report.admin.fix_open'))}</button>
         <button type="button" class="rp-btn" data-reset>${escapeHtml(i18n('report.admin.reset'))}</button>
         <span class="rp-status" data-fix-status></span>
       </div>
+      ${ADMIN_FORM_OPEN === s.set_id ? formHtml(adminModel(s)) : ''}
     </div>`;
   }
   box.innerHTML = h;
   for (const row of box.querySelectorAll('.rp-adm-row')) {
     const setId = row.getAttribute('data-set');
     const st = row.querySelector('[data-fix-status]');
-    row.querySelector('[data-fix]').addEventListener('click', async () => {
-      const w = Number(row.querySelector('[data-fix-w]').value);
-      const [a, b] = row.querySelector('[data-fix-s]').value.split('-').map(Number);
-      const g = [];
-      for (let i = 0; i < b; i++) g.push({ w: 1 - w, c: [null, null], s: null });
-      for (let i = 0; i < a; i++) g.push({ w, c: [null, null], s: null });
-      if (!confirm(i18n('report.admin.fix_confirm'))) return;
-      setStatus(st, i18n('report.sending'), 'busy');
-      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result: { w, g } });
-      setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
-      if (x && x.ok && !DEMO) setTimeout(() => refreshAdminSets(true), 800);
+    row.querySelector('[data-fix-open]').addEventListener('click', () => {
+      ADMIN_FORM_OPEN = ADMIN_FORM_OPEN === setId ? null : setId;
+      renderAdminSets(LAST_ADMIN_SETS, true);
     });
+    const form = row.querySelector('form.rp-form');
+    if (form) {
+      const s = sets.find((x) => x.set_id === setId);
+      wireForm(form, Object.assign(adminModel(s), {
+        // 選手の欄と同じ入力から直す (送る前に確かめる)
+        onSubmit: async (result) => {
+          const fst = form.querySelector('[data-form-status]');
+          const wn = s.slots && s.slots[result.w] ? s.slots[result.w].name : '';
+          if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
+          setStatus(fst, i18n('report.sending'), 'busy');
+          const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result });
+          setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
+          if (x && x.ok) { ADMIN_FORM_OPEN = null; if (!DEMO) setTimeout(() => refreshAdminSets(true), 800); else setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 800); }
+        },
+      }));
+    }
     row.querySelector('[data-reset]').addEventListener('click', async () => {
       if (!confirm(i18n('report.admin.reset_confirm'))) return;
       setStatus(st, i18n('report.sending'), 'busy');
@@ -1142,39 +1210,107 @@ function renderAdminSets(sets) {
 
 // ── 画面: 受付を始める (運営) ─────────────────────────────────────────
 
-function renderSetup() {
+/**
+ * 受付を始める画面。運営のログインが先 (2026-10-30、シード作成・下位クラス作成と同じ):
+ *   1. start.gg で運営としてログイン (scope tournament.reporter、トークンは Worker が暗号化して受付を始めるまで預かる)
+ *   2. 管理している大会 (開催中 → これから → 終わって 2 日まで) のイベントを選ぶ。一覧に無ければ URL でも指定できる
+ *   3. 設定を選んで受付を始める → 運営の画面へ
+ */
+async function renderSetup() {
   const root = $('rp-setup');
   root.hidden = false;
   $('rp-title').textContent = i18n('report.setup.title');
+  const notes = `<p class="rp-muted">${escapeHtml(i18n('report.setup.scope'))}</p>
+    <p class="rp-muted">${escapeHtml(i18n('report.setup.class'))}</p>`;
+  const loginView = (msg) => {
+    root.innerHTML = `<section class="rp-card-sec">
+      <p>${escapeHtml(i18n('report.setup.lead'))}</p>
+      ${msg ? `<p class="rp-warn">${escapeHtml(msg)}</p>` : ''}
+      <button type="button" class="rp-btn rp-primary" id="rp-to-login">${escapeHtml(i18n('report.setup.login_btn'))}</button>
+      <p class="rp-muted">${escapeHtml(i18n('report.setup.login_help'))}</p>
+      <div class="rp-status" id="rp-setup-status"></div>
+      ${notes}
+    </section>`;
+    $('rp-to-login').addEventListener('click', async () => {
+      const st = $('rp-setup-status');
+      if (DEMO) { setStatus(st, i18n('report.demo.nogo'), 'warn'); return; }
+      setStatus(st, i18n('report.setup.going'), 'busy');
+      if (!(await SpspReportAuth.start(location.pathname))) setStatus(st, i18n('report.err.generic'), 'err');
+    });
+  };
+  if ((!DEMO && !sess()) || DEMO === 'setup_login') { loginView(''); return; }
+  root.innerHTML = `<section class="rp-card-sec"><p class="rp-muted">${escapeHtml(i18n('report.setup.loading'))}</p></section>`;
+  const r = await api({ action: 'report_tournaments', token: tok() });
+  if (!r || !r.ok) {
+    const code = r && r.error && r.error.code;
+    if (code === 'no_grant' || code === 'auth_failed') { loginView(''); return; }   // まだ運営としてログインしていない・切れた
+    loginView(errText(r));
+    return;
+  }
+  const tours = r.tournaments || [];
+  const fmt = (sec) => (sec ? new Date(sec * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }) : '');
+  // スマブラ SP のイベントを先に。受付中のイベントは運営の画面へのリンク
+  const evRow = (t, e) => {
+    const meta = [e.entrants ? i18n('report.setup.entrants', { n: e.entrants }) : '', e.game && e.game !== ULT ? i18n('report.setup.other_game') : ''].filter(Boolean).join(' · ');
+    return `<label class="rp-ev${e.code ? ' rp-ev-on' : ''}">
+      <input type="radio" name="rp-ev" value="${escapeHtml(e.slug || String(e.id))}"${e.code ? ' disabled' : ''}>
+      <span class="rp-ev-n">${escapeHtml(e.name)}</span>${meta ? ` <span class="rp-muted">${escapeHtml(meta)}</span>` : ''}
+      ${e.code ? ` <a class="rp-link" href="${escapeHtml(pageUrl(e.code, true))}">${escapeHtml(i18n('report.setup.open_admin'))}</a>` : ''}
+    </label>`;
+  };
+  const tourHtml = (t) => {
+    const evs = (t.events || []).slice().sort((a, b) => (a.game === ULT ? 0 : 1) - (b.game === ULT ? 0 : 1));
+    return `<div class="rp-tour">
+      <div class="rp-tour-h">${t.live ? `<span class="rp-tag rp-live">${escapeHtml(i18n('report.setup.live'))}</span> ` : ''}<b>${escapeHtml(t.name)}</b> <span class="rp-muted">${escapeHtml(fmt(t.startAt))}</span></div>
+      ${evs.length ? evs.map((e) => evRow(t, e)).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.setup.no_events'))}</p>`}
+    </div>`;
+  };
+  const who = DEMO ? i18n('report.demo.to_name') : sess() && sess().user ? sess().user.gamerTag || '' : '';
   root.innerHTML = `<section class="rp-card-sec">
-    <p>${escapeHtml(i18n('report.setup.lead'))}</p>
-    <p class="rp-links">${extLink(SGG, i18n('report.link.open_sgg'))}</p>
-    <label class="rp-label">${escapeHtml(i18n('report.setup.event'))}<input type="url" id="rp-event" placeholder="https://www.start.gg/tournament/…/event/…"></label>
-    ${tok() || DEMO ? presetBarHtml(false) : ''}
+    <p class="rp-muted">${escapeHtml(i18n('report.setup.logged_in', { name: who }))} <button type="button" class="rp-link" id="rp-relogin-mgr">${escapeHtml(i18n('report.setup.relogin'))}</button></p>
+    <h2>${escapeHtml(i18n('report.setup.pick'))}</h2>
+    ${tours.length ? `<div class="rp-tours">${tours.map(tourHtml).join('')}</div>` : `<p class="rp-muted">${escapeHtml(i18n('report.setup.no_tours'))}</p>`}
+    <details class="rp-ev-url"${tours.length ? '' : ' open'}><summary>${escapeHtml(i18n('report.setup.by_url'))}</summary>
+      <label class="rp-label">${escapeHtml(i18n('report.setup.event'))}<input type="url" id="rp-event" placeholder="https://www.start.gg/tournament/…/event/…"></label>
+    </details>
+    <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
+    ${presetBarHtml(false)}
     ${settingsFormHtml({ top_cut: null, classes_only: false }, 'startgg')}
     <button type="button" class="rp-btn rp-primary" id="rp-start">${escapeHtml(i18n('report.setup.start'))}</button>
     <div class="rp-status" id="rp-setup-status"></div>
-    <p class="rp-muted">${escapeHtml(i18n('report.setup.scope'))}</p>
-    <p class="rp-muted">${escapeHtml(i18n('report.setup.class'))}</p>
+    ${notes}
   </section>`;
+  // 開催中のスマブラのイベントが 1 つだけなら選んでおく
+  const live = tours.filter((t) => t.live).flatMap((t) => (t.events || []).filter((e) => e.game === ULT && !e.code));
+  if (live.length === 1) { const v = live[0].slug || String(live[0].id); const x = Array.from(root.querySelectorAll('input[name="rp-ev"]')).find((i) => i.value === v); if (x) x.checked = true; }
+  $('rp-event').addEventListener('input', () => { if ($('rp-event').value.trim()) for (const x of root.querySelectorAll('input[name="rp-ev"]')) x.checked = false; });
+  $('rp-relogin-mgr').addEventListener('click', () => { if (!DEMO) SpspReportAuth.start(location.pathname); });
   let chosen = null;   // 呼び出した設定 (何先は受付の後、フェーズが分かってから当てはめる)
-  if ($('rp-preset-sel')) wirePresets((p, name) => { applySettingsInputs(root, p); chosen = { name, settings: p }; setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup', { name }), 'ok'); }, () => null);
+  wirePresets((p, name) => { applySettingsInputs(root, p); chosen = { name, settings: p }; setStatus($('rp-preset-status'), i18n('report.preset.loaded_setup', { name }), 'ok'); }, () => null);
   $('rp-start').addEventListener('click', async () => {
-    const ev = String($('rp-event').value || '').trim();
     const st = $('rp-setup-status');
-    if (!/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(ev) && !/^\d+$/.test(ev)) { setStatus(st, i18n('report.setup.bad_event'), 'err'); return; }
-    setStatus(st, i18n('report.setup.going'), 'busy');
+    const picked = root.querySelector('input[name="rp-ev"]:checked');
+    const url = String($('rp-event').value || '').trim();
+    const ev = url || (picked ? picked.value : '');
+    if (!ev) { setStatus(st, i18n('report.setup.need_pick'), 'err'); return; }
+    if (url && !/start\.gg\/tournament\/[^/]+\/event\/[^/?#]+/.test(url) && !/^\d+$/.test(url)) { setStatus(st, i18n('report.setup.bad_event'), 'err'); return; }
     if (DEMO) { setStatus(st, i18n('report.demo.nogo'), 'warn'); return; }
+    setStatus(st, i18n('report.setup.starting'), 'busy');
+    const x = await api({ action: 'report_enable', token: tok(), event: ev, settings: readSettings(root) });
+    if (!x || !x.ok) {
+      if (x && x.error && x.error.code === 'no_grant') { loginView(i18n('report.setup.login_expired')); return; }
+      setStatus(st, errText(x), 'err');
+      return;
+    }
     try { if (chosen) sessionStorage.setItem(PRESET_PENDING, JSON.stringify(chosen)); else sessionStorage.removeItem(PRESET_PENDING); } catch (e) { /* 何先は後で入れ直す */ }
-    const okk = await SpspReportAuth.start({ event: ev, settings: readSettings(root) }, location.pathname);
-    if (!okk) setStatus(st, i18n('report.err.generic'), 'err');
+    location.href = pageUrl(x.report.code, true);
   });
 }
 
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'admin', 'setup'];
+const DEMO_SCENES = ['match', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に) */
 async function demoPlayers() {
@@ -1217,7 +1353,7 @@ function demoRow(id, state, mine, theirs, P) {
   if (mine) reports['0'] = { result: mine, ts: 1, mine: true };
   if (theirs) reports['1'] = { result: theirs, ts: 2, mine: false };
   return { code: 'demo', set_id: id, state, note: state === 'review' ? 'locked_conflict' : '', applied: mine || null,
-    slots: [{ id: 'a', name: P[0].name }, { id: 'b', name: P[1].name }], reports, updated_ms: Date.now() - 60000 };
+    slots: [{ id: 'a', name: P[0].name, users: P[0].uid ? [P[0].uid] : [] }, { id: 'b', name: P[1].name, users: P[1].uid ? [P[1].uid] : [] }], reports, updated_ms: Date.now() - 60000 };
 }
 
 const R20 = { w: 0, g: [{ w: 0, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }] };
@@ -1251,9 +1387,19 @@ async function demoApi(body) {
     return { ok: true, set_id: body.set_id, state, op: 'report' };
   }
   if (body.action === 'report_admin') {
-    const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [{ id: 'a', name: P[i].name }, { id: 'b', name: P[i + 1].name }] });
+    const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
     return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: 8, classes_only: false, ft: DEMO_FT } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
+  }
+  if (body.action === 'report_tournaments') {
+    // 見本: 開催中 1 つ (イベント 2 つ、片方は受付中) とこれから 1 つ
+    const now = Math.floor(Date.now() / 1000);
+    return { ok: true, tournaments: [
+      { id: 1, name: i18n('report.demo.tour1'), slug: 'tournament/demo', startAt: now - 3 * 3600, endAt: now + 5 * 3600, live: true, events: [
+        { id: 11, name: 'Singles', slug: 'tournament/demo/event/singles', entrants: 128, game: ULT, code: null },
+        { id: 12, name: 'Crew Battle', slug: 'tournament/demo/event/crew', entrants: 16, game: ULT, code: 'demo' }] },
+      { id: 2, name: i18n('report.demo.tour2'), slug: 'tournament/demo2', startAt: now + 6 * 86400, endAt: now + 6 * 86400, live: false, events: [
+        { id: 21, name: 'Singles', slug: 'tournament/demo2/event/singles', entrants: 48, game: ULT, code: null }] }] };
   }
   if (body.action === 'report_settings') return { ok: true, settings: body.settings };
   if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES };
@@ -1267,7 +1413,7 @@ async function demoApi(body) {
 async function runDemo() {
   demoBanner();
   if (DEMO === 'list' || !DEMO_SCENES.includes(DEMO)) { $('rp-title').textContent = i18n('report.demo.title'); return; }
-  if (DEMO === 'setup') { renderSetup(); return; }
+  if (DEMO === 'setup' || DEMO === 'setup_login') { renderSetup(); return; }
   DEMO_P = await demoPlayers();
   const P = DEMO_P;
   DEMO_ME = P[0].uid;
@@ -1278,6 +1424,8 @@ async function runDemo() {
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin') { await renderAdmin(); return; }
+  if (DEMO === 'login') { $('rp-login').hidden = false; return; }   // ログインしていない人が報告ページを開いた
+  if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }   // ログインしたが出場者に居ない
   await loadChars();
   STAGES = ['戦場', '終点', '小戦場', 'ポケモンスタジアム2', 'すま村', 'ホロウバスティオン', 'カロスポケモンリーグ'].map((name, i) => ({ id: 9001 + i, name }));
   const done0 = demoMatch(P, { id: '90000', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
@@ -1326,7 +1474,7 @@ async function main() {
   poll(true);
 }
 
-$('rp-login-btn').addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search));
+$('rp-login-btn').addEventListener('click', () => { if (!DEMO) SpspLogin.startLogin(location.pathname + location.search); });
 $('rp-relogin-btn').addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search));
 $('rp-to-admin').addEventListener('click', () => { location.href = pageUrl(CODE, true); });
 $('rp-to-player').addEventListener('click', () => { location.href = pageUrl(CODE, false); });
