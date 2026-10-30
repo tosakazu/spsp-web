@@ -413,14 +413,17 @@ function stationHtml(m) {
 
 /**
  * VS = 自分のカード・VS・相手のカード (2026-10-30、名前の文字の VS はやめた)。二つ名・名前はカードに出る。
- * カードが読み込まれるまでとカードが無い人 (start.gg のアカウントが無い・相手が未定・データが無い) は名前の札を出す
+ * カードが読み込まれるまでと SPSP にデータが無い人 (初参加・start.gg のアカウントが無い) は名前だけのカード、相手が未定なら札を出す
  */
+/** SPSP にデータが無い人 (初参加・start.gg のアカウントがつながっていない) のカード。カードと同じ大きさで名前だけ */
+function noCardHtml(name) {
+  return `<div class="rp-nocard"><span class="rp-nocard-t">${escapeHtml(i18n('report.card.default_title'))}</span><span class="rp-nocard-n">${escapeHtml(name)}</span></div>`;
+}
 function vsCardHtml(slot, cls) {
-  const name = slot ? slot.name : i18n('report.tbd');
-  const plate = `<div class="rp-plate"><span class="rp-plate-n">${escapeHtml(name)}</span></div>`;
-  const body = slot && slot.uid
-    ? `<div class="rp-card rp-vs-card pcard" data-card-uid="${escapeHtml(slot.uid)}" data-card-plate="1">${plate}</div>`
-    : plate;
+  if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div></div>`;
+  const body = slot.uid
+    ? `<div class="rp-card rp-vs-card pcard" data-card-uid="${escapeHtml(slot.uid)}" data-card-plate="1">${noCardHtml(slot.name)}</div>`
+    : `<div class="rp-card rp-vs-card">${noCardHtml(slot.name)}</div>`;
   return `<div class="rp-vs-side ${cls}">${body}</div>`;
 }
 function vsHtml(m) {
@@ -479,8 +482,8 @@ function fillCards(root) {
   for (const el of root.querySelectorAll('[data-card-uid]')) {
     mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
       if (ok || !el.isConnected) return;
-      if (el.hasAttribute('data-card-plate')) el.classList.remove('pcard', 'rp-card');   // VS: 名前の札のまま
-      else el.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.card.none'))}</p>`;
+      if (el.hasAttribute('data-card-plate')) el.classList.remove('pcard');   // VS: データが無い人のカード (名前だけ) のまま
+      else el.remove();   // 次の相手の候補: 名前は上に出ているのでカードは出さない
     }).catch(() => { /* カードが出ないだけ */ });
   }
 }
@@ -720,17 +723,20 @@ async function matchAnimation(m) {
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
   for (const sl of [me, op]) if (sl && sl.uid) cardDataOf(sl.uid);   // VS のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
+  // 幕は先に (同じ処理の中で) 出して、下の画面が見えないようにする。中身は二つ名を読んでから (最大 1.2 秒)
+  const ov = document.createElement('div');
+  ov.className = 'rp-match-ov';
+  document.body.appendChild(ov);
+  let skipped = false;
+  ov.addEventListener('click', () => { skipped = true; }, { once: true });
   let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
   const side = (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
-  const ov = document.createElement('div');
-  ov.className = 'rp-match-ov';
   ov.innerHTML = `<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
     <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}
     <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
-  document.body.appendChild(ov);
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
   // タップ (クリック)・Esc / Enter / Space で飛ばす。飛ばしたときは短く消す
   return new Promise((res) => {
@@ -747,6 +753,7 @@ async function matchAnimation(m) {
     ov.addEventListener('click', () => done(true));
     document.addEventListener('keydown', onKey);
     const timer = setTimeout(() => done(false), 2200);
+    if (skipped) done(true);   // 二つ名を読んでいる間にタップされた
   });
 }
 
@@ -1401,7 +1408,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に) */
 async function demoPlayers() {
@@ -1522,6 +1529,10 @@ async function runDemo() {
   const done0 = demoMatch(P, { id: '90000', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
   PRED = { p: { bt: { ifWin: { 90001: 14.2 }, perSet: { 90000: 6.8 } }, tjpr: { delta: 41.5 } } };
   if (DEMO === 'match') { MATCHES = [demoMatch(P, { stream: { name: 'spsp_tv', source: 'TWITCH' } }), done0]; VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P)]; }
+  if (DEMO === 'newcomer') {   // 相手が初参加 (SPSP にデータが無い)
+    MATCHES = [demoMatch(P, { slots: [demoSlot(P[0], 5, 0), { id: 'e1_new', name: i18n('report.demo.newcomer_name'), uid: '999999999', seed: 40 }] }), done0];
+    VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P)];
+  }
   if (DEMO === 'conflict') { MATCHES = [demoMatch(P), done0]; VIEW.sets = [demoRow('90001', 'conflict', R21, L12, P)]; }
   if (DEMO === 'gate') MATCHES = [demoMatch(P, { lPlacement: 7, round: 'Winners Semi-Final', phase: 'Top 32', pool: '', phaseKey: 'p2', roundNum: 3 })];
   if (DEMO === 'challonge') { MATCHES = [demoMatch(P, { kind: 'challonge', station: null, phase: '', pool: 'A', round: i18n('report.round', { n: 1 }), totalGames: null, isClass: true, phaseKey: 'c', roundNum: 1 })]; PRED = { none: true }; }
