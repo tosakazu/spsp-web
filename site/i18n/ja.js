@@ -2133,8 +2133,6 @@ window.SPSP_I18N.ja = {
   'report.demo.tour1': '見本の大会 #12',
   'report.demo.tour2': '見本の大会 #13',
   'report.setup.bad_event': 'イベントの URL (…/tournament/…/event/…) を入れてください。',
-  'report.setup.scope': 'start.gg には「試合の報告」の権限 (tournament.reporter) だけを求めます。トークンは SPSP のサーバで暗号化して預かり、受付の期限 (大会の翌日) か停止で消します。',
-  'report.setup.class': 'Challonge の下位クラスは、下位クラス作成のページの「結果報告の受付」から始めます。',
   'report.notice_label': '結果報告',
   'report.notice_conflict': '{n} 件食い違い',
   'class.report': '結果報告',

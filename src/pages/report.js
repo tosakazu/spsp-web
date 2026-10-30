@@ -1220,8 +1220,6 @@ async function renderSetup() {
   const root = $('rp-setup');
   root.hidden = false;
   $('rp-title').textContent = i18n('report.setup.title');
-  const notes = `<p class="rp-muted">${escapeHtml(i18n('report.setup.scope'))}</p>
-    <p class="rp-muted">${escapeHtml(i18n('report.setup.class'))}</p>`;
   const loginView = (msg) => {
     root.innerHTML = `<section class="rp-card-sec">
       <p>${escapeHtml(i18n('report.setup.lead'))}</p>
@@ -1229,7 +1227,6 @@ async function renderSetup() {
       <button type="button" class="rp-btn rp-primary" id="rp-to-login">${escapeHtml(i18n('report.setup.login_btn'))}</button>
       <p class="rp-muted">${escapeHtml(i18n('report.setup.login_help'))}</p>
       <div class="rp-status" id="rp-setup-status"></div>
-      ${notes}
     </section>`;
     $('rp-to-login').addEventListener('click', async () => {
       const st = $('rp-setup-status');
@@ -1278,7 +1275,6 @@ async function renderSetup() {
     ${settingsFormHtml({ top_cut: null, classes_only: false }, 'startgg')}
     <button type="button" class="rp-btn rp-primary" id="rp-start">${escapeHtml(i18n('report.setup.start'))}</button>
     <div class="rp-status" id="rp-setup-status"></div>
-    ${notes}
   </section>`;
   // 開催中のスマブラのイベントが 1 つだけなら選んでおく
   const live = tours.filter((t) => t.live).flatMap((t) => (t.events || []).filter((e) => e.game === ULT && !e.code));

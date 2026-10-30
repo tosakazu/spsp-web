@@ -2080,8 +2080,6 @@ window.SPSP_I18N.en = {
   'report.demo.tour1': 'Sample Tournament #12',
   'report.demo.tour2': 'Sample Tournament #13',
   'report.setup.bad_event': 'Enter an event URL (…/tournament/…/event/…).',
-  'report.setup.scope': 'SPSP asks start.gg only for the match reporting permission (tournament.reporter). The token is stored encrypted on the SPSP server and deleted when reporting closes (the day after the event) or when you stop it.',
-  'report.setup.class': 'For Challonge lower classes, start from \"Match reports\" on the lower class page.',
   'report.notice_label': 'Match reports',
   'report.notice_conflict': '{n} mismatched',
   'class.report': 'Match reports',
