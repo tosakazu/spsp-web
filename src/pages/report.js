@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { cardDataOf, cardTitleOf, mountPlayerCard } from '../../site/js/player_card_embed.js';
+import { cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -415,15 +415,10 @@ function stationHtml(m) {
  * VS = 自分のカード・VS・相手のカード (2026-10-30、名前の文字の VS はやめた)。二つ名・名前はカードに出る。
  * カードが読み込まれるまでと SPSP にデータが無い人 (初参加・start.gg のアカウントが無い) は名前だけのカード、相手が未定なら札を出す
  */
-/** SPSP にデータが無い人 (初参加・start.gg のアカウントがつながっていない) のカード。カードと同じ大きさで名前だけ */
-function noCardHtml(name) {
-  return `<div class="rp-nocard"><span class="rp-nocard-t">${escapeHtml(i18n('report.card.default_title'))}</span><span class="rp-nocard-n">${escapeHtml(name)}</span></div>`;
-}
+/** VS のカード。読み込むまでは同じ大きさの空の枠、SPSP にデータが無い人 (初参加・start.gg のアカウントがつながっていない) は NO DATA のカード */
 function vsCardHtml(slot, cls) {
   if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div></div>`;
-  const body = slot.uid
-    ? `<div class="rp-card rp-vs-card pcard" data-card-uid="${escapeHtml(slot.uid)}" data-card-plate="1">${noCardHtml(slot.name)}</div>`
-    : `<div class="rp-card rp-vs-card">${noCardHtml(slot.name)}</div>`;
+  const body = `<div class="rp-card rp-vs-card pcard rp-card-wait"${slot.uid ? ` data-card-uid="${escapeHtml(slot.uid)}"` : ''} data-card-name="${escapeHtml(slot.name)}"></div>`;
   return `<div class="rp-vs-side ${cls}">${body}</div>`;
 }
 function vsHtml(m) {
@@ -477,12 +472,16 @@ function candidatesHtml(m) {
   return `<p class="rp-muted">${escapeHtml(open ? i18n('report.cand.count_more', { n }) : i18n('report.cand.count', { n }))}</p>` + html;
 }
 
-/** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。読めなければ一言 */
+/** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。データが無ければ VS は NO DATA のカード、候補は出さない */
 function fillCards(root) {
+  const noData = (el) => { el.classList.remove('rp-card-wait'); mountNoDataCard(el, el.getAttribute('data-card-name') || ''); };
+  for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
     mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
-      if (ok || !el.isConnected) return;
-      if (el.hasAttribute('data-card-plate')) el.classList.remove('pcard');   // VS: データが無い人のカード (名前だけ) のまま
+      if (!el.isConnected) return;
+      el.classList.remove('rp-card-wait');
+      if (ok) return;
+      if (el.hasAttribute('data-card-name')) noData(el);   // VS: SPSP にデータが無い人
       else el.remove();   // 次の相手の候補: 名前は上に出ているのでカードは出さない
     }).catch(() => { /* カードが出ないだけ */ });
   }

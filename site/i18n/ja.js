@@ -1995,7 +1995,6 @@ window.SPSP_I18N.ja = {
   'report.cand.playing': '試合中',
   'report.cand.pending': '試合前',
   'report.cand.done': '終了',
-  'report.card.default_title': 'スマブラSPプレイヤー',
   'report.no_current': 'いま報告する試合はありません。',
   'report.no_sets': 'この大会のあなたの試合はまだありません (ブラケットが始まると出ます)。',
   'report.not_entrant': 'この大会の出場者にあなたが見つからないため、結果を報告できません。',

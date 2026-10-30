@@ -3,11 +3,12 @@
 //   mountPlayerCard(el, uid, opts)  el (.pcard を付ける) に uid のカードを描く。データ・設定・二つ名・フォントはプレイヤーページと同じ
 //   cardDataOf(uid) / appliedOf(uid) 読んだものはページの中で使い回す (同じ選手を何度も読まない)
 //   cardTitleOf(uid)                カードに出る二つ名の文字 (前半 + 後半、既定の「スマブラSPプレイヤー」も含む)。選手のデータが無ければ ''
+//   mountNoDataCard(el, name)        SPSP にデータが無い人のカード (既定の見た目・名前だけ・NO DATA)
 //   ensureCardFonts()               カードの Web フォント (IBM Plex Sans JP / Zalando Sans) を読む <link> を足す (p/index.html と同じもの)
 // 見た目の CSS は css/player_card.css (ページの <head> で読む)。描くのは js/player_card.js の render (プレイヤーページと同じ)
 import SPSPPlayerCard, { shownTitle } from './player_card.js';
 import SPSPViews from './views.js';
-import { buildCardModel, fetchAppliedCard, loadCardData } from './player_card_model.js';
+import { buildCardModel, fetchAppliedCard, loadCardData, noDataCardModel } from './player_card_model.js';
 
 /** p/index.html・p/edit.html と同じフォント (変えるときは 3 か所とも) */
 export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
@@ -86,4 +87,11 @@ export async function mountPlayerCard(el, uid) {
   return true;
 }
 
-export default { mountPlayerCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, CARD_FONTS_URL };
+/** SPSP にデータが無い人のカード @param {HTMLElement} el @param {string} name */
+export function mountNoDataCard(el, name) {
+  ensureCardFonts();
+  el.classList.add('pcard');
+  SPSPPlayerCard.render(el, noDataCardModel(name));
+}
+
+export default { mountPlayerCard, mountNoDataCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, CARD_FONTS_URL };

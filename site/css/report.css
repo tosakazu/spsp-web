@@ -48,11 +48,8 @@ body {
 .rp-vs-mark { flex: none; width: 46px; height: 46px; border-radius: 50%; background: #dc2626; color: #fff; font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 900; font-size: 16px; line-height: 1; letter-spacing: 0; text-box: trim-both cap alphabetic; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .rp-plate { width: 100%; height: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; padding: 10px; border-radius: 12px; background: #f3f4f6; border: 1px solid #e5e7eb; }
 .rp-vs-card .rp-plate { border-radius: inherit; }
-/* SPSP にデータが無い人のカード (カードと同じ縦横比、名前だけ) */
-.rp-nocard { width: 100%; aspect-ratio: 514 / 333; border-radius: 14px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; padding: 6% 8%;
-  background: linear-gradient(135deg, #374151 0%, #111827 100%); color: #fff; box-sizing: border-box; overflow: hidden; }
-.rp-nocard-t { font-size: 12px; font-weight: 700; color: #d1d5db; letter-spacing: .04em; }
-.rp-nocard-n { font-size: clamp(20px, 6vw, 32px); font-weight: 900; line-height: 1.2; overflow-wrap: anywhere; }
+/* カードを読み込むまでの空の枠 (カードと同じ大きさ) */
+.rp-card-wait { background: #f3f4f6; border-radius: 14px; }
 .rp-plate-n { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; text-align: center; }
 .rp-card { margin: 8px auto; width: 100%; max-width: 514px; }   /* 514px = カードの原寸 (プレイヤーページと同じ大きさまで) */
 .rp-card-sm { max-width: 420px; margin: 6px 0 0; }

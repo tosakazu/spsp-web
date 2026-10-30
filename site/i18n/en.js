@@ -1942,7 +1942,6 @@ window.SPSP_I18N.en = {
   'report.cand.playing': 'in progress',
   'report.cand.pending': 'not started',
   'report.cand.done': 'finished',
-  'report.card.default_title': 'Smash Ultimate Player',
   'report.no_current': 'No match to report right now.',
   'report.no_sets': 'You have no matches in this event yet (they appear when the bracket starts).',
   'report.not_entrant': 'You are not an entrant of this event, so you cannot report results.',
