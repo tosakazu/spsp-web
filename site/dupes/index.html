@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="page.dupes.title">重複参加チェック | SPSP</title>
+<meta name="description" content="start.gg の大会の参加者から、同じ人が別のアカウントで申し込んでいないかを、名前・連携アカウント・SPSP の出場記録で調べます。" data-i18n-attr="content:page.dupes.description">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="../css/class_bracket.css">
+<link rel="stylesheet" href="../css/startgg_auth.css">
+<link rel="stylesheet" href="../css/dupes.css">
+<link rel="stylesheet" href="../region/site.css">
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="../region/config.js"></script>
+<script src="../i18n/ja.js"></script>
+<script src="../region/i18n.js"></script>
+<!-- 重複参加チェック (docs/dupe_check_design.md)。ブラウザの中だけで動く: 参加者と連携アカウントは start.gg、出場記録は SPSP の公開データ。
+     SPSP のサーバには何も送らない。フォームの見た目は下位クラス作成 (css/class_bracket.css) と同じ -->
+<main class="cb-main dp-main">
+  <h1 data-i18n="dupes.title">重複参加チェック</h1>
+  <p class="subtitle" data-i18n="page.dupes.description">start.gg の大会の参加者から、同じ人が別のアカウントで申し込んでいないかを、名前・連携アカウント・SPSP の出場記録で調べます。</p>
+  <div class="cb-card dp-form">
+    <div class="cb-sec">
+      <h2 data-i18n="class.h.accounts">アカウント</h2>
+      <!-- start.gg の認証 (ログイン / API キー。js/startgg_manager.js の mount が組み立てる。ほかの運営ツールと共通) -->
+      <div id="dp-sgg-auth">
+      <div id="dp-sgg-keyblock">
+      <label class="cb-label" for="dp-sgg-key">
+        <span data-i18n="class.startgg_key">start.gg の API キー (その大会の管理者)</span>
+        <a class="cb-help-link" href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" data-i18n="seed.skeleton.t8">API キー取得→</a>
+      </label>
+      <div class="cb-token">
+        <input type="password" id="dp-sgg-key" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+        <button type="button" class="cb-icon-btn" id="dp-sgg-reveal" data-i18n-attr="title:seed.skeleton.t116" title="表示/隠す">👁</button>
+        <button type="button" class="cb-save-btn" id="dp-sgg-save" data-i18n-attr="title:seed.skeleton.t117" title="ブラウザに保存" data-i18n="seed.skeleton.t9">💾 保存</button>
+      </div>
+      <div class="cb-hint" id="dp-sgg-hint"></div>
+      <div class="sgg-key-note" data-i18n="dupes.key_note">🔒 API キーは start.gg への問い合わせだけに使います。「💾 保存」を押したときだけ、このブラウザ (localStorage) に保存します。</div>
+      </div>
+      </div>
+    </div>
+    <div class="cb-sec">
+      <h2 data-i18n="dupes.h.event">大会</h2>
+      <div id="dp-tour-pick-row" hidden>
+        <label class="cb-label" for="dp-tour-pick" data-i18n="class.tour_pick">管理している大会から選ぶ</label>
+        <select id="dp-tour-pick"></select>
+      </div>
+      <label class="cb-label" for="dp-event" data-i18n="dupes.event_url">大会の start.gg の URL (イベントのページでも可)</label>
+      <input type="text" id="dp-event" placeholder="https://www.start.gg/tournament/…" autocomplete="off">
+      <div id="dp-event-pick-row" hidden>
+        <label class="cb-label" for="dp-event-pick" data-i18n="class.event_pick">イベント</label>
+        <select id="dp-event-pick"></select>
+      </div>
+    </div>
+    <button type="button" class="cb-main-btn" id="dp-load" data-i18n="dupes.load">調べる</button>
+    <div class="cb-status" id="dp-status" role="status"></div>
+  </div>
+
+  <!-- 結果 (調べたあとに出す)。印刷すると結果だけが出る (css/dupes.css の @media print) -->
+  <section class="dp-report" id="dp-report" hidden>
+    <div class="dp-report-head">
+      <h2 class="dp-report-title" id="dp-report-title"></h2>
+      <div class="dp-report-meta" id="dp-report-meta"></div>
+      <div class="dp-actions">
+        <button type="button" class="cb-sub-btn" id="dp-print" data-i18n="dupes.print">印刷 / PDF</button>
+        <button type="button" class="cb-sub-btn" id="dp-csv" data-i18n="dupes.csv">CSV</button>
+      </div>
+    </div>
+    <div class="dp-legend" id="dp-legend"></div>
+    <div class="dp-filter">
+      <label><input type="checkbox" id="dp-show-diff"> <span data-i18n="dupes.show_diff">別人と判断した組も表に出す</span></label>
+    </div>
+    <div class="dp-table-wrap"><table class="dp-table" id="dp-table">
+      <thead><tr>
+        <th data-i18n="dupes.col.pair">組</th>
+        <th data-i18n="dupes.col.verdict">判定</th>
+        <th data-i18n="dupes.col.reason">決め手</th>
+      </tr></thead>
+      <tbody id="dp-tbody"></tbody>
+    </table></div>
+    <p class="dp-empty" id="dp-empty" hidden data-i18n="dupes.empty">確認が必要な組はありませんでした。</p>
+    <h3 class="dp-h" data-i18n="dupes.h.cards">組ごとの根拠</h3>
+    <div class="dp-cards" id="dp-cards"></div>
+    <details class="dp-similar" id="dp-similar">
+      <summary id="dp-similar-sum"></summary>
+      <div class="dp-cards" id="dp-similar-cards"></div>
+    </details>
+    <div class="dp-notes">
+      <h3 class="dp-h" data-i18n="dupes.h.method">調べ方</h3>
+      <ul>
+        <li data-i18n="dupes.method.names">候補の組: 名前が同じ (全角・半角、大文字小文字、カタカナとひらがな、記号の違いは無視。かなと英字はローマ字で比べる)、名前が 1 文字違い (3 文字以上)、連携アカウント (Discord・X など) が同じ。</li>
+        <li data-i18n="dupes.method.played">同じ大会の同じ部門に両方が出て、どちらも試合をしていれば別人です (DQ だけの部門は根拠にしません)。同じ日に離れた地方の大会で両方試合をしていても別人です。</li>
+        <li data-i18n="dupes.method.links">同じ Discord アカウント (ID で照合) がつながっていれば同一人物、連携アカウントの名前が同じなら同一人物の可能性が高いとします。</li>
+        <li data-i18n="dupes.method.data">出場記録は SPSP の集計対象の大会だけです (オンライン大会などは入っていません)。SPSP に記録が無いアカウントは、start.gg の参加大会数を表示します。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<script src="../assets/dupes.js"></script>
+</body>
+</html>
