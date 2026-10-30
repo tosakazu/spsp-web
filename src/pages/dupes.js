@@ -1,5 +1,5 @@
 // @ts-check
-// src/pages/dupes.js — site/dupes/index.html (重複エントリーチェック、docs/dupe_check_design.md)。
+// src/pages/dupes.js — site/dupes/index.html (重複参加チェック、docs/dupe_check_design.md)。
 //   1. 読み込む: start.gg のキーでその大会の管理者か確かめ (下位クラス作成と同じ)、参加者と連携アカウントを 100 人ずつ取る
 //   2. 候補の組を作る (js/dupe_check.js findCandidates)。連携アカウントが空で返った人は取り直す:
 //      start.gg は 1 回の応答に同じ Discord を持つ人が 2 人いると片方を空にして返す (2026-10-30 に確認)。10 人ずつ、まだ空なら 1 人ずつ

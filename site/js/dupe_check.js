@@ -1,5 +1,5 @@
 // @ts-check
-// dupe_check.js — 重複エントリーチェック (dupes/index.html) の計算部分。画面と通信は src/pages/dupes.js (docs/dupe_check_design.md)。
+// dupe_check.js — 重複参加チェック (dupes/index.html) の計算部分。画面と通信は src/pages/dupes.js (docs/dupe_check_design.md)。
 //   ブラウザの中だけで動く。参加者と連携アカウントは start.gg、出場記録は SPSP の公開データ (players/<uid>.json)。
 //   normName(s)                 名前の正規化 (NFKC・小文字・カタカナ→ひらがな・記号と空白を除く)
 //   romaji(s)                   ひらがな (normName 済み) → ローマ字 (連携アカウントの名前と比べる用。簡易ヘボン式)

@@ -1,4 +1,4 @@
-# 重複エントリーチェック (dupes/)
+# 重複参加チェック (dupes/)
 
 start.gg の大会の参加者から、同じ人が別のアカウントで申し込んでいないかを調べる運営ツール。ページは `site/dupes/index.html`、
 計算は `site/js/dupe_check.js`、画面と通信は `src/pages/dupes.js`。テストは `tests/frontend/dupe_check.test.cjs` (データは架空)。

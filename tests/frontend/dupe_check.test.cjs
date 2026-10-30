@@ -1,4 +1,4 @@
-// tests/frontend/dupe_check.test.cjs — 重複エントリーチェックの計算部分 (js/dupe_check.js、docs/dupe_check_design.md)。データは架空
+// tests/frontend/dupe_check.test.cjs — 重複参加チェックの計算部分 (js/dupe_check.js、docs/dupe_check_design.md)。データは架空
 const test = require('node:test');
 const assert = require('node:assert');
 const vm = require('vm');

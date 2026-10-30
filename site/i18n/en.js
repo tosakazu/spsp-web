@@ -11,7 +11,7 @@ window.SPSP_I18N.en = {
   'nav.ranking.pref': 'Rankings by prefecture',
   'nav.ranking.events': 'Tournaments',
   'nav.ranking.sim': 'Score simulator',
-  'nav.seeding': 'Seeding',
+  'nav.seeding': 'TO Tools',
   'nav.seeding.seed': 'Seed generator',
   'nav.seeding.upload': 'Seed upload',
   'nav.seeding.priority': 'Priority list',
@@ -140,7 +140,7 @@ window.SPSP_I18N.en = {
   'class.err.del': 'Could not delete: {message}',
   'class.err.already_imported': 'Already imported into SPSP, so it cannot be deleted',
   'class.err.startgg': 'Loading from start.gg failed: {message}',
-  // ── 重複エントリーチェック (dupes/index.html、src/pages/dupes.js) ──
+  // ── 重複参加チェック (dupes/index.html、src/pages/dupes.js) ──
   'dupes.title': 'Duplicate entry check',
   'dupes.key_note': '🔒 The API key is only used for start.gg queries. It is saved in this browser (localStorage) only when you press "💾 Save".',
   'dupes.h.event': 'Tournament',
