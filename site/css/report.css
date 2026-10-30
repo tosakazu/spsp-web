@@ -110,7 +110,10 @@ body {
   position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
   background: radial-gradient(circle at 50% 45%, #7f1d1d 0%, #111827 70%); color: #fff; animation: rp-fade .25s ease-out; padding: 16px;
 }
+.rp-match-ov { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
 .rp-match-ov.out { opacity: 0; transition: opacity .35s; }
+.rp-match-ov.skip { opacity: 0; transition: opacity .12s; pointer-events: none; }
+.rp-match-skip { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); font-size: 12px; opacity: .55; animation: rp-fade 1s; }
 .rp-match-title { font-size: 15px; letter-spacing: .2em; opacity: .85; animation: rp-pop .5s ease-out; }
 .rp-match-names { display: flex; align-items: center; gap: 14px; font-size: 24px; font-weight: 900; max-width: 100%; }
 .rp-match-p { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow-wrap: anywhere; max-width: 40vw; text-align: center; }

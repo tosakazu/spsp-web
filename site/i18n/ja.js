@@ -1961,6 +1961,7 @@ window.SPSP_I18N.ja = {
   'report.state.reset': '運営が取り消し',
   'report.banner_conflict': '結果が食い違っている試合が {n} 件あります。相手と確かめて送り直してください。',
   'report.matched': '対戦相手が決まりました',
+  'report.match_skip': 'タップでスキップ',
   'report.station': '{n} 番台',
   'report.stream': '配信台',
   'report.seed': 'シード {n}',

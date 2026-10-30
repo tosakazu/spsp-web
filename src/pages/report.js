@@ -727,13 +727,25 @@ async function matchAnimation(m) {
   ov.innerHTML = `<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
     <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
-    ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}`;
+    ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}
+    <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   document.body.appendChild(ov);
   try { if (navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) { /* 震えないだけ */ }
+  // タップ (クリック)・Esc / Enter / Space で飛ばす。飛ばしたときは短く消す
   return new Promise((res) => {
-    const done = () => { ov.classList.add('out'); setTimeout(() => { ov.remove(); res(); }, 350); };
-    ov.addEventListener('click', done, { once: true });
-    setTimeout(done, 2200);
+    let over = false;
+    const done = (skip) => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      document.removeEventListener('keydown', onKey);
+      ov.classList.add(skip ? 'skip' : 'out');
+      setTimeout(() => { ov.remove(); res(); }, skip ? 120 : 350);
+    };
+    const onKey = (e) => { if (['Escape', 'Enter', ' '].includes(e.key)) { e.preventDefault(); done(true); } };
+    ov.addEventListener('click', () => done(true));
+    document.addEventListener('keydown', onKey);
+    const timer = setTimeout(() => done(false), 2200);
   });
 }
 

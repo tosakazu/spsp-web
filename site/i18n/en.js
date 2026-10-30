@@ -1908,6 +1908,7 @@ window.SPSP_I18N.en = {
   'report.state.reset': 'Cleared by organizers',
   'report.banner_conflict': '{n} of your matches have mismatched reports. Check with your opponent and send again.',
   'report.matched': 'Your opponent is set',
+  'report.match_skip': 'Tap to skip',
   'report.station': 'Station {n}',
   'report.stream': 'Stream',
   'report.seed': 'Seed {n}',
