@@ -532,9 +532,9 @@ function formHtml(m) {
     </div>`;
   }
   // まとめて: 両者の名前の隣にスコア (0〜3・それ以外は数を入れる) と、start.gg ならキャラ。ステージは選べない
-  // 候補: 何先が分かれば 0〜N (運営の設定なら それ以外 は出さない)、分からなければ 0〜3 と それ以外
+  // 候補: 何先が分かれば 0〜N (運営の設定なら それ以外 は出さない)、分からなければ 0〜3 と それ以外。既定は 0 (2026-10-30)
   const top = ft || 3;
-  const scoreOpts = `<option value="">—</option>` + Array.from({ length: top + 1 }, (_, x) => `<option value="${x}">${x}</option>`).join('')
+  const scoreOpts = Array.from({ length: top + 1 }, (_, x) => `<option value="${x}"${x === 0 ? " selected" : ""}>${x}</option>`).join('')
     + (ftSet(m) ? '' : `<option value="${SCORE_OTHER}">${escapeHtml(i18n('report.score_other'))}</option>`);
   const sumRow = (k) => {
     const slot = m.slots[k];
@@ -591,7 +591,7 @@ function wireForm(form, m) {
     submit.disabled = true;
     if (sc[0] === null || sc[1] === null) { setSum(''); return; }
     const mine = sc[m.mySide]; const opp = sc[1 - m.mySide];
-    if (mine === opp) { setSum(i18n('report.sum_tie'), true); return; }
+    if (mine === opp) { setSum(mine === 0 ? '' : i18n('report.sum_tie'), true); return; }   // 0-0 = まだ何も入れていない
     if (mine + opp > MAX_GAMES) { setSum(i18n('report.sum_too_many'), true); return; }
     const strict = ftSet(m);
     if (strict && Math.max(mine, opp) !== strict) { setSum(i18n('report.sum_ft', { n: strict }), true); return; }
