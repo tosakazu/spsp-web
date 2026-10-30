@@ -458,5 +458,5 @@ $('dp-sgg-save').addEventListener('click', () => {
   b.disabled = true;
   setTimeout(() => { b.textContent = orig; b.disabled = false; }, 1500);
 });
-SpspStartggManager.mount({ root: $('dp-sgg-auth'), keyBlock: $('dp-sgg-keyblock'), onChange: () => { loadMyTournaments(); } });
+SpspStartggManager.mount({ root: $('dp-sgg-auth'), keyBlock: $('dp-sgg-keyblock'), notice: false, onChange: () => { loadMyTournaments(); } });
 loadMyTournaments();
