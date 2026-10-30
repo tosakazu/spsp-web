@@ -166,11 +166,11 @@ export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
 }
 
 /** この set を前提 (prereq) にする set のうち、結果が入ったものがあるか */
-export function downstreamDoneOf(nodes: unknown, setId: string, state = 3): boolean {
+export function downstreamDoneOf(nodes: unknown, setId: string): boolean {
   if (!Array.isArray(nodes)) return false;
   return nodes.some((n) => {
     const x = n as { id?: unknown; state?: unknown; slots?: { prereqType?: unknown; prereqId?: unknown }[] } | null;
-    if (!x || String(x.id) === setId || Number(x.state) !== state || !Array.isArray(x.slots)) return false;
+    if (!x || String(x.id) === setId || Number(x.state) !== 3 || !Array.isArray(x.slots)) return false;
     return x.slots.some((sl) => sl && sl.prereqType === 'set' && String(sl.prereqId) === setId);
   });
 }
@@ -236,7 +236,6 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
           if (!Number.isFinite(total) || page >= total) break;
         }
         set.downstreamDone = downstreamDoneOf(nodes, set.id);
-        set.downstreamStarted = downstreamDoneOf(nodes, set.id, 2);
       }
       return { ok: true, set };
     },

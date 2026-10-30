@@ -28,8 +28,6 @@ export interface NSet {
   totalGames: number | null;
   /** この試合の勝者・敗者が進んだ次の試合に、もう結果が入っている */
   downstreamDone: boolean;
-  /** 次の試合が始まっている (start.gg state 2)。選手の報告から自動で取り消し・入れ直しはしない (試合中の人を引き戻さない)。運営の直しは止めない */
-  downstreamStarted?: boolean;
   /** 負けた人の順位 (start.gg の lPlacement。Challonge は残り人数から) */
   lPlacement: number | null;
   /** 下位クラス (Bクラス等) の試合 */
@@ -264,7 +262,8 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
   const byUs = set.complete && !!ours && sameOutcome(ours, set.remote);
   const external = set.complete && !byUs;
   const [a, b] = latest;
-  const locked = set.downstreamDone || !!set.downstreamStarted;   // 勝者が変わる取り消し・入れ直しは、次の試合に結果がある・始まっているならしない (キャラだけの update は結果があるときだけ止める)
+  // 食い違い・出し直しは、次の試合に結果が出るまでは巻き戻す (次の試合が始まっていても。一致するまで待つか運営が確かめる)
+  const locked = set.downstreamDone;
 
   if (a && b) {
     if (sameOutcome(a.result, b.result)) {

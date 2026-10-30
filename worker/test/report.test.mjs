@@ -622,16 +622,12 @@ test('運営の受付用ログイン (reporter) の state は、普段のログ�
   }
 });
 
-test('次の試合が始まっている (state 2): 選手の報告で自動に取り消さない (review)。キャラだけの update と運営の直しは止めない', () => {
+test('次の試合が始まっている (state 2) だけなら、食い違いは巻き戻す (結果が出るまでは)', () => {
   const a = { result: R(0, G(0), G(0)), ts: 1 };
   const bad = { result: R(1, G(1), G(1)), ts: 2 };
-  const started = set0({ complete: true, remote: R(0, G(0), G(0)), downstreamStarted: true });
-  assert.deepStrictEqual(reconcile({ state: 'reported', applied: a.result }, [a, bad], started), { op: 'none', state: 'review', result: null, note: 'locked_conflict' });
-  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [bad, null], started).note, 'locked_change');
-  const chars = { result: R(0, G(0, 1293), G(0)), ts: 3 };
-  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [chars, null], started).op, 'update');
-  assert.strictEqual(adminDecision('reset', null, started).op, 'reset');
-  assert.ok(downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100', 2));
+  const started = set0({ complete: true, remote: R(0, G(0), G(0)) });   // downstreamDoneOf は state 3 だけを数える
+  assert.ok(!downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
+  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [a, bad], started).op, 'reset');
 });
 
 test('次の試合の探し方: 2 人の試合が 60 件より多くてもページをまたいで見つける', async () => {
