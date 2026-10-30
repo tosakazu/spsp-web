@@ -568,11 +568,11 @@ function formHtml(m) {
       ${sumRow(m.mySide)}${sumRow(1 - m.mySide)}
     </div>`;
   return `<form class="rp-form" data-set="${escapeHtml(m.id)}">
-    ${m.admin ? '' : `<h3>${escapeHtml(i18n('report.form.title'))} ${ftHtml(m)}</h3>`}
-    <div class="rp-tabs" role="tablist">
-      <button type="button" role="tab" class="rp-tab on" data-mode="sum" aria-selected="true">${escapeHtml(i18n('report.mode.sum'))}</button>
-      <button type="button" role="tab" class="rp-tab" data-mode="each" aria-selected="false">${escapeHtml(i18n('report.mode.each'))}</button>
-    </div>
+    <div class="rp-form-top">${m.admin ? '' : `<h3>${escapeHtml(i18n('report.form.title'))} ${ftHtml(m)}</h3>`}
+      <div class="rp-tabs" role="tablist">
+        <button type="button" role="tab" class="rp-tab on" data-mode="sum" aria-selected="true">${escapeHtml(i18n('report.mode.sum'))}</button>
+        <button type="button" role="tab" class="rp-tab" data-mode="each" aria-selected="false">${escapeHtml(i18n('report.mode.each'))}</button>
+      </div></div>
     ${sumPane}
     <div class="rp-pane" data-pane="each" hidden>
     ${withChars ? '' : `<p class="rp-muted">${escapeHtml(i18n('report.form.help_ch'))}</p>`}
