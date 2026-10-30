@@ -110,10 +110,6 @@ body {
   position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
   background: radial-gradient(circle at 50% 45%, #7f1d1d 0%, #111827 70%); color: #fff; animation: rp-fade .25s ease-out; padding: 16px;
 }
-.rp-start { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
-.rp-playing { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #b91c1c; }
-.rp-playing::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: rp-blink 1.2s ease-in-out infinite; }
-@keyframes rp-blink { 50% { opacity: .3; } }
 .rp-match-ov { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
 .rp-match-ov.out { opacity: 0; transition: opacity .35s; }
 .rp-match-ov.skip { opacity: 0; transition: opacity .12s; pointer-events: none; }
@@ -130,7 +126,7 @@ body {
 @keyframes rp-pop { 0% { transform: scale(.3); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes rp-in-l { from { transform: translateX(-60vw); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes rp-in-r { from { transform: translateX(60vw); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .rp-match-ov, .rp-match-ov *, .rp-playing::before { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .rp-match-ov, .rp-match-ov * { animation: none !important; } }
 
 /* 見本の画面 (?demo=) */
 .rp-demo { background: #eff6ff; border: 1px solid #93c5fd; color: #1e3a8a; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; }

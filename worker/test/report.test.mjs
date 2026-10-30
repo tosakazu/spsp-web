@@ -226,7 +226,6 @@ function fakeStartgg() {
       st.last = variables;
       return j({ x: { id: 100, state: 3 } });
     }
-    if (name === 'SpspStartSet') { st.set.state = 2; return j({ markSetInProgress: { id: 100, state: 2 } }); }
     if (name === 'SpspResetSet') { st.set.state = 1; st.set.winnerId = null; st.set.games = null; return j({ resetSet: { id: 100, state: 1 } }); }
     return j({});
   };
@@ -358,19 +357,6 @@ test('報告の流れ: 1 人目で反映 → 2 人目が違えば取り消し �
   assert.deepStrictEqual([r.state, r.op], ['agreed', 'report']);
   assert.deepStrictEqual(fake.last.gameData[0].selections, [{ entrantId: '1', characterId: '1293' }, { entrantId: '2', characterId: '1310' }]);
   assert.strictEqual(fake.last.gameData[0].stageId, '3');
-});
-
-test('試合開始: 選手が押すと start.gg の試合を試合中にする (もう試合中なら送らない)。選手でない人は弾く', async () => {
-  const fake = fakeStartgg();
-  fake.set.state = 1;
-  const e = await enabled(fake);
-  assert.strictEqual((await e.call({ action: 'report_start', token: await e.tok(33), code: e.code, set_id: '100' })).error.code, 'not_player');
-  const r = await e.call({ action: 'report_start', token: await e.tok(11), code: e.code, set_id: '100' });
-  assert.deepStrictEqual([r.ok, r.started], [true, true]);
-  assert.strictEqual(fake.set.state, 2);
-  const n = fake.calls.filter((c) => c === 'SpspStartSet').length;
-  assert.strictEqual((await e.call({ action: 'report_start', token: await e.tok(22), code: e.code, set_id: '100' })).ok, true);
-  assert.strictEqual(fake.calls.filter((c) => c === 'SpspStartSet').length, n);   // もう試合中
 });
 
 test('選手でない人・連投・相手未定は弾く', async () => {
