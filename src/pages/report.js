@@ -826,8 +826,16 @@ function renderPlayer() {
 let GQL = null;
 let LAST_SIG = '';
 /** 試合の状態の要約 (start.gg / Challonge 側で結果が変わったかを見る) */
+/** 試合待ちの画面に出るもの (台・配信・次の相手の候補の試合の進み具合)。報告の入力欄が無いときだけ見る (描き直しで入力を消さない) */
+function waitingSig() {
+  if (MATCHES.some((m) => m.state === 'open')) return '';
+  const w = MATCHES.find((m) => m.state === 'waiting');
+  if (!w) return '';
+  const pre = (p) => (p ? [p.id, p.state, p.station || '', (p.slots || []).map((x) => (x ? x.id : '')).join('/'), (p.deeper || []).map(pre).join(',')].join(':') : '');
+  return [w.id, w.station || '', w.stream ? w.stream.name : '', (w.prereq || []).map(pre).join(';')].join('~');
+}
 function matchesSig() {
-  return MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
+  return waitingSig() + '#' + MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
     + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '');
 }
 async function poll(force) {
