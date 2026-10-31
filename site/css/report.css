@@ -50,6 +50,7 @@ body {
 .rp-vs-card .rp-plate { border-radius: inherit; }
 /* カードを読み込むまでの空の枠 (カードと同じ大きさ) */
 .rp-card-wait { background: #f3f4f6; border-radius: 14px; }
+.rp-card-wait > * { visibility: hidden; }
 .rp-plate-n { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; text-align: center; }
 .rp-card { margin: 8px auto; width: 100%; max-width: 514px; }   /* 514px = カードの原寸 (プレイヤーページと同じ大きさまで) */
 .rp-card-sm { max-width: 420px; margin: 6px 0 0; }

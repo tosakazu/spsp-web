@@ -393,6 +393,10 @@ function applyScale(el) {
 
 /** @type {WeakSet<HTMLElement>} */
 const observed = new WeakSet();
+/** 描き直した回数 (前の描画のフォント待ちを無視するため) @type {WeakMap<HTMLElement, number>} */
+const renderGen = new WeakMap();
+/** 次の描画の後 (描いた文字のフォントの読み込みが始まった後) @param {() => void} fn */
+const afterPaint = fn => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => requestAnimationFrame(fn)) : setTimeout(fn, 32));
 
 /** @param {HTMLElement} el @param {PCardModel} model
  * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
@@ -410,9 +414,29 @@ export function render(el, model, opts = {}) {
   };
   build();
   scheduleImage(el, live ? 1500 : 300);
-  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す (読み込み済みなら不要)
+  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す (読み込み済みなら不要)。
+  // 日本語のフォントは字の範囲ごとに分かれていて、描いた文字の分はそのあとで読み始めることがある
+  // (ほかの文字の分を読み終えていると、描いた直後はまだ「読み込み済み」)。なので描いた直後と次の描画の後にも確かめる
   const fonts = /** @type {any} */ (document).fonts;
-  if (fonts && fonts.ready && fonts.status !== 'loaded') fonts.ready.then(() => { build(); scheduleImage(el, live ? 1500 : 300); }).catch(() => {});
+  if (fonts && fonts.ready) {
+    const gen = (renderGen.get(el) || 0) + 1;
+    renderGen.set(el, gen);
+    /** @type {any} */
+    let waiting = null;
+    let rebuilt = 0;
+    const watch = () => {
+      if (renderGen.get(el) !== gen || fonts.status === 'loaded' || waiting === fonts.ready || rebuilt >= 3) return;
+      waiting = fonts.ready;
+      waiting.then(() => {
+        if (renderGen.get(el) !== gen) return;   // 新しく描き直された
+        waiting = null; rebuilt++;
+        build(); scheduleImage(el, live ? 1500 : 300);
+        watch(); afterPaint(watch);   // 作り直した文字でまた別のフォントを読むことがある
+      }).catch(() => {});
+    };
+    watch();
+    afterPaint(watch);
+  }
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
     new ResizeObserver(() => applyScale(el)).observe(el);

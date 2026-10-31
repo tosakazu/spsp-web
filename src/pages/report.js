@@ -487,7 +487,9 @@ function fillCards(root) {
   const noData = (el) => { el.classList.remove('rp-card-wait'); mountNoDataCard(el, el.getAttribute('data-card-name') || ''); };
   for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
+    mountPlayerCard(el, el.getAttribute('data-card-uid')).then(async (ok) => {
+      // フォントがそろって詰め直すまで (最大 2 秒) は灰色の枠のまま (描いてから文字の幅が変わってずれないように)
+      if (ok) await Promise.race([cardFontsReady(), new Promise((r) => setTimeout(r, 2000))]);
       if (!el.isConnected) return;
       el.classList.remove('rp-card-wait');
       if (ok) return;

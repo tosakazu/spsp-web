@@ -52,6 +52,7 @@ async function open(query, opts) {
   new w.MutationObserver(() => {
     if (state.first === null && w.document.querySelector('.rp-current')) state.first = !!w.document.querySelector('.rp-match-ov');
   }).observe(w.document, { subtree: true, childList: true });
+  if (opts && opts.before) opts.before(w);
   for (const f of ['region/config.js', 'i18n/ja.js', 'region/i18n.js']) w.eval(built(f));
   w.eval(bundle());
   return { w, d: w.document, errs, state, fetched, close: () => w.close() };
@@ -215,4 +216,22 @@ test('見本: 試合の 2 人を URL で選べる (順位・名前・uid・初�
   assert.ok(def.u.every((x) => /^10\d\d$/.test(x)), '指定が無ければ一覧からランダム: ' + def.u);
   const rnd = await names('&p1=random&p2=random');
   assert.ok(/p1=10\d\d&p2=10\d\d/.test(rnd.href), 'ランダムは選んだ uid を URL に書き戻す: ' + rnd.href);
+});
+
+test('カードは、描いた後で読み始めたフォントが届いたら詰め直す (描いた時点では「読み込み済み」でも)', { skip }, async () => {
+  // 描いた時点は loaded、その直後に描いた文字の分を読み始める (loading)
+  const fonts = { status: 'loaded', ready: Promise.resolve(), load: async () => [] };
+  let finish = () => {};
+  const p = await open('?demo=newcomer&anim=dark', { before: (w) => { Object.defineProperty(w.document, 'fonts', { value: fonts, configurable: true }); } });
+  await until(() => p.d.querySelector('.rp-match-ov'));
+  p.d.querySelector('.rp-match-ov').click();
+  assert.ok(await until(() => p.d.querySelector('.rp-current .rp-op .pc-in')), 'カードが出る');
+  const before = p.d.querySelector('.rp-current .rp-op .pc-in');
+  fonts.status = 'loading';
+  fonts.ready = new Promise((r) => { finish = () => { fonts.status = 'loaded'; r(); }; });
+  await sleep(100);
+  assert.strictEqual(p.d.querySelector('.rp-current .rp-op .pc-in'), before, 'フォントが届くまではそのまま');
+  finish();
+  assert.ok(await until(() => p.d.querySelector('.rp-current .rp-op .pc-in') !== before, 1000), 'フォントが届いたら作り直す');
+  p.close();
 });
