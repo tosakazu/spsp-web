@@ -2032,7 +2032,7 @@ window.SPSP_I18N.ja = {
   'report.err.generic': 'うまくいきませんでした。時間をおいてやり直してください。',
   'report.err.read': '試合を読み込めませんでした',
   'report.state.none': '未報告',
-  'report.state.reported': '報告済み (相手の報告待ち)',
+  'report.state.reported': '反映済み',
   'report.state.agreed': '両者一致',
   'report.state.conflict': '食い違い',
   'report.state.review': '運営の確認待ち',

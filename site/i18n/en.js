@@ -1979,7 +1979,7 @@ window.SPSP_I18N.en = {
   'report.err.generic': 'Something went wrong. Please try again later.',
   'report.err.read': 'Could not load your matches',
   'report.state.none': 'Not reported',
-  'report.state.reported': 'Reported (waiting for opponent)',
+  'report.state.reported': 'Applied',
   'report.state.agreed': 'Both agree',
   'report.state.conflict': 'Mismatch',
   'report.state.review': 'Waiting for organizers',
