@@ -32,18 +32,14 @@ export function tweetText(v) {
     + (v.advance ? '\n' + advText(v.advance) : '');
 }
 
-/** 「Top 32 進出 (勝者側)」 @param {Advance} a */
+/** 「勝者側Top 32進出」(側が分からなければ「Top 32進出」) @param {Advance} a */
 function advText(a) {
-  const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
-  return (side ? side + ' ' : '') + i18n('report.win.advance', { phase: a.phase });
+  if (a.side === 'w') return i18n('report.win.advance_w', { phase: a.phase });
+  if (a.side === 'l') return i18n('report.win.advance_l', { phase: a.phase });
+  return i18n('report.win.advance', { phase: a.phase });
 }
-/** 進出の札 (勝利画面の中)。勝者側/敗者側 → 進出先の順で、どちらも赤い台形 @param {Advance} a */
-function advHtml(a) {
-  const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
-  return `${side ? `<b class="rp-win-tag">${escapeHtml(side)}</b>` : ''}<b class="rp-win-tag">${escapeHtml(i18n('report.win.advance', { phase: a.phase }))}</b>`;
-}
-/** @param {Advance | null | undefined} a */
-const sideText = (a) => (!a ? '' : a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '');
+/** 進出の札 (勝利画面の中)。赤い台形 1 枚 @param {Advance} a */
+const advHtml = (a) => `<b class="rp-win-tag">${escapeHtml(advText(a))}</b>`;
 
 const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
 const em = (/** @type {WinSide} */ s) => `<span class="rp-win-em">${escapeHtml(s.emoji || '')}</span>`;
@@ -134,7 +130,7 @@ function tag(ctx, x, y, h, text, font, fill) {
 /** 保存用の画像 @param {Victory} v @param {HTMLElement | null} cardEl カードの案ならカードの箱 @returns {Promise<Blob | null>} */
 export async function victoryPng(v, cardEl) {
   const fonts = /** @type {any} */ (document).fonts;
-  const all = [v.me.name, v.op.name, v.tour, where(v), v.advance ? i18n('report.win.advance', { phase: v.advance.phase }) + sideText(v.advance) : ''].join(' ');
+  const all = [v.me.name, v.op.name, v.tour, where(v), v.advance ? advText(v.advance) : ''].join(' ');
   if (fonts && fonts.load) {
     await Promise.all([`700 40px ${F_JP}`, `500 40px ${F_JP}`, `italic 900 40px ${F_Z}`, `800 40px ${F_Z}`, `500 20px ${F_EXP}`, `600 20px ${F_EXP}`]
       .map((ft) => fonts.load(ft, all + ' WIN RESULT UPSET FACTOR spsp.games 0123456789+-').catch(() => null)));
@@ -207,8 +203,7 @@ export async function victoryPng(v, cardEl) {
   // 下: 進出・UF の札、サイト
   let x = cardImg ? 650 : 48;
   if (v.advance) {
-    if (sideText(v.advance)) x = tag(ctx, x, tagY, 58, sideText(v.advance), `700 28px ${F_JP}`, true) + 8;
-    x = tag(ctx, x, tagY, 58, i18n('report.win.advance', { phase: v.advance.phase }), `700 28px ${F_JP}`, true) + 8;
+    x = tag(ctx, x, tagY, 58, advText(v.advance), `700 28px ${F_JP}`, true) + 8;
   }
   if (v.uf >= 1) {
     // 進出と同じ赤い台形

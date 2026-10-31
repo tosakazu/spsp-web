@@ -274,9 +274,9 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     assert.ok(panel.querySelector('.rp-win-op .rp-win-nm, .rp-win-against .rp-win-nm').textContent.length > 0);
     assert.ok([...panel.querySelectorAll('.rp-win-em')].every((e) => e.textContent.length > 0), '報告したキャラの絵文字');
     assert.match(panel.querySelector('.rp-win-round').textContent, /Pools.*B3.*Winners Final/);
-    // 次のフェーズへの進出 (見本は 0.5 秒後に分かる): Top 32 進出 + 勝者側
+    // 次のフェーズへの進出 (見本は 0.5 秒後に分かる): 勝者側Top 32進出
     assert.ok(await until(() => !panel.querySelector('.rp-win-adv').hidden, 1500), '進出の札');
-    assert.strictEqual(panel.querySelector('.rp-win-adv').textContent, '勝者側Top 32 進出');
+    assert.strictEqual(panel.querySelector('.rp-win-adv').textContent, '勝者側Top 32進出');
     if (ov.classList.contains('rp-win-card')) assert.match(p.w.getComputedStyle(panel.querySelector('.rp-win-sash')).boxShadow || '#fff', /#fff|255, 255, 255/);
     assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
     assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+UPSET FACTOR$/, 'シード 24 が 3 に勝った: UF');
@@ -286,7 +286,7 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     ov.querySelector('[data-win-tweet]').click();
     const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
     assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
-    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)\n勝者側 Top 32 進出$/);
+    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)\n勝者側Top 32進出$/);
     ov.querySelector('[data-win-close]').click();
     assert.ok(await until(() => !p.d.querySelector('.rp-win-ov'), 1000), '閉じる');
     assert.deepStrictEqual(p.errs, []);
@@ -352,7 +352,7 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     assert.match(downloaded, /^SPSP_win_.+_vs_.+\.png$/);
     assert.deepStrictEqual(calls.find((c) => c[0] === 'toBlob'), ['toBlob', 1200, 675]);
     const texts = calls.filter((c) => c[0] === 'fillText').map((c) => String(c[1]));
-    for (const t of ['WIN', 'spsp.games', 'Top 32 進出', '勝者側']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
+    for (const t of ['WIN', 'spsp.games', '勝者側Top 32進出']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
     assert.deepStrictEqual(p.errs, []);
     p.close();
   }
