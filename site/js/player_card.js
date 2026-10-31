@@ -393,11 +393,6 @@ function applyScale(el) {
 
 /** @type {WeakSet<HTMLElement>} */
 const observed = new WeakSet();
-/** 描いた・フォントがそろった・画像を重ねたを、カードの箱にイベント 'pcard-step' (detail = 'build' | 'fonts' | 'image') で知らせる
- * (結果報告の見本で、あとから動いたところを調べる用) @param {HTMLElement} el @param {string} what */
-function step(el, what) {
-  try { el.dispatchEvent(new CustomEvent('pcard-step', { detail: what, bubbles: true })); } catch (e) { /* 知らせないだけ */ }
-}
 /** 描き直した回数 (前の描画のフォント待ちを無視するため) @type {WeakMap<HTMLElement, number>} */
 const renderGen = new WeakMap();
 /** 最後の描画のフォントがそろって詰め直し終わったら解ける @type {WeakMap<HTMLElement, Promise<void>>} */
@@ -456,7 +451,6 @@ export function render(el, model, opts = {}) {
     if (keep) el.appendChild(keep);
     fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
-    step(el, 'build');
   };
   build();
   // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す。
@@ -472,7 +466,6 @@ export function render(el, model, opts = {}) {
       if (!loaded) break;
       build();
     }
-    step(el, 'fonts');
     await scheduleImage(el, live ? 1500 : 0);
   })().catch(() => {}));
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
@@ -525,7 +518,6 @@ function scheduleImage(el, delay) {
       node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
-      step(el, 'image');
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).then(() => { if (imageWaiters.get(el) === done) imageWaiters.delete(el); done(); });
   }, delay));
   return p;

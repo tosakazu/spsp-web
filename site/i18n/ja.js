@@ -2226,8 +2226,6 @@ window.SPSP_I18N.ja = {
   'class.err.report': '結果報告の受付を始められませんでした: {message}',
   'report.demo.banner': '見本の画面です (データは見本で、どこにも送りません)',
   'report.demo.anim': 'マッチングの演出:',
-  'report.demo.debug_on': 'カードの動きの記録を出す',
-  'report.demo.debug_off': '記録を消す',
   'report.demo.pick': '選手を選んで試す:',
   'report.demo.pick_top': '上位どうし',
   'report.demo.pick_mid': '中位どうし',

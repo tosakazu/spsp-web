@@ -2173,8 +2173,6 @@ window.SPSP_I18N.en = {
   'class.err.report': 'Could not start match reports: {message}',
   'report.demo.banner': 'Sample screens (sample data; nothing is sent anywhere)',
   'report.demo.anim': 'Match animation:',
-  'report.demo.debug_on': 'Show the card timeline',
-  'report.demo.debug_off': 'Hide the timeline',
   'report.demo.pick': 'Try with players:',
   'report.demo.pick_top': 'Top vs top',
   'report.demo.pick_mid': 'Mid vs mid',
