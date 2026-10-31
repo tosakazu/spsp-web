@@ -76,6 +76,19 @@ test('live_fetch: 新しいセットがあれば順位を取り直して残り�
   assert.ok(d.sets[0].label && /Winners/.test(d.sets[0].label));
 });
 
+
+test('live_fetch: 前の doc に残っている仮の id (preview_…) のセットは、同じプール・識別子の本物があれば捨てる (新しいセットが無くても)', async () => {
+  const LF = load(makeCtx(), 'js/live_fetch.js', ['refreshDoc']);
+  const g = fakeGql({ LiveSets: { data: { event: { sets: { pageInfo: { totalPages: 1 }, nodes: [] } } } } });
+  const doc = baseDoc();
+  doc.sets = [
+    { id: 'preview_11_1_0', pg: 11, round: 1, ident: 'A', state: 1, e: [101, null], winner: null },
+    { id: 500, pg: 11, round: 1, ident: 'A', state: 3, e: [101, 104], winner: 101 },
+    { id: 'preview_11_2_0', pg: 11, round: 2, ident: 'C', state: 1, e: [101, null], winner: null },
+  ];
+  const d = await LF.refreshDoc(g, doc, 2050);
+  assert.strictEqual(JSON.stringify(d.sets.map((s) => String(s.id))), JSON.stringify(['500', 'preview_11_2_0']));
+});
 test('live_browser.pick: サーバの速報とキャッシュの新しい方 (形 v が同じときだけキャッシュ)', () => {
   const ctx = makeCtx({ SpspLiveFetch: {}, SpspStartggIdentity: {} });
   const LB = load(ctx, 'js/live_browser.js', ['pick']);
