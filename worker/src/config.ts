@@ -35,6 +35,11 @@ export interface Env {
   CHALLONGE_CLIENT_SECRET?: string;
   /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
   TITLE_SYNC_KEY?: string;
+  /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** VAPID の連絡先 (mailto: か https:)。[vars] */
+  VAPID_SUBJECT?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
@@ -48,6 +53,8 @@ export const GQL_URL = 'https://api.start.gg/gql/alpha';
 export const SCOPE = 'user.identity';
 /** 大会運営用のログイン (flow 'manager'、シード作成・下位クラス作成で API キーの代わり)。自分が管理する大会のシード・トーナメント設定だけ。 */
 export const MANAGER_SCOPE = 'user.identity tournament.manager';
+/** 試合結果の報告の受付 (flow 'reporter'、report.ts)。運営が大会ごとに 1 回許可する。自分が管理する大会の試合の報告だけ。 */
+export const REPORTER_SCOPE = 'user.identity tournament.reporter';
 
 /** 本文の長さ (UTF-16 code unit 数。クライアントの textarea maxlength と同じ数え方)。 */
 export const BODY_MIN = 1;
@@ -75,6 +82,16 @@ export const CLASS_DELETE_MIN_INTERVAL_MS = 5 * 1000;
 export const CLASS_DELETE_MAX_PER_DAY = 50;
 export const CLASS_PARTICIPANTS_MIN = 2;
 export const CLASS_PARTICIPANTS_MAX = 512;
+
+/** 試合結果の報告 (report.ts)。送る間隔・1 日の数 (同じ人)・受付の期間 */
+export const REPORT_MIN_INTERVAL_MS = 3 * 1000;
+export const REPORT_MAX_PER_DAY = 300;
+export const REPORT_ADMIN_MAX_PER_DAY = 2000;
+/** 運営のログイン (report_login) のトークンを預かる長さ。受付を始めるまでの間だけ (始めたらイベントの受付に写す) */
+export const REPORT_GRANT_MS = 12 * 3600 * 1000;
+export const REPORT_MIN_OPEN_MS = 6 * 3600 * 1000;        // 受付は少なくともこれだけ開ける
+export const REPORT_MAX_OPEN_MS = 8 * 24 * 3600 * 1000;   // 長くてもこれまで (大会が延びたら運営が受付し直す)
+export const REPORT_CHALLONGE_CACHE_S = 15;               // Challonge の試合一覧を Worker で持つ秒数
 
 /** Challonge (OAuth と API v2.1)。scope は取得側 (smash_database、client credentials の application:manage) と
  *  確認済み: TO が SPSP のアプリ経由で作ったトーナメントは /v2.1/application/tournaments に出る (2026-10-01)。 */
@@ -132,6 +149,7 @@ export const CLIENT_ERROR_KINDS: Record<string, 1> = {
   login_failed: 1,       // login が失敗 (server 側にも残るが経路確認用)
   network: 1,            // fetch 自体が失敗
   manager_failed: 1,     // 大会運営用の start.gg ログイン (manager_login) が失敗
+  reporter_failed: 1,    // 試合結果の報告の受付 (report_enable) が失敗
   challonge_failed: 1,   // Challonge のログインが失敗
 };
 
@@ -150,6 +168,8 @@ export interface Config {
   /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
   titleLang?: string;
   titleSyncKey?: string;
+  /** Web Push の鍵 (未設定なら通知は出さない) */
+  vapid?: { publicKey: string; privateKey: string; subject: string };
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -183,6 +203,8 @@ export function configFromEnv(env: Env): Config {
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
     titleSyncKey: env.TITLE_SYNC_KEY || undefined,
+    vapid: env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
+      ? { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: String(env.VAPID_SUBJECT || 'https://spsp.games/') } : undefined,
     titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),

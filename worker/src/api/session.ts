@@ -131,7 +131,7 @@ const STATE_USED_PREFIX = 'st:';
 export interface StatePayload {
   n: string;
   r: string;
-  f: 'post' | 'login' | 'challonge' | 'manager';
+  f: 'post' | 'login' | 'challonge' | 'manager' | 'reporter';
   t: number;
 }
 
@@ -140,7 +140,7 @@ export async function signState(cfg: Config, nonce: unknown, returnPath: unknown
   const payload: StatePayload = {
     n: String(nonce || ''),
     r: String(returnPath || ''),
-    f: flow === 'post' ? 'post' : flow === 'challonge' ? 'challonge' : flow === 'manager' ? 'manager' : 'login',
+    f: flow === 'post' ? 'post' : flow === 'challonge' ? 'challonge' : flow === 'manager' ? 'manager' : flow === 'reporter' ? 'reporter' : 'login',
     t: now,
   };
   const body = utf8ToBase64Url(JSON.stringify(payload));

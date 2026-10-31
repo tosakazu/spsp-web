@@ -185,4 +185,104 @@ export class MemStore {
   async listCsp() {
     return [...this.csp.entries()].sort((a, b) => b[1].hits - a[1].hits || (a[0] < b[0] ? -1 : 1)).map(([, v]) => ({ ...v }));
   }
+
+  // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
+  _rep() {
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; }
+  }
+
+  async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
+
+  async getReportEventByTarget(kind, targetId) {
+    this._rep(); const r = this.reportEvents.find((x) => x.kind === kind && x.target_id === targetId); return r ? { ...r } : null;
+  }
+
+  async upsertReportEvent(row) {
+    this._rep();
+    const i = this.reportEvents.findIndex((x) => x.kind === row.kind && x.target_id === row.target_id);
+    if (i < 0) { this.reportEvents.push({ ...row }); return; }
+    const old = this.reportEvents[i];
+    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms };
+  }
+
+  async updateReportEventToken(code, tokenEnc, tokenExpMs) {
+    this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.token_enc = tokenEnc; x.token_exp_ms = tokenExpMs; }
+  }
+
+  async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
+
+  async listReportPresets(userId) {
+    this._rep(); return this.reportPresets.filter((x) => x.user_id === userId).sort((a, b) => b.updated_ms - a.updated_ms).map(({ name, settings, updated_ms }) => ({ name, settings, updated_ms }));
+  }
+
+  async saveReportPreset(userId, row, max) {
+    this._rep();
+    const old = this.reportPresets.find((x) => x.user_id === userId && x.name === row.name);
+    if (old) { old.settings = row.settings; old.updated_ms = row.updated_ms; return true; }
+    if (this.reportPresets.filter((x) => x.user_id === userId).length >= max) return false;
+    this.reportPresets.push({ user_id: userId, ...row }); return true;
+  }
+
+  async deleteReportPreset(userId, name) { this._rep(); this.reportPresets = this.reportPresets.filter((x) => !(x.user_id === userId && x.name === name)); }
+
+  async getReportGrant(userId, nowMs) { this._rep(); const r = this.reportGrants.find((x) => x.user_id === userId && x.expires_ms >= nowMs); return r ? { ...r } : null; }
+  async putReportGrant(row) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== row.user_id).concat([{ ...row }]); }
+  async putReportPushSub(row, max) {
+    this._rep(); this.reportPush = this.reportPush.filter((x) => x.endpoint !== row.endpoint).concat([{ ...row }]);
+    const mine = this.reportPush.filter((x) => x.user_id === row.user_id).sort((a, b) => b.created_ms - a.created_ms);
+    const drop = new Set(mine.slice(max).map((x) => x.endpoint));
+    this.reportPush = this.reportPush.filter((x) => !drop.has(x.endpoint));
+  }
+  async deleteReportPushSub(endpoint, userId) { this._rep(); this.reportPush = this.reportPush.filter((x) => !(x.endpoint === endpoint && (userId === null || x.user_id === userId))); }
+  async listReportPushSubs(userIds) { this._rep(); return this.reportPush.filter((x) => userIds.includes(x.user_id)).map((x) => ({ ...x })); }
+  async deleteReportGrant(userId) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== userId); }
+
+  async stopReportEvent(code) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.status = 'stopped'; x.token_enc = ''; } }
+
+  async purgeReportTokens(nowMs) {
+    this._rep(); for (const x of this.reportEvents) if (x.expires_ms < nowMs) { x.status = 'stopped'; x.token_enc = ''; }
+    this.reportGrants = this.reportGrants.filter((x) => x.expires_ms >= nowMs);
+  }
+
+  async listActiveReportEvents(nowMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => x.status === 'active' && x.expires_ms >= nowMs).sort((a, b) => a.created_ms - b.created_ms)
+      .map(({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings }) => ({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings }));
+  }
+
+  async getReportSet(code, setId) { this._rep(); const r = this.reportSets.find((x) => x.code === code && x.set_id === setId); return r ? { ...r } : null; }
+
+  async casReportSet(row, prevVersion) {
+    this._rep();
+    const i = this.reportSets.findIndex((x) => x.code === row.code && x.set_id === row.set_id);
+    if (prevVersion === null) { if (i >= 0) return false; this.reportSets.push({ ...row }); return true; }
+    if (i < 0 || this.reportSets[i].version !== prevVersion) return false;
+    this.reportSets[i] = { ...row };
+    return true;
+  }
+
+  async listReportSets(code) {
+    this._rep(); return this.reportSets.filter((x) => x.code === code).sort((a, b) => b.updated_ms - a.updated_ms).map((x) => ({ ...x }));
+  }
+
+  async listReportSetsForUser(userId, codes) {
+    this._rep();
+    return this.reportSets.filter((x) => codes.includes(x.code) && x.users.includes('|' + userId + '|')).sort((a, b) => b.updated_ms - a.updated_ms).map((x) => ({ ...x }));
+  }
+
+  async insertReportSubmission(row) {
+    this._rep(); const id = this.reportSubs.length + 1; this.reportSubs.push({ ...row, id }); return id;
+  }
+
+  async setReportSubmissionOutcome(id, outcome) { this._rep(); const r = this.reportSubs.find((x) => x.id === id); if (r) r.outcome = outcome; }
+
+  async listReportSubmissions(code, setId) {
+    this._rep(); return this.reportSubs.filter((x) => x.code === code && x.set_id === setId).map((x) => ({ ...x }));
+  }
+
+  async reportSubmissionActivity(userId, sinceMs) {
+    this._rep();
+    const rows = this.reportSubs.filter((x) => x.user_id === userId && x.ts_ms >= sinceMs);
+    return { count: rows.length, latestMs: rows.length ? Math.max(...rows.map((x) => x.ts_ms)) : null };
+  }
 }

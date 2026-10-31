@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -212,4 +212,65 @@ test('tool_logs: 1 行足す (null の欄はそのまま)・同じユーザー�
   const rows = db.prepare('SELECT user_id, day, event_id, phase_id, count, detail FROM tool_logs ORDER BY id').all();
   assert.strictEqual(rows.length, 4);
   assert.deepStrictEqual({ ...rows[0] }, { user_id: '1', day: '2026-10-28', event_id: null, phase_id: 9, count: 32, detail: '{"a":1}' });
+});
+
+test('試合結果の報告: 受付の upsert (code は変えない)・期限切れの掃除・版つきの行・報告の数', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store } = fresh();
+  const ev = { code: 'abcdefghjk', kind: 'startgg', target_id: '9', event_id: 9, tournament_id: 5, class_id: null, name: 'T', slug: 's',
+    admins: '1', token_enc: 'v1.a.b', token_exp_ms: 10, status: 'active', created_ms: 100, expires_ms: 1000, settings: '{}' };
+  await store.upsertReportEvent(ev);
+  await store.upsertReportEvent({ ...ev, code: 'zzzzzzzzzz', admins: '1,2', created_ms: 999, settings: '{"top_cut":8}' });
+  const got = await store.getReportEvent('abcdefghjk');
+  assert.strictEqual(got.admins, '1,2'); assert.strictEqual(got.created_ms, 100); assert.strictEqual(got.settings, '{"top_cut":8}');
+  assert.strictEqual(await store.getReportEvent('zzzzzzzzzz'), null);
+  assert.strictEqual((await store.getReportEventByTarget('startgg', '9')).code, 'abcdefghjk');
+  assert.strictEqual((await store.listActiveReportEvents(500)).length, 1);
+  await store.updateReportEventSettings('abcdefghjk', '{}');
+  await store.updateReportEventToken('abcdefghjk', 'v1.c.d', 20);
+  assert.strictEqual((await store.getReportEvent('abcdefghjk')).token_enc, 'v1.c.d');
+  await store.purgeReportTokens(2000);
+  const p = await store.getReportEvent('abcdefghjk');
+  assert.deepStrictEqual([p.status, p.token_enc], ['stopped', '']);
+  assert.strictEqual((await store.listActiveReportEvents(500)).length, 0);
+
+  // 名前をつけて保存した設定: 上書き・上限・消す
+  assert.strictEqual(await store.saveReportPreset('11', { name: 'a', settings: '{}', updated_ms: 1 }, 2), true);
+  assert.strictEqual(await store.saveReportPreset('11', { name: 'b', settings: '{}', updated_ms: 2 }, 2), true);
+  assert.strictEqual(await store.saveReportPreset('11', { name: 'c', settings: '{}', updated_ms: 3 }, 2), false);
+  assert.strictEqual(await store.saveReportPreset('11', { name: 'a', settings: '{"x":1}', updated_ms: 4 }, 2), true);
+  assert.strictEqual(await store.saveReportPreset('22', { name: 'a', settings: '{}', updated_ms: 5 }, 2), true);
+  assert.deepStrictEqual((await store.listReportPresets('11')).map((x) => [x.name, x.settings]), [['a', '{"x":1}'], ['b', '{}']]);
+  await store.deleteReportPreset('11', 'a');
+  assert.deepStrictEqual((await store.listReportPresets('11')).map((x) => x.name), ['b']);
+
+  // 運営のログインのトークン: 置き直し・期限・消す
+  await store.putReportGrant({ user_id: '11', token_enc: 'v1.a', token_exp_ms: 10, expires_ms: 5000 });
+  await store.putReportGrant({ user_id: '11', token_enc: 'v1.b', token_exp_ms: 20, expires_ms: 6000 });
+  assert.strictEqual((await store.getReportGrant('11', 5500)).token_enc, 'v1.b');
+  assert.strictEqual(await store.getReportGrant('11', 6001), null);
+  await store.purgeReportTokens(7000);
+  assert.strictEqual(await store.getReportGrant('11', 0), null, '期限を過ぎたら消す');
+  await store.putReportGrant({ user_id: '22', token_enc: 'v1.c', token_exp_ms: 20, expires_ms: 9000 });
+  await store.deleteReportGrant('22');
+  assert.strictEqual(await store.getReportGrant('22', 0), null);
+
+  const row = { code: 'abcdefghjk', set_id: '100', state: 'reported', users: '|11|22|', slots: '[]', applied: '{}', note: '', floor_id: 0, version: 1, updated_ms: 1 };
+  assert.strictEqual(await store.casReportSet(row, null), true);
+  assert.strictEqual(await store.casReportSet(row, null), false);
+  assert.strictEqual(await store.casReportSet({ ...row, state: 'agreed', version: 2 }, 0), false);
+  assert.strictEqual(await store.casReportSet({ ...row, state: 'agreed', version: 2 }, 1), true);
+  assert.strictEqual((await store.getReportSet('abcdefghjk', '100')).state, 'agreed');
+  assert.strictEqual((await store.listReportSetsForUser('22', ['abcdefghjk'])).length, 1);
+  assert.strictEqual((await store.listReportSetsForUser('2', ['abcdefghjk'])).length, 0);
+  assert.strictEqual((await store.listReportSetsForUser('22', [])).length, 0);
+  assert.strictEqual((await store.listReportSets('abcdefghjk')).length, 1);
+  const id1 = await store.insertReportSubmission({ code: 'abcdefghjk', set_id: '100', user_id: '11', side: 0, ts_ms: 50, result: '{}', outcome: 'pending' });
+  const id2 = await store.insertReportSubmission({ code: 'abcdefghjk', set_id: '100', user_id: '11', side: 0, ts_ms: 60, result: '{}', outcome: 'pending' });
+  assert.ok(id2 > id1);
+  await store.setReportSubmissionOutcome(id1, 'report');
+  const subs = await store.listReportSubmissions('abcdefghjk', '100');
+  assert.deepStrictEqual(subs.map((x) => [x.id, x.outcome]), [[id1, 'report'], [id2, 'pending']]);
+  assert.deepStrictEqual(await store.reportSubmissionActivity('11', 55), { count: 1, latestMs: 60 });
+  assert.deepStrictEqual(await store.reportSubmissionActivity('99', 0), { count: 0, latestMs: null });
+  await store.stopReportEvent('abcdefghjk');
 });

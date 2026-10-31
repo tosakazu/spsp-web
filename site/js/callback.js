@@ -238,9 +238,9 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
     // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
     // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
-    if ((intent === 'challonge' || intent === 'manager') && !hadNonce) {
+    if ((intent === 'challonge' || intent === 'manager' || intent === 'reporter') && !hadNonce) {
       reportError('state_missing', intent + ' ' + S.browserTag(navigator.userAgent));
-      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
+      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : intent === 'reporter' ? 'callback.reporter_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
       return;
     }
     if (intent === 'challonge') {
@@ -249,6 +249,10 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }
     if (intent === 'manager') {
       runManager(code, state, back);
+      return;
+    }
+    if (intent === 'reporter') {
+      runReporter(code, state, back);
       return;
     }
 
@@ -412,6 +416,36 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).catch(function () {
       reportError('network', 'manager fetch failed');
       show('error', i18n('callback.manager_title'), i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * reporter フロー (試合結果の報告の受付、src/pages/report.js): 運営のログインを先にする (2026-10-30)。Worker が code を報告用の scope で交換して
+   * 暗号化して預かり (受付を始めるまで)、普段のセッションを返す。ブラウザには運営のトークンは返らない。
+   * 報告ページ (受付を始める画面) に戻り、管理している大会の一覧から選んで受付を始める
+   */
+  function runReporter(code, state, back) {
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'report_login', code: code, state: state }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.token && json.user) {
+        AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        location.replace(back);
+        return;
+      }
+      var errCode = (json && json.error && json.error.code) || 'unknown';
+      reportError('reporter_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.reporter_failed'));
+      show('error', i18n('callback.reporter_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'reporter fetch failed');
+      show('error', i18n('callback.reporter_title'), i18n('callback.s28'), back);
     });
   }
 

@@ -50,6 +50,17 @@ export function defaultTitle() {
   return d && (d.pre || d.post) ? { pre: d.pre || '', post: d.post || '' } : null;
 }
 
+/** カードに出る二つ名 (前半・後半)。出さないなら null。ほかのページ (結果報告の VS など) もこれで同じ文字を出す
+ * @param {PCardModel} m @returns {{ pre: string, post: string } | null} */
+export function shownTitle(m) {
+  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
+  const def = defaultTitle() || { pre: '', post: '' };
+  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
+  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
+  const post = m.title && m.title.post != null ? m.title.post : def.post;
+  return pre || post ? { pre, post } : null;
+}
+
 function latinRuns(s, cls) {
   let out = '', last = 0;
   s.replace(LATIN_RUN, (m, off) => {
@@ -145,12 +156,7 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  // 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
-  const def = defaultTitle() || { pre: '', post: '' };
-  // 文字が null の側 (と、設定の無いとき = title null) は既定、'' の側は「なし」(空欄)
-  const pre = m.title && m.title.pre != null ? m.title.pre : def.pre;
-  const post = m.title && m.title.post != null ? m.title.post : def.post;
-  const tt = pre || post ? { pre, post } : null;
+  const tt = shownTitle(m);
   const hasTitle = !!tt;
   // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
   const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
@@ -387,6 +393,50 @@ function applyScale(el) {
 
 /** @type {WeakSet<HTMLElement>} */
 const observed = new WeakSet();
+/** 描き直した回数 (前の描画のフォント待ちを無視するため) @type {WeakMap<HTMLElement, number>} */
+const renderGen = new WeakMap();
+/** 最後の描画のフォントがそろって詰め直し終わったら解ける @type {WeakMap<HTMLElement, Promise<void>>} */
+const settled = new WeakMap();
+
+/** el のカードが落ち着くまで (フォントがそろって詰め直し終わる。途中で描き直されたら新しい方を待つ)
+ * @param {HTMLElement} el @returns {Promise<void>} */
+export async function cardSettled(el) {
+  for (let p = settled.get(el); p; ) {
+    await p;
+    const q = settled.get(el);
+    if (q === p) return;
+    p = q;
+  }
+}
+
+/** カードに出ている文字を、その文字のフォント (太さ・斜体ごと) で読む。読む必要があったら true
+ * @param {HTMLElement} el @returns {Promise<boolean>} */
+async function loadCardFonts(el) {
+  const fonts = /** @type {any} */ (document).fonts;
+  if (!fonts || !fonts.load || typeof getComputedStyle !== 'function') return false;
+  // Google Fonts の CSS (@font-face) が届く前は、どのフォントも「無い」扱いになる (届く前に描いた分は、届いたら必ず作り直す)
+  const late = /** @type {HTMLLinkElement[]} */ (Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"]')))
+    .filter(link => !link.sheet);
+  const cssLate = late.length > 0;
+  await Promise.all(late.map(link => new Promise(r => {
+    link.addEventListener('load', r, { once: true }); link.addEventListener('error', r, { once: true }); setTimeout(r, 3000);
+  })));
+  /** @type {Map<string, string>} */
+  const groups = new Map();
+  for (const n of Array.from(el.querySelectorAll('.pc-in *'))) {
+    let t = '';
+    for (const c of Array.from(n.childNodes)) if (c.nodeType === 3) t += c.nodeValue;
+    t = t.trim();
+    if (!t) continue;
+    const cs = getComputedStyle(n);
+    const spec = `${cs.fontStyle || 'normal'} ${cs.fontWeight || '400'} 16px ${cs.fontFamily}`;
+    groups.set(spec, (groups.get(spec) || '') + t + t.toUpperCase());   // 大文字にして出す所 (text-transform) の分も
+  }
+  const need = Array.from(groups).filter(([spec, text]) => { try { return !fonts.check(spec, text); } catch (e) { return false; } });
+  if (!need.length) return cssLate;
+  await Promise.all(need.map(([spec, text]) => fonts.load(spec, text).catch(() => [])));
+  return true;
+}
 
 /** @param {HTMLElement} el @param {PCardModel} model
  * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
@@ -403,10 +453,21 @@ export function render(el, model, opts = {}) {
     applyScale(el);
   };
   build();
-  scheduleImage(el, live ? 1500 : 300);
-  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す (読み込み済みなら不要)
-  const fonts = /** @type {any} */ (document).fonts;
-  if (fonts && fonts.ready && fonts.status !== 'loaded') fonts.ready.then(() => { build(); scheduleImage(el, live ? 1500 : 300); }).catch(() => {});
+  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す。
+  // 日本語のフォントは字の範囲ごとに別のファイルで、描いた文字の分はそのあとで読み始める。ページ全体の読み込み状態
+  // (document.fonts.ready) では「まだ頼んでいない字」を待てないので、カードに出ている文字とフォントを名指しで読む
+  const gen = (renderGen.get(el) || 0) + 1;
+  renderGen.set(el, gen);
+  // 強制ダークモード用の画像は、フォントがそろって詰め直した後に撮る (先に撮ると、詰め直す前の並びの画像が出てから入れ替わる)
+  settled.set(el, (async () => {
+    for (let i = 0; i < 3; i++) {   // 作り直した文字でまた別のフォントを読むことがある
+      const loaded = await loadCardFonts(el);
+      if (renderGen.get(el) !== gen) return;
+      if (!loaded) break;
+      build();
+    }
+    await scheduleImage(el, live ? 1500 : 0);
+  })().catch(() => {}));
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
     new ResizeObserver(() => applyScale(el)).observe(el);
@@ -433,11 +494,19 @@ function needsImage() {
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
 const imageTimers = new WeakMap();
-/** @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) */
+/** @type {WeakMap<HTMLElement, () => void>} 撮り直しで取りやめた回を待っている人を解く */
+const imageWaiters = new WeakMap();
+/** 撮って重ね終わったら解ける (画像にしないときはすぐ) @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) @returns {Promise<void>} */
 function scheduleImage(el, delay) {
-  if (!needsImage()) return;
+  if (!needsImage()) return Promise.resolve();
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
+  const prevWaiter = imageWaiters.get(el);
+  /** @type {() => void} */
+  let done = () => {};
+  const p = new Promise(r => { done = () => { r(undefined); }; });
+  imageWaiters.set(el, done);
+  if (prevWaiter) p.then(prevWaiter);   // 前の回を待っていた人は、この回が終わるまで待つ
   imageTimers.set(el, setTimeout(() => {
     // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
     captureCanvas(el).then(node => {
@@ -449,8 +518,9 @@ function scheduleImage(el, delay) {
       node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
-    }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
+    }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).then(() => { if (imageWaiters.get(el) === done) imageWaiters.delete(el); done(); });
   }, delay));
+  return p;
 }
 
 /** カードだけを PNG にする (画像で保存 / X で共有)。表示中のカードは縮小されているので、
@@ -521,4 +591,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, capture, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, capture, shownTitle, makeAchFitTester, cardSettled, COLORS, TEMPLATES };

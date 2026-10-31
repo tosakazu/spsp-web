@@ -88,6 +88,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     if (/\/math(\.html)?$/.test(p))     return 'math';
     if (/\/seed-upload\//.test(p))   return 'seed-upload';
     if (/\/class\//.test(p))         return 'class';
+    if (/\/report\//.test(p))        return 'report';
     if (/\/dupes\//.test(p))         return 'dupes';
     if (/\/seed\//.test(p))          return 'seed';
     if (/\/priority\//.test(p))      return 'priority';
