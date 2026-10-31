@@ -395,8 +395,48 @@ function applyScale(el) {
 const observed = new WeakSet();
 /** 描き直した回数 (前の描画のフォント待ちを無視するため) @type {WeakMap<HTMLElement, number>} */
 const renderGen = new WeakMap();
-/** 次の描画の後 (描いた文字のフォントの読み込みが始まった後) @param {() => void} fn */
-const afterPaint = fn => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => requestAnimationFrame(fn)) : setTimeout(fn, 32));
+/** 最後の描画のフォントがそろって詰め直し終わったら解ける @type {WeakMap<HTMLElement, Promise<void>>} */
+const settled = new WeakMap();
+
+/** el のカードが落ち着くまで (フォントがそろって詰め直し終わる。途中で描き直されたら新しい方を待つ)
+ * @param {HTMLElement} el @returns {Promise<void>} */
+export async function cardSettled(el) {
+  for (let p = settled.get(el); p; ) {
+    await p;
+    const q = settled.get(el);
+    if (q === p) return;
+    p = q;
+  }
+}
+
+/** カードに出ている文字を、その文字のフォント (太さ・斜体ごと) で読む。読む必要があったら true
+ * @param {HTMLElement} el @returns {Promise<boolean>} */
+async function loadCardFonts(el) {
+  const fonts = /** @type {any} */ (document).fonts;
+  if (!fonts || !fonts.load || typeof getComputedStyle !== 'function') return false;
+  // Google Fonts の CSS (@font-face) が届く前は、どのフォントも「無い」扱いになる (届く前に描いた分は、届いたら必ず作り直す)
+  const late = /** @type {HTMLLinkElement[]} */ (Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"]')))
+    .filter(link => !link.sheet);
+  const cssLate = late.length > 0;
+  await Promise.all(late.map(link => new Promise(r => {
+    link.addEventListener('load', r, { once: true }); link.addEventListener('error', r, { once: true }); setTimeout(r, 3000);
+  })));
+  /** @type {Map<string, string>} */
+  const groups = new Map();
+  for (const n of Array.from(el.querySelectorAll('.pc-in *'))) {
+    let t = '';
+    for (const c of Array.from(n.childNodes)) if (c.nodeType === 3) t += c.nodeValue;
+    t = t.trim();
+    if (!t) continue;
+    const cs = getComputedStyle(n);
+    const spec = `${cs.fontStyle || 'normal'} ${cs.fontWeight || '400'} 16px ${cs.fontFamily}`;
+    groups.set(spec, (groups.get(spec) || '') + t + t.toUpperCase());   // 大文字にして出す所 (text-transform) の分も
+  }
+  const need = Array.from(groups).filter(([spec, text]) => { try { return !fonts.check(spec, text); } catch (e) { return false; } });
+  if (!need.length) return cssLate;
+  await Promise.all(need.map(([spec, text]) => fonts.load(spec, text).catch(() => [])));
+  return true;
+}
 
 /** @param {HTMLElement} el @param {PCardModel} model
  * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
@@ -414,29 +454,18 @@ export function render(el, model, opts = {}) {
   };
   build();
   scheduleImage(el, live ? 1500 : 300);
-  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す (読み込み済みなら不要)。
-  // 日本語のフォントは字の範囲ごとに分かれていて、描いた文字の分はそのあとで読み始めることがある
-  // (ほかの文字の分を読み終えていると、描いた直後はまだ「読み込み済み」)。なので描いた直後と次の描画の後にも確かめる
-  const fonts = /** @type {any} */ (document).fonts;
-  if (fonts && fonts.ready) {
-    const gen = (renderGen.get(el) || 0) + 1;
-    renderGen.set(el, gen);
-    /** @type {any} */
-    let waiting = null;
-    let rebuilt = 0;
-    const watch = () => {
-      if (renderGen.get(el) !== gen || fonts.status === 'loaded' || waiting === fonts.ready || rebuilt >= 3) return;
-      waiting = fonts.ready;
-      waiting.then(() => {
-        if (renderGen.get(el) !== gen) return;   // 新しく描き直された
-        waiting = null; rebuilt++;
-        build(); scheduleImage(el, live ? 1500 : 300);
-        watch(); afterPaint(watch);   // 作り直した文字でまた別のフォントを読むことがある
-      }).catch(() => {});
-    };
-    watch();
-    afterPaint(watch);
-  }
+  // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す。
+  // 日本語のフォントは字の範囲ごとに別のファイルで、描いた文字の分はそのあとで読み始める。ページ全体の読み込み状態
+  // (document.fonts.ready) では「まだ頼んでいない字」を待てないので、カードに出ている文字とフォントを名指しで読む
+  const gen = (renderGen.get(el) || 0) + 1;
+  renderGen.set(el, gen);
+  settled.set(el, (async () => {
+    for (let i = 0; i < 3; i++) {   // 作り直した文字でまた別のフォントを読むことがある
+      const loaded = await loadCardFonts(el);
+      if (renderGen.get(el) !== gen || !loaded) return;
+      build(); scheduleImage(el, live ? 1500 : 300);
+    }
+  })().catch(() => {}));
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
     new ResizeObserver(() => applyScale(el)).observe(el);
@@ -551,4 +580,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, capture, shownTitle, makeAchFitTester, COLORS, TEMPLATES };
+export default { render, capture, shownTitle, makeAchFitTester, cardSettled, COLORS, TEMPLATES };

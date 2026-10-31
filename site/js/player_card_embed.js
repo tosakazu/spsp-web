@@ -5,17 +5,24 @@
 //   cardTitleOf(uid)                カードに出る二つ名の文字 (前半 + 後半、既定の「スマブラSPプレイヤー」も含む)。選手のデータが無ければ ''
 //   mountNoDataCard(el, name)        SPSP にデータが無い人のカード (既定の見た目・名前だけ・NO DATA)
 //   ensureCardFonts()               カードの Web フォント (IBM Plex Sans JP / Zalando Sans) を読む <link> を足す (p/index.html と同じもの)
+//   cardSettled(el)                 描いたカードのフォントがそろって詰め直し終わるまで (表示してからずれないように待つ)
 //   warmCards(uids, texts)          カードを描く前に先読みする (選手のデータ・カードの設定・共通のファイル・フォント)
 // 見た目の CSS は css/player_card.css (ページの <head> で読む)。描くのは js/player_card.js の render (プレイヤーページと同じ)
-import SPSPPlayerCard, { shownTitle } from './player_card.js';
+import SPSPPlayerCard, { cardSettled, shownTitle } from './player_card.js';
+export { cardSettled };
 import SPSPViews from './views.js';
 import { buildCardModel, fetchAppliedCard, loadCardData, loadCardShared, noDataCardModel } from './player_card_model.js';
 
 /** p/index.html・p/edit.html と同じフォント (変えるときは 3 か所とも) */
 export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
 
+/** ページにあるカードのフォントの <link> (属性セレクタは URL の記号で引けないことがあるので、href を比べる) */
+function fontsLink() {
+  return /** @type {HTMLLinkElement | undefined} */ (Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(l => l.getAttribute('href') === CARD_FONTS_URL));
+}
+
 export function ensureCardFonts() {
-  if (typeof document === 'undefined' || document.querySelector(`link[href="${CARD_FONTS_URL}"]`)) return;
+  if (typeof document === 'undefined' || fontsLink()) return;
   for (const [href, cross] of [['https://fonts.googleapis.com', false], ['https://fonts.gstatic.com', true]]) {
     const p = document.createElement('link');
     p.rel = 'preconnect'; p.href = /** @type {string} */ (href);
@@ -53,7 +60,7 @@ export function warmCards(uids, texts) {
       f.load(font, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./-').catch(() => {});
   };
   // @font-face は Google Fonts の CSS が届いてから (届く前に頼むと何も読まれない)
-  const l = /** @type {HTMLLinkElement | null} */ (document.querySelector(`link[href="${CARD_FONTS_URL}"]`));
+  const l = fontsLink();
   if (l && !l.sheet) l.addEventListener('load', go, { once: true }); else go();
 }
 

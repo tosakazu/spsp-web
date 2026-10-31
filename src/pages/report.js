@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { CARD_FONTS_URL, cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard, warmCards } from '../../site/js/player_card_embed.js';
+import { cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, warmCards } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -484,15 +484,14 @@ function candidatesHtml(m) {
 
 /** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。データが無ければ VS は NO DATA のカード、候補は出さない */
 function fillCards(root) {
-  const noData = (el) => { el.classList.remove('rp-card-wait'); mountNoDataCard(el, el.getAttribute('data-card-name') || ''); };
+  // フォントがそろって詰め直すまで (最大 2.5 秒) は灰色の枠のまま (描いてから文字の幅が変わってずれないように)
+  const settle = (el) => Promise.race([cardSettled(el), new Promise((r) => setTimeout(r, 2500))]).then(() => el.classList.remove('rp-card-wait'));
+  const noData = (el) => { mountNoDataCard(el, el.getAttribute('data-card-name') || ''); settle(el); };
   for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    mountPlayerCard(el, el.getAttribute('data-card-uid')).then(async (ok) => {
-      // フォントがそろって詰め直すまで (最大 2 秒) は灰色の枠のまま (描いてから文字の幅が変わってずれないように)
-      if (ok) await Promise.race([cardFontsReady(), new Promise((r) => setTimeout(r, 2000))]);
+    mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
       if (!el.isConnected) return;
-      el.classList.remove('rp-card-wait');
-      if (ok) return;
+      if (ok) { settle(el); return; }
       if (el.hasAttribute('data-card-name')) noData(el);   // VS: SPSP にデータが無い人
       else el.remove();   // 次の相手の候補: 名前は上に出ているのでカードは出さない
     }).catch(() => { /* カードが出ないだけ */ });
@@ -764,7 +763,8 @@ async function matchAnimation(m) {
   });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // 線の案: 線が走りきるまで (0.7 秒) はカードを出さない。読み込みが遅くても最大 3 秒
-  const ready = Promise.all([Promise.all(mounts).then(cardFontsReady), lines ? sleep(700) : null]);
+  const cardEls = /** @type {HTMLElement[]} */ ([...ov.querySelectorAll('.rp-match-card')]);
+  const ready = Promise.all([Promise.all(mounts).then(() => Promise.all(cardEls.map(cardSettled))), lines ? sleep(700) : null]);
   if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
   ov.classList.add('go');
   // 振動: 飛ばしたときは鳴らさない。ブラウザ (Android の Chrome など) はページに一度も触れていないと振動させない
@@ -788,15 +788,6 @@ async function matchAnimation(m) {
     const timer = setTimeout(() => done(false), cards ? 2800 : 2200);
     if (skipped) done(true);   // 二つ名を読んでいる間にタップされた
   });
-}
-
-/** カードの Web フォントが読み終わるまで (読み込みの link → 描いた文字で使われるフォント) */
-async function cardFontsReady() {
-  const l = /** @type {HTMLLinkElement | null} */ (document.querySelector(`link[href="${CARD_FONTS_URL}"]`));
-  if (l && !l.sheet) await new Promise((r) => { l.addEventListener('load', r, { once: true }); l.addEventListener('error', r, { once: true }); });
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // 描いた文字のフォントの読み込みが始まるまで
-  const f = /** @type {any} */ (document).fonts;
-  if (f && f.ready) await f.ready;
 }
 
 /** アニメーションの後、相手のカードが画面の上に来るところまでスクロールする (1 試合 1 回。その下に台・試合開始・入力欄が続く) */

@@ -218,20 +218,28 @@ test('見本: 試合の 2 人を URL で選べる (順位・名前・uid・初�
   assert.ok(/p1=10\d\d&p2=10\d\d/.test(rnd.href), 'ランダムは選んだ uid を URL に書き戻す: ' + rnd.href);
 });
 
-test('カードは、描いた後で読み始めたフォントが届いたら詰め直す (描いた時点では「読み込み済み」でも)', { skip }, async () => {
-  // 描いた時点は loaded、その直後に描いた文字の分を読み始める (loading)
-  const fonts = { status: 'loaded', ready: Promise.resolve(), load: async () => [] };
-  let finish = () => {};
-  const p = await open('?demo=newcomer&anim=dark', { before: (w) => { Object.defineProperty(w.document, 'fonts', { value: fonts, configurable: true }); } });
+test('カードは、出ている文字のフォントを名指しで読み、届いてから詰め直す。それまで下の画面のカードは枠のまま', { skip }, async () => {
+  // 描いた文字の分のフォントはまだ無い (check = false)。load は finish() まで終わらない
+  let have = false, finish = () => {};
+  const loads = [];
+  const gate = new Promise((r) => { finish = () => { have = true; r(); }; });
+  const fonts = { status: 'loaded', ready: Promise.resolve(), check: () => have, load: (spec, text) => { loads.push([spec, text]); return gate.then(() => []); } };
+  const p = await open('?demo=newcomer&anim=dark', { before: (w) => {
+    Object.defineProperty(w.document, 'fonts', { value: fonts, configurable: true });
+    // jsdom は外の CSS を読まないので、CSS は届いている扱いにする
+    Object.defineProperty(w.HTMLLinkElement.prototype, 'sheet', { get: () => ({}), configurable: true });
+  } });
   await until(() => p.d.querySelector('.rp-match-ov'));
   p.d.querySelector('.rp-match-ov').click();
-  assert.ok(await until(() => p.d.querySelector('.rp-current .rp-op .pc-in')), 'カードが出る');
-  const before = p.d.querySelector('.rp-current .rp-op .pc-in');
-  fonts.status = 'loading';
-  fonts.ready = new Promise((r) => { finish = () => { fonts.status = 'loaded'; r(); }; });
-  await sleep(100);
-  assert.strictEqual(p.d.querySelector('.rp-current .rp-op .pc-in'), before, 'フォントが届くまではそのまま');
+  assert.ok(await until(() => p.d.querySelector('.rp-current .rp-op .pc-in')), 'カードを描く');
+  const card = p.d.querySelector('.rp-current .rp-op .pcard');
+  const before = card.querySelector('.pc-in');
+  await sleep(150);
+  assert.ok(loads.some(([, t]) => /NO DATA/.test(t)), 'カードの文字でフォントを読む: ' + loads.length);
+  assert.ok(card.classList.contains('rp-card-wait'), 'フォントが届くまでは枠のまま');
+  assert.strictEqual(card.querySelector('.pc-in'), before);
   finish();
-  assert.ok(await until(() => p.d.querySelector('.rp-current .rp-op .pc-in') !== before, 1000), 'フォントが届いたら作り直す');
+  assert.ok(await until(() => card.querySelector('.pc-in') !== before, 1000), 'フォントが届いたら作り直す');
+  assert.ok(await until(() => !card.classList.contains('rp-card-wait'), 1000), '作り直してから見せる');
   p.close();
 });
