@@ -4,7 +4,7 @@
 //   - どの見本もエラーなく描ける
 //   - 試合の画面: マッチングの幕が画面より先に出る・タップで消える・自分のカード → 相手のカード → 台 → 入力欄の順
 //   - 入力欄は自分の行が先・カードのリンクは押せない
-//   - 演出の案 (?anim=) は全部描ける。カードの案は描き終わるまで中身を隠す
+//   - 演出の案 (?anim=) は全部見本の帯から選べる。描く処理が違う案 (幕だけ / カード / 線 + 飾りの有無 / ランダム) は描ける。カードの案は描き終わるまで中身を隠す
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -62,7 +62,8 @@ async function until(fn, ms = 4000) {
   return false;
 }
 
-const SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
+// 専用のテストが無い見本だけ (match / win / newcomer / admin / setup は下の専用のテストでエラーなしも見る)
+const SCENES = ['conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'setup_login'];
 
 for (const sc of SCENES) {
   test(`見本 ${sc}: エラーなく描ける`, { skip }, async () => {
@@ -70,8 +71,9 @@ for (const sc of SCENES) {
     await until(() => p.d.querySelector('.rp-demo'));
     const ov = p.d.querySelector('.rp-match-ov');
     if (ov) ov.click();
-    await sleep(300);
     const main = p.d.querySelector('.rp-main');
+    await until(() => !p.d.querySelector('.rp-match-ov') && main.textContent.trim().length > 50, 1000);
+    await sleep(100);   // 描いたあとの非同期の処理でエラーが出ないか
     assert.ok(p.d.querySelector('.rp-demo'), '見本の帯が出る');
     assert.ok(main.textContent.trim().length > 50, '画面が空でない');
     assert.deepStrictEqual(p.errs, []);
@@ -84,6 +86,11 @@ test('試合の画面: 幕が先に出て、タップで消える。自分 → �
   assert.ok(await until(() => p.state.first !== null), '試合の画面が出る');
   assert.strictEqual(p.state.first, true, '画面より先に幕がある (下の画面が見えない)');
   const ov = p.d.querySelector('.rp-match-ov');
+  await until(() => ov.querySelector('.rp-match-skip'));
+  assert.ok(!/案 [A-Z]/.test(ov.textContent), '案の名前は画面に出さない');
+  // 演出の案は見本の帯から全部選べる (下の演出のテストは描く処理が違う案だけ開く)
+  const links = [...p.d.querySelectorAll('.rp-demo a[href*="anim="]')].map((a) => /anim=([a-z]+)/.exec(a.getAttribute('href'))[1]);
+  for (const a of ['dark', 'light', 'band', 'cards', 'combo', 'cross', 'wipe', 'speed', 'flip', 'ring', 'bars', 'stamp', 'stripes']) assert.ok(links.includes(a), '見本の帯に ' + a);
   ov.click();
   assert.ok(await until(() => !p.d.querySelector('.rp-match-ov'), 1000), 'タップで幕が消える');
   const cur = p.d.querySelector('.rp-current');
@@ -105,6 +112,7 @@ test('初参加の相手 (SPSP にデータが無い): NO DATA のカード', { 
   await until(() => p.d.querySelector('.rp-match-ov'));
   p.d.querySelector('.rp-match-ov').click();
   assert.ok(await until(() => [...p.d.querySelectorAll('.rp-current .rp-op')].some((e) => /NO DATA/.test(e.textContent))), '相手は NO DATA');
+  assert.deepStrictEqual(p.errs, []);
   p.close();
 });
 
@@ -123,7 +131,9 @@ test('カードのリンクは押せない (画面が移らない)', { skip }, a
   p.close();
 });
 
-for (const anim of ['dark', 'light', 'band', 'cards', 'combo', 'cross', 'wipe', 'speed', 'flip', 'ring', 'bars', 'stamp', 'stripes', '']) {
+// 描く処理が違う案だけ: light (幕だけ。band も同じ処理、dark は上の試合の画面のテスト) / cards (カード) /
+// 線の案は class 名と飾り (animFxHtml) だけが違う → 飾りなし combo・<i> の飾り speed・<b> の飾り stamp / ランダム
+for (const anim of ['light', 'cards', 'combo', 'speed', 'stamp', '']) {
   test(`演出 ${anim || 'ランダム'}: 描けて、案の名前は出さない`, { skip }, async () => {
     const p = await open('?demo=match' + (anim ? '&anim=' + anim : ''));
     assert.ok(await until(() => p.d.querySelector('.rp-match-ov .rp-match-skip')), '幕の中身が出る');
@@ -149,6 +159,8 @@ test('受付を始める画面: 何先と受付の開始の欄がある', { skip
   assert.ok(await until(() => p.d.querySelector('[data-set-open]')), '受付の開始の欄');
   assert.ok(p.d.getElementById('rp-ft-set'), '何先の欄');
   assert.ok(p.d.querySelector('[data-set-open]').value, '開始の既定値が入っている');
+  assert.ok(p.d.querySelector('.rp-demo'), '見本の帯が出る');
+  assert.deepStrictEqual(p.errs, []);
   p.close();
 });
 
@@ -245,12 +257,13 @@ test('カードは、出ている文字のフォントを名指しで読み、�
 });
 
 test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相手・スコア・キャラ絵文字・大会名・ラウンド・UF・X に投稿', { skip }, async () => {
-  for (const win of ['card', 'letters', 'ribbon', 'confetti', '']) {
+  // 勝利画面の形は card / ribbon (赤い帯) / letters・confetti (白い紙) の 3 通り。letters は下の保存のテストで開く
+  for (const win of ['card', 'ribbon', 'confetti']) {
     const emoji = JSON.parse(fs.readFileSync(path.join(ROOT, 'site/data/char_emoji.json'), 'utf8'));
     const p = await open('?demo=win' + (win ? '&win=' + win : ''), { json: (u) => (/char_emoji\.json$/.test(u) ? emoji : null) });
     assert.ok(await until(() => p.d.querySelector('.rp-win-ov')), '勝利の演出が出る ' + win);
     const ov = p.d.querySelector('.rp-win-ov');
-    if (win) assert.ok(ov.classList.contains('rp-win-' + win));
+    assert.ok(ov.classList.contains('rp-win-' + win));
     assert.ok(!ov.classList.contains('still'), '最初は演出');
     ov.click();   // タップで飛ばす
     assert.ok(ov.classList.contains('still'), 'タップで勝利画面に');
@@ -316,7 +329,8 @@ test('勝利画面: 勝ちを報告したときだけ出る (負けの報告で�
 });
 
 test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675 を描いて保存する (描く処理が最後まで通る)', { skip }, async () => {
-  for (const win of ['letters', 'ribbon']) {
+  // 画像はカードの案かどうかだけで描き方が変わる (victoryPng)。カードの案は jsdom で撮れないので letters だけ
+  for (const win of ['letters']) {
     const calls = [];
     const p = await open('?demo=win&win=' + win, { before: (w) => {
       // jsdom に canvas は無いので、描く命令を記録するだけの 2D の文脈を渡す
@@ -339,6 +353,7 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     assert.deepStrictEqual(calls.find((c) => c[0] === 'toBlob'), ['toBlob', 1200, 675]);
     const texts = calls.filter((c) => c[0] === 'fillText').map((c) => String(c[1]));
     for (const t of ['WIN', 'spsp.games', 'Top 32 進出', '勝者側']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
+    assert.deepStrictEqual(p.errs, []);
     p.close();
   }
 });
