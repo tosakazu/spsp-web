@@ -387,84 +387,91 @@ body {
  * 案: card / letters / ribbon / confetti。勝利画面の形は card (自分のカード) / band (上が赤い帯) / sheet (白い紙) */
 .rp-win-ov { position: fixed; inset: 0; z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   padding: 16px; overflow: hidden; -webkit-tap-highlight-color: transparent;
-  background: radial-gradient(120% 70% at 50% 0%, #fff1f1 0%, #fff 55%) #fff; }
+  background: #fff; }
 .rp-win-ov.out { opacity: 0; transition: opacity .25s; }
 .rp-win-fx { position: absolute; inset: 0; pointer-events: none; }
 .rp-win-fx > b { position: absolute; left: 0; right: 0; top: 50%; text-align: center; transform: translateY(-50%); opacity: 0;
-  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(96px, 32vw, 220px); line-height: 1; color: #dc2626; letter-spacing: -.03em; }
+  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(96px, 32vw, 220px); line-height: 1; color: #df1b1b; letter-spacing: -.03em; }
 .rp-win-ov.still .rp-win-fx > b { opacity: 0 !important; transition: opacity .2s; animation: none; }
 .rp-win-skip { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 12px; color: #f87171; letter-spacing: .04em; }
 .rp-win-ov.still .rp-win-skip { display: none; }
 
-/* 勝利画面 (共通) */
-.rp-win-panel { position: relative; overflow: hidden; width: min(92vw, 400px); box-sizing: border-box; border-radius: 20px; background: #fff;
-  border: 1px solid #fde2e2; box-shadow: 0 18px 48px rgba(220, 38, 38, .14), 0 2px 6px rgba(220, 38, 38, .06); color: #1f2937; text-align: center;
-  opacity: 0; transform: translateY(20px) scale(.97); }
-.rp-win-ov.still .rp-win-panel { opacity: 1; transform: none; transition: opacity .35s ease-out, transform .5s cubic-bezier(.2, 1.3, .4, 1); }
-.rp-win-word { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 60px; line-height: 1; color: #dc2626; letter-spacing: -.02em; }
-.rp-win-tour { font-size: 13px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
-.rp-win-round { margin-top: 3px; font-size: 12px; font-weight: 600; color: #dc2626; overflow-wrap: anywhere; }
-.rp-win-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; margin-top: 16px; }
-.rp-win-side { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-.rp-win-side .rp-win-em { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; font-size: 30px; line-height: 1; }
-.rp-win-me .rp-win-em { background: #fee2e2; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #dc2626; }
-.rp-win-op .rp-win-em { background: #fff5f5; }
+/* 勝利画面 (共通): プレイヤーカードと同じ作り。角ばった赤い枠 (--pc-red)、赤い帯、英字の小見出しは Zalando Sans Expanded、
+ * 数字は Zalando Sans、日本語は IBM Plex Sans JP。丸い札・ふんわりした影は使わない */
+.rp-win-ov { --w-red: #df1b1b; --w-gray: #626262; --w-pale: #f3f3f3; }
+.rp-win-panel { position: relative; overflow: hidden; width: min(92vw, 420px); box-sizing: border-box; background: var(--w-pale);
+  border: 5px solid var(--w-red); color: #111; text-align: left; font-family: "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+  box-shadow: 8px 8px 0 rgba(223, 27, 27, .14); opacity: 0; transform: translateY(18px); }
+.rp-win-ov.still .rp-win-panel { opacity: 1; transform: none; transition: opacity .3s ease-out, transform .45s cubic-bezier(.2, 1.2, .4, 1); }
+.rp-win-head { position: relative; overflow: hidden; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px;
+  padding: 12px 14px 10px; border-bottom: 3px solid var(--w-red); }
+.rp-win-word { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 56px; line-height: .9; color: var(--w-red); letter-spacing: -.02em; }
+.rp-win-round { min-width: 0; text-align: right; font-family: "Zalando Sans Expanded", "IBM Plex Sans JP", sans-serif; font-weight: 500; font-size: 10.5px;
+  line-height: 1.35; text-transform: uppercase; letter-spacing: .04em; color: var(--w-gray); overflow-wrap: anywhere; padding-bottom: 3px; }
+.rp-win-body { padding: 12px 14px 10px; }
+.rp-win-tour { font-size: 14px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.rp-win-lbl { margin-top: 12px; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 9px; letter-spacing: .14em; color: var(--w-gray); }
+.rp-win-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; margin-top: 6px; }
+.rp-win-side { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }
+.rp-win-side .rp-win-em { display: flex; align-items: center; justify-content: center; width: 50px; height: 50px; background: #fff; font-size: 30px; line-height: 1; }
+.rp-win-me .rp-win-em { box-shadow: inset 0 -5px 0 var(--w-red); }
 .rp-win-nm { font-size: 14px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
-.rp-win-op .rp-win-nm { font-weight: 500; opacity: .75; }
-.rp-win-score { display: flex; align-items: baseline; justify-content: center; gap: 6px; font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; line-height: 1; font-size: 48px; }
-.rp-win-score b:first-child { color: #dc2626; }
-.rp-win-score b:last-child { color: #fca5a5; }
-.rp-win-score i { font-style: normal; font-weight: 500; font-size: .5em; color: #fecaca; }
-/* 次のフェーズへの進出: 赤い札 + 勝者側 / 敗者側 */
-.rp-win-adv { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; }
-.rp-win-adv b { padding: 5px 14px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .02em; }
-.rp-win-adv-side { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-.rp-win-adv-w { background: #fee2e2; color: #b91c1c; }
-.rp-win-adv-l { background: #fff; color: #dc2626; border: 1.5px solid #fca5a5; }
-.rp-win-ov.still .rp-win-adv:not([hidden]) { animation: rp-win-adv .4s cubic-bezier(.2, 1.5, .4, 1); }
-@keyframes rp-win-adv { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
-.rp-win-p-card .rp-win-adv { margin-top: 10px; }
-.rp-win-uf { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 14px; padding: 5px 14px; border-radius: 999px; border: 1.5px solid #dc2626; color: #dc2626; }
-.rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 20px; line-height: 1; }
-.rp-win-uf span { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .03em; }
-.rp-win-site { margin-top: 12px; text-align: right; font-family: "Zalando Sans", sans-serif; font-size: 10px; letter-spacing: .04em; color: #f87171; }
-/* 止まった後: 光が通る (画像で保存には写らない) */
-.rp-win-shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 35%; pointer-events: none; z-index: 2; opacity: 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .7), rgba(255, 255, 255, 0)); transform: skewX(-20deg); }
-.rp-win-ov.still .rp-win-shine { opacity: 1; animation: rp-win-shine 4s ease-in-out .7s infinite; }
-@keyframes rp-win-shine { 0% { left: -60%; } 40%, 100% { left: 140%; } }
+.rp-win-op .rp-win-nm { font-weight: 500; color: var(--w-gray); }
+.rp-win-score { display: flex; align-items: baseline; justify-content: center; gap: 6px; font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; line-height: .9; font-size: 54px; padding-bottom: 18px; }
+.rp-win-score b:first-child { color: var(--w-red); }
+.rp-win-score b:last-child { color: #e8a3a3; }
+.rp-win-score i { font-style: normal; font-weight: 500; font-size: .45em; color: #c9c9c9; }
+/* 進出・UF: 角ばった札 (赤は右端を斜めに切る) */
+.rp-win-tags { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin-top: 12px; }
+.rp-win-tags:not(:has(.rp-win-uf)):has(.rp-win-adv[hidden]) { display: none; }
+.rp-win-adv { display: flex; align-items: stretch; gap: 6px; }
+.rp-win-adv[hidden] { display: none; }
+.rp-win-adv b { display: flex; align-items: center; padding: 6px 18px 6px 10px; background: var(--w-red); color: #fff; font-size: 13px; font-weight: 700;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.rp-win-adv-side { display: flex; align-items: center; padding: 5px 9px; background: #fff; color: var(--w-red); font-size: 12px; font-weight: 700; border: 2px solid var(--w-red); }
+.rp-win-ov.still .rp-win-adv:not([hidden]) { animation: rp-win-adv .35s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes rp-win-adv { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+.rp-win-uf { display: flex; align-items: baseline; gap: 6px; padding: 5px 10px; background: #fff; border: 2px solid var(--w-red); color: var(--w-red); }
+.rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 19px; line-height: 1; }
+.rp-win-uf span { font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 8.5px; letter-spacing: .1em; }
+.rp-win-site { margin-top: 10px; text-align: right; font-family: "Zalando Sans", sans-serif; font-weight: 500; font-size: 10px; color: var(--w-gray); }
+/* 止まった後: 光が通る */
+.rp-win-shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 30%; pointer-events: none; z-index: 2; opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .6), rgba(255, 255, 255, 0)); transform: skewX(-20deg); }
+.rp-win-ov.still .rp-win-shine { opacity: 1; animation: rp-win-shine 4.5s ease-in-out .7s infinite; }
+@keyframes rp-win-shine { 0% { left: -60%; } 35%, 100% { left: 140%; } }
+/* ボタン: 角ばった形 (赤 / 白地に赤の枠) */
 .rp-win-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; opacity: 0; pointer-events: none; position: relative; z-index: 1; }
 .rp-win-ov.still .rp-win-actions { opacity: 1; pointer-events: auto; transition: opacity .3s .3s; }
-.rp-win-actions .rp-btn { border-radius: 999px; padding: 9px 18px; }
-.rp-win-actions .rp-btn:not(.rp-primary) { border-color: #fecaca; color: #dc2626; }
+.rp-win-actions .rp-btn { border-radius: 0; padding: 10px 16px; font-weight: 700; border-width: 2px; }
+.rp-win-actions .rp-btn.rp-primary { background: var(--w-red); border-color: var(--w-red); }
+.rp-win-actions .rp-btn:not(.rp-primary) { background: #fff; border-color: var(--w-red); color: var(--w-red); }
 
-/* sheet (letters / confetti): 白い紙。WIN の下に赤い細線 */
-.rp-win-p-sheet { padding: 22px 20px 14px; }
-.rp-win-rule { width: 48px; height: 3px; margin: 10px auto 12px; border-radius: 2px; background: #dc2626; }
+/* band (ribbon): 上が赤い帯で白の WIN */
+.rp-win-p-band .rp-win-head { background: var(--w-red); border-bottom: 0; }
+.rp-win-p-band .rp-win-word, .rp-win-p-band .rp-win-round { color: #fff; }
+.rp-win-p-band .rp-win-round { opacity: .85; }
 
-/* band (ribbon): 上が赤い帯で白い WIN */
-.rp-win-band { position: relative; overflow: hidden; padding: 16px 0 14px; background: linear-gradient(100deg, #dc2626 0%, #ef4444 55%, #dc2626 100%); }
-.rp-win-band .rp-win-word { color: #fff; }
-.rp-win-band::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: repeating-linear-gradient(-60deg, rgba(255, 255, 255, .22) 0 6px, transparent 6px 12px); }
-.rp-win-body { padding: 14px 20px 14px; }
-
-/* card: 自分のカード + 赤いたすき。下に結果 */
-.rp-win-p-card { padding: 14px 14px 12px; }
-.rp-win-cardwrap { position: relative; overflow: hidden; border-radius: 12px; }
+/* card: 自分のカード (そのまま) + 赤いたすき。下に結果 */
+.rp-win-p-card { padding: 0; border: 0; }   /* 枠はカード (赤い枠を持っている) と下の結果の枠で */
+.rp-win-cardwrap { position: relative; overflow: hidden; }
 .rp-win-pcard { width: 100%; }
-.rp-win-sash { position: absolute; top: 18px; right: -46px; width: 190px; transform: rotate(35deg); background: #dc2626; text-align: center; padding: 4px 0;
-  box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(220, 38, 38, .35); }   /* 帯の外側に白い縁 */
+.rp-win-sash { position: absolute; top: 18px; right: -46px; width: 190px; transform: rotate(35deg); background: var(--w-red); text-align: center; padding: 4px 0;
+  box-shadow: 0 0 0 3px #fff; }   /* 帯の外側に白い縁 */
 .rp-win-sash span { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 22px; letter-spacing: .06em; color: #fff; }
-.rp-win-strip { padding: 12px 4px 0; }
-.rp-win-line { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
-.rp-win-line .rp-win-score { font-size: 40px; }
-.rp-win-against { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: #dc2626; font-weight: 600; min-width: 0; }
+.rp-win-strip { padding: 10px 14px 10px; border: 5px solid var(--w-red); border-top: 0; }
+.rp-win-line { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.rp-win-line .rp-win-score { font-size: 46px; padding-bottom: 0; }
+.rp-win-against { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.rp-win-against em { font-style: normal; font-family: "Zalando Sans Expanded", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: .12em; color: var(--w-gray); }
 .rp-win-against .rp-win-em { font-size: 22px; }
-.rp-win-against .rp-win-nm { color: #1f2937; }
+.rp-win-against .rp-win-nm { font-weight: 700; }
+.rp-win-p-card .rp-win-round { text-align: left; margin-top: 3px; padding: 0; }
 
 /* ── 演出 ── */
 /* card: 演出の間も勝利画面のカードを使う (パネルの枠は後から)。カードが回って入り、たすきが掛かる */
 .rp-win-ov.rp-win-card .rp-win-panel { opacity: 1; transform: none; background: transparent; border-color: transparent; box-shadow: none; }
+.rp-win-ov.rp-win-card .rp-win-strip { border-color: transparent; }
 .rp-win-ov.rp-win-card .rp-win-strip, .rp-win-ov.rp-win-card .rp-win-site { opacity: 0; }
 .rp-win-ov.rp-win-card .rp-win-cardwrap { opacity: 0; transform: perspective(900px) rotateY(-80deg) scale(.8); }
 .rp-win-ov.rp-win-card.go .rp-win-cardwrap { animation: rp-win-cardin .7s cubic-bezier(.2, 1.1, .4, 1) .05s forwards; }
@@ -472,8 +479,9 @@ body {
 .rp-win-ov.rp-win-card.go .rp-win-sash { animation: rp-win-sash .35s cubic-bezier(.3, 1.4, .5, 1) .8s forwards; }
 .rp-win-ov.rp-win-card.still .rp-win-cardwrap { opacity: 1; transform: none; animation: rp-win-float 5s ease-in-out infinite; }
 .rp-win-ov.rp-win-card.still .rp-win-sash { transform: rotate(35deg); animation: none; }
-.rp-win-ov.rp-win-card.still .rp-win-panel { background: #fff; border-color: #fde2e2; box-shadow: 0 18px 48px rgba(220, 38, 38, .14), 0 2px 6px rgba(220, 38, 38, .06);
+.rp-win-ov.rp-win-card.still .rp-win-panel { background: var(--w-pale); border-color: transparent; box-shadow: 8px 8px 0 rgba(223, 27, 27, .14);
   transition: background .3s, box-shadow .3s, border-color .3s; }
+.rp-win-ov.rp-win-card.still .rp-win-strip { border-color: var(--w-red); transition: border-color .3s; }
 .rp-win-ov.rp-win-card.still .rp-win-strip, .rp-win-ov.rp-win-card.still .rp-win-site { opacity: 1; transition: opacity .35s .1s; }
 @keyframes rp-win-cardin { to { opacity: 1; transform: perspective(900px) rotateY(0) scale(1); } }
 @keyframes rp-win-sash { to { transform: rotate(35deg); } }
@@ -497,7 +505,7 @@ body {
 
 /* ribbon: 赤いリボンが左から走って VICTORY。止まると勝利画面の帯に */
 .rp-win-ribbon .rp-win-fx i.rb { position: absolute; left: 0; right: 0; top: 50%; height: 84px; margin-top: -42px; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(100deg, #dc2626, #ef4444 55%, #dc2626); clip-path: inset(0 100% 0 0); box-shadow: 0 10px 30px rgba(220, 38, 38, .25); }
+  background: #df1b1b; clip-path: inset(0 100% 0 0); }
 .rp-win-ribbon .rp-win-fx i.rb::before, .rp-win-ribbon .rp-win-fx i.rb::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: #fff; opacity: .6; }
 .rp-win-ribbon .rp-win-fx i.rb::before { top: 8px; } .rp-win-ribbon .rp-win-fx i.rb::after { bottom: 8px; }
 .rp-win-ribbon .rp-win-fx i.rb span { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(40px, 13vw, 88px); letter-spacing: .08em; color: #fff;

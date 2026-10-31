@@ -266,7 +266,7 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     assert.strictEqual(panel.querySelector('.rp-win-adv').textContent, 'Top 32 進出勝者側');
     if (ov.classList.contains('rp-win-card')) assert.match(p.w.getComputedStyle(panel.querySelector('.rp-win-sash')).boxShadow || '#fff', /#fff|255, 255, 255/);
     assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
-    assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+Upset Factor$/, 'シード 24 が 3 に勝った: UF');
+    assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+UPSET FACTOR$/, 'シード 24 が 3 に勝った: UF');
     // X に投稿: 文に相手・スコア・UF
     let opened = '';
     p.w.open = (u) => { opened = String(u); return null; };
@@ -311,6 +311,34 @@ test('勝利画面: 勝ちを報告したときだけ出る (負けの報告で�
     // カードの案は自分の絵文字の代わりにカード (相手の絵文字だけ)
     const want = ov.classList.contains('rp-win-card') ? [emoji['1272'].emoji] : [emoji['1271'].emoji, emoji['1272'].emoji];
     assert.ok(want.every((e) => ems.includes(e)), '報告にキャラが無ければ使用キャラ: ' + ems.join(' '));
+    p.close();
+  }
+});
+
+test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675 を描いて保存する (描く処理が最後まで通る)', { skip }, async () => {
+  for (const win of ['letters', 'ribbon']) {
+    const calls = [];
+    const p = await open('?demo=win&win=' + win, { before: (w) => {
+      // jsdom に canvas は無いので、描く命令を記録するだけの 2D の文脈を渡す
+      const ctx = new Proxy({}, { get: (o, k) => (k in o ? o[k] : k === 'measureText' ? (t) => ({ width: String(t).length * 10 }) : (...a) => { calls.push([k, ...a]); }), set: (o, k, v) => { o[k] = v; return true; } });
+      w.HTMLCanvasElement.prototype.getContext = function () { return ctx; };
+      w.HTMLCanvasElement.prototype.toBlob = function (cb) { calls.push(['toBlob', this.width, this.height]); cb(new w.Blob(['x'], { type: 'image/png' })); };
+      w.URL.createObjectURL = () => 'blob:x'; w.URL.revokeObjectURL = () => {};
+    } });
+    await until(() => p.d.querySelector('.rp-win-ov'));
+    const ov = p.d.querySelector('.rp-win-ov');
+    ov.click();
+    await until(() => !p.d.querySelector('.rp-win-adv').hidden, 1500);
+    let downloaded = '', alerted = '';
+    p.w.alert = (m) => { alerted = String(m); };
+    p.w.HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
+    ov.querySelector('[data-win-save]').click();
+    assert.ok(await until(() => downloaded || alerted, 3000), '保存するか、失敗を知らせる');
+    assert.strictEqual(alerted, '', '失敗しない');
+    assert.match(downloaded, /^SPSP_win_.+_vs_.+\.png$/);
+    assert.deepStrictEqual(calls.find((c) => c[0] === 'toBlob'), ['toBlob', 1200, 675]);
+    const texts = calls.filter((c) => c[0] === 'fillText').map((c) => String(c[1]));
+    for (const t of ['WIN', 'spsp.games', 'Top 32 進出', '勝者側']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
     p.close();
   }
 });
