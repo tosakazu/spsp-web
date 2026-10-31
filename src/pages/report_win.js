@@ -35,19 +35,19 @@ export function tweetText(v) {
 /** 「Top 32 進出 (勝者側)」 @param {Advance} a */
 function advText(a) {
   const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
-  return i18n('report.win.advance', { phase: a.phase }) + (side ? ' (' + side + ')' : '');
+  return (side ? side + ' ' : '') + i18n('report.win.advance', { phase: a.phase });
 }
-/** 進出の札 (勝利画面の中) @param {Advance} a */
+/** 進出の札 (勝利画面の中)。勝者側/敗者側 → 進出先の順で、どちらも赤い台形 @param {Advance} a */
 function advHtml(a) {
   const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
-  return `<b>${escapeHtml(i18n('report.win.advance', { phase: a.phase }))}</b>${side ? `<span class="rp-win-adv-side">${escapeHtml(side)}</span>` : ''}`;
+  return `${side ? `<b class="rp-win-tag">${escapeHtml(side)}</b>` : ''}<b class="rp-win-tag">${escapeHtml(i18n('report.win.advance', { phase: a.phase }))}</b>`;
 }
 /** @param {Advance | null | undefined} a */
 const sideText = (a) => (!a ? '' : a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '');
 
 const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
 const em = (/** @type {WinSide} */ s) => `<span class="rp-win-em">${escapeHtml(s.emoji || '')}</span>`;
-const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf"><b>+${v.uf}</b><span>UPSET FACTOR</span></div>` : '');
+const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf rp-win-tag"><b>+${v.uf}</b><span>UPSET FACTOR</span></div>` : '');
 const scoreHtml = (/** @type {Victory} */ v) => `<div class="rp-win-score"><b>${v.score[0]}</b><i>-</i><b>${v.score[1]}</b></div>`;
 const shine = '<i class="rp-win-shine" aria-hidden="true"></i>';
 const site = '<div class="rp-win-site">spsp.games</div>';
@@ -207,16 +207,18 @@ export async function victoryPng(v, cardEl) {
   // 下: 進出・UF の札、サイト
   let x = cardImg ? 650 : 48;
   if (v.advance) {
-    x = tag(ctx, x, tagY, 58, i18n('report.win.advance', { phase: v.advance.phase }), `700 28px ${F_JP}`, true) + 10;
-    if (sideText(v.advance)) x = tag(ctx, x, tagY, 58, sideText(v.advance), `700 24px ${F_JP}`, false) + 10;
+    if (sideText(v.advance)) x = tag(ctx, x, tagY, 58, sideText(v.advance), `700 28px ${F_JP}`, true) + 8;
+    x = tag(ctx, x, tagY, 58, i18n('report.win.advance', { phase: v.advance.phase }), `700 28px ${F_JP}`, true) + 8;
   }
   if (v.uf >= 1) {
+    // 進出と同じ赤い台形
     ctx.font = `800 34px ${F_Z}`;
     const t1 = '+' + v.uf; const w1 = ctx.measureText(t1).width;
     ctx.font = `600 15px ${F_EXP}`; const w2 = ctx.measureText('UPSET FACTOR').width + 11 * 2;
-    const w = w1 + w2 + 48;
-    ctx.fillStyle = '#fff'; ctx.fillRect(x, tagY, w, 58); ctx.lineWidth = 3; ctx.strokeStyle = RED; ctx.strokeRect(x + 1.5, tagY + 1.5, w - 3, 55);
-    ctx.fillStyle = RED; ctx.font = `800 34px ${F_Z}`; ctx.fillText(t1, x + 18, tagY + 42);
+    const w = w1 + w2 + 36;
+    ctx.beginPath(); ctx.moveTo(x, tagY); ctx.lineTo(x + w + 12, tagY); ctx.lineTo(x + w, tagY + 58); ctx.lineTo(x, tagY + 58); ctx.closePath();
+    ctx.fillStyle = RED; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `800 34px ${F_Z}`; ctx.fillText(t1, x + 18, tagY + 42);
     ctx.font = `600 15px ${F_EXP}`; spaced(ctx, 'UPSET FACTOR', x + 30 + w1, tagY + 37, 2);
   }
   ctx.fillStyle = GRAY; ctx.font = `500 20px ${F_Z}`; ctx.textAlign = 'right'; ctx.fillText('spsp.games', IW - 44, IH - 32); ctx.textAlign = 'left';
