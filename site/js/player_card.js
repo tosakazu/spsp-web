@@ -393,6 +393,11 @@ function applyScale(el) {
 
 /** @type {WeakSet<HTMLElement>} */
 const observed = new WeakSet();
+/** 描いた・フォントがそろった・画像を重ねたを、カードの箱にイベント 'pcard-step' (detail = 'build' | 'fonts' | 'image') で知らせる
+ * (結果報告の見本で、あとから動いたところを調べる用) @param {HTMLElement} el @param {string} what */
+function step(el, what) {
+  try { el.dispatchEvent(new CustomEvent('pcard-step', { detail: what, bubbles: true })); } catch (e) { /* 知らせないだけ */ }
+}
 /** 描き直した回数 (前の描画のフォント待ちを無視するため) @type {WeakMap<HTMLElement, number>} */
 const renderGen = new WeakMap();
 /** 最後の描画のフォントがそろって詰め直し終わったら解ける @type {WeakMap<HTMLElement, Promise<void>>} */
@@ -451,20 +456,24 @@ export function render(el, model, opts = {}) {
     if (keep) el.appendChild(keep);
     fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
+    step(el, 'build');
   };
   build();
-  scheduleImage(el, live ? 1500 : 300);
   // Web フォント (Zalando Sans / IBM Plex Sans JP) が後から来ると幅が変わるので作り直す。
   // 日本語のフォントは字の範囲ごとに別のファイルで、描いた文字の分はそのあとで読み始める。ページ全体の読み込み状態
   // (document.fonts.ready) では「まだ頼んでいない字」を待てないので、カードに出ている文字とフォントを名指しで読む
   const gen = (renderGen.get(el) || 0) + 1;
   renderGen.set(el, gen);
+  // 強制ダークモード用の画像は、フォントがそろって詰め直した後に撮る (先に撮ると、詰め直す前の並びの画像が出てから入れ替わる)
   settled.set(el, (async () => {
     for (let i = 0; i < 3; i++) {   // 作り直した文字でまた別のフォントを読むことがある
       const loaded = await loadCardFonts(el);
-      if (renderGen.get(el) !== gen || !loaded) return;
-      build(); scheduleImage(el, live ? 1500 : 300);
+      if (renderGen.get(el) !== gen) return;
+      if (!loaded) break;
+      build();
     }
+    step(el, 'fonts');
+    await scheduleImage(el, live ? 1500 : 0);
   })().catch(() => {}));
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
     observed.add(el);
@@ -492,11 +501,19 @@ function needsImage() {
 }
 /** @type {WeakMap<HTMLElement, ReturnType<typeof setTimeout>>} */
 const imageTimers = new WeakMap();
-/** @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) */
+/** @type {WeakMap<HTMLElement, () => void>} 撮り直しで取りやめた回を待っている人を解く */
+const imageWaiters = new WeakMap();
+/** 撮って重ね終わったら解ける (画像にしないときはすぐ) @param {HTMLElement} el @param {number} delay 撮るまで待つ時間 (ms) @returns {Promise<void>} */
 function scheduleImage(el, delay) {
-  if (!needsImage()) return;
+  if (!needsImage()) return Promise.resolve();
   const old = imageTimers.get(el);
   if (old) clearTimeout(old);
+  const prevWaiter = imageWaiters.get(el);
+  /** @type {() => void} */
+  let done = () => {};
+  const p = new Promise(r => { done = () => { r(undefined); }; });
+  imageWaiters.set(el, done);
+  if (prevWaiter) p.then(prevWaiter);   // 前の回を待っていた人は、この回が終わるまで待つ
   imageTimers.set(el, setTimeout(() => {
     // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
     captureCanvas(el).then(node => {
@@ -508,8 +525,10 @@ function scheduleImage(el, delay) {
       node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
-    }).catch(() => { /* 撮れなければ HTML のカードのまま */ });
+      step(el, 'image');
+    }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).then(() => { if (imageWaiters.get(el) === done) imageWaiters.delete(el); done(); });
   }, delay));
+  return p;
 }
 
 /** カードだけを PNG にする (画像で保存 / X で共有)。表示中のカードは縮小されているので、

@@ -485,7 +485,7 @@ function candidatesHtml(m) {
 /** カードはプレイヤーページと同じもの (js/player_card_embed.js: データ・設定・二つ名・フォントとも同じ)。データが無ければ VS は NO DATA のカード、候補は出さない */
 function fillCards(root) {
   // フォントがそろって詰め直すまで (最大 2.5 秒) は灰色の枠のまま (描いてから文字の幅が変わってずれないように)
-  const settle = (el) => Promise.race([cardSettled(el), new Promise((r) => setTimeout(r, 2500))]).then(() => el.classList.remove('rp-card-wait'));
+  const settle = (el) => Promise.race([cardSettled(el), new Promise((r) => setTimeout(r, 2500))]).then(() => { el.classList.remove('rp-card-wait'); debugLog('見せた', el); });
   const noData = (el) => { mountNoDataCard(el, el.getAttribute('data-card-name') || ''); settle(el); };
   for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
@@ -767,6 +767,7 @@ async function matchAnimation(m) {
   const ready = Promise.all([Promise.all(mounts).then(() => Promise.all(cardEls.map(cardSettled))), lines ? sleep(700) : null]);
   if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
   ov.classList.add('go');
+  debugLog('演出: カードを見せた');
   // 振動: 飛ばしたときは鳴らさない。ブラウザ (Android の Chrome など) はページに一度も触れていないと振動させない
   // (呼んでも無視される。iPhone の Safari はそもそも無い) ので、触れたことがあるときだけ呼ぶ
   const ua = /** @type {any} */ (navigator).userActivation;
@@ -1535,7 +1536,7 @@ function demoBanner() {
     + '<form class="rp-demo-pick"><input name="p1" placeholder="' + escapeHtml(i18n('report.demo.pick_me')) + '" value="' + escapeHtml(Q.get('p1') || '') + '">'
     + '<span>VS</span><input name="p2" placeholder="' + escapeHtml(i18n('report.demo.pick_op')) + '" value="' + escapeHtml(Q.get('p2') || '') + '">'
     + '<button type="submit" class="rp-btn">' + escapeHtml(i18n('report.demo.pick_go')) + '</button></form>'
-    + '<div class="rp-demo-hint">' + escapeHtml(i18n('report.demo.pick_hint')) + '</div>';
+    + '<div class="rp-demo-hint">' + escapeHtml(i18n('report.demo.pick_hint')) + ' <a href="' + escapeHtml(DEBUG ? location.search.replace(/&debug=1/, '') : location.search + (location.search ? '&' : '?') + 'debug=1') + '">' + escapeHtml(i18n(DEBUG ? 'report.demo.debug_off' : 'report.demo.debug_on')) + '</a></div>';
   el.querySelector('form.rp-demo-pick').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = /** @type {HTMLFormElement} */ (e.currentTarget);
@@ -1636,6 +1637,26 @@ async function demoApi(body) {
   if (body.action === 'report_preset_delete') { DEMO_PRESETS = DEMO_PRESETS.filter((p) => p.name !== body.name); return { ok: true, presets: DEMO_PRESETS }; }
   return { ok: true, state: 'fixed', op: 'report' };
 }
+
+/** 見本の &debug=1: カードが描かれた・フォントがそろった・画像を重ねた・見せた時刻を画面の下に出す (あとから動くところを調べる用) */
+const DEBUG = !!Q.get('debug');
+function debugLog(what, el) {
+  if (!DEBUG) return;
+  let box = document.getElementById('rp-debug');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'rp-debug';
+    box.className = 'rp-debug';
+    document.body.appendChild(box);
+  }
+  const card = el && el.closest ? el.closest('.pcard') : null;
+  const where = !card ? '' : card.closest('.rp-match-ov') ? '演出' : card.closest('.rp-me') ? '下・自分' : card.closest('.rp-op') ? '下・相手' : '下・ほか';
+  const name = card ? (card.getAttribute('data-card-name') || card.getAttribute('data-name') || (card.querySelector('.pc-name') || {}).textContent || '') : '';
+  const line = document.createElement('div');
+  line.textContent = (performance.now() / 1000).toFixed(2) + 's ' + what + (where ? ' [' + where + '] ' + String(name).slice(0, 16) : '');
+  box.appendChild(line);
+}
+if (DEBUG) document.addEventListener('pcard-step', (e) => debugLog(/** @type {any} */ (e).detail, /** @type {any} */ (e).target));
 
 async function runDemo() {
   demoBanner();

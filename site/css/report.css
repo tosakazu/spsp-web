@@ -380,3 +380,7 @@ body {
 
 /* この画面のプレイヤーカード (VS・次の相手の候補・演出) はリンクを押せない (試合の画面から離れないように) */
 .rp-main .pcard a, .rp-match-ov .pcard a { pointer-events: none; cursor: default; }
+
+/* 見本の &debug=1 (カードの動きの記録) */
+.rp-debug { position: fixed; left: 4px; bottom: 4px; z-index: 10001; max-height: 40vh; overflow: auto; max-width: calc(100vw - 8px);
+  background: rgba(17, 24, 39, .85); color: #e5e7eb; font: 11px/1.4 ui-monospace, monospace; padding: 4px 6px; border-radius: 6px; pointer-events: none; }
