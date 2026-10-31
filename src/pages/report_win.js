@@ -103,6 +103,7 @@ function fxHtml(anim) {
 // カードの案は、カードだけカードの撮り方 (player_card.js の capture、原寸を 3 倍) で撮って貼る
 const IW = 1200, IH = 675, RED = '#df1b1b', GRAY = '#626262', PALE = '#f3f3f3';
 const F_EXP = '"Zalando Sans Expanded", sans-serif', F_Z = '"Zalando Sans", sans-serif', F_JP = '"IBM Plex Sans JP", "Hiragino Sans", sans-serif';
+const F_EMOJI = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
 /** 幅 maxW に入るまで文字を小さくして描く @param {CanvasRenderingContext2D} ctx */
 function fitText(ctx, text, x, y, maxW, font, px, minPx) {
@@ -112,6 +113,22 @@ function fitText(ctx, text, x, y, maxW, font, px, minPx) {
   let t = text;
   while (t.length > 1 && ctx.measureText(t).width > maxW) t = t.slice(0, -1);
   ctx.fillText(t === text ? t : t.slice(0, -1) + '…', x, y);
+}
+/** 自分の名前: 大きく 1 行で入らなければ 2 行 (字で折る)、それでも入らなければ小さくして末尾を … @param {CanvasRenderingContext2D} ctx */
+function nameLines(ctx, text, x, y, maxW, font) {
+  ctx.font = font.replace('{px}', '52px');
+  if (ctx.measureText(text).width <= maxW) { ctx.fillText(text, x, y); return; }
+  for (const px of [40, 34]) {
+    ctx.font = font.replace('{px}', px + 'px');
+    let i = 1;
+    while (i < text.length && ctx.measureText(text.slice(0, i + 1)).width <= maxW) i++;
+    const rest = text.slice(i);
+    if (ctx.measureText(rest).width <= maxW || px === 34) {
+      ctx.fillText(text.slice(0, i), x, y - px * .55);
+      fitText(ctx, rest, x, y + px * .65, maxW, font, px, px);
+      return;
+    }
+  }
 }
 /** 字間をあけて描く (英字の小見出し) @param {CanvasRenderingContext2D} ctx */
 function spaced(ctx, text, x, y, gap) {
@@ -129,69 +146,76 @@ function tag(ctx, x, y, h, text, font, fill) {
   return x + w + 12;
 }
 
-/** 共有用の画像。演出の案によらず同じ画像 (カードは使わない) @param {Victory} v @returns {Promise<Blob | null>} */
+/** 共有用の画像。演出の案によらず同じ画像 (カードは使わない)。
+ * 左 = 赤い斜めの板に WIN と自分 (絵文字・名前)、右 = 白地に大会・ラウンド・スコア・相手、下に進出・UF の札 @param {Victory} v @returns {Promise<Blob | null>} */
 export async function victoryPng(v) {
   const fonts = /** @type {any} */ (document).fonts;
   const all = [v.me.name, v.op.name, v.tour, where(v), v.advance ? advText(v.advance) : ''].join(' ');
   if (fonts && fonts.load) {
-    await Promise.all([`700 40px ${F_JP}`, `500 40px ${F_JP}`, `italic 900 40px ${F_Z}`, `800 40px ${F_Z}`, `500 20px ${F_EXP}`, `600 20px ${F_EXP}`]
-      .map((ft) => fonts.load(ft, all + ' WIN RESULT UPSET FACTOR spsp.games 0123456789+-').catch(() => null)));
+    await Promise.all([`700 40px ${F_JP}`, `500 40px ${F_JP}`, `italic 900 40px ${F_Z}`, `800 40px ${F_Z}`, `600 20px ${F_Z}`, `500 20px ${F_EXP}`, `600 20px ${F_EXP}`]
+      .map((ft) => fonts.load(ft, all + ' WIN VS UPSET FACTOR spsp.games 0123456789+-').catch(() => null)));
   }
   const cv = document.createElement('canvas');
   cv.width = IW; cv.height = IH;
   const ctx = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
-  ctx.fillStyle = PALE; ctx.fillRect(0, 0, IW, IH);
-  // 上の赤い帯: WIN と、大会・ラウンド
-  const HB = 150;
-  ctx.fillStyle = RED; ctx.fillRect(0, 0, IW, HB);
-  ctx.fillStyle = '#fff'; ctx.font = `italic 900 132px ${F_Z}`; ctx.fillText('WIN', 44, 128);
-  const hx = 360, hw = IW - hx - 48;
-  ctx.textAlign = 'right';
-  if (v.tour) { ctx.fillStyle = '#fff'; fitText(ctx, v.tour, IW - 48, 70, hw, `700 {px} ${F_JP}`, 34, 18); }
-  if (where(v)) { ctx.fillStyle = 'rgba(255,255,255,.82)'; fitText(ctx, where(v).toUpperCase(), IW - 48, 116, hw, `500 {px} ${F_EXP}`, 22, 14); }
-  ctx.textAlign = 'left';
-  // 中: 両者とスコア
-  const tagY = 548;
-  const scoreAt = (cx, y, px) => {
-    ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.textBaseline = 'alphabetic';
-    const a = String(v.score[0]), b = String(v.score[1]), d = '-';
-    const wa = ctx.measureText(a).width, wb = ctx.measureText(b).width;
-    ctx.font = `500 ${px * .45}px ${F_Z}`; const wd = ctx.measureText(d).width + 24;
-    let x = cx - (wa + wd + wb) / 2;
-    ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.fillStyle = RED; ctx.fillText(a, x, y); x += wa;
-    ctx.font = `500 ${px * .45}px ${F_Z}`; ctx.fillStyle = '#c9c9c9'; ctx.fillText(d, x + 12, y - px * .22); x += wd;
-    ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.fillStyle = '#e8a3a3'; ctx.fillText(b, x, y);
-  };
-  ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`; spaced(ctx, 'RESULT', 48, HB + 52, 3);
-  const side = (/** @type {WinSide} */ p, cx, me) => {
-    // キャラ絵文字の四角 (自分は赤い下線)
-    ctx.fillStyle = '#fff'; ctx.fillRect(cx - 60, HB + 90, 120, 120);
-    if (me) { ctx.fillStyle = RED; ctx.fillRect(cx - 60, HB + 202, 120, 8); }
-    if (p.emoji) { ctx.font = `72px ${F_JP}`; ctx.textAlign = 'center'; ctx.fillStyle = '#222'; ctx.fillText(p.emoji, cx, HB + 177); }
-    ctx.textAlign = 'center'; ctx.fillStyle = me ? '#111' : GRAY;
-    fitText(ctx, p.name, cx, HB + 270, 340, `${me ? 700 : 500} {px} ${F_JP}`, 40, 20);
-    ctx.textAlign = 'left';
-  };
-  side(v.me, 230, true);
-  side(v.op, IW - 230, false);
-  scoreAt(IW / 2, HB + 230, 170);
-  // 下: 進出・UF の札、サイト
-  let x = 48;
-  if (v.advance) {
-    x = tag(ctx, x, tagY, 58, advText(v.advance), `700 28px ${F_JP}`, true) + 8;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, IW, IH);
+  // 左の赤い板 (右の辺を斜めに) と、その外に細い斜線
+  const edge = (/** @type {number} */ y) => 500 - 110 * y / IH;   // 板の右の辺の x
+  const slant = (x0, x1) => { ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.lineTo(x1 - 110, IH); ctx.lineTo(x0 - 110, IH); ctx.closePath(); ctx.fill(); };
+  ctx.fillStyle = RED; slant(-200, 500);
+  ctx.fillStyle = RED; slant(522, 536);
+  ctx.fillStyle = 'rgba(223,27,27,.12)'; slant(558, 600);
+  // WIN
+  ctx.fillStyle = '#fff'; ctx.font = `italic 900 168px ${F_Z}`; ctx.fillText('WIN', 44, 186);
+  // 自分: 絵文字の白い四角 + 名前
+  const ey = 250, es = 132;
+  if (v.me.emoji) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(56, ey, es, es);
+    ctx.font = `84px ${F_EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#222';
+    ctx.fillText(v.me.emoji, 56 + es / 2, ey + es / 2 + 4);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
+  const ny = v.me.emoji ? ey + es + 72 : ey + 60;
+  ctx.fillStyle = '#fff';
+  nameLines(ctx, v.me.name, 56, ny, edge(ny + 50) - 56 - 36, `700 {px} ${F_JP}`);
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = `500 22px ${F_Z}`; ctx.fillText('spsp.games', 56, IH - 44);
+  // 右: 大会・ラウンド
+  const rx = 600, rw = IW - rx - 56;
+  const dy0 = v.advance || v.uf >= 1 ? 0 : 40;
+  ctx.fillStyle = '#1a1a1a'; fitText(ctx, v.tour || '', rx, 104 + dy0, rw, `700 {px} ${F_JP}`, 34, 18);
+  if (where(v)) { ctx.fillStyle = RED; fitText(ctx, where(v).toUpperCase(), rx, 146 + dy0, rw, `600 {px} ${F_EXP}`, 21, 13); }
+  // スコア (勝った数は赤、負けた数はうすい赤)
+  const sy = 368 + dy0, px = 210;
+  ctx.font = `italic 900 ${px}px ${F_Z}`;
+  const a = String(v.score[0]), b = String(v.score[1]);
+  const wa = ctx.measureText(a).width;
+  ctx.fillStyle = RED; ctx.fillText(a, rx - 8, sy);
+  ctx.fillStyle = RED; ctx.beginPath();   // 斜めの短い棒 (ハイフンの代わり)
+  const dx = rx - 8 + wa + 22, dy = sy - px * .3;
+  ctx.moveTo(dx + 8, dy - 10); ctx.lineTo(dx + 50, dy - 10); ctx.lineTo(dx + 42, dy + 10); ctx.lineTo(dx, dy + 10); ctx.closePath(); ctx.fill();
+  ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.fillStyle = '#f0b4b4'; ctx.fillText(b, dx + 72, sy);
+  // 相手
+  const oy = 452 + dy0;
+  ctx.fillStyle = RED; ctx.font = `600 20px ${F_EXP}`; spaced(ctx, 'VS', rx, oy - 4, 3);
+  let ox = rx + 54;
+  if (v.op.emoji) { ctx.font = `44px ${F_EMOJI}`; ctx.fillStyle = '#222'; ctx.fillText(v.op.emoji, ox, oy + 2); ox += 62; }
+  ctx.fillStyle = '#3a3a3a'; fitText(ctx, v.op.name, ox, oy, IW - 56 - ox, `700 {px} ${F_JP}`, 36, 18);
+  // 下: 進出・UF の札 (赤い台形)
+  const tagY = 532;
+  let x = rx;
+  if (v.advance) x = tag(ctx, x, tagY, 58, advText(v.advance), `700 26px ${F_JP}`, true) + 8;
   if (v.uf >= 1) {
-    // 進出と同じ赤い台形
-    ctx.font = `800 34px ${F_Z}`;
+    ctx.font = `800 32px ${F_Z}`;
     const t1 = '+' + v.uf; const w1 = ctx.measureText(t1).width;
-    ctx.font = `600 15px ${F_EXP}`; const w2 = ctx.measureText('UPSET FACTOR').width + 11 * 2;
+    ctx.font = `600 14px ${F_EXP}`; const w2 = ctx.measureText('UPSET FACTOR').width + 11 * 2;
     const w = w1 + w2 + 36;
-    ctx.beginPath(); ctx.moveTo(x, tagY); ctx.lineTo(x + w + 12, tagY); ctx.lineTo(x + w, tagY + 58); ctx.lineTo(x, tagY + 58); ctx.closePath();
+    if (x + w + 12 > IW - 40) { x = rx; }   // 入らなければ次の行
+    const ty = x === rx && v.advance ? tagY + 66 : tagY;
+    ctx.beginPath(); ctx.moveTo(x, ty); ctx.lineTo(x + w + 12, ty); ctx.lineTo(x + w, ty + 58); ctx.lineTo(x, ty + 58); ctx.closePath();
     ctx.fillStyle = RED; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `800 34px ${F_Z}`; ctx.fillText(t1, x + 18, tagY + 42);
-    ctx.font = `600 15px ${F_EXP}`; spaced(ctx, 'UPSET FACTOR', x + 30 + w1, tagY + 37, 2);
+    ctx.fillStyle = '#fff'; ctx.font = `800 32px ${F_Z}`; ctx.fillText(t1, x + 18, ty + 41);
+    ctx.font = `600 14px ${F_EXP}`; spaced(ctx, 'UPSET FACTOR', x + 30 + w1, ty + 36, 2);
   }
-  ctx.fillStyle = GRAY; ctx.font = `500 20px ${F_Z}`; ctx.textAlign = 'right'; ctx.fillText('spsp.games', IW - 44, IH - 32); ctx.textAlign = 'left';
   // 外の赤い枠 (カードと同じ)
   ctx.lineWidth = 12; ctx.strokeStyle = RED; ctx.strokeRect(6, 6, IW - 12, IH - 12);
   return new Promise((r) => cv.toBlob(r, 'image/png'));
