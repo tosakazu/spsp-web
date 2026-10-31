@@ -151,6 +151,13 @@ test('運営の画面: 食い違いは片方の報告を採用して解決でき
   assert.strictEqual(adopt.length, 2, '両者の採用ボタン');
   assert.ok(/報告を採用/.test(adopt[1].textContent));
   assert.strictEqual(row().querySelector('[data-fix-open]').textContent, 'スコアを入力して直す');
+  // 結果は 1 行ずつ (反映した結果・両者の報告)。食い違った報告は赤
+  const res = [...row().querySelectorAll('.rp-adm-res > .rp-adm-k')].map((e) => e.textContent);
+  assert.strictEqual(res.length, 3);
+  assert.strictEqual(res[0], '反映した結果');
+  assert.ok(/の報告$/.test(res[1]) && /の報告$/.test(res[2]));
+  assert.strictEqual(row().querySelectorAll('.rp-adm-res .rp-adm-diff').length, 2);
+  for (const v of row().querySelectorAll('.rp-adm-res .rp-adm-v.rp-adm-diff')) assert.match(v.textContent, /の \d-\d 勝ち/);
   // 次の試合に結果が出ている (locked) 確認待ちには採用ボタンを出さない
   assert.strictEqual(p.d.querySelector('.rp-adm-row[data-set="101"]').querySelectorAll('[data-adopt]').length, 0);
   // 手動: 欄が開く

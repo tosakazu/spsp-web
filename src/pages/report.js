@@ -1266,12 +1266,20 @@ function renderAdminSets(sets, force) {
   if (!sets.length) h += `<p class="rp-muted">${escapeHtml(i18n('report.admin.empty'))}</p>`;
   for (const s of sets) {
     const names = (s.slots || []).map((x) => (x ? x.name : '?'));
-    const rep = (k) => { const x = s.reports && s.reports[k]; return x && x.result ? (x.result.w === 0 ? names[0] : names[1]) + ' ' + scoreText(x.result, 0) : '—'; };
+    // 「◯◯ の 2-1 勝ち」(勝った側から見たスコア)
+    const resText = (r) => (r && r.g ? i18n('report.admin.sum', { name: names[r.w] || '?', a: scoreText(r, r.w).split('-')[0], b: scoreText(r, r.w).split('-')[1] }) : '');
+    const repOf = (k) => { const x = s.reports && s.reports[k]; return x && x.result ? x.result : null; };
+    const same = (a, b) => !!a && !!b && a.w === b.w && scoreText(a, 0) === scoreText(b, 0);
+    const diff = s.state === 'conflict' || (repOf('0') && repOf('1') && !same(repOf('0'), repOf('1')));
+    const resRow = (label, r, cls) => `<div class="rp-adm-k">${escapeHtml(label)}</div><div class="rp-adm-v${cls ? ' ' + cls : ''}">${r ? escapeHtml(resText(r)) : '<span class="rp-muted">' + escapeHtml(i18n('report.admin.no_report')) + '</span>'}</div>`;
     h += `<div class="rp-adm-row rp-state-${escapeHtml(s.state)}" data-set="${escapeHtml(s.set_id)}">
       <div class="rp-adm-head"><b>${escapeHtml(names.join(' vs '))}</b> <span class="rp-tag rp-state-${escapeHtml(s.state)}">${escapeHtml(STATE_LABEL(s.state))}</span>
         <span class="rp-muted">#${escapeHtml(s.set_id)} · ${escapeHtml(new Date(s.updated_ms).toLocaleTimeString())}</span></div>
-      <div class="rp-muted">${escapeHtml(i18n('report.admin.applied'))}: ${escapeHtml(s.applied ? (s.applied.w === 0 ? names[0] : names[1]) + ' ' + scoreText(s.applied, 0) : '—')}
-        · ${escapeHtml(names[0])}: ${escapeHtml(rep('0'))} · ${escapeHtml(names[1])}: ${escapeHtml(rep('1'))}${s.note ? ' · ' + escapeHtml(noteText(s.note)) : ''}</div>
+      <div class="rp-adm-res">
+        ${resRow(i18n('report.admin.applied'), s.applied, '')}
+        ${[0, 1].map((k) => resRow(i18n('report.admin.report_by', { name: names[k] }), repOf(String(k)), diff && repOf(String(k)) ? 'rp-adm-diff' : '')).join('')}
+      </div>
+      ${s.note ? `<div class="rp-adm-note">${escapeHtml(noteText(s.note))}</div>` : ''}
       <div class="rp-adm-fix">
         ${adoptable(s).map((k) => `<button type="button" class="rp-btn rp-primary" data-adopt="${k}">${escapeHtml(i18n('report.admin.adopt', { name: names[k] }))}</button>`).join('')}
         <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : adoptable(s).length ? i18n('report.admin.fix_manual') : i18n('report.admin.fix_open'))}</button>

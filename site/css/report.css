@@ -100,10 +100,17 @@ body {
 .rp-settings label.rp-check { flex-direction: row; align-items: center; }
 .rp-share { display: flex; gap: 6px; }
 .rp-share input { flex: 1; }
-.rp-adm-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+.rp-adm-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
 .rp-adm-row.rp-state-conflict, .rp-adm-row.rp-state-review { border-color: #fdba74; background: #fffbeb; }
-.rp-adm-head { font-size: 13px; }
-.rp-adm-fix { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.rp-adm-head { font-size: 14px; }
+.rp-adm-fix { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+/* 反映した結果と両者の報告: 名前の列と結果の列に分けて 1 行ずつ */
+.rp-adm-res { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 4px 14px; margin-top: 8px; padding: 8px 10px; background: #fff; border: 1px solid #f1f5f9; border-radius: 8px; font-size: 14px; }
+.rp-adm-k { color: #6b7280; font-size: 12px; align-self: center; overflow-wrap: anywhere; }
+.rp-adm-v { font-weight: 600; overflow-wrap: anywhere; }
+.rp-adm-v.rp-adm-diff { color: #dc2626; }
+.rp-adm-note { margin-top: 6px; font-size: 12px; color: #9a3412; }
+@media (max-width: 420px) { .rp-adm-res { grid-template-columns: minmax(0, 1fr); gap: 0; } .rp-adm-v { margin-bottom: 6px; } }
 
 /* マッチングの演出 */
 .rp-match-ov {
