@@ -10,7 +10,6 @@ import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import { safeFileName } from '../../site/share.js';
 import { cardSettled, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
-import { capture as captureCard } from '../../site/js/player_card.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
@@ -41,7 +40,10 @@ function advText(a) {
 /** 進出の札 (勝利画面の中)。赤い台形 1 枚 @param {Advance} a */
 const advHtml = (a) => `<b class="rp-win-tag">${escapeHtml(advText(a))}</b>`;
 
-const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' | ');
+/** 共有のアイコン (箱から上向きの矢印) */
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square">'
+  + '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>';
+const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' ');
 const em = (/** @type {WinSide} */ s) => `<span class="rp-win-em">${escapeHtml(s.emoji || '')}</span>`;
 const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf rp-win-tag"><b>+${v.uf}</b><span>UPSET FACTOR</span></div>` : '');
 const scoreHtml = (/** @type {Victory} */ v) => `<div class="rp-win-score"><b>${v.score[0]}</b><i>-</i><b>${v.score[1]}</b></div>`;
@@ -127,18 +129,13 @@ function tag(ctx, x, y, h, text, font, fill) {
   return x + w + 12;
 }
 
-/** 保存用の画像 @param {Victory} v @param {HTMLElement | null} cardEl カードの案ならカードの箱 @returns {Promise<Blob | null>} */
-export async function victoryPng(v, cardEl) {
+/** 共有用の画像。演出の案によらず同じ画像 (カードは使わない) @param {Victory} v @returns {Promise<Blob | null>} */
+export async function victoryPng(v) {
   const fonts = /** @type {any} */ (document).fonts;
   const all = [v.me.name, v.op.name, v.tour, where(v), v.advance ? advText(v.advance) : ''].join(' ');
   if (fonts && fonts.load) {
     await Promise.all([`700 40px ${F_JP}`, `500 40px ${F_JP}`, `italic 900 40px ${F_Z}`, `800 40px ${F_Z}`, `500 20px ${F_EXP}`, `600 20px ${F_EXP}`]
       .map((ft) => fonts.load(ft, all + ' WIN RESULT UPSET FACTOR spsp.games 0123456789+-').catch(() => null)));
-  }
-  let cardImg = null;
-  if (cardEl && cardEl.querySelector('.pc-in')) {
-    const b = await captureCard(cardEl).catch(() => null);
-    if (b) cardImg = await createImageBitmap(b).catch(() => null);
   }
   const cv = document.createElement('canvas');
   cv.width = IW; cv.height = IH;
@@ -153,7 +150,7 @@ export async function victoryPng(v, cardEl) {
   if (v.tour) { ctx.fillStyle = '#fff'; fitText(ctx, v.tour, IW - 48, 70, hw, `700 {px} ${F_JP}`, 34, 18); }
   if (where(v)) { ctx.fillStyle = 'rgba(255,255,255,.82)'; fitText(ctx, where(v).toUpperCase(), IW - 48, 116, hw, `500 {px} ${F_EXP}`, 22, 14); }
   ctx.textAlign = 'left';
-  // 中: 両者とスコア (カードの案は左にカード、右に結果)
+  // 中: 両者とスコア
   const tagY = 548;
   const scoreAt = (cx, y, px) => {
     ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.textBaseline = 'alphabetic';
@@ -165,43 +162,21 @@ export async function victoryPng(v, cardEl) {
     ctx.font = `500 ${px * .45}px ${F_Z}`; ctx.fillStyle = '#c9c9c9'; ctx.fillText(d, x + 12, y - px * .22); x += wd;
     ctx.font = `italic 900 ${px}px ${F_Z}`; ctx.fillStyle = '#e8a3a3'; ctx.fillText(b, x, y);
   };
-  ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`;
-  if (cardImg) {
-    // カード (514×333 の比) を左に。赤い枠はカードが持っている
-    const cw = 560, ch = Math.round(cw * 333 / 514), cx = 44, cy = HB + 30;
-    ctx.drawImage(cardImg, cx, cy, cw, ch);
-    // たすき
-    ctx.save(); ctx.beginPath(); ctx.rect(cx, cy, cw, ch); ctx.clip();
-    ctx.translate(cx + cw - 70, cy + 62); ctx.rotate(35 * Math.PI / 180);
-    ctx.fillStyle = '#fff'; ctx.fillRect(-150, -30, 300, 60);
-    ctx.fillStyle = RED; ctx.fillRect(-150, -24, 300, 48);
-    ctx.fillStyle = '#fff'; ctx.font = `italic 900 34px ${F_Z}`; ctx.textAlign = 'center'; ctx.fillText('WIN', 0, 12); ctx.textAlign = 'left';
-    ctx.restore();
-    const rx = 650, rw = IW - rx - 48;
-    ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`; spaced(ctx, 'RESULT', rx, HB + 62, 3);
-    scoreAt(rx + rw / 2, HB + 210, 150);
-    ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`; spaced(ctx, 'VS', rx, HB + 280, 3);
-    ctx.fillStyle = '#222'; ctx.font = `64px ${F_JP}`;
-    let nx = rx;
-    if (v.op.emoji) { ctx.fillText(v.op.emoji, rx, HB + 352); nx = rx + 84; }
-    ctx.fillStyle = '#222'; fitText(ctx, v.op.name, nx, HB + 340, IW - 48 - nx, `700 {px} ${F_JP}`, 40, 20);
-  } else {
-    ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`; spaced(ctx, 'RESULT', 48, HB + 52, 3);
-    const side = (/** @type {WinSide} */ p, cx, me) => {
-      // キャラ絵文字の四角 (自分は赤い下線)
-      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 60, HB + 90, 120, 120);
-      if (me) { ctx.fillStyle = RED; ctx.fillRect(cx - 60, HB + 202, 120, 8); }
-      if (p.emoji) { ctx.font = `72px ${F_JP}`; ctx.textAlign = 'center'; ctx.fillStyle = '#222'; ctx.fillText(p.emoji, cx, HB + 177); }
-      ctx.textAlign = 'center'; ctx.fillStyle = me ? '#111' : GRAY;
-      fitText(ctx, p.name, cx, HB + 270, 340, `${me ? 700 : 500} {px} ${F_JP}`, 40, 20);
-      ctx.textAlign = 'left';
-    };
-    side(v.me, 230, true);
-    side(v.op, IW - 230, false);
-    scoreAt(IW / 2, HB + 230, 170);
-  }
+  ctx.fillStyle = GRAY; ctx.font = `600 18px ${F_EXP}`; spaced(ctx, 'RESULT', 48, HB + 52, 3);
+  const side = (/** @type {WinSide} */ p, cx, me) => {
+    // キャラ絵文字の四角 (自分は赤い下線)
+    ctx.fillStyle = '#fff'; ctx.fillRect(cx - 60, HB + 90, 120, 120);
+    if (me) { ctx.fillStyle = RED; ctx.fillRect(cx - 60, HB + 202, 120, 8); }
+    if (p.emoji) { ctx.font = `72px ${F_JP}`; ctx.textAlign = 'center'; ctx.fillStyle = '#222'; ctx.fillText(p.emoji, cx, HB + 177); }
+    ctx.textAlign = 'center'; ctx.fillStyle = me ? '#111' : GRAY;
+    fitText(ctx, p.name, cx, HB + 270, 340, `${me ? 700 : 500} {px} ${F_JP}`, 40, 20);
+    ctx.textAlign = 'left';
+  };
+  side(v.me, 230, true);
+  side(v.op, IW - 230, false);
+  scoreAt(IW / 2, HB + 230, 170);
   // 下: 進出・UF の札、サイト
-  let x = cardImg ? 650 : 48;
+  let x = 48;
   if (v.advance) {
     x = tag(ctx, x, tagY, 58, advText(v.advance), `700 28px ${F_JP}`, true) + 8;
   }
@@ -232,8 +207,7 @@ export async function showVictory(v, advance) {
   ov.setAttribute('aria-label', i18n('report.win.aria'));
   ov.innerHTML = `${fxHtml(anim)}${panelHtml(v, anim)}
     <div class="rp-win-actions">
-      <button type="button" class="rp-btn rp-primary" data-win-tweet>${escapeHtml(i18n('report.win.tweet_btn'))}</button>
-      <button type="button" class="rp-btn" data-win-save>${escapeHtml(i18n('report.win.save'))}</button>
+      <button type="button" class="rp-btn rp-primary rp-win-share" data-win-share>${SHARE_ICON}<span>${escapeHtml(i18n('report.win.share'))}</span></button>
       <button type="button" class="rp-btn" data-win-close>${escapeHtml(i18n('report.win.close'))}</button>
     </div>
     <div class="rp-win-note" role="status" hidden></div>
@@ -287,13 +261,13 @@ export async function showVictory(v, advance) {
     const isTouch = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
     const canShareFiles = () => isTouch() && typeof File === 'function' && !!nav.canShare && !!nav.share;
     /** @type {Promise<Blob> | null} */ let png = null;
-    const getPng = () => png || (png = victoryPng(v, cardEl).then((b) => { if (!b) throw new Error('png'); return b; })
+    const getPng = () => png || (png = victoryPng(v).then((b) => { if (!b) throw new Error('png'); return b; })
       .catch((e) => { png = null; throw e; }));
     const pre = () => { if (canShareFiles() && ov.isConnected) getPng().catch(() => { /* 押したときにもう一度 */ }); };
     onStill = () => setTimeout(pre, 400);
     onAdvance = () => { png = null; if (ov.classList.contains('still')) pre(); };
     if (ov.classList.contains('still')) onStill();
-    // 画像を待つのは 5 秒まで (カードの撮影に使う html2canvas が読めないときなど)。過ぎたら画像なしで投稿画面へ
+    // 画像を待つのは 5 秒まで (フォントが読めないときなど)。過ぎたら画像なしで投稿画面へ
     const pngSoon = () => Promise.race([getPng(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))]);
     /** @param {Blob} blob */
     const download = (blob) => {
@@ -313,9 +287,9 @@ export async function showVictory(v, advance) {
       try { await nav.share({ files: [file], text }); } catch (e) { if (/** @type {Error} */ (e).name !== 'AbortError') throw e; }
       return true;
     };
-    // X に投稿: スマホは共有シート (画像つき)。PC は X の投稿画面に画像を付けられないので、画像をコピーしてから開く (貼り付ければ付く)。
-    // コピーできないブラウザは画像を保存してから開く
-    const tweet = /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-tweet]'));
+    // 共有: スマホは共有シート (画像と文。X などを選ぶ)。PC は X の投稿画面に画像を付けられないので、画像をコピーしてから X の投稿画面を開く
+    // (貼り付ければ付く)。コピーできないブラウザは画像を保存してから開く
+    const tweet = /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-share]'));
     tweet.addEventListener('click', async () => {
       const text = tweetText(v) + (v.url ? '\n' + v.url : '');
       const intent = 'https://x.com/intent/tweet?text=' + encodeURIComponent(tweetText(v)) + (v.url ? '&url=' + encodeURIComponent(v.url) : '');
@@ -336,22 +310,6 @@ export async function showVictory(v, advance) {
         window.open(intent, '_blank', 'noopener');
       } finally {
         tweet.disabled = false;
-      }
-    });
-    const save = /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-save]'));
-    save.addEventListener('click', async () => {
-      save.disabled = true;
-      const label = save.textContent;
-      save.textContent = i18n('share.s2');
-      say('');
-      try {
-        // スマホ: 共有シート (画像を保存・X に画像つきで投稿などを選べる)。無ければダウンロード
-        try { if (await shareFile(tweetText(v) + (v.url ? '\n' + v.url : ''))) return; } catch (e) { /* ダウンロードに回す */ }
-        download(await getPng());
-      } catch (err) {
-        alert(i18n('share.s3') + /** @type {Error} */ (err).message);
-      } finally {
-        save.disabled = false; save.textContent = label;
       }
     });
   });

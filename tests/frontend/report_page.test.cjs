@@ -285,7 +285,7 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     p.w.open = (u) => { opened = String(u); return null; };
     // 画像を渡せないスマホ扱い (画像は作らずすぐ開く。画像つきの経路は保存のテストで見る)
     p.w.matchMedia = (q) => ({ matches: /coarse/.test(q), addEventListener() {}, removeEventListener() {} });
-    ov.querySelector('[data-win-tweet]').click();
+    ov.querySelector('[data-win-share]').click();
     assert.ok(await until(() => opened, 1500), '投稿画面を開く');
     const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
     assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
@@ -331,9 +331,9 @@ test('勝利画面: 勝ちを報告したときだけ出る (負けの報告で�
   }
 });
 
-test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675 を描いて保存する (描く処理が最後まで通る)', { skip }, async () => {
-  // 画像はカードの案かどうかだけで描き方が変わる (victoryPng)。カードの案は jsdom で撮れないので letters だけ
-  for (const win of ['letters']) {
+test('勝利画面の共有: 画面を撮らずに Canvas で 1200×675 を描く (どの案でも同じ画像)。PC はコピー/保存してから X、スマホは共有シート', { skip }, async () => {
+  // カードの案でもカードは撮らない (撮らずに描けるので jsdom でも最後まで通る)
+  for (const win of ['card']) {
     const calls = [];
     const p = await open('?demo=win&win=' + win, { before: (w) => {
       // jsdom に canvas は無いので、描く命令を記録するだけの 2D の文脈を渡す
@@ -346,13 +346,15 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     const ov = p.d.querySelector('.rp-win-ov');
     ov.click();
     await until(() => !p.d.querySelector('.rp-win-adv').hidden, 1500);
-    let downloaded = '', alerted = '';
-    p.w.alert = (m) => { alerted = String(m); };
+    // PC でコピーできないブラウザ: 画像を保存してから X の投稿画面
+    let downloaded = '', opened0 = '';
     p.w.HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
-    ov.querySelector('[data-win-save]').click();
-    assert.ok(await until(() => downloaded || alerted, 3000), '保存するか、失敗を知らせる');
-    assert.strictEqual(alerted, '', '失敗しない');
+    p.w.open = (u) => { opened0 = String(u); return null; };
+    ov.querySelector('[data-win-share]').click();
+    assert.ok(await until(() => opened0, 3000), '投稿画面を開く');
     assert.match(downloaded, /^SPSP_win_.+_vs_.+\.png$/);
+    assert.match(ov.querySelector('.rp-win-note').textContent, /保存/);
+    assert.strictEqual(ov.querySelectorAll('.rp-win-actions button').length, 2, '共有と閉じるだけ');
     assert.deepStrictEqual(calls.find((c) => c[0] === 'toBlob'), ['toBlob', 1200, 675]);
     const texts = calls.filter((c) => c[0] === 'fillText').map((c) => String(c[1]));
     for (const t of ['WIN', 'spsp.games', '勝者側Top 32進出']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
@@ -362,7 +364,7 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     p.w.open = (u) => { opened = String(u); return null; };
     p.w.ClipboardItem = function (items) { this.items = items; };
     Object.defineProperty(p.w.navigator, 'clipboard', { configurable: true, value: { write: async (list) => { clip = await list[0].items['image/png']; } } });
-    ov.querySelector('[data-win-tweet]').click();
+    ov.querySelector('[data-win-share]').click();
     assert.ok(await until(() => opened, 3000), 'コピーの後に投稿画面');
     assert.ok(clip && clip.type === 'image/png', '画像をコピー');
     assert.match(ov.querySelector('.rp-win-note').textContent, /コピー/);
@@ -382,7 +384,7 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     await until(() => q.d.querySelector('.rp-win-ov'));
     q.d.querySelector('.rp-win-ov').click();
     await until(() => !q.d.querySelector('.rp-win-adv').hidden, 1500);
-    q.d.querySelector('[data-win-tweet]').click();
+    q.d.querySelector('[data-win-share]').click();
     assert.ok(await until(() => shared, 3000), '共有シート');
     assert.match(shared.files[0].name, /^SPSP_win_.+\.png$/);
     assert.match(shared.text, /勝ちました！[\s\S]*勝者側Top 32進出/);
