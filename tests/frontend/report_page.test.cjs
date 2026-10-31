@@ -62,7 +62,7 @@ async function until(fn, ms = 4000) {
   return false;
 }
 
-const SCENES = ['match', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
+const SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
 
 for (const sc of SCENES) {
   test(`見本 ${sc}: エラーなく描ける`, { skip }, async () => {
@@ -242,4 +242,58 @@ test('カードは、出ている文字のフォントを名指しで読み、�
   assert.ok(await until(() => card.querySelector('.pc-in') !== before, 1000), 'フォントが届いたら作り直す');
   assert.ok(await until(() => !card.classList.contains('rp-card-wait'), 1000), '作り直してから見せる');
   p.close();
+});
+
+test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相手・スコア・キャラ絵文字・大会名・ラウンド・UF・X に投稿', { skip }, async () => {
+  for (const win of ['slash', 'stamp', 'stripes', 'burst', '']) {
+    const p = await open('?demo=win' + (win ? '&win=' + win : ''));
+    assert.ok(await until(() => p.d.querySelector('.rp-win-ov')), '勝利の演出が出る ' + win);
+    const ov = p.d.querySelector('.rp-win-ov');
+    if (win) assert.ok(ov.classList.contains('rp-win-' + win));
+    assert.ok(!ov.classList.contains('still'), '最初は演出');
+    ov.click();   // タップで飛ばす
+    assert.ok(ov.classList.contains('still'), 'タップで勝利画面に');
+    const panel = ov.querySelector('[data-win-panel]');
+    assert.match(panel.querySelector('.rp-win-score').textContent.replace(/\s+/g, ''), /^2-1$/);
+    assert.ok(panel.querySelector('.rp-win-me .rp-win-nm').textContent.length > 0);
+    assert.ok(panel.querySelector('.rp-win-op .rp-win-nm').textContent.length > 0);
+    assert.match(panel.querySelector('.rp-win-round').textContent, /Top 32.*Winners Quarter-Final/);
+    assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
+    assert.match(panel.querySelector('.rp-win-uf').textContent, /\+\d+UF/, 'シード 24 が 3 に勝った: UF');
+    // X に投稿: 文に相手・スコア・UF
+    let opened = '';
+    p.w.open = (u) => { opened = String(u); return null; };
+    ov.querySelector('[data-win-tweet]').click();
+    const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
+    assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
+    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)$/);
+    ov.querySelector('[data-win-close]').click();
+    assert.ok(await until(() => !p.d.querySelector('.rp-win-ov'), 1000), '閉じる');
+    assert.deepStrictEqual(p.errs, []);
+    p.close();
+  }
+});
+
+test('勝利画面: 勝ちを報告したときだけ出る (負けの報告では出ない)。UF が 1 未満なら UF を出さない', { skip }, async () => {
+  for (const won of [true, false]) {
+    const p = await open('?demo=match&anim=dark');
+    await until(() => p.d.querySelector('.rp-match-ov'));
+    p.d.querySelector('.rp-match-ov').click();
+    await until(() => p.d.querySelector('.rp-current form.rp-form'));
+    const form = p.d.querySelector('.rp-current form.rp-form');
+    const mine = form.querySelector('.rp-sum-row select[data-score]');   // 自分の行が先
+    const theirs = form.querySelectorAll('.rp-sum-row select[data-score]')[1];
+    mine.value = won ? '2' : '0'; mine.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+    theirs.value = won ? '0' : '2'; theirs.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+    p.w.confirm = () => true;
+    form.querySelector('button[type=submit]').click();
+    await sleep(400);
+    const ov = p.d.querySelector('.rp-win-ov');
+    if (!won) { assert.strictEqual(ov, null, '負けでは出ない'); p.close(); continue; }
+    assert.ok(ov, '勝ちで出る');
+    ov.click();
+    assert.match(ov.querySelector('.rp-win-score').textContent.replace(/\s+/g, ''), /^2-0$/);
+    assert.strictEqual(ov.querySelector('.rp-win-uf'), null, '見本の試合はシード 5 vs 28 (UF なし)');
+    p.close();
+  }
 });

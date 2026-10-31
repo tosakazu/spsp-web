@@ -381,3 +381,106 @@ body {
 /* この画面のプレイヤーカード (VS・次の相手の候補・演出) はリンクを押せない (試合の画面から離れないように) */
 .rp-main .pcard a, .rp-match-ov .pcard a { pointer-events: none; cursor: default; }
 
+
+/* ── 勝利の演出と勝利画面 (src/pages/report_win.js) ─────────────────────────────
+ * 演出 (約 1.6 秒、大きな WIN) → .still で勝利画面 (パネル + ボタン)。色はサイトと同じ白・濃いグレー・赤
+ * 案: slash (濃いグレーの地に赤白の斜めの帯) / stamp (白地に赤い判子) / stripes (赤とグレーの縞が流れる) / burst (赤い放射の線が回る) */
+.rp-win-ov { position: fixed; inset: 0; z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: #fff; overflow: hidden; padding: 16px; -webkit-tap-highlight-color: transparent; }
+.rp-win-ov.out { opacity: 0; transition: opacity .25s; }
+.rp-win-slash { background: #111827; }
+.rp-win-fx { position: absolute; inset: 0; pointer-events: none; }
+.rp-win-fx i { position: absolute; display: block; }
+.rp-win-fx b { position: absolute; left: 0; right: 0; top: 50%; text-align: center; transform: translateY(-50%);
+  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(88px, 30vw, 200px); line-height: 1; color: #dc2626; letter-spacing: -.02em; }
+.rp-win-ov.still .rp-win-fx b { opacity: 0; transition: opacity .25s; }
+
+/* 勝利画面 */
+.rp-win-panel { position: relative; overflow: hidden; width: min(92vw, 420px); box-sizing: border-box; padding: 16px 18px 12px; border-radius: 16px;
+  background: #fff; color: #111827; border: 1px solid #e5e7eb; border-top: 6px solid #dc2626; box-shadow: 0 12px 32px rgba(17, 24, 39, .18);
+  text-align: center; opacity: 0; transform: translateY(16px) scale(.96); }
+.rp-win-ov.still .rp-win-panel { opacity: 1; transform: none; transition: opacity .35s ease-out, transform .45s cubic-bezier(.2, 1.4, .4, 1); }
+.rp-win-slash .rp-win-panel { background: #1f2937; color: #f9fafb; border-color: #374151; border-top-color: #dc2626; }
+.rp-win-word { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 64px; line-height: 1; color: #dc2626; letter-spacing: -.01em; }
+.rp-win-tour { margin-top: 8px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.rp-win-round { margin-top: 2px; font-size: 12px; color: #6b7280; overflow-wrap: anywhere; }
+.rp-win-slash .rp-win-round { color: #9ca3af; }
+.rp-win-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 14px; }
+.rp-win-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.rp-win-em { font-size: 34px; line-height: 1.1; min-height: 1.1em; }
+.rp-win-nm { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
+.rp-win-op .rp-win-nm { color: #6b7280; font-weight: 600; }
+.rp-win-slash .rp-win-op .rp-win-nm { color: #9ca3af; }
+.rp-win-score { display: flex; align-items: baseline; gap: 6px; font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 46px; line-height: 1; }
+.rp-win-score b:first-child { color: #dc2626; }
+.rp-win-score b:last-child { color: #9ca3af; }
+.rp-win-score span { font-size: 28px; color: #d1d5db; }
+.rp-win-uf { display: inline-flex; align-items: baseline; gap: 5px; margin-top: 12px; padding: 4px 12px; border-radius: 999px; background: #fef2f2; border: 1px solid #fecaca; }
+.rp-win-slash .rp-win-uf { background: rgba(220, 38, 38, .15); border-color: rgba(220, 38, 38, .5); }
+.rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 20px; color: #dc2626; }
+.rp-win-uf span { font-family: "Zalando Sans", sans-serif; font-weight: 700; font-size: 13px; color: #dc2626; }
+.rp-win-uf em { font-style: normal; font-size: 11px; color: #9ca3af; }
+.rp-win-site { margin-top: 10px; text-align: right; font-family: "Zalando Sans", sans-serif; font-size: 10px; color: #9ca3af; }
+/* 止まった後: パネルの上を光が通る (少し動く。画像で保存には写らない) */
+.rp-win-shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent); transform: skewX(-20deg); opacity: 0; }
+.rp-win-slash .rp-win-shine { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .12), transparent); }
+.rp-win-ov.still .rp-win-shine { opacity: 1; animation: rp-win-shine 3.6s ease-in-out .6s infinite; }
+@keyframes rp-win-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+.rp-win-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; opacity: 0; pointer-events: none; position: relative; }
+.rp-win-ov.still .rp-win-actions { opacity: 1; pointer-events: auto; transition: opacity .3s .25s; }
+.rp-win-slash .rp-win-actions .rp-btn:not(.rp-primary) { background: #374151; color: #f9fafb; border-color: #4b5563; }
+.rp-win-skip { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; font-size: 12px; color: #9ca3af; }
+.rp-win-ov.still .rp-win-skip { display: none; }
+
+/* slash: 赤と白の帯が斜めに走り、WIN が横から入る。止まった後も帯はうすく残って揺れる */
+.rp-win-slash .rp-win-fx i:nth-child(1) { left: -20%; width: 140%; top: 36%; height: 28%; background: #dc2626; transform-origin: 0 50%;
+  transform: skewY(-12deg) scaleX(0); animation: rp-win-band .4s cubic-bezier(.6, 0, .2, 1) .05s forwards; }
+.rp-win-slash .rp-win-fx i:nth-child(2) { left: -20%; width: 140%; top: 66%; height: 2.5%; background: #fff; transform-origin: 100% 50%;
+  transform: skewY(-12deg) scaleX(0); animation: rp-win-band .35s cubic-bezier(.6, 0, .2, 1) .25s forwards; }
+.rp-win-slash .rp-win-fx b { color: #fff; text-shadow: 6px 6px 0 #111827; opacity: 0; animation: rp-win-slide .45s cubic-bezier(.2, 1.2, .4, 1) .4s forwards; }
+.rp-win-slash.still .rp-win-fx i { opacity: .35; transition: opacity .4s; animation: rp-win-sway 4s ease-in-out infinite alternate; transform: skewY(-12deg) scaleX(1); }
+@keyframes rp-win-band { to { transform: skewY(-12deg) scaleX(1); } }
+@keyframes rp-win-slide { from { opacity: 0; transform: translate(-60vw, -50%) skewX(-12deg); } to { opacity: 1; transform: translate(0, -50%) skewX(-12deg); } }
+@keyframes rp-win-sway { from { transform: skewY(-12deg) translateX(-3%); } to { transform: skewY(-12deg) translateX(3%); } }
+
+/* stamp: 白地に赤い判子が押される (少し揺れる)。止まった後は角に赤い斜線 */
+.rp-win-stamp .rp-win-fx b { left: 50%; right: auto; padding: 0 .12em; border: .06em solid #dc2626; border-radius: .1em; background: #fff;
+  font-size: clamp(72px, 24vw, 160px); opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(-16deg);
+  animation: rp-win-stamp .5s cubic-bezier(.5, 0, .7, 1.4) .15s forwards, rp-win-shake .3s ease-out .65s; }
+@keyframes rp-win-stamp { 70% { opacity: 1; transform: translate(-50%, -50%) scale(.92) rotate(-8deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-8deg); } }
+@keyframes rp-win-shake { 0%, 100% { margin-left: 0; } 25% { margin-left: -6px; } 50% { margin-left: 5px; } 75% { margin-left: -3px; } }
+.rp-win-stamp::before, .rp-win-stamp::after { content: ''; position: absolute; width: 60vmax; height: 3px; background: #dc2626; opacity: 0; transform: rotate(-35deg); }
+.rp-win-stamp::before { left: -18vmax; top: 10vh; }
+.rp-win-stamp::after { right: -18vmax; bottom: 10vh; }
+.rp-win-stamp.still::before, .rp-win-stamp.still::after { opacity: .5; transition: opacity .5s; }
+
+/* stripes: 赤と濃いグレーの縞が左から右へ流れ、そのあと WIN。止まった後は縞がうすくゆっくり流れる */
+.rp-win-stripes .rp-win-fx i { top: -20%; bottom: -20%; width: 16vw; left: 0; transform: translateX(-30vw) skewX(-20deg);
+  animation: rp-win-stripe .7s cubic-bezier(.5, 0, .3, 1) forwards; }
+.rp-win-stripes .rp-win-fx i:nth-child(odd) { background: #dc2626; }
+.rp-win-stripes .rp-win-fx i:nth-child(even) { background: #1f2937; }
+.rp-win-stripes .rp-win-fx i:nth-child(2) { animation-delay: .06s; } .rp-win-stripes .rp-win-fx i:nth-child(3) { animation-delay: .12s; }
+.rp-win-stripes .rp-win-fx i:nth-child(4) { animation-delay: .18s; } .rp-win-stripes .rp-win-fx i:nth-child(5) { animation-delay: .24s; }
+.rp-win-stripes .rp-win-fx i:nth-child(6) { animation-delay: .3s; }
+.rp-win-stripes .rp-win-fx b { opacity: 0; animation: rp-win-pop .4s cubic-bezier(.2, 1.5, .4, 1) .75s forwards; }
+.rp-win-stripes.still .rp-win-fx i { opacity: .1; animation: rp-win-drift 9s linear infinite; }
+.rp-win-stripes.still .rp-win-fx i:nth-child(2) { animation-delay: -1.5s; } .rp-win-stripes.still .rp-win-fx i:nth-child(3) { animation-delay: -3s; }
+.rp-win-stripes.still .rp-win-fx i:nth-child(4) { animation-delay: -4.5s; } .rp-win-stripes.still .rp-win-fx i:nth-child(5) { animation-delay: -6s; }
+.rp-win-stripes.still .rp-win-fx i:nth-child(6) { animation-delay: -7.5s; }
+@keyframes rp-win-stripe { to { transform: translateX(130vw) skewX(-20deg); } }
+@keyframes rp-win-drift { from { transform: translateX(-30vw) skewX(-20deg); } to { transform: translateX(130vw) skewX(-20deg); } }
+@keyframes rp-win-pop { from { opacity: 0; transform: translateY(-50%) scale(.4); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+
+/* burst: 赤い放射の線が広がって回り、WIN が弾ける。止まった後もうすく回り続ける */
+.rp-win-burst .rp-win-fx i { left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; border-radius: 50%;
+  background: repeating-conic-gradient(#dc2626 0 5deg, transparent 5deg 15deg); opacity: .9; transform: scale(0) rotate(0);
+  animation: rp-win-burst .8s cubic-bezier(.2, .8, .3, 1) forwards; }
+.rp-win-burst .rp-win-fx b { opacity: 0; text-shadow: 0 0 0 #fff, 4px 4px 0 #fff, -4px -4px 0 #fff, 4px -4px 0 #fff, -4px 4px 0 #fff; animation: rp-win-pop .45s cubic-bezier(.2, 1.6, .4, 1) .3s forwards; }
+.rp-win-burst.still .rp-win-fx i { opacity: .08; transform: scale(1); animation: rp-win-spin 40s linear infinite; transition: opacity .5s; }
+@keyframes rp-win-burst { to { transform: scale(1) rotate(30deg); } }
+@keyframes rp-win-spin { from { transform: scale(1) rotate(30deg); } to { transform: scale(1) rotate(390deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-win-ov *, .rp-win-ov::before, .rp-win-ov::after { animation: none !important; transition: none !important; }
+}

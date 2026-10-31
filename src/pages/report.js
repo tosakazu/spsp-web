@@ -19,6 +19,9 @@ import { cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard,
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
+import { placementToW2W } from '../../site/js/match.js';
+import SPSPLinks from '../../site/js/links.js';
+import { showVictory, WIN_ANIMS } from './report_win.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
@@ -36,6 +39,8 @@ const DEMO = Q.get('demo') || '';
 const LINE_ANIMS = ['combo', 'cross', 'wipe', 'speed', 'flip', 'ring', 'bars', 'stamp', 'stripes'];
 const ANIMS = ['', 'dark', 'light', 'band', 'cards', ...LINE_ANIMS];
 const ANIM = ANIMS.includes(Q.get('anim') || '') ? Q.get('anim') || '' : '';
+/** 勝利の演出 (?win=… で固定。無ければ src/pages/report_win.js の WIN_ANIMS から毎回ランダム) */
+const WIN = WIN_ANIMS.includes(Q.get('win') || '') ? Q.get('win') || '' : '';
 /** 線の案の後ろの飾り (::before / ::after で足りない案だけ) @param {string} anim */
 function animFxHtml(anim) {
   const inner = anim === 'speed' ? '<i></i>'.repeat(7) : anim === 'bars' ? '<i></i>'.repeat(8) : anim === 'stamp' ? '<b>VS</b>' : '';
@@ -714,8 +719,29 @@ function wireForm(form, m) {
     const sentKind = ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
+    // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
+    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(victoryOf(m, result));
     setTimeout(() => poll(true), 800);
   });
+}
+
+/** 勝利画面に出すもの。キャラ絵文字は報告で選んだキャラ (いちばん多く使ったもの。選んでいなければ出さない)。
+ * UF (アップセットファクター) = 両者のシード順位から見た番狂わせの大きさ (大会ページの UF と同じ)。1 以上のときだけ出す */
+function victoryOf(m, result) {
+  const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
+  const wins = (k) => result.g.filter((g) => g.w === k).length;
+  const emojiOf = (k) => {
+    const n = new Map();
+    for (const g of result.g) { const c = g.c && g.c[k]; if (c) n.set(c, (n.get(c) || 0) + 1); }
+    const top = [...n].sort((a, b) => b[1] - a[1])[0];
+    const c = top ? charById(top[0]) : null;
+    return c ? c.emoji : '';
+  };
+  const uf = me && op && me.seed && op.seed ? placementToW2W(me.seed) - placementToW2W(op.seed) : 0;
+  const uid = myUid();
+  return { me: { name: me ? me.name : '', emoji: emojiOf(m.mySide) }, op: { name: op ? op.name : '', emoji: emojiOf(1 - m.mySide) },
+    score: [wins(m.mySide), wins(1 - m.mySide)], tour: INFO ? INFO.name || '' : '', phase: m.phase || '', pool: m.pool || '', round: m.round || '',
+    uf: uf >= 1 ? uf : 0, url: uid ? SPSPLinks.playerHref(new URL('../', location.href).href, uid) : new URL('../', location.href).href, anim: WIN };
 }
 
 /** マッチングのアニメーション (試合ごとに 1 回) */
@@ -1470,7 +1496,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -1531,6 +1557,8 @@ function demoBanner() {
     + '<a data-demo-again hidden>' + escapeHtml(i18n('report.demo.pick_again')) + '</a>';
   el.innerHTML = '<b>' + escapeHtml(i18n('report.demo.banner')) + '</b><div class="rp-demo-links">' + links + '</div>'
     + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.anim')) + ' ' + anims + '</div>'
+    + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.win_anim')) + ' '
+    + ['random', ...WIN_ANIMS].map((wk) => '<a href="?demo=win' + (wk !== 'random' ? '&win=' + wk : '') + '"' + (DEMO === 'win' && (wk === WIN || (wk === 'random' && !WIN)) ? ' class="on"' : '') + '>' + escapeHtml(i18n('report.demo.win_' + wk)) + '</a>').join('') + '</div>'
     + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.pick')) + ' ' + pick + '</div>'
     + '<form class="rp-demo-pick"><input name="p1" placeholder="' + escapeHtml(i18n('report.demo.pick_me')) + '" value="' + escapeHtml(Q.get('p1') || '') + '">'
     + '<span>VS</span><input name="p2" placeholder="' + escapeHtml(i18n('report.demo.pick_op')) + '" value="' + escapeHtml(Q.get('p2') || '') + '">'
@@ -1652,7 +1680,19 @@ async function runDemo() {
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin') { await renderAdmin(); return; }
   if (DEMO === 'login') { $('rp-login').hidden = false; return; }   // ログインしていない人が報告ページを開いた
-  if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }   // ログインしたが出場者に居ない
+  if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }
+  if (DEMO === 'win') {   // 勝った側が報告した直後 (勝利の演出 → 勝利画面)。下の画面は報告した後の形
+    await loadChars();
+    const m = demoMatch(P, { phase: 'Top 32', pool: '', round: 'Winners Quarter-Final', phaseKey: 'p2', roundNum: 2, slots: [demoSlot(P[0], 24, 0), demoSlot(P[1], 3, 1)] });
+    const pick = (q) => (CHARS.find((c) => c.name.includes(q)) || CHARS[0] || { id: null }).id;
+    const c = [pick('マリオ'), pick('クラウド')];
+    const res = { w: 0, g: [{ w: 0, c, s: null }, { w: 1, c, s: null }, { w: 0, c, s: null }] };
+    MATCHES = [Object.assign({}, m, { state: 'complete', winner: 0, score: [2, 1] })];
+    VIEW.sets = [demoRow(m.id, 'reported', res, null, P)];
+    renderPlayer();
+    showVictory(victoryOf(m, res));
+    return;
+  }   // ログインしたが出場者に居ない
   await loadChars();
   STAGES = ['戦場', '終点', '小戦場', 'ポケモンスタジアム2', 'すま村', 'ホロウバスティオン', 'カロスポケモンリーグ'].map((name, i) => ({ id: 9001 + i, name }));
   const done0 = demoMatch(P, { id: '90000', state: 'complete', round: 'Winners Round 1', slots: [demoSlot(P[0], 5, 0), demoSlot(P[5], 60, 1)], winner: 0, score: [2, 0] });
