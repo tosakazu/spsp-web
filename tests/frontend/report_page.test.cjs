@@ -280,10 +280,13 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     if (ov.classList.contains('rp-win-card')) assert.match(p.w.getComputedStyle(panel.querySelector('.rp-win-sash')).boxShadow || '#fff', /#fff|255, 255, 255/);
     assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
     assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+UPSET FACTOR$/, 'シード 24 が 3 に勝った: UF');
-    // X に投稿: 文に相手・スコア・UF
+    // X に投稿: 文に相手・スコア・UF。画像を渡せない端末は文だけで投稿画面を開く
     let opened = '';
     p.w.open = (u) => { opened = String(u); return null; };
+    // 画像を渡せないスマホ扱い (画像は作らずすぐ開く。画像つきの経路は保存のテストで見る)
+    p.w.matchMedia = (q) => ({ matches: /coarse/.test(q), addEventListener() {}, removeEventListener() {} });
     ov.querySelector('[data-win-tweet]').click();
+    assert.ok(await until(() => opened, 1500), '投稿画面を開く');
     const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
     assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
     assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)\n勝者側Top 32進出$/);
@@ -354,6 +357,37 @@ test('勝利画面の画像を保存: 画面を撮らずに Canvas で 1200×675
     const texts = calls.filter((c) => c[0] === 'fillText').map((c) => String(c[1]));
     for (const t of ['WIN', 'spsp.games', '勝者側Top 32進出']) assert.ok(texts.some((x) => x.includes(t)), t + ' を描く: ' + texts.slice(0, 12).join(' / '));
     assert.deepStrictEqual(p.errs, []);
+    // X に投稿 (PC): 画像をクリップボードに入れてから投稿画面
+    let opened = '', clip = null;
+    p.w.open = (u) => { opened = String(u); return null; };
+    p.w.ClipboardItem = function (items) { this.items = items; };
+    Object.defineProperty(p.w.navigator, 'clipboard', { configurable: true, value: { write: async (list) => { clip = await list[0].items['image/png']; } } });
+    ov.querySelector('[data-win-tweet]').click();
+    assert.ok(await until(() => opened, 3000), 'コピーの後に投稿画面');
+    assert.ok(clip && clip.type === 'image/png', '画像をコピー');
+    assert.match(ov.querySelector('.rp-win-note').textContent, /コピー/);
+    // スマホ: 共有シートに画像と文 (投稿画面は開かない)
     p.close();
+    opened = '';
+    let shared = null;
+    const q = await open('?demo=win&win=' + win, { before: (w) => {
+      const ctx = new Proxy({}, { get: (o, k) => (k in o ? o[k] : k === 'measureText' ? (t) => ({ width: String(t).length * 10 }) : () => {}), set: (o, k, v) => { o[k] = v; return true; } });
+      w.HTMLCanvasElement.prototype.getContext = function () { return ctx; };
+      w.HTMLCanvasElement.prototype.toBlob = function (cb) { cb(new w.Blob(['x'], { type: 'image/png' })); };
+      w.matchMedia = (mq) => ({ matches: /coarse/.test(mq), addEventListener() {}, removeEventListener() {} });
+      w.navigator.canShare = () => true;
+      w.navigator.share = async (d) => { shared = d; };
+      w.open = (u) => { opened = String(u); return null; };
+    } });
+    await until(() => q.d.querySelector('.rp-win-ov'));
+    q.d.querySelector('.rp-win-ov').click();
+    await until(() => !q.d.querySelector('.rp-win-adv').hidden, 1500);
+    q.d.querySelector('[data-win-tweet]').click();
+    assert.ok(await until(() => shared, 3000), '共有シート');
+    assert.match(shared.files[0].name, /^SPSP_win_.+\.png$/);
+    assert.match(shared.text, /勝ちました！[\s\S]*勝者側Top 32進出/);
+    assert.strictEqual(opened, '', 'スマホは投稿画面を別に開かない');
+    assert.deepStrictEqual(q.errs, []);
+    q.close();
   }
 });

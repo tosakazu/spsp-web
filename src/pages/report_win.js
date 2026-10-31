@@ -236,17 +236,22 @@ export async function showVictory(v, advance) {
       <button type="button" class="rp-btn" data-win-save>${escapeHtml(i18n('report.win.save'))}</button>
       <button type="button" class="rp-btn" data-win-close>${escapeHtml(i18n('report.win.close'))}</button>
     </div>
+    <div class="rp-win-note" role="status" hidden></div>
     <div class="rp-win-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   document.body.appendChild(ov);
+  // 止まった画面になったとき・進出が分かったときの続き (共有用の画像を先に描く。下で入れる)
+  let onStill = () => {};
+  let onAdvance = () => {};
   if (advance) advance.then((a) => {
     if (!a || !ov.isConnected) return;
     v.advance = a;   // X の投稿の文にも入れる
     const el = /** @type {HTMLElement} */ (ov.querySelector('.rp-win-adv'));
     el.innerHTML = advHtml(a);
     el.hidden = false;
+    onAdvance();
   }).catch(() => { /* 出さないだけ */ });
   // 演出 → 止まって勝利画面 (.still)。演出の間のタップで飛ばす (カードを読んでいる間も)。動きを減らす設定ならすぐ
-  const still = () => { if (!ov.classList.contains('still')) ov.classList.add('go', 'still'); };
+  const still = () => { if (!ov.classList.contains('still')) { ov.classList.add('go', 'still'); onStill(); } };
   ov.addEventListener('click', (e) => { if (!ov.classList.contains('still') && !(/** @type {HTMLElement} */ (e.target)).closest('button')) still(); });
   // card: カードを描いてフォントがそろってから動かす (たいてい VS のときに読み終えている。最大 1.5 秒)
   const cardEl = /** @type {HTMLElement | null} */ (ov.querySelector('.rp-win-pcard'));
@@ -274,31 +279,75 @@ export async function showVictory(v, advance) {
     };
     document.addEventListener('keydown', onKey);
     /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-close]')).addEventListener('click', close);
-    /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-tweet]')).addEventListener('click', () => {
-      const u = 'https://x.com/intent/tweet?text=' + encodeURIComponent(tweetText(v)) + (v.url ? '&url=' + encodeURIComponent(v.url) : '');
-      window.open(u, '_blank', 'noopener');
+    const name = safeFileName('SPSP_win_' + v.me.name + '_vs_' + v.op.name) + '.png';
+    const nav = /** @type {any} */ (navigator);
+    // スマホ (共有シートで画像を渡せる端末) は、押してから描くと「押した直後」の扱いが切れて共有できないことがある (iOS)。
+    // 止まった画面になったら先に描いておく。進出の札が後から分かったら描き直す
+    // 押したときに見る (画面の途中で端末の扱いが変わることもある)
+    const isTouch = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    const canShareFiles = () => isTouch() && typeof File === 'function' && !!nav.canShare && !!nav.share;
+    /** @type {Promise<Blob> | null} */ let png = null;
+    const getPng = () => png || (png = victoryPng(v, cardEl).then((b) => { if (!b) throw new Error('png'); return b; })
+      .catch((e) => { png = null; throw e; }));
+    const pre = () => { if (canShareFiles() && ov.isConnected) getPng().catch(() => { /* 押したときにもう一度 */ }); };
+    onStill = () => setTimeout(pre, 400);
+    onAdvance = () => { png = null; if (ov.classList.contains('still')) pre(); };
+    if (ov.classList.contains('still')) onStill();
+    // 画像を待つのは 5 秒まで (カードの撮影に使う html2canvas が読めないときなど)。過ぎたら画像なしで投稿画面へ
+    const pngSoon = () => Promise.race([getPng(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))]);
+    /** @param {Blob} blob */
+    const download = (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const note = /** @type {HTMLElement} */ (ov.querySelector('.rp-win-note'));
+    const say = (/** @type {string} */ t) => { note.textContent = t; note.hidden = !t; };
+    /** スマホ: 共有シートに画像と文を渡す (X を選べば画像つきの投稿になる)。渡せたら true @param {string} text */
+    const shareFile = async (text) => {
+      if (!canShareFiles()) return false;
+      const file = new File([await getPng()], name, { type: 'image/png' });
+      if (!nav.canShare({ files: [file] })) return false;
+      try { await nav.share({ files: [file], text }); } catch (e) { if (/** @type {Error} */ (e).name !== 'AbortError') throw e; }
+      return true;
+    };
+    // X に投稿: スマホは共有シート (画像つき)。PC は X の投稿画面に画像を付けられないので、画像をコピーしてから開く (貼り付ければ付く)。
+    // コピーできないブラウザは画像を保存してから開く
+    const tweet = /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-tweet]'));
+    tweet.addEventListener('click', async () => {
+      const text = tweetText(v) + (v.url ? '\n' + v.url : '');
+      const intent = 'https://x.com/intent/tweet?text=' + encodeURIComponent(tweetText(v)) + (v.url ? '&url=' + encodeURIComponent(v.url) : '');
+      tweet.disabled = true;
+      say('');
+      try {
+        try { if (await shareFile(text)) return; } catch (e) { /* 共有シートが使えない → X の投稿画面へ */ }
+        const CI = /** @type {any} */ (window).ClipboardItem;
+        const touch = isTouch();
+        let done = '';
+        if (!touch && CI && nav.clipboard && nav.clipboard.write) {
+          try { await nav.clipboard.write([new CI({ 'image/png': pngSoon() })]); done = i18n('report.win.copied'); } catch (e) { /* 保存に回す */ }
+        }
+        if (!done && !touch) {
+          try { download(await pngSoon()); done = i18n('report.win.saved'); } catch (e) { /* 画像なしで投稿画面だけ開く */ }
+        }
+        say(done);
+        window.open(intent, '_blank', 'noopener');
+      } finally {
+        tweet.disabled = false;
+      }
     });
     const save = /** @type {HTMLButtonElement} */ (ov.querySelector('[data-win-save]'));
     save.addEventListener('click', async () => {
       save.disabled = true;
       const label = save.textContent;
       save.textContent = i18n('share.s2');
+      say('');
       try {
-        const blob = await victoryPng(v, cardEl);
-        if (!blob) throw new Error('png');
-        const name = safeFileName('SPSP_win_' + v.me.name + '_vs_' + v.op.name) + '.png';
         // スマホ: 共有シート (画像を保存・X に画像つきで投稿などを選べる)。無ければダウンロード
-        const file = typeof File === 'function' ? new File([blob], name, { type: 'image/png' }) : null;
-        const nav = /** @type {any} */ (navigator);
-        if (file && nav.canShare && nav.canShare({ files: [file] })) {
-          try { await nav.share({ files: [file], text: tweetText(v) + (v.url ? '\n' + v.url : '') }); return; }
-          catch (e) { if (/** @type {Error} */ (e).name === 'AbortError') return; }
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = name;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        try { if (await shareFile(tweetText(v) + (v.url ? '\n' + v.url : ''))) return; } catch (e) { /* ダウンロードに回す */ }
+        download(await getPng());
       } catch (err) {
         alert(i18n('share.s3') + /** @type {Error} */ (err).message);
       } finally {

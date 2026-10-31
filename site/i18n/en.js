@@ -2184,6 +2184,8 @@ window.SPSP_I18N.en = {
   'report.win.tweet_btn': 'Post on X',
   'report.win.save': 'Save image',
   'report.win.close': 'Close',
+  'report.win.copied': 'Image copied. Paste it into your post on X.',
+  'report.win.saved': 'Image saved. Attach it to your post on X.',
   'report.win.tweet': 'Beat {op} {s} at {where}!',
   'report.win.tweet_uf': '(UF +{n})',
   'report.win.advance': 'Advanced to {phase}',

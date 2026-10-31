@@ -2237,6 +2237,8 @@ window.SPSP_I18N.ja = {
   'report.win.tweet_btn': 'X に投稿',
   'report.win.save': '画像を保存',
   'report.win.close': '閉じる',
+  'report.win.copied': '画像をコピーしました。X の投稿欄に貼り付けてください',
+  'report.win.saved': '画像を保存しました。X の投稿に添付してください',
   'report.win.tweet': '{where} で {op} に {s} で勝ちました！',
   'report.win.tweet_uf': '(UF +{n})',
   'report.win.advance': '{phase}進出',

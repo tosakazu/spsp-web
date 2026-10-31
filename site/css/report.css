@@ -442,6 +442,8 @@ body {
 /* ボタン: 角ばった形 (赤 / 白地に赤の枠) */
 .rp-win-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; opacity: 0; pointer-events: none; position: relative; z-index: 1; }
 .rp-win-ov.still .rp-win-actions { opacity: 1; pointer-events: auto; transition: opacity .3s .3s; }
+.rp-win-note { position: relative; z-index: 1; margin-top: 8px; padding: 6px 12px; background: #fff; border: 2px solid var(--w-red); color: var(--w-red); font-size: 13px; font-weight: 700; text-align: center; }
+.rp-win-note[hidden] { display: none; }
 .rp-win-actions .rp-btn { border-radius: 0; padding: 10px 16px; font-weight: 700; border-width: 2px; }
 .rp-win-actions .rp-btn.rp-primary { background: var(--w-red); border-color: var(--w-red); }
 .rp-win-actions .rp-btn:not(.rp-primary) { background: #fff; border-color: var(--w-red); color: var(--w-red); }
