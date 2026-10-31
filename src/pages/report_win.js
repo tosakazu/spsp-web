@@ -18,15 +18,28 @@ export const WIN_ANIMS = ['card', 'letters', 'ribbon', 'confetti'];
 
 /**
  * @typedef {{ name: string, emoji: string, uid?: string | null }} WinSide
+ * @typedef {{ phase: string, side: 'w' | 'l' | null }} Advance  次のフェーズへの進出 (side = そのフェーズの勝者側 / 敗者側)
  * @typedef {{ me: WinSide, op: WinSide, score: [number, number], tour: string, phase: string, pool: string, round: string,
- *   uf: number, url: string, anim?: string }} Victory
+ *   uf: number, url: string, anim?: string, advance?: Advance | null }} Victory
  */
 
 /** X (Twitter) の投稿の文 @param {Victory} v */
 export function tweetText(v) {
   const where = [v.tour, [v.phase, v.pool, v.round].filter(Boolean).join(' ')].filter(Boolean).join(' ');
   return i18n('report.win.tweet', { where, op: v.op.name, s: v.score[0] + '-' + v.score[1] })
-    + (v.uf >= 1 ? ' ' + i18n('report.win.tweet_uf', { n: v.uf }) : '');
+    + (v.uf >= 1 ? ' ' + i18n('report.win.tweet_uf', { n: v.uf }) : '')
+    + (v.advance ? '\n' + advText(v.advance) : '');
+}
+
+/** 「Top 32 進出 (勝者側)」 @param {Advance} a */
+function advText(a) {
+  const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
+  return i18n('report.win.advance', { phase: a.phase }) + (side ? ' (' + side + ')' : '');
+}
+/** 進出の札 (勝利画面の中) @param {Advance} a */
+function advHtml(a) {
+  const side = a.side === 'w' ? i18n('report.win.side_w') : a.side === 'l' ? i18n('report.win.side_l') : '';
+  return `<b>${escapeHtml(i18n('report.win.advance', { phase: a.phase }))}</b>${side ? `<span class="rp-win-adv-side rp-win-adv-${a.side}">${escapeHtml(side)}</span>` : ''}`;
 }
 
 const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
@@ -35,6 +48,7 @@ const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf
 const scoreHtml = (/** @type {Victory} */ v) => `<div class="rp-win-score"><b>${v.score[0]}</b><i>-</i><b>${v.score[1]}</b></div>`;
 const shine = '<i class="rp-win-shine" aria-hidden="true" data-html2canvas-ignore></i>';
 const site = '<div class="rp-win-site">spsp.games</div>';
+const advSlot = (/** @type {Victory} */ v) => `<div class="rp-win-adv"${v.advance ? '' : ' hidden'}>${v.advance ? advHtml(v.advance) : ''}</div>`;
 
 /** 勝利画面 (止まる画面。画像で保存するのもこの箱)。案ごとに形が違う @param {Victory} v @param {string} anim */
 function panelHtml(v, anim) {
@@ -50,7 +64,7 @@ function panelHtml(v, anim) {
       <div class="rp-win-cardwrap"><div class="rp-win-pcard pcard"></div><div class="rp-win-sash"><span>WIN</span></div>${shine}</div>
       <div class="rp-win-strip">
         <div class="rp-win-line">${scoreHtml(v)}<span class="rp-win-against">vs ${em(v.op)}<span class="rp-win-nm">${escapeHtml(v.op.name)}</span></span></div>
-        ${head}${ufHtml(v)}
+        ${head}${advSlot(v)}${ufHtml(v)}
       </div>${site}
     </div>`;
   }
@@ -58,12 +72,12 @@ function panelHtml(v, anim) {
     // 上が赤い帯 (WIN)、下に白で結果
     return `<div class="rp-win-panel rp-win-p-band" data-win-panel>
       <div class="rp-win-band">${shine}<span class="rp-win-word">WIN</span></div>
-      <div class="rp-win-body">${head}${names}${ufHtml(v)}${site}</div>
+      <div class="rp-win-body">${head}${names}${advSlot(v)}${ufHtml(v)}${site}</div>
     </div>`;
   }
   // letters / confetti: 白い紙。上に WIN、赤い細線
   return `<div class="rp-win-panel rp-win-p-sheet" data-win-panel>
-    ${shine}<div class="rp-win-word">WIN</div><div class="rp-win-rule"></div>${head}${names}${ufHtml(v)}${site}
+    ${shine}<div class="rp-win-word">WIN</div><div class="rp-win-rule"></div>${head}${names}${advSlot(v)}${ufHtml(v)}${site}
   </div>`;
 }
 
@@ -84,8 +98,9 @@ function fxHtml(anim) {
   return '<div class="rp-win-fx" aria-hidden="true"></div>';   // card: 飾りはカードの上 (たすき)
 }
 
-/** 演出 → 勝利画面。閉じたら解ける @param {Victory} v @returns {Promise<void>} */
-export async function showVictory(v) {
+/** 演出 → 勝利画面。閉じたら解ける。advance = 次のフェーズへの進出 (報告の後に start.gg を読み直して分かる。分かったら札を出す)
+ * @param {Victory} v @param {Promise<Advance | null>} [advance] @returns {Promise<void>} */
+export async function showVictory(v, advance) {
   const anim = WIN_ANIMS.includes(v.anim || '') ? /** @type {string} */ (v.anim) : WIN_ANIMS[Math.floor(Math.random() * WIN_ANIMS.length)];
   const ov = document.createElement('div');
   ov.className = 'rp-win-ov rp-win-' + anim;
@@ -99,6 +114,13 @@ export async function showVictory(v) {
     </div>
     <div class="rp-win-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   document.body.appendChild(ov);
+  if (advance) advance.then((a) => {
+    if (!a || !ov.isConnected) return;
+    v.advance = a;   // X の投稿の文にも入れる
+    const el = /** @type {HTMLElement} */ (ov.querySelector('.rp-win-adv'));
+    el.innerHTML = advHtml(a);
+    el.hidden = false;
+  }).catch(() => { /* 出さないだけ */ });
   // 演出 → 止まって勝利画面 (.still)。演出の間のタップで飛ばす (カードを読んでいる間も)。動きを減らす設定ならすぐ
   const still = () => { if (!ov.classList.contains('still')) ov.classList.add('go', 'still'); };
   ov.addEventListener('click', (e) => { if (!ov.classList.contains('still') && !(/** @type {HTMLElement} */ (e.target)).closest('button')) still(); });

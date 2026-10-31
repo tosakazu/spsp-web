@@ -260,7 +260,11 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     else assert.ok(panel.querySelector('.rp-win-me .rp-win-nm').textContent.length > 0);
     assert.ok(panel.querySelector('.rp-win-op .rp-win-nm, .rp-win-against .rp-win-nm').textContent.length > 0);
     assert.ok([...panel.querySelectorAll('.rp-win-em')].every((e) => e.textContent.length > 0), '報告したキャラの絵文字');
-    assert.match(panel.querySelector('.rp-win-round').textContent, /Top 32.*Winners Quarter-Final/);
+    assert.match(panel.querySelector('.rp-win-round').textContent, /Pools.*B3.*Winners Final/);
+    // 次のフェーズへの進出 (見本は 0.5 秒後に分かる): Top 32 進出 + 勝者側
+    assert.ok(await until(() => !panel.querySelector('.rp-win-adv').hidden, 1500), '進出の札');
+    assert.strictEqual(panel.querySelector('.rp-win-adv').textContent, 'Top 32 進出勝者側');
+    if (ov.classList.contains('rp-win-card')) assert.match(p.w.getComputedStyle(panel.querySelector('.rp-win-sash')).boxShadow || '#fff', /#fff|255, 255, 255/);
     assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
     assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+Upset Factor$/, 'シード 24 が 3 に勝った: UF');
     // X に投稿: 文に相手・スコア・UF
@@ -269,7 +273,7 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     ov.querySelector('[data-win-tweet]').click();
     const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
     assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
-    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)$/);
+    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)\nTop 32 進出 \(勝者側\)$/);
     ov.querySelector('[data-win-close]').click();
     assert.ok(await until(() => !p.d.querySelector('.rp-win-ov'), 1000), '閉じる');
     assert.deepStrictEqual(p.errs, []);
@@ -302,8 +306,11 @@ test('勝利画面: 勝ちを報告したときだけ出る (負けの報告で�
     ov.click();
     assert.match(ov.querySelector('.rp-win-score').textContent.replace(/\s+/g, ''), /^2-0$/);
     assert.strictEqual(ov.querySelector('.rp-win-uf'), null, '見本の試合はシード 5 vs 28 (UF なし)');
+    assert.ok(ov.querySelector('.rp-win-adv').hidden, '進出が分からなければ札は出さない');
     const ems = [...ov.querySelectorAll('.rp-win-em')].map((e) => e.textContent);
-    assert.ok(ems.includes(emoji['1271'].emoji) && ems.includes(emoji['1272'].emoji), '報告にキャラが無ければ使用キャラ: ' + ems.join(' '));
+    // カードの案は自分の絵文字の代わりにカード (相手の絵文字だけ)
+    const want = ov.classList.contains('rp-win-card') ? [emoji['1272'].emoji] : [emoji['1271'].emoji, emoji['1272'].emoji];
+    assert.ok(want.every((e) => ems.includes(e)), '報告にキャラが無ければ使用キャラ: ' + ems.join(' '));
     p.close();
   }
 });

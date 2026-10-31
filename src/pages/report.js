@@ -720,7 +720,7 @@ function wireForm(form, m) {
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
-    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(await victoryOf(m, result));
+    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(await victoryOf(m, result), advanceAfter(m));
     setTimeout(() => poll(true), 800);
   });
 }
@@ -748,6 +748,22 @@ async function victoryOf(m, result) {
   return { me: { name: me ? me.name : '', emoji: eMe, uid: me ? me.uid : null }, op: { name: op ? op.name : '', emoji: eOp, uid: op ? op.uid : null },
     score: [wins(m.mySide), wins(1 - m.mySide)], tour: INFO ? INFO.name || '' : '', phase: m.phase || '', pool: m.pool || '', round: m.round || '',
     uf: uf >= 1 ? uf : 0, url: uid ? SPSPLinks.playerHref(new URL('../', location.href).href, uid) : new URL('../', location.href).href, anim: WIN };
+}
+
+/** 勝った試合で次のフェーズに進んだか: 報告の後に自分の試合を読み直し、後のフェーズ (今の試合と違うフェーズ) に終わっていない試合があれば進出。
+ * 勝者側 / 敗者側 = その試合のラウンド (start.gg は勝者側が正、敗者側が負)。start.gg が反映するのを少し待つ (3 回まで、約 4 秒)。
+ * 報告の前から見えていた試合は数えない (前の試合ですでに進出していた)
+ * @returns {Promise<{ phase: string, side: 'w' | 'l' | null } | null>} */
+async function advanceAfter(m) {
+  if (m.kind !== 'startgg' || !m.phaseKey || !GQL) return null;
+  const known = new Set(MATCHES.map((x) => x.id));
+  for (const wait of [600, 1200, 2000]) {
+    await new Promise((r) => setTimeout(r, wait));
+    const sets = await startggSets(GQL).catch(() => null);
+    const next = (sets || []).find((x) => x.phaseKey && x.phaseKey !== m.phaseKey && x.state !== 'complete' && !known.has(x.id));
+    if (next) return { phase: next.phase || '', side: next.roundNum > 0 ? 'w' : next.roundNum < 0 ? 'l' : null };
+  }
+  return null;
 }
 
 /** マッチングのアニメーション (試合ごとに 1 回) */
@@ -1689,14 +1705,14 @@ async function runDemo() {
   if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }
   if (DEMO === 'win') {   // 勝った側が報告した直後 (勝利の演出 → 勝利画面)。下の画面は報告した後の形
     await loadChars();
-    const m = demoMatch(P, { phase: 'Top 32', pool: '', round: 'Winners Quarter-Final', phaseKey: 'p2', roundNum: 2, slots: [demoSlot(P[0], 24, 0), demoSlot(P[1], 3, 1)] });
+    const m = demoMatch(P, { phase: 'Pools', pool: 'B3', round: 'Winners Final', phaseKey: 'p1', roundNum: 3, slots: [demoSlot(P[0], 24, 0), demoSlot(P[1], 3, 1)] });
     const pick = (q) => (CHARS.find((c) => c.name.includes(q)) || CHARS[0] || { id: null }).id;
     const c = [pick('マリオ'), pick('クラウド')];
     const res = { w: 0, g: [{ w: 0, c, s: null }, { w: 1, c, s: null }, { w: 0, c, s: null }] };
     MATCHES = [Object.assign({}, m, { state: 'complete', winner: 0, score: [2, 1] })];
     VIEW.sets = [demoRow(m.id, 'reported', res, null, P)];
     renderPlayer();
-    showVictory(await victoryOf(m, res));
+    showVictory(await victoryOf(m, res), new Promise((r) => setTimeout(() => r({ phase: 'Top 32', side: 'w' }), 500)));
     return;
   }   // ログインしたが出場者に居ない
   await loadChars();

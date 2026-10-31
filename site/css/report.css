@@ -415,6 +415,15 @@ body {
 .rp-win-score b:first-child { color: #dc2626; }
 .rp-win-score b:last-child { color: #fca5a5; }
 .rp-win-score i { font-style: normal; font-weight: 500; font-size: .5em; color: #fecaca; }
+/* 次のフェーズへの進出: 赤い札 + 勝者側 / 敗者側 */
+.rp-win-adv { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; }
+.rp-win-adv b { padding: 5px 14px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+.rp-win-adv-side { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.rp-win-adv-w { background: #fee2e2; color: #b91c1c; }
+.rp-win-adv-l { background: #fff; color: #dc2626; border: 1.5px solid #fca5a5; }
+.rp-win-ov.still .rp-win-adv:not([hidden]) { animation: rp-win-adv .4s cubic-bezier(.2, 1.5, .4, 1); }
+@keyframes rp-win-adv { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+.rp-win-p-card .rp-win-adv { margin-top: 10px; }
 .rp-win-uf { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 14px; padding: 5px 14px; border-radius: 999px; border: 1.5px solid #dc2626; color: #dc2626; }
 .rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 20px; line-height: 1; }
 .rp-win-uf span { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .03em; }
@@ -444,7 +453,7 @@ body {
 .rp-win-cardwrap { position: relative; overflow: hidden; border-radius: 12px; }
 .rp-win-pcard { width: 100%; }
 .rp-win-sash { position: absolute; top: 18px; right: -46px; width: 190px; transform: rotate(35deg); background: #dc2626; text-align: center; padding: 4px 0;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, .35); }
+  box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(220, 38, 38, .35); }   /* 帯の外側に白い縁 */
 .rp-win-sash span { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 22px; letter-spacing: .06em; color: #fff; }
 .rp-win-strip { padding: 12px 4px 0; }
 .rp-win-line { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
