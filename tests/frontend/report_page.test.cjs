@@ -31,7 +31,8 @@ const HTML = () => fs.readFileSync(path.join(ROOT, 'site/report/index.html'), 'u
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 見本の画面を開く。first = 試合の画面 (.rp-current) が最初に出たときに幕があったか */
-async function open(query) {
+async function open(query, opts) {
+  const okRe = opts && opts.ok;   // この URL だけ {} を返す (ほかは 404)
   const errs = [];
   const vc = new VirtualConsole();
   vc.on('jsdomError', (e) => { const m = String(e && e.message); if (!/scrollTo|Not implemented/.test(m)) errs.push(m.slice(0, 300)); });
@@ -39,14 +40,19 @@ async function open(query) {
   const w = dom.window;
   w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   w.scrollTo = () => {};
-  w.fetch = async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
+  const fetched = [];
+  w.fetch = async (u) => {
+    fetched.push(String(u));
+    const ok = !!okRe && okRe.test(String(u));
+    return { ok, status: ok ? 200 : 404, json: async () => ({}), text: async () => (ok ? '{}' : '') };
+  };
   const state = { first: null };
   new w.MutationObserver(() => {
     if (state.first === null && w.document.querySelector('.rp-current')) state.first = !!w.document.querySelector('.rp-match-ov');
   }).observe(w.document, { subtree: true, childList: true });
   for (const f of ['region/config.js', 'i18n/ja.js', 'region/i18n.js']) w.eval(built(f));
   w.eval(bundle());
-  return { w, d: w.document, errs, state, close: () => w.close() };
+  return { w, d: w.document, errs, state, fetched, close: () => w.close() };
 }
 async function until(fn, ms = 4000) {
   for (let t = 0; t < ms; t += 25) { if (fn()) return true; await sleep(25); }
@@ -170,5 +176,14 @@ test('運営の画面: 食い違いは片方の報告を採用して解決でき
   row().querySelector('[data-adopt="1"]').click();
   assert.ok(await until(() => row() && row().classList.contains('rp-state-fixed'), 3000), '確定した');
   assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
+test('カードを何枚描いても、選手によらないファイル (サブ順位など) は 1 回だけ読む', { skip }, async () => {
+  const p = await open('?demo=match&anim=cards', { ok: /(^|\/)(meta|overseas|character_index|player_prefectures|player_subranks)\.json$/ });
+  await until(() => p.d.querySelectorAll('.pcard').length >= 4);
+  await sleep(500);
+  const n = (re) => p.fetched.filter((u) => re.test(u)).length;
+  for (const re of [/player_subranks\.json/, /player_prefectures\.json/, /overseas\.json/, /character_index\.json/]) assert.strictEqual(n(re), 1, String(re));
   p.close();
 });

@@ -5,10 +5,11 @@
 //   cardTitleOf(uid)                カードに出る二つ名の文字 (前半 + 後半、既定の「スマブラSPプレイヤー」も含む)。選手のデータが無ければ ''
 //   mountNoDataCard(el, name)        SPSP にデータが無い人のカード (既定の見た目・名前だけ・NO DATA)
 //   ensureCardFonts()               カードの Web フォント (IBM Plex Sans JP / Zalando Sans) を読む <link> を足す (p/index.html と同じもの)
+//   warmCards(uids, texts)          カードを描く前に先読みする (選手のデータ・カードの設定・共通のファイル・フォント)
 // 見た目の CSS は css/player_card.css (ページの <head> で読む)。描くのは js/player_card.js の render (プレイヤーページと同じ)
 import SPSPPlayerCard, { shownTitle } from './player_card.js';
 import SPSPViews from './views.js';
-import { buildCardModel, fetchAppliedCard, loadCardData, noDataCardModel } from './player_card_model.js';
+import { buildCardModel, fetchAppliedCard, loadCardData, loadCardShared, noDataCardModel } from './player_card_model.js';
 
 /** p/index.html・p/edit.html と同じフォント (変えるときは 3 か所とも) */
 export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
@@ -24,6 +25,36 @@ export function ensureCardFonts() {
   const l = document.createElement('link');
   l.rel = 'stylesheet'; l.href = CARD_FONTS_URL;
   document.head.appendChild(l);
+}
+
+/** @type {Set<string>} */
+const WARMED_TEXT = new Set();
+/**
+ * カードを描く前に読んでおく。uids の選手のデータとカードの設定、選手によらないファイル、フォント。
+ * Web フォントは文字を描くまで読まれない (日本語は字の範囲ごとに数十ファイルに分かれている) ので、
+ * カードの決まった文字と texts (名前など) を先に頼んで、データと同時に読む
+ * @param {(string | null | undefined)[]} uids @param {string[]} [texts]
+ */
+export function warmCards(uids, texts) {
+  if (typeof document === 'undefined') return;
+  ensureCardFonts();
+  loadCardShared();
+  for (const u of uids) if (u) { cardDataOf(String(u)); appliedOf(String(u)); }
+  const f = /** @type {any} */ (document).fonts;
+  if (!f || !f.load) return;
+  const m = noDataCardModel('');
+  const text = [...Object.values(m.labels), 'スマブラSPプレイヤー 0123456789 位人', ...(texts || [])].join(' ');
+  if (WARMED_TEXT.has(text)) return;
+  WARMED_TEXT.add(text);
+  const go = () => {
+    for (const font of ['500 16px "IBM Plex Sans JP"', '600 16px "IBM Plex Sans JP"', '700 16px "IBM Plex Sans JP"'])
+      f.load(font, text).catch(() => { /* 描くときに読むだけ */ });
+    for (const font of ['500 14px "Zalando Sans"', '600 14px "Zalando Sans"', '400 10px "Zalando Sans Expanded"'])
+      f.load(font, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./-').catch(() => {});
+  };
+  // @font-face は Google Fonts の CSS が届いてから (届く前に頼むと何も読まれない)
+  const l = /** @type {HTMLLinkElement | null} */ (document.querySelector(`link[href="${CARD_FONTS_URL}"]`));
+  if (l && !l.sheet) l.addEventListener('load', go, { once: true }); else go();
 }
 
 /** @type {Map<string, Promise<any>>} */
@@ -94,4 +125,4 @@ export function mountNoDataCard(el, name) {
   SPSPPlayerCard.render(el, noDataCardModel(name));
 }
 
-export default { mountPlayerCard, mountNoDataCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, CARD_FONTS_URL };
+export default { mountPlayerCard, mountNoDataCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, warmCards, CARD_FONTS_URL };

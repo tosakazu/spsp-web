@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { CARD_FONTS_URL, cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
+import { CARD_FONTS_URL, cardDataOf, cardTitleOf, mountNoDataCard, mountPlayerCard, warmCards } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -731,7 +731,7 @@ async function matchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  for (const sl of [me, op]) if (sl && sl.uid) cardDataOf(sl.uid);   // VS のカードはアニメーションの間に読んでおく (画面はこの下に先に作ってある)
+  warmCards([me && me.uid, op && op.uid], [me ? me.name : '', op ? op.name : '']);   // VS のカード (ふつうは poll で読み始めている)
   // 幕は先に (同じ処理の中で) 出して、下の画面が見えないようにする。中身は二つ名を読んでから (最大 1.2 秒)
   const ov = document.createElement('div');
   const anim = ANIM || LINE_ANIMS[Math.floor(Math.random() * LINE_ANIMS.length)];
@@ -743,7 +743,7 @@ async function matchAnimation(m) {
   let onSkip = () => {};
   const skipP = new Promise((r) => { onSkip = r; });
   ov.addEventListener('click', () => { skipped = true; onSkip(); }, { once: true });
-  let [tMe, tOp] = await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
+  let [tMe, tOp] = cards ? ['', ''] : await Promise.all([titleOf(me && me.uid, 1200), titleOf(op && op.uid, 1200)]);
   if (DEMO) { tMe = tMe || i18n('report.demo.title_me'); tOp = tOp || i18n('report.demo.title_op'); }   // 見本: 二つ名が無い人には見本の二つ名
   const side = cards
     ? (slot, title, cls) => `<span class="rp-match-p ${cls}"><span class="rp-match-card pcard"${slot && slot.uid ? ` data-uid="${escapeHtml(String(slot.uid))}"` : ''} data-name="${escapeHtml(slot ? slot.name : '')}"></span></span>`
@@ -927,9 +927,10 @@ async function poll(force) {
         if (!STAGES) await loadStages(GQL);
         MATCHES = await startggSets(GQL);
       }
+      const cur = MATCHES.find((m) => m.state === 'open');
+      if (cur) warmCards(cur.slots.map((x) => x && x.uid), cur.slots.map((x) => (x ? x.name : '')));
       if (!CHARS) await loadChars();
       await loadMains();
-      const cur = MATCHES.find((m) => m.state === 'open');
       // 画面は先に作って、アニメーションはその上に出す (カード・二つ名の読み込みを待たずに操作できる)
       const sig = matchesSig();
       // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
@@ -1638,6 +1639,7 @@ async function runDemo() {
 async function main() {
   if (DEMO) { await runDemo(); return; }
   if (!CODE) { renderSetup(); return; }
+  if (sess() && !WANT_ADMIN) warmCards([myUid()]);   // 自分のカード・共通のファイル・フォントは、試合が分かる前から読んでおく
   const info = await api({ action: 'report_info', code: CODE });
   if (!info || !info.ok) { setStatus($('rp-status'), errText(info), 'err'); return; }
   INFO = info.report;
