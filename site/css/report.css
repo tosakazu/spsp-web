@@ -99,6 +99,16 @@ body {
 .rp-settings { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; font-size: 12px; }
 .rp-settings label { display: flex; flex-direction: column; gap: 4px; }
 .rp-settings label.rp-check { flex-direction: row; align-items: center; }
+.rp-apply { margin: 4px 0 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; }
+.rp-apply legend { padding: 0; margin-bottom: 4px; }
+.rp-settings .rp-apply label.rp-radio { flex-direction: row; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--line, #ddd); border-radius: 6px; cursor: pointer; }
+.rp-settings .rp-apply label.rp-radio:has(input:checked) { border-color: var(--accent, #dc2626); background: rgba(220, 38, 38, .05); }
+.rp-apply .rp-radio input { margin-top: 2px; }
+.rp-apply .rp-radio span { display: flex; flex-direction: column; gap: 2px; }
+.rp-apply .rp-radio small { color: var(--muted, #666); font-size: 11px; line-height: 1.5; }
+.rp-push { margin-top: 14px; }
+.rp-push-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.rp-state-pending, .rp-tag.rp-state-pending { background: #eff6ff; border-color: #bfdbfe; }
 .rp-share { display: flex; gap: 6px; }
 .rp-share input { flex: 1; }
 .rp-adm-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }

@@ -77,7 +77,7 @@ function pageUrl(code, admin) {
   return location.origin + location.pathname + '?c=' + encodeURIComponent(code) + (admin ? '&admin=1' : '');
 }
 
-const STATE_LABEL = (s) => { const k = ['reported', 'agreed', 'conflict', 'review', 'fixed', 'reset'].includes(s) ? s : 'none'; return i18n('report.state.' + k); };
+const STATE_LABEL = (s) => { const k = ['reported', 'agreed', 'conflict', 'review', 'fixed', 'reset', 'pending'].includes(s) ? s : 'none'; return i18n('report.state.' + k); };
 
 /** 結果 {w, g} → "2-1" (側 0 から見た数) */
 function scoreText(r, mySide) {
@@ -716,11 +716,12 @@ function wireForm(form, m) {
     submit.disabled = true;
     const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
-    const sentKind = ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
+    const sentKind = r.state === 'pending' && ['wait_delay', 'wait_both', 'wait_admin'].includes(r.note) ? r.note
+      : ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
-    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(await victoryOf(m, result), advanceAfter(m));
+    if (won && ['reported', 'agreed', 'fixed', 'pending'].includes(r.state)) await showVictory(await victoryOf(m, result), advanceAfter(m));
     setTimeout(() => poll(true), 800);
   });
 }
@@ -1002,7 +1003,7 @@ async function loadMains() {
 // ── 画面: 運営 ─────────────────────────────────────────────────────
 
 function noteText(note) {
-  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin'].includes(note) ? note : 'other';
+  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold'].includes(note) ? note : 'other';
   return i18n('report.note.' + k) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
 }
 
@@ -1026,13 +1027,25 @@ function settingsFormHtml(s, kind) {
     <label>${escapeHtml(i18n('report.set.top_cut'))}
       <select data-set-top><option value="">${escapeHtml(i18n('report.set.top_none'))}</option>${TOP_CUTS.map((n) => `<option value="${n}"${n === tc ? ' selected' : ''}>${escapeHtml(i18n('report.set.top_n', { n }))}</option>`).join('')}</select></label>
     ${kind === 'challonge' ? '' : `<label class="rp-check"><input type="checkbox" data-set-cls${s && s.classes_only ? ' checked' : ''}> ${escapeHtml(i18n('report.set.classes_only'))}</label>`}
+    <fieldset class="rp-apply"><legend>${escapeHtml(i18n('report.set.apply'))}</legend>
+      ${APPLY_MODES.map((k) => `<label class="rp-radio"><input type="radio" name="rp-apply" value="${k}" data-set-apply${(s && s.apply ? s.apply : 'auto') === k ? ' checked' : ''}>
+        <span><b>${escapeHtml(i18n('report.set.apply_' + k))}</b><small>${escapeHtml(i18n('report.set.apply_help_' + k))}</small></span></label>`).join('')}
+    </fieldset>
+    <label>${escapeHtml(i18n('report.set.notify'))}
+      <select data-set-notify>${NOTIFY_LEVELS.map((k) => `<option value="${k}"${(s && s.notify ? s.notify : 'off') === k ? ' selected' : ''}>${escapeHtml(i18n('report.set.notify_' + k))}</option>`).join('')}</select></label>
   </div>`;
 }
+const APPLY_MODES = ['auto', 'delay', 'both', 'approve'];
+const NOTIFY_LEVELS = ['off', 'action', 'all'];
 function readSettings(root) {
   const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]'); const op = root.querySelector('[data-set-open]');
   const out = { top_cut: top && top.value ? Number(top.value) : null, classes_only: !!(cls && cls.checked) };
   const ms = op ? fromLocalInput(op.value) : null;
   if (ms) out.opens_ms = ms;
+  const ap = root.querySelector('[data-set-apply]:checked');
+  if (ap && ap.value !== 'auto') out.apply = ap.value;
+  const nt = root.querySelector('[data-set-notify]');
+  if (nt && nt.value !== 'off') out.notify = nt.value;
   return out;
 }
 
@@ -1199,6 +1212,71 @@ function applySettingsInputs(root, p) {
   if (cls) cls.checked = !!p.classes_only;
 }
 
+// ── 運営への通知 (Web Push)。この端末で受け取る / やめる / 試しに送る。何を送るかは設定の「通知」(受付ごと) ──
+const pushOk = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function pushHtml() {
+  return `<div class="rp-push">
+    <h3>${escapeHtml(i18n('report.push.title'))}</h3>
+    <p class="rp-muted">${escapeHtml(i18n('report.push.help'))}</p>
+    <div class="rp-push-btns">
+      <button type="button" class="rp-btn rp-primary" id="rp-push-on">${escapeHtml(i18n('report.push.on'))}</button>
+      <button type="button" class="rp-btn" id="rp-push-off" hidden>${escapeHtml(i18n('report.push.off'))}</button>
+      <button type="button" class="rp-btn" id="rp-push-test" hidden>${escapeHtml(i18n('report.push.test'))}</button>
+    </div>
+    <div class="rp-status" id="rp-push-status"></div>
+  </div>`;
+}
+/** base64url → Uint8Array (applicationServerKey) */
+function b64uBytes(s) {
+  const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4));
+  return Uint8Array.from(b, (c) => c.charCodeAt(0));
+}
+const SW_URL = './sw.js';   // site/report/sw.js (範囲 = 報告ページ)
+async function pushReg() {
+  if (!pushOk()) return null;
+  return (await navigator.serviceWorker.getRegistration(SW_URL)) || null;
+}
+function wirePush(root) {
+  const on = root.querySelector('#rp-push-on'); const off = root.querySelector('#rp-push-off'); const test = root.querySelector('#rp-push-test');
+  const st = root.querySelector('#rp-push-status');
+  if (!on) return;
+  const show = (subscribed) => { on.hidden = subscribed; off.hidden = !subscribed; test.hidden = !subscribed; };
+  if (DEMO) { on.addEventListener('click', () => { show(true); setStatus(st, i18n('report.push.done'), 'ok'); }); off.addEventListener('click', () => { show(false); setStatus(st, '', ''); }); test.addEventListener('click', () => setStatus(st, i18n('report.push.test_sent', { n: 1 }), 'ok')); return; }
+  if (!pushOk()) { on.disabled = true; setStatus(st, i18n('report.push.unsupported'), 'warn'); return; }
+  (async () => { const reg = await pushReg(); const sub = reg ? await reg.pushManager.getSubscription() : null; show(!!sub && Notification.permission === 'granted'); })().catch(() => {});
+  on.addEventListener('click', async () => {
+    on.disabled = true;
+    setStatus(st, i18n('report.sending'), 'busy');
+    try {
+      const k = await api({ action: 'report_push_key' });
+      if (!k || !k.ok || !k.key) { setStatus(st, i18n('report.push.no_key'), 'err'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setStatus(st, i18n('report.push.denied'), 'warn'); return; }
+      const reg = await navigator.serviceWorker.register(SW_URL, { scope: './' });
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(k.key) });
+      const x = await api({ action: 'report_push_subscribe', token: tok(), sub: sub.toJSON() });
+      if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
+      show(true);
+      setStatus(st, i18n('report.push.done'), 'ok');
+    } catch (e) {
+      setStatus(st, i18n('report.push.failed') + ' (' + String(e && e.message || e).slice(0, 80) + ')', 'err');
+    } finally { on.disabled = false; }
+  });
+  off.addEventListener('click', async () => {
+    const reg = await pushReg();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) { await api({ action: 'report_push_unsubscribe', token: tok(), endpoint: sub.endpoint }); await sub.unsubscribe().catch(() => false); }
+    show(false);
+    setStatus(st, i18n('report.push.off_done'), 'ok');
+  });
+  test.addEventListener('click', async () => {
+    const x = await api({ action: 'report_push_test', token: tok(), code: CODE });
+    setStatus(st, x && x.ok ? i18n('report.push.test_sent', { n: x.sent }) : errText(x), x && x.ok && x.sent ? 'ok' : 'err');
+  });
+}
+
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
@@ -1217,6 +1295,7 @@ async function renderAdmin() {
     <h3>${escapeHtml(i18n('report.ft.title'))}</h3>
     <div id="rp-ft-set" class="rp-ft-set"><p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p></div>
     <button type="button" class="rp-btn" id="rp-save-set">${escapeHtml(i18n('report.admin.save'))}</button> <span class="rp-status" id="rp-set-status"></span>
+    ${pushHtml()}
   </section>
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
@@ -1240,6 +1319,7 @@ async function renderAdmin() {
     return !!(x && x.ok);
   };
   $('rp-save-set').addEventListener('click', () => saveSettings());
+  wirePush(root);
   // 保存した設定を呼び出す = 入力に入れて、この大会の設定として保存する
   const loadPreset = async (p, name) => {
     await phasesP;
@@ -1290,7 +1370,7 @@ function adminModel(s) {
 }
 /** 食い違い (と、次の試合に結果が出ていない運営の確認待ち) の試合で、採用できる側 (報告がある側) */
 function adoptable(s) {
-  const open = s.state === 'conflict' || (s.state === 'review' && !/^locked_/.test(s.note || ''));
+  const open = s.state === 'conflict' || s.state === 'pending' || (s.state === 'review' && !/^locked_/.test(s.note || ''));
   return open ? [0, 1].filter((k) => s.reports && s.reports[String(k)] && s.reports[String(k)].result && s.slots && s.slots[k]) : [];
 }
 let ADMIN_FORM_OPEN = null;   // 直しの欄を開いている試合
@@ -1302,7 +1382,7 @@ function renderAdminSets(sets, force) {
   if (!force && sig === ADMIN_SIG && box.childElementCount) return;
   if (!force && ADMIN_FORM_OPEN && box.childElementCount) return;   // 直している途中は描き直さない
   ADMIN_SIG = sig;
-  const order = { review: 0, conflict: 1, reported: 2, reset: 3, agreed: 4, fixed: 5 };
+  const order = { review: 0, conflict: 1, pending: 2, reported: 3, reset: 4, agreed: 5, fixed: 6 };
   sets.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || b.updated_ms - a.updated_ms);
   let h = `<h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}</h2>`;
   if (!sets.length) h += `<p class="rp-muted">${escapeHtml(i18n('report.admin.empty'))}</p>`;
@@ -1323,7 +1403,8 @@ function renderAdminSets(sets, force) {
       </div>
       ${s.note ? `<div class="rp-adm-note">${escapeHtml(noteText(s.note))}</div>` : ''}
       <div class="rp-adm-fix">
-        ${adoptable(s).map((k) => `<button type="button" class="rp-btn rp-primary" data-adopt="${k}">${escapeHtml(i18n('report.admin.adopt', { name: names[k] }))}</button>`).join('')}
+        ${adoptable(s).map((k) => `<button type="button" class="rp-btn rp-primary" data-adopt="${k}">${escapeHtml(s.state === 'pending' ? i18n('report.admin.approve', { name: names[k] }) : i18n('report.admin.adopt', { name: names[k] }))}</button>`).join('')}
+        ${s.state === 'pending' ? `<button type="button" class="rp-btn" data-hold>${escapeHtml(i18n('report.admin.hold'))}</button>` : ''}
         <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : adoptable(s).length ? i18n('report.admin.fix_manual') : i18n('report.admin.fix_open'))}</button>
         <button type="button" class="rp-btn" data-reset>${escapeHtml(i18n('report.admin.reset'))}</button>
         <span class="rp-status" data-fix-status></span>
@@ -1369,6 +1450,16 @@ function renderAdminSets(sets, force) {
         if (DEMO) { Object.assign(s, { state: 'fixed', note: '', applied: res, updated_ms: Date.now() }); setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 600); } else setTimeout(() => refreshAdminSets(true), 800);
       });
     }
+    const hold = row.querySelector('[data-hold]');
+    if (hold) hold.addEventListener('click', async () => {
+      if (!confirm(i18n('report.admin.hold_confirm'))) return;
+      setStatus(st, i18n('report.sending'), 'busy');
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, hold: true });
+      setStatus(st, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
+      if (!(x && x.ok)) return;
+      const s = sets.find((y) => y.set_id === setId);
+      if (DEMO) { Object.assign(s, { state: 'review', note: 'hold', updated_ms: Date.now() }); setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 600); } else setTimeout(() => refreshAdminSets(true), 800);
+    });
     row.querySelector('[data-reset]').addEventListener('click', async () => {
       if (!confirm(i18n('report.admin.reset_confirm'))) return;
       setStatus(st, i18n('report.sending'), 'busy');
@@ -1665,8 +1756,8 @@ async function demoApi(body) {
   }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
-    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT } },
-      sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
+    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
+      sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
   }
   if (body.action === 'report_tournaments') {
     // 見本: 開催中 1 つ (イベント 2 つ、片方は受付中) とこれから 1 つ

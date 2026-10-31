@@ -35,6 +35,11 @@ export interface Env {
   CHALLONGE_CLIENT_SECRET?: string;
   /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
   TITLE_SYNC_KEY?: string;
+  /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** VAPID の連絡先 (mailto: か https:)。[vars] */
+  VAPID_SUBJECT?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
@@ -163,6 +168,8 @@ export interface Config {
   /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
   titleLang?: string;
   titleSyncKey?: string;
+  /** Web Push の鍵 (未設定なら通知は出さない) */
+  vapid?: { publicKey: string; privateKey: string; subject: string };
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -196,6 +203,8 @@ export function configFromEnv(env: Env): Config {
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
     titleSyncKey: env.TITLE_SYNC_KEY || undefined,
+    vapid: env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
+      ? { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: String(env.VAPID_SUBJECT || 'https://spsp.games/') } : undefined,
     titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),

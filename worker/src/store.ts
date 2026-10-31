@@ -145,6 +145,7 @@ export interface ReportEventRow {
 /** 名前をつけて保存した運営の設定 (report_presets) */
 export interface ReportPresetRow { name: string; settings: string; updated_ms: number }
 /** report_grants の 1 行 (運営のログインのトークン、受付を始めるまで) */
+export interface ReportPushSubRow { endpoint: string; user_id: string; p256dh: string; auth: string; created_ms: number }
 export interface ReportGrantRow { user_id: string; token_enc: string; token_exp_ms: number; expires_ms: number }
 export type ReportEventPublic = Pick<ReportEventRow, 'code' | 'kind' | 'event_id' | 'tournament_id' | 'class_id' | 'name' | 'slug' | 'expires_ms' | 'settings'>;
 /** report_sets の 1 行 */
@@ -233,6 +234,10 @@ export interface Store {
   getReportGrant(userId: string, nowMs: number): Promise<ReportGrantRow | null>;
   putReportGrant(row: ReportGrantRow): Promise<void>;
   deleteReportGrant(userId: string): Promise<void>;
+  /** 運営の通知の送り先 (端末ごと)。同じ endpoint なら置き換える。1 人 max 台まで (古いものから消す) */
+  putReportPushSub(row: ReportPushSubRow, max: number): Promise<void>;
+  deleteReportPushSub(endpoint: string, userId: string | null): Promise<void>;
+  listReportPushSubs(userIds: string[]): Promise<ReportPushSubRow[]>;
   /** 受付を止めてトークンを消す。 */
   stopReportEvent(code: string): Promise<void>;
   /** 期限を過ぎた受付のトークンを消して止める (運営のログインのトークンも)。 */

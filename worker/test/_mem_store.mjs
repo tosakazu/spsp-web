@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -227,6 +227,14 @@ export class MemStore {
 
   async getReportGrant(userId, nowMs) { this._rep(); const r = this.reportGrants.find((x) => x.user_id === userId && x.expires_ms >= nowMs); return r ? { ...r } : null; }
   async putReportGrant(row) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== row.user_id).concat([{ ...row }]); }
+  async putReportPushSub(row, max) {
+    this._rep(); this.reportPush = this.reportPush.filter((x) => x.endpoint !== row.endpoint).concat([{ ...row }]);
+    const mine = this.reportPush.filter((x) => x.user_id === row.user_id).sort((a, b) => b.created_ms - a.created_ms);
+    const drop = new Set(mine.slice(max).map((x) => x.endpoint));
+    this.reportPush = this.reportPush.filter((x) => !drop.has(x.endpoint));
+  }
+  async deleteReportPushSub(endpoint, userId) { this._rep(); this.reportPush = this.reportPush.filter((x) => !(x.endpoint === endpoint && (userId === null || x.user_id === userId))); }
+  async listReportPushSubs(userIds) { this._rep(); return this.reportPush.filter((x) => userIds.includes(x.user_id)).map((x) => ({ ...x })); }
   async deleteReportGrant(userId) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== userId); }
 
   async stopReportEvent(code) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.status = 'stopped'; x.token_enc = ''; } }

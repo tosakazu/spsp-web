@@ -683,3 +683,146 @@ test('運営: 食い違いは片方の報告を採用して解決できる (キ�
   r = await e.call({ action: 'report_admin_fix', token: e.login.token, code: e.code, set_id: '100', adopt: 0 });
   assert.strictEqual(r.error.code, 'bad_request');
 });
+
+// ── 取り込み方 (2026-11-01) ──
+test('reconcile の取り込み方: delay は 5 分待つ (相手の同じ報告ならすぐ)・both は両者の一致・approve は運営の承認・運営が止めた試合は動かさない', () => {
+  const a = { result: R(0, G(0), G(0)), ts: 1000 };
+  const b = { result: R(0, G(0), G(0)), ts: 2000 };
+  const bad = { result: R(1, G(1), G(1)), ts: 2000 };
+  const pend = (note) => ({ op: 'none', state: 'pending', result: null, note });
+  assert.strictEqual(reconcile(null, [a, null], set0(), 'auto', 1000).op, 'report');
+  assert.deepStrictEqual(reconcile(null, [a, null], set0(), 'delay', 1000 + 299e3), pend('wait_delay'));
+  assert.strictEqual(reconcile(null, [a, null], set0(), 'delay', 1000 + 300e3).op, 'report', '5 分たったら反映');
+  assert.strictEqual(reconcile(null, [a, b], set0(), 'delay', 2000).state, 'agreed', '相手も同じならすぐ');
+  assert.strictEqual(reconcile(null, [a, bad], set0(), 'delay', 1e9).state, 'conflict', '違えば反映しない');
+  assert.deepStrictEqual(reconcile(null, [a, null], set0(), 'both', 1e9), pend('wait_both'));
+  assert.strictEqual(reconcile(null, [a, b], set0(), 'both', 0).op, 'report');
+  assert.deepStrictEqual(reconcile(null, [a, null], set0(), 'approve', 1e9), pend('wait_admin'));
+  assert.deepStrictEqual(reconcile(null, [a, b], set0(), 'approve', 1e9), pend('wait_admin'), '一致していても承認待ち');
+  assert.deepStrictEqual(reconcile({ state: 'review', applied: null, note: 'hold' }, [a, b], set0(), 'auto', 1e9), { op: 'none', state: 'review', result: null, note: 'hold' });
+  assert.deepStrictEqual(parseSettings({ apply: 'delay', notify: 'action' }).apply, 'delay');
+  assert.strictEqual(parseSettings({ apply: 'auto', notify: 'off' }).apply, undefined, '既定値は持たない');
+  assert.strictEqual(parseSettings({ apply: 'x', notify: 'y' }).notify, undefined);
+});
+
+test('5 分後に取り込む: 待っている間は送らず、5 分たって画面が読みに来たら送る。運営が止めたら送らず、承認で送る', async () => {
+  const fake = fakeStartgg();
+  const e = await enabled(fake, { top_cut: null, classes_only: false, apply: 'delay' });
+  const A = await e.tok(11);
+  const win0 = { w: 0, g: [{ w: 0 }, { w: 0 }] };
+  let r = await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: win0 });
+  assert.deepStrictEqual([r.state, r.op, r.note], ['pending', 'none', 'wait_delay']);
+  assert.notStrictEqual(fake.set.state, 3, 'まだ送らない');
+  e.tick(4 * 60e3);
+  await e.call({ action: 'report_view', token: A, code: e.code });
+  assert.notStrictEqual(fake.set.state, 3, '4 分ではまだ');
+  e.tick(61e3);
+  const v = await e.call({ action: 'report_view', token: A, code: e.code });
+  assert.strictEqual(fake.set.state, 3, '5 分たったら送る');
+  assert.strictEqual(v.sets[0].state, 'reported');
+
+  // 止める → 5 分たっても送らない → 承認で送る
+  const fake2 = fakeStartgg();
+  const e2 = await enabled(fake2, { top_cut: null, classes_only: false, apply: 'delay' });
+  const A2 = await e2.tok(11);
+  await e2.call({ action: 'report_submit', token: A2, code: e2.code, set_id: '100', result: win0 });
+  r = await e2.call({ action: 'report_admin_fix', token: e2.login.token, code: e2.code, set_id: '100', hold: true });
+  assert.deepStrictEqual([r.ok, r.state], [true, 'review'], JSON.stringify(r));
+  e2.tick(10 * 60e3);
+  const adm = await e2.call({ action: 'report_admin', token: e2.login.token, code: e2.code });
+  assert.notStrictEqual(fake2.set.state, 3, '止めた試合は送らない');
+  assert.strictEqual(adm.sets[0].note, 'hold');
+  r = await e2.call({ action: 'report_admin_fix', token: e2.login.token, code: e2.code, set_id: '100', hold: true });
+  assert.strictEqual(r.error.code, 'bad_request', '取り込み待ちでなければ止められない');
+  r = await e2.call({ action: 'report_admin_fix', token: e2.login.token, code: e2.code, set_id: '100', adopt: 0 });
+  assert.deepStrictEqual([r.ok, r.state], [true, 'fixed'], JSON.stringify(r));
+  assert.strictEqual(fake2.set.state, 3);
+});
+
+test('運営の承認が必要: 両者が一致しても承認待ち、運営が承認したら送る。両者の報告が必要: そろうまで送らない', async () => {
+  const fake = fakeStartgg();
+  const e = await enabled(fake, { top_cut: null, classes_only: false, apply: 'approve' });
+  const A = await e.tok(11); const B = await e.tok(22);
+  const win0 = { w: 0, g: [{ w: 0 }, { w: 0 }] };
+  await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: win0 });
+  e.tick(5000);
+  let r = await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: win0 });
+  assert.deepStrictEqual([r.state, r.note], ['pending', 'wait_admin']);
+  e.tick(3600e3);
+  await e.call({ action: 'report_admin', token: e.login.token, code: e.code });
+  assert.notStrictEqual(fake.set.state, 3, '時間では送らない');
+  r = await e.call({ action: 'report_admin_fix', token: e.login.token, code: e.code, set_id: '100', adopt: 0 });
+  assert.deepStrictEqual([r.ok, r.state], [true, 'fixed']);
+  assert.strictEqual(fake.set.state, 3);
+
+  const fake2 = fakeStartgg();
+  const e2 = await enabled(fake2, { top_cut: null, classes_only: false, apply: 'both' });
+  const A2 = await e2.tok(11); const B2 = await e2.tok(22);
+  r = await e2.call({ action: 'report_submit', token: A2, code: e2.code, set_id: '100', result: win0 });
+  assert.deepStrictEqual([r.state, r.note], ['pending', 'wait_both']);
+  assert.notStrictEqual(fake2.set.state, 3);
+  e2.tick(5000);
+  r = await e2.call({ action: 'report_submit', token: B2, code: e2.code, set_id: '100', result: win0 });
+  assert.deepStrictEqual([r.state, r.op], ['agreed', 'report']);
+  assert.strictEqual(fake2.set.state, 3);
+  // 取り込み方を「すぐ」に戻すと、待っていた試合は次に画面が読みに来たとき送る
+  const fake3 = fakeStartgg();
+  const e3 = await enabled(fake3, { top_cut: null, classes_only: false, apply: 'both' });
+  await e3.call({ action: 'report_submit', token: await e3.tok(11), code: e3.code, set_id: '100', result: win0 });
+  await e3.call({ action: 'report_settings', token: e3.login.token, code: e3.code, settings: { top_cut: null, classes_only: false } });
+  await e3.call({ action: 'report_admin', token: e3.login.token, code: e3.code });
+  assert.strictEqual(fake3.set.state, 3);
+});
+
+// ── 運営への通知 (Web Push) ──
+async function pushKeys() {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const b64u = (buf) => Buffer.from(buf).toString('base64url');
+  const vapid = { publicKey: b64u(await crypto.subtle.exportKey('raw', kp.publicKey)), privateKey: (await crypto.subtle.exportKey('jwk', kp.privateKey)).d, subject: 'https://spsp.games/' };
+  const ua = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const sub = { endpoint: 'https://push.example/abc', keys: { p256dh: b64u(await crypto.subtle.exportKey('raw', ua.publicKey)), auth: b64u(crypto.getRandomValues(new Uint8Array(16))) } };
+  return { vapid, sub };
+}
+
+test('運営への通知: 端末を登録 → 設定 (対応が要るときだけ / 報告のたび) に合わせて送る。410 の端末は消す。運営以外はテスト送信できない', async () => {
+  const fake = fakeStartgg();
+  const pushes = [];
+  let gone = false;
+  const base = fake.fetch;
+  fake.fetch = async (url, init) => {
+    if (String(url).startsWith('https://push.example/')) { pushes.push(init.headers); return new Response('', { status: gone ? 410 : 201 }); }
+    return base(url, init);
+  };
+  const e = await enabled(fake, { top_cut: null, classes_only: false, notify: 'action' });
+  const { vapid, sub } = await pushKeys();
+  // 鍵が無いと登録できない
+  assert.strictEqual((await e.call({ action: 'report_push_key' })).key, null);
+  assert.strictEqual((await e.call({ action: 'report_push_subscribe', token: e.login.token, sub })).error.code, 'not_allowed');
+  e.cfg.vapid = vapid;
+  assert.strictEqual((await e.call({ action: 'report_push_key' })).key, vapid.publicKey);
+  assert.strictEqual((await e.call({ action: 'report_push_subscribe', token: e.login.token, sub: { endpoint: 'http://x/' } })).error.code, 'bad_request');
+  assert.strictEqual((await e.call({ action: 'report_push_subscribe', token: e.login.token, sub })).ok, true);
+  const A = await e.tok(11); const B = await e.tok(22);
+  // 対応が要るときだけ: ふつうの報告では送らない、食い違いで送る
+  await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } });
+  assert.strictEqual(pushes.length, 0);
+  e.tick(5000);
+  await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1 }, { w: 1 }] } });
+  assert.strictEqual(pushes.length, 1, '食い違いで送る');
+  assert.strictEqual(pushes[0]['Content-Encoding'], 'aes128gcm');
+  assert.strictEqual(pushes[0].Urgency, 'high');
+  // テスト送信: 運営だけ
+  assert.strictEqual((await e.call({ action: 'report_push_test', token: A, code: e.code })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_push_test', token: e.login.token, code: e.code })).sent, 1);
+  // 410 → 購読を消す
+  gone = true;
+  assert.strictEqual((await e.call({ action: 'report_push_test', token: e.login.token, code: e.code })).sent, 0);
+  assert.deepStrictEqual(await e.store.listReportPushSubs(['4242']), []);
+  // 登録・解除
+  gone = false;
+  await e.call({ action: 'report_push_subscribe', token: e.login.token, sub });
+  await e.call({ action: 'report_push_unsubscribe', token: A, endpoint: sub.endpoint });
+  assert.strictEqual((await e.store.listReportPushSubs(['4242'])).length, 1, 'ほかの人は解除できない');
+  await e.call({ action: 'report_push_unsubscribe', token: e.login.token, endpoint: sub.endpoint });
+  assert.strictEqual((await e.store.listReportPushSubs(['4242'])).length, 0);
+});

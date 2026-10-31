@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportPresetRow, ReportSetRow, ReportSubmissionRow,
+import type { LoginRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -347,6 +347,28 @@ export class D1Store implements Store {
       `INSERT INTO report_grants (user_id, token_enc, token_exp_ms, expires_ms) VALUES (?1, ?2, ?3, ?4)
        ON CONFLICT (user_id) DO UPDATE SET token_enc = ?2, token_exp_ms = ?3, expires_ms = ?4`)
       .bind(row.user_id, row.token_enc, row.token_exp_ms, row.expires_ms).run();
+  }
+
+  async putReportPushSub(row: ReportPushSubRow, max: number): Promise<void> {
+    await this.db.batch([
+      this.db.prepare('INSERT INTO report_push_subs (endpoint, user_id, p256dh, auth, created_ms) VALUES (?, ?, ?, ?, ?) '
+        + 'ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, created_ms = excluded.created_ms')
+        .bind(row.endpoint, row.user_id, row.p256dh, row.auth, row.created_ms),
+      this.db.prepare('DELETE FROM report_push_subs WHERE user_id = ? AND endpoint NOT IN (SELECT endpoint FROM report_push_subs WHERE user_id = ? ORDER BY created_ms DESC LIMIT ?)')
+        .bind(row.user_id, row.user_id, max),
+    ]);
+  }
+
+  async deleteReportPushSub(endpoint: string, userId: string | null): Promise<void> {
+    if (userId === null) await this.db.prepare('DELETE FROM report_push_subs WHERE endpoint = ?').bind(endpoint).run();
+    else await this.db.prepare('DELETE FROM report_push_subs WHERE endpoint = ? AND user_id = ?').bind(endpoint, userId).run();
+  }
+
+  async listReportPushSubs(userIds: string[]): Promise<ReportPushSubRow[]> {
+    if (!userIds.length) return [];
+    const q = 'SELECT endpoint, user_id, p256dh, auth, created_ms FROM report_push_subs WHERE user_id IN (' + userIds.map(() => '?').join(',') + ')';
+    const r = await this.db.prepare(q).bind(...userIds).all<ReportPushSubRow>();
+    return r.results || [];
   }
 
   async deleteReportGrant(userId: string): Promise<void> {

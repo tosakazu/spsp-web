@@ -39,9 +39,11 @@ import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
-import { adminDecision, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
+import { adminDecision, APPLY_DELAY_MS, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
+import { notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
+import { validSub } from './webpush.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
 import { checkStateToken, issueSessionToken, verifySessionToken } from './session.ts';
@@ -380,6 +382,27 @@ async function settle(store: Store, p: Provider, code: string, first: NSet, seen
   return { ok: false, why: 'busy', note: 'busy' };
 }
 
+const prevOf = (row: ReportSetRow | null) => (row ? { state: row.state as ReportState, applied: parseApplied(row.applied), note: row.note } : null);
+
+/**
+ * 取り込み待ち (pending) の試合を、今の取り込み方でもう一度判定する (5 分待ちの期限が来た・運営が取り込み方を変えた)。
+ * 定時の処理は無いので、選手・運営の画面が読みに来たとき (report_view / report_admin) と報告のときに呼ぶ。1 回に max 件まで
+ */
+export async function flushPending(store: Store, p: Provider, ev: ReportEventRow, now: number, max = 3): Promise<number> {
+  const mode = parseSettings(ev.settings).apply || 'auto';
+  if (mode === 'both' || mode === 'approve') return 0;   // 待つ理由が時間ではない (報告・承認で動く)
+  const due = (await store.listReportSets(ev.code)).filter((r) => r.state === 'pending'
+    && (mode === 'auto' || (r.note === 'wait_delay' && now - r.updated_ms >= APPLY_DELAY_MS) || r.note !== 'wait_delay'));
+  let n = 0;
+  for (const row of due.slice(0, max)) {
+    const rs = await p.readSet(row.set_id);
+    if (!rs.ok) continue;
+    const r = await settle(store, p, ev.code, rs.set, row.version, now, null, (cur, latest, set) => reconcile(prevOf(cur), latest, set, mode, now));
+    if (r.ok && r.d.op !== 'none') n++;
+  }
+  return n;
+}
+
 function providerMessage(kind: string, note: string): string {
   const where = kind === 'challonge' ? 'Challonge' : 'start.gg';
   if (/http_429/.test(note)) return where + ' が混み合っています。少し待ってから送り直してください。';
@@ -423,14 +446,15 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   }
 
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(pr.result), outcome: 'pending' });
-  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, null, (row, latest, cur) => reconcile(
-    row ? { state: row.state as ReportState, applied: parseApplied(row.applied) } : null, latest, cur));
+  const mode = parseSettings(o.ev.settings).apply || 'auto';
+  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, null, (row, latest, cur) => reconcile(prevOf(row), latest, cur, mode, now));
   if (!r.ok) {
     await store.setReportSubmissionOutcome(subId, 'error:' + r.note.slice(0, 100));
     if (r.why === 'busy') return err('busy', 'ほかの報告と重なりました。もう一度送ってください。', 'busy');
     return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   }
   await store.setReportSubmissionOutcome(subId, r.d.op + (r.d.note ? ':' + r.d.note : ''));
+  await notifyReport(cfg, store, fetchFn, o.ev, set, r.d, pr.result).catch(() => 0);   // 運営への通知 (送れなくても報告は済んでいる)
   return ok({ set_id: setId, state: r.d.state, op: r.d.op, note: r.d.note });
 }
 
@@ -508,6 +532,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
+  await flushPending(store, providerOf(fetchFn, o), o.ev, now).catch(() => 0);
   const rows = await store.listReportSetsForUser(sess.id, [o.ev.code]);
   const sets = [];
   for (const r of rows) sets.push(await setView(store, r, sess.id));
@@ -548,6 +573,7 @@ async function adminOpen(cfg: Config, store: Store, fetchFn: FetchFn, req: Recor
 export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
+  await flushPending(store, providerOf(fetchFn, o), o.ev, now).catch(() => 0);
   const sets = [];
   for (const r of await store.listReportSets(o.ev.code)) sets.push(await setView(store, r, null));
   return ok({ report: publicOf(o.ev, now), sets });
@@ -592,7 +618,8 @@ async function adoptedResult(store: Store, code: string, setId: string, side: Si
   return latest[side] ? mergeResults(latest, side) : null;
 }
 
-/** action: "report_admin_fix" — 運営が直す ({ result })・片方の報告を採用する ({ adopt: 0 | 1 }、食い違いの解決)・取り消す ({ reset: true })。次の試合に結果が出るまで */
+/** action: "report_admin_fix" — 運営が直す ({ result })・片方の報告を採用する ({ adopt: 0 | 1 }、食い違いの解決・取り込み待ちの承認)・取り消す ({ reset: true })・
+ *  取り込み待ちを止める ({ hold: true }、選手の報告では動かさない。採用・直すで解ける)。次の試合に結果が出るまで */
 export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
@@ -607,7 +634,8 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   if (!rs.ok) return rs.code === 'not_found' ? err('not_found', 'この大会にその試合はありません。', rs.note) : err('provider_error', providerMessage(o.ev.kind, rs.note), rs.note);
   const set = rs.set;
   if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
-  const kind = req.reset === true ? 'reset' : 'fix';
+  const kind = req.reset === true ? 'reset' : req.hold === true ? 'hold' : 'fix';
+  if (kind === 'hold' && !(before && before.state === 'pending')) return err('bad_request', '取り込み待ちの試合だけ止められます。', 'bad:hold');
   let result: Result | null = null;
   if (kind === 'fix' && (req.adopt === 0 || req.adopt === 1)) {
     result = await adoptedResult(store, o.ev.code, setId, req.adopt);
@@ -618,7 +646,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
     result = pr.result;
   }
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: uid, side: -1, ts_ms: now, result: result ? JSON.stringify(result) : '', outcome: 'pending' });
-  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, subId, (row, _latest, cur) => adminDecision(kind, result, cur, row ? parseApplied(row.applied) : null));
+  const r = await settle(store, p, o.ev.code, set, before ? before.version : null, now, kind === 'hold' ? null : subId, (row, _latest, cur) => adminDecision(kind, result, cur, row ? parseApplied(row.applied) : null));
   if (!r.ok) {
     await store.setReportSubmissionOutcome(subId, 'error:' + r.note.slice(0, 100));
     if (r.why === 'locked') return err('locked', '次の試合の結果が入っているため、ここでは直せません。start.gg / Challonge で直してください。', 'locked');
@@ -690,4 +718,44 @@ export async function handleReportSettings(cfg: Config, store: Store, req: Recor
   if (ev.kind === 'challonge') next.classes_only = false;
   await store.updateReportEventSettings(ev.code, JSON.stringify(next));
   return ok({ settings: next });
+}
+
+// ── 運営への通知 (Web Push、report_notify.ts) ─────────────────────────
+
+/** action: "report_push_key" — ブラウザの購読に使う公開鍵 (未設定なら null = 通知は使えない) */
+export function handleReportPushKey(cfg: Config): HandlerResult {
+  return ok({ key: cfg.vapid ? cfg.vapid.publicKey : null });
+}
+
+/** action: "report_push_subscribe" — { token, sub: PushSubscription.toJSON() } この端末で通知を受け取る */
+export async function handleReportPushSubscribe(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  if (!cfg.vapid) return err('not_allowed', '通知はまだ使えません。', 'no_vapid');
+  const sub = validSub(req.sub);
+  if (!sub) return err('bad_request', '通知の登録の形式が正しくありません。', 'bad:sub');
+  await store.putReportPushSub({ endpoint: sub.endpoint, user_id: sess.id, p256dh: sub.p256dh, auth: sub.auth, created_ms: now }, PUSH_SUBS_PER_USER);
+  return ok({});
+}
+
+/** action: "report_push_unsubscribe" — { token, endpoint } この端末の通知をやめる */
+export async function handleReportPushUnsubscribe(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  if (typeof req.endpoint !== 'string' || req.endpoint.length > 1000) return err('bad_request', '通知の登録の形式が正しくありません。', 'bad:endpoint');
+  await store.deleteReportPushSub(req.endpoint, sess.id);
+  return ok({});
+}
+
+/** action: "report_push_test" — { token, code } 自分の端末に試しに送る (運営だけ) */
+export async function handleReportPushTest(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
+  const ev = await store.getReportEvent(req.code);
+  if (!ev || !admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_admin');
+  const act = await store.reportSubmissionActivity(sess.id, now - DAY);
+  if (act.count >= REPORT_ADMIN_MAX_PER_DAY) return err('rate_limited', '今日はこれ以上送れません。', 'rate');
+  const n = await notifyTest(cfg, store, fetchFn, sess.id, ev.code);
+  return ok({ sent: n });
 }

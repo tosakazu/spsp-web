@@ -47,9 +47,23 @@ export interface FtRule { w: FtSide; l: FtSide }
 export const FT_MAX = 5;
 const FT_PHASES_MAX = 30;
 
+/**
+ * 報告の取り込み方 (2026-11-01)。
+ *   auto    = すぐ取り込む (既定)
+ *   delay   = 5 分待ってから取り込む (その間に相手の違う報告・運営の操作があれば取り込まない。相手の同じ報告が来たらすぐ)
+ *   both    = 両者の報告がそろって一致したら取り込む
+ *   approve = 運営が承認したら取り込む (両者が一致していても)
+ */
+export type ApplyMode = 'auto' | 'delay' | 'both' | 'approve';
+export const APPLY_MODES: ApplyMode[] = ['auto', 'delay', 'both', 'approve'];
+export const APPLY_DELAY_MS = 5 * 60 * 1000;
+/** 運営への通知: off = なし / action = 対応が要るとき (食い違い・確認・承認待ち) / all = 報告のたび */
+export type NotifyLevel = 'off' | 'action' | 'all';
+export const NOTIFY_LEVELS: NotifyLevel[] = ['off', 'action', 'all'];
+
 /** 運営の設定 (report_events.settings) */
 /** opens_ms = 選手が報告できるようになる時刻 (無ければ受付を始めたときから、2026-10-30) */
-export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule>; opens_ms?: number }
+export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule>; opens_ms?: number; apply?: ApplyMode; notify?: NotifyLevel }
 export const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
 
 function ftNum(v: unknown): number | null {
@@ -102,6 +116,8 @@ export function parseSettings(v: unknown): ReportSettings {
   if (Number.isInteger(op) && op > 0 && op < 4102444800000) s.opens_ms = op;
   const ft = parseFt(o.ft);
   if (ft) s.ft = ft;
+  if (APPLY_MODES.includes(o.apply as ApplyMode) && o.apply !== 'auto') s.apply = o.apply as ApplyMode;
+  if (NOTIFY_LEVELS.includes(o.notify as NotifyLevel) && o.notify !== 'off') s.notify = o.notify as NotifyLevel;
   return s;
 }
 
@@ -150,7 +166,9 @@ export function playerGate(set: NSet, s: ReportSettings): 'top_cut' | 'classes_o
   return null;
 }
 
-export type ReportState = 'reported' | 'agreed' | 'conflict' | 'review' | 'fixed' | 'reset';
+/** pending = 取り込み待ち (note: wait_delay = 5 分待ち / wait_both = 相手の報告待ち / wait_admin = 運営の承認待ち)。
+ *  review の note が hold = 運営が止めた (選手の報告では動かさない) */
+export type ReportState = 'reported' | 'agreed' | 'conflict' | 'review' | 'fixed' | 'reset' | 'pending';
 export type Op = 'none' | 'report' | 'update' | 'reset' | 'rereport';
 export interface Decision { op: Op; state: ReportState; result: Result | null; note: string }
 
@@ -255,9 +273,11 @@ export interface Latest { result: Result; ts: number }
  * applied が今の remote と同じ結果なら「SPSP が入れた結果がそのまま残っている」とみなす。
  * それ以外の結果 (運営が start.gg で直接入れた等) は動かさない。
  */
-export function reconcile(prev: { state: ReportState; applied: Result | null } | null, latest: [Latest | null, Latest | null], set: NSet): Decision {
+export function reconcile(prev: { state: ReportState; applied: Result | null; note?: string } | null, latest: [Latest | null, Latest | null], set: NSet,
+  mode: ApplyMode = 'auto', now = 0): Decision {
   const none = (state: ReportState, note = ''): Decision => ({ op: 'none', state, result: null, note });
   if (prev && prev.state === 'fixed') return none('fixed');
+  if (prev && prev.state === 'review' && prev.note === 'hold') return none('review', 'hold');
   const ours = prev ? prev.applied : null;
   const byUs = set.complete && !!ours && sameOutcome(ours, set.remote);
   const external = set.complete && !byUs;
@@ -268,7 +288,7 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
   if (a && b) {
     if (sameOutcome(a.result, b.result)) {
       const target = mergeResults([a.result, b.result], a.ts <= b.ts ? 0 : 1);
-      if (!set.complete) return { op: 'report', state: 'agreed', result: target, note: '' };
+      if (!set.complete) return mode === 'approve' ? none('pending', 'wait_admin') : { op: 'report', state: 'agreed', result: target, note: '' };
       if (external) return sameOutcome(target, set.remote) ? none('agreed') : none('review', 'external_mismatch');
       if (sameFull(ours, target)) return none('agreed');
       if (sameOutcome(ours, target)) return set.downstreamDone ? none('agreed') : { op: 'update', state: 'agreed', result: target, note: '' };
@@ -284,7 +304,12 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
   const one = a || b;
   if (!one) return none(prev ? prev.state : 'reset');
   const r = one.result;
-  if (!set.complete) return { op: 'report', state: 'reported', result: r, note: '' };
+  if (!set.complete) {
+    if (mode === 'both') return none('pending', 'wait_both');
+    if (mode === 'approve') return none('pending', 'wait_admin');
+    if (mode === 'delay' && now - one.ts < APPLY_DELAY_MS) return none('pending', 'wait_delay');
+    return { op: 'report', state: 'reported', result: r, note: '' };
+  }
   if (external) return sameOutcome(r, set.remote) ? none('agreed') : none('review', 'external_mismatch');
   if (sameFull(ours, r)) return none(prev ? prev.state : 'reported');
   if (sameOutcome(ours, r)) return set.downstreamDone ? none(prev ? prev.state : 'reported') : { op: 'update', state: 'reported', result: r, note: '' };
@@ -292,7 +317,9 @@ export function reconcile(prev: { state: ReportState; applied: Result | null } |
 }
 
 /** 運営が直す・取り消すときの判定。次の試合に結果が出ていたら locked */
-export function adminDecision(kind: 'fix' | 'reset', result: Result | null, set: NSet, ours: Result | null = null): Decision | { locked: true } {
+export function adminDecision(kind: 'fix' | 'reset' | 'hold', result: Result | null, set: NSet, ours: Result | null = null): Decision | { locked: true } {
+  // 止める: 取り込み待ちの試合を、選手の報告では動かさないようにする (取り込み済みなら何もしない)
+  if (kind === 'hold') return { op: 'none', state: 'review', result: null, note: 'hold' };
   if (set.downstreamDone) return { locked: true };
   if (kind === 'reset') return { op: set.complete ? 'reset' : 'none', state: 'reset', result: null, note: 'admin' };
   if (!result) throw new Error('adminDecision: no result');

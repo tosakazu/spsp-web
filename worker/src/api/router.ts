@@ -29,7 +29,7 @@ import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefre
 import { handleToolLog } from './tool_log.ts';
 import {
   handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
-  handleReportPresetDelete, handleReportPresets, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
+  handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
@@ -146,6 +146,14 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleReportPresetSave(ctx.cfg, ctx.store, r, now); break;
       case 'report_preset_delete':
         res = await handleReportPresetDelete(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_key':
+        return handleReportPushKey(ctx.cfg).body;   // 公開鍵を返すだけ。記録しない
+      case 'report_push_subscribe':
+        res = await handleReportPushSubscribe(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_unsubscribe':
+        res = await handleReportPushUnsubscribe(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_test':
+        res = await handleReportPushTest(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_stop':
         res = await handleReportStop(ctx.cfg, ctx.store, r, now); break;
       case 'class_waitlist':
