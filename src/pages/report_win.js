@@ -41,7 +41,7 @@ function advText(a) {
 /** 進出の札 (勝利画面の中)。赤い台形 1 枚 @param {Advance} a */
 const advHtml = (a) => `<b class="rp-win-tag">${escapeHtml(advText(a))}</b>`;
 
-const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
+const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' | ');
 const em = (/** @type {WinSide} */ s) => `<span class="rp-win-em">${escapeHtml(s.emoji || '')}</span>`;
 const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf rp-win-tag"><b>+${v.uf}</b><span>UPSET FACTOR</span></div>` : '');
 const scoreHtml = (/** @type {Victory} */ v) => `<div class="rp-win-score"><b>${v.score[0]}</b><i>-</i><b>${v.score[1]}</b></div>`;
