@@ -1479,18 +1479,36 @@ async function renderSetup() {
 let DEMO_ME = '';
 const DEMO_SCENES = ['match', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
 
-/** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に) */
+/** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
+ * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
+let DEMO_INDEX = [];
 async function demoPlayers() {
   let rows = [];
   try {
     const j = await (await fetch((SPSP.data || '') + 'data/views/players_index.json')).json();
     const cols = j.cols || j.columns || [];
     const ci = (k) => cols.indexOf(k);
-    rows = (j.rows || []).slice(40, 60).map((r) => ({ uid: String(r[ci('uid')]), name: String(r[ci('name')] || ''), char: Number(r[ci('char')]) || null }));
+    DEMO_INDEX = (j.rows || []).map((r) => ({ uid: String(r[ci('uid')]), name: String(r[ci('name')] || ''), char: Number(r[ci('char')]) || null, rank: Number(r[ci('ens')]) || null }));
+    rows = DEMO_INDEX.slice(40, 60).map((r) => Object.assign({}, r));
   } catch (e) { rows = []; }
   while (rows.length < 12) rows.push({ uid: '', name: 'Player ' + (rows.length + 1), char: null });
   const s = sess();
   if (s && s.user) rows[0] = { uid: String(s.user.id), name: s.user.gamerTag || rows[0].name, char: null };
+  // 指定が無ければランダム (ログイン中の自分はそのまま「自分」)
+  const picked = ['p1', 'p2'].map((k, i) => demoPick(Q.get(k) || (i === 0 && s && s.user ? '' : 'random')));
+  picked.forEach((p, i) => { if (p) rows[i] = p; });
+  const again = /** @type {HTMLAnchorElement | null} */ (document.querySelector('[data-demo-again]'));
+  if (again && rows[0].uid && rows[1].uid) {   // 同じ 2 人でもう一度
+    const u = new URL(location.href);
+    u.searchParams.set('p1', rows[0].uid); u.searchParams.set('p2', rows[1].uid);
+    again.href = u.search; again.hidden = false;
+  }
+  // random は選んだ 2 人を URL に書き戻す (読み込み直すと同じ 2 人でもう一度見られる)
+  if (picked.some(Boolean) && ['p1', 'p2'].some((k) => Q.get(k) === 'random')) {
+    const u = new URL(location.href);
+    ['p1', 'p2'].forEach((k, i) => { if (Q.get(k) === 'random') u.searchParams.set(k, rows[i].uid); });
+    try { history.replaceState(null, '', u.toString()); } catch (e) { /* 書き戻さないだけ */ }
+  }
   W.__rpMain = {};
   for (const r of rows) if (r.uid) W.__rpMain[r.uid] = r.char;
   return rows;
@@ -1512,10 +1530,46 @@ function demoBanner() {
   const anims = ANIMS.map((k) => '<a href="?demo=' + (DEMO === 'newcomer' ? 'newcomer' : 'match') + (k ? '&anim=' + k : '') + '"' + (k === ANIM ? ' class="on"' : '') + '>' + escapeHtml(animLabelOf(k)) + '</a>').join('');
   const el = document.createElement('div');
   el.className = 'rp-demo';
+  // 選手を選んで試す (カードの読み込みの確かめ用。random は毎回ちがう 2 人 = たいていキャッシュに無い)
+  const pq = (a, b) => '?demo=match' + an + '&p1=' + encodeURIComponent(a) + '&p2=' + encodeURIComponent(b);
+  const pairs = [['r1', 'r2', 'report.demo.pick_top'], ['r300', 'r900', 'report.demo.pick_mid'], ['r6000', 'r15000', 'report.demo.pick_low'],
+    ['random', 'random', 'report.demo.pick_random'], ['r1', 'new', 'report.demo.pick_new']];
+  const pick = pairs.map(([a, b, k]) => '<a href="' + escapeHtml(pq(a, b)) + '">' + escapeHtml(i18n(k)) + '</a>').join('')
+    + '<a data-demo-again hidden>' + escapeHtml(i18n('report.demo.pick_again')) + '</a>';
   el.innerHTML = '<b>' + escapeHtml(i18n('report.demo.banner')) + '</b><div class="rp-demo-links">' + links + '</div>'
-    + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.anim')) + ' ' + anims + '</div>';
+    + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.anim')) + ' ' + anims + '</div>'
+    + '<div class="rp-demo-links">' + escapeHtml(i18n('report.demo.pick')) + ' ' + pick + '</div>'
+    + '<form class="rp-demo-pick"><input name="p1" placeholder="' + escapeHtml(i18n('report.demo.pick_me')) + '" value="' + escapeHtml(Q.get('p1') || '') + '">'
+    + '<span>VS</span><input name="p2" placeholder="' + escapeHtml(i18n('report.demo.pick_op')) + '" value="' + escapeHtml(Q.get('p2') || '') + '">'
+    + '<button type="submit" class="rp-btn">' + escapeHtml(i18n('report.demo.pick_go')) + '</button></form>'
+    + '<div class="rp-demo-hint">' + escapeHtml(i18n('report.demo.pick_hint')) + '</div>';
+  el.querySelector('form.rp-demo-pick').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = /** @type {HTMLFormElement} */ (e.currentTarget);
+    const v = (n) => /** @type {HTMLInputElement} */ (f.elements.namedItem(n)).value.trim();
+    location.search = pq(v('p1') || 'random', v('p2') || 'random');
+  });
   const main = document.querySelector('.rp-main');
   main.insertBefore(el, main.firstChild);
+}
+
+/** URL の p1 / p2 の値 → 見本の選手 (見つからなければ null) @param {string | null} v */
+function demoPick(v) {
+  v = (v || '').trim();
+  if (!v) return null;
+  if (v === 'new') return { uid: '999999999', name: i18n('report.demo.newcomer_name'), char: null };
+  const ix = DEMO_INDEX;
+  if (!ix.length) return null;
+  let r = null;
+  if (v === 'random') r = ix[Math.floor(Math.random() * ix.length)];
+  else if (/^r\d+$/.test(v)) r = ix.find((x) => x.rank === Number(v.slice(1))) || ix[Math.min(ix.length, Number(v.slice(1))) - 1];
+  else if (/^\d+$/.test(v)) r = ix.find((x) => x.uid === v) || { uid: v, name: 'uid ' + v, char: null };
+  else {
+    const q = v.toLowerCase();
+    const plain = (n) => n.toLowerCase().replace(/^.*\|\s*/, '');   // チーム名を外した名前
+    r = ix.find((x) => plain(x.name) === q) || ix.find((x) => x.name.toLowerCase() === q) || ix.find((x) => x.name.toLowerCase().includes(q));
+  }
+  return r ? Object.assign({}, r) : null;
 }
 
 function demoSlot(p, seed, side) {

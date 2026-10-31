@@ -43,6 +43,8 @@ async function open(query, opts) {
   const fetched = [];
   w.fetch = async (u) => {
     fetched.push(String(u));
+    const body = opts && opts.json ? opts.json(String(u)) : null;   // この URL はこの中身を返す
+    if (body) return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
     const ok = !!okRe && okRe.test(String(u));
     return { ok, status: ok ? 200 : 404, json: async () => ({}), text: async () => (ok ? '{}' : '') };
   };
@@ -186,4 +188,31 @@ test('カードを何枚描いても、選手によらないファイル (サブ
   const n = (re) => p.fetched.filter((u) => re.test(u)).length;
   for (const re of [/player_subranks\.json/, /player_prefectures\.json/, /overseas\.json/, /character_index\.json/]) assert.strictEqual(n(re), 1, String(re));
   p.close();
+});
+
+test('見本: 試合の 2 人を URL で選べる (順位・名前・uid・初参加・ランダム)', { skip }, async () => {
+  const rows = Array.from({ length: 100 }, (_, i) => [1000 + i, i === 7 ? 'TEAM | ほげ' : 'P' + (i + 1), i + 1, i + 1, i + 1, 3, 0, 0, null, null, 0, 0]);
+  const index = { format: 1, columns: ['uid', 'name', 'ens', 'tjpr', 'bt', 'lv', 'prov', 'ovs', 'char', 'pref', 'last', 'b'], rows };
+  const names = async (q) => {
+    const p = await open('?demo=match&anim=dark' + q, { json: (u) => (/players_index\.json$/.test(u) ? index : null) });
+    await until(() => p.d.querySelector('.rp-match-ov'));
+    p.d.querySelector('.rp-match-ov').click();
+    await until(() => p.d.querySelectorAll('.rp-current .rp-vs-side [data-card-name]').length === 2);
+    const r = [...p.d.querySelectorAll('.rp-current .rp-vs-side [data-card-name]')].map((e) => e.getAttribute('data-card-name'));
+    const u = [...p.d.querySelectorAll('.rp-current .rp-vs-side [data-card-name]')].map((e) => e.getAttribute('data-card-uid'));
+    const href = p.w.location.search;
+    assert.ok(p.d.querySelector('form.rp-demo-pick'), '選ぶ欄がある');
+    assert.deepStrictEqual(p.errs, []);
+    p.close();
+    return { r, u, href };
+  };
+  assert.deepStrictEqual((await names('&p1=r3&p2=r10')).r, ['P3', 'P10']);
+  assert.deepStrictEqual((await names('&p1=ほげ&p2=1004')).r, ['TEAM | ほげ', 'P5']);
+  const nw = await names('&p1=r1&p2=new');
+  assert.strictEqual(nw.r[0], 'P1');
+  assert.strictEqual(nw.u[1], '999999999');
+  const def = await names('');
+  assert.ok(def.u.every((x) => /^10\d\d$/.test(x)), '指定が無ければ一覧からランダム: ' + def.u);
+  const rnd = await names('&p1=random&p2=random');
+  assert.ok(/p1=10\d\d&p2=10\d\d/.test(rnd.href), 'ランダムは選んだ uid を URL に書き戻す: ' + rnd.href);
 });

@@ -283,6 +283,10 @@ body {
 .rp-demo-links { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
 .rp-demo-links a { color: #1d4ed8; }
 .rp-demo-links a.on { font-weight: 700; text-decoration: none; color: #111827; }
+.rp-demo-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.rp-demo-pick input { flex: 1 1 140px; min-width: 0; padding: 6px 8px; border: 1px solid #93c5fd; border-radius: 6px; font-size: 13px; }
+.rp-demo-pick .rp-btn { padding: 6px 10px; }
+.rp-demo-hint { margin-top: 4px; color: #3b5b9a; }
 
 /* 入力のタブ (まとめて / 1 戦ごと) */
 /* 「結果を報告」の見出しとタブは同じ行 (タブは右、下の線は行全体) */
