@@ -167,12 +167,11 @@ export async function victoryPng(v) {
   ctx.fillStyle = 'rgba(223,27,27,.12)'; slant(558, 600);
   // WIN
   ctx.fillStyle = '#fff'; ctx.font = `italic 900 168px ${F_Z}`; ctx.fillText('WIN', 44, 186);
-  // 自分: 絵文字の白い四角 + 名前
+  // 自分: 絵文字 (赤の上にそのまま) + 名前
   const ey = 250, es = 132;
   if (v.me.emoji) {
-    ctx.fillStyle = '#fff'; ctx.fillRect(56, ey, es, es);
-    ctx.font = `84px ${F_EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#222';
-    ctx.fillText(v.me.emoji, 56 + es / 2, ey + es / 2 + 4);
+    ctx.font = `112px ${F_EMOJI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#222';
+    ctx.fillText(v.me.emoji, 50, ey + es / 2 + 4);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   const ny = v.me.emoji ? ey + es + 72 : ey + 60;
