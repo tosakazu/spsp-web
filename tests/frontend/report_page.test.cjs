@@ -245,8 +245,9 @@ test('カードは、出ている文字のフォントを名指しで読み、�
 });
 
 test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相手・スコア・キャラ絵文字・大会名・ラウンド・UF・X に投稿', { skip }, async () => {
-  for (const win of ['slash', 'stamp', 'stripes', 'burst', '']) {
-    const p = await open('?demo=win' + (win ? '&win=' + win : ''));
+  for (const win of ['card', 'letters', 'ribbon', 'confetti', '']) {
+    const emoji = JSON.parse(fs.readFileSync(path.join(ROOT, 'site/data/char_emoji.json'), 'utf8'));
+    const p = await open('?demo=win' + (win ? '&win=' + win : ''), { json: (u) => (/char_emoji\.json$/.test(u) ? emoji : null) });
     assert.ok(await until(() => p.d.querySelector('.rp-win-ov')), '勝利の演出が出る ' + win);
     const ov = p.d.querySelector('.rp-win-ov');
     if (win) assert.ok(ov.classList.contains('rp-win-' + win));
@@ -255,11 +256,13 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     assert.ok(ov.classList.contains('still'), 'タップで勝利画面に');
     const panel = ov.querySelector('[data-win-panel]');
     assert.match(panel.querySelector('.rp-win-score').textContent.replace(/\s+/g, ''), /^2-1$/);
-    assert.ok(panel.querySelector('.rp-win-me .rp-win-nm').textContent.length > 0);
-    assert.ok(panel.querySelector('.rp-win-op .rp-win-nm').textContent.length > 0);
+    if (ov.classList.contains('rp-win-card')) assert.ok(panel.querySelector('.rp-win-pcard .pc-in'), '自分のカード');
+    else assert.ok(panel.querySelector('.rp-win-me .rp-win-nm').textContent.length > 0);
+    assert.ok(panel.querySelector('.rp-win-op .rp-win-nm, .rp-win-against .rp-win-nm').textContent.length > 0);
+    assert.ok([...panel.querySelectorAll('.rp-win-em')].every((e) => e.textContent.length > 0), '報告したキャラの絵文字');
     assert.match(panel.querySelector('.rp-win-round').textContent, /Top 32.*Winners Quarter-Final/);
     assert.ok(panel.querySelector('.rp-win-tour').textContent.length > 0, '大会名');
-    assert.match(panel.querySelector('.rp-win-uf').textContent, /\+\d+UF/, 'シード 24 が 3 に勝った: UF');
+    assert.match(panel.querySelector('.rp-win-uf').textContent, /^\+\d+Upset Factor$/, 'シード 24 が 3 に勝った: UF');
     // X に投稿: 文に相手・スコア・UF
     let opened = '';
     p.w.open = (u) => { opened = String(u); return null; };
@@ -275,8 +278,13 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
 });
 
 test('勝利画面: 勝ちを報告したときだけ出る (負けの報告では出ない)。UF が 1 未満なら UF を出さない', { skip }, async () => {
+  // 選手一覧にメインキャラ (1271 = ベヨネッタ、1272 = クッパJr.) がある。報告ではキャラを選ばない → 使用キャラの絵文字
+  const emoji = JSON.parse(fs.readFileSync(path.join(ROOT, 'site/data/char_emoji.json'), 'utf8'));
+  const rows = [1271, 1272].map((c, i) => [5000 + i, 'Q' + i, i + 1, i + 1, i + 1, 3, 0, 0, c, null, 0, 0]);
+  const index = { format: 1, columns: ['uid', 'name', 'ens', 'tjpr', 'bt', 'lv', 'prov', 'ovs', 'char', 'pref', 'last', 'b'], rows };
+  const json = (u) => (/char_emoji\.json$/.test(u) ? emoji : /players_index\.json$/.test(u) ? index : null);
   for (const won of [true, false]) {
-    const p = await open('?demo=match&anim=dark');
+    const p = await open('?demo=match&anim=dark&p1=r1&p2=r2', { json });
     await until(() => p.d.querySelector('.rp-match-ov'));
     p.d.querySelector('.rp-match-ov').click();
     await until(() => p.d.querySelector('.rp-current form.rp-form'));
@@ -294,6 +302,8 @@ test('勝利画面: 勝ちを報告したときだけ出る (負けの報告で�
     ov.click();
     assert.match(ov.querySelector('.rp-win-score').textContent.replace(/\s+/g, ''), /^2-0$/);
     assert.strictEqual(ov.querySelector('.rp-win-uf'), null, '見本の試合はシード 5 vs 28 (UF なし)');
+    const ems = [...ov.querySelectorAll('.rp-win-em')].map((e) => e.textContent);
+    assert.ok(ems.includes(emoji['1271'].emoji) && ems.includes(emoji['1272'].emoji), '報告にキャラが無ければ使用キャラ: ' + ems.join(' '));
     p.close();
   }
 });

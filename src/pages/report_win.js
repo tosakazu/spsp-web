@@ -1,20 +1,23 @@
 // 試合結果の報告: 勝った側が報告したときの勝利の演出と勝利画面 (src/pages/report.js から呼ぶ)。
 //   showVictory(v)  演出 → 止まって勝利画面 (自分と相手・スコア・キャラ絵文字・大会名・フェーズ・ラウンド・UF)。
 //                   勝利画面には X に投稿・画像を保存・閉じる。閉じたら解ける
-// 演出は WIN_ANIMS から毎回ランダム (?win=… で固定)。色はサイトと同じ白・濃いグレー・赤 (#dc2626)
+// 色はサイトと同じ白と赤 (#dc2626) だけ (黒・グレーの地は使わない)。演出と勝利画面の組は WIN_ANIMS から毎回ランダム (?win=… で固定)
+//   card     自分のプレイヤーカードが回って入り、赤いたすき「WIN」が掛かる → カードの下に結果 (カードはゆっくり浮く)
+//   letters  W・I・N が 1 字ずつ入り、赤い細線が左右に伸びる → 白い結果の紙 (細線がゆっくり脈打つ)
+//   ribbon   赤いリボンが横に走って「VICTORY」→ 上が赤い帯の結果 (帯の上を光が流れる)
+//   confetti 赤とピンクの紙吹雪が弾けて WIN → 白い結果の紙 (紙吹雪がゆっくり降り続ける)
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import { capturePng, safeFileName } from '../../site/share.js';
+import { cardSettled, mountNoDataCard, mountPlayerCard } from '../../site/js/player_card_embed.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
 
-/** 演出の案 (slash = 赤い斜めの帯で切る / stamp = 判子 / stripes = 赤白の縞が流れる / burst = 放射の線)
- * 勝利画面の地は slash が濃いグレー、ほかは白 */
-export const WIN_ANIMS = ['slash', 'stamp', 'stripes', 'burst'];
+export const WIN_ANIMS = ['card', 'letters', 'ribbon', 'confetti'];
 
 /**
- * @typedef {{ name: string, emoji: string }} WinSide
+ * @typedef {{ name: string, emoji: string, uid?: string | null }} WinSide
  * @typedef {{ me: WinSide, op: WinSide, score: [number, number], tour: string, phase: string, pool: string, round: string,
  *   uf: number, url: string, anim?: string }} Victory
  */
@@ -26,44 +29,69 @@ export function tweetText(v) {
     + (v.uf >= 1 ? ' ' + i18n('report.win.tweet_uf', { n: v.uf }) : '');
 }
 
-/** 勝利画面の中身 (演出のあと止まる画面。画像で保存するのもこの箱) @param {Victory} v */
-function panelHtml(v) {
-  const where = [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
-  const side = (/** @type {WinSide} */ s, /** @type {string} */ cls) => `<div class="rp-win-side ${cls}">
-      <span class="rp-win-em">${escapeHtml(s.emoji || '')}</span><span class="rp-win-nm">${escapeHtml(s.name)}</span></div>`;
-  return `<div class="rp-win-panel" data-win-panel>
-    <i class="rp-win-shine" aria-hidden="true" data-html2canvas-ignore></i>
-    <div class="rp-win-word">WIN</div>
-    ${v.tour ? `<div class="rp-win-tour">${escapeHtml(v.tour)}</div>` : ''}
-    ${where ? `<div class="rp-win-round">${escapeHtml(where)}</div>` : ''}
-    <div class="rp-win-vs">
-      ${side(v.me, 'rp-win-me')}
-      <div class="rp-win-score"><b>${v.score[0]}</b><span>-</span><b>${v.score[1]}</b></div>
-      ${side(v.op, 'rp-win-op')}
-    </div>
-    ${v.uf >= 1 ? `<div class="rp-win-uf"><b>+${v.uf}</b><span>UF</span><em>${escapeHtml(i18n('report.win.uf_label'))}</em></div>` : ''}
-    <div class="rp-win-site">spsp.games</div>
+const where = (/** @type {Victory} */ v) => [v.phase, v.pool, v.round].filter(Boolean).join(' · ');
+const em = (/** @type {WinSide} */ s) => `<span class="rp-win-em">${escapeHtml(s.emoji || '')}</span>`;
+const ufHtml = (/** @type {Victory} */ v) => (v.uf >= 1 ? `<div class="rp-win-uf"><b>+${v.uf}</b><span>Upset Factor</span></div>` : '');
+const scoreHtml = (/** @type {Victory} */ v) => `<div class="rp-win-score"><b>${v.score[0]}</b><i>-</i><b>${v.score[1]}</b></div>`;
+const shine = '<i class="rp-win-shine" aria-hidden="true" data-html2canvas-ignore></i>';
+const site = '<div class="rp-win-site">spsp.games</div>';
+
+/** 勝利画面 (止まる画面。画像で保存するのもこの箱)。案ごとに形が違う @param {Victory} v @param {string} anim */
+function panelHtml(v, anim) {
+  const head = `${v.tour ? `<div class="rp-win-tour">${escapeHtml(v.tour)}</div>` : ''}${where(v) ? `<div class="rp-win-round">${escapeHtml(where(v))}</div>` : ''}`;
+  const names = `<div class="rp-win-vs">
+      <div class="rp-win-side rp-win-me">${em(v.me)}<span class="rp-win-nm">${escapeHtml(v.me.name)}</span></div>
+      ${scoreHtml(v)}
+      <div class="rp-win-side rp-win-op">${em(v.op)}<span class="rp-win-nm">${escapeHtml(v.op.name)}</span></div>
+    </div>`;
+  if (anim === 'card') {
+    // 自分のカード + たすき。下に「vs 相手 2-1」と大会
+    return `<div class="rp-win-panel rp-win-p-card" data-win-panel>
+      <div class="rp-win-cardwrap"><div class="rp-win-pcard pcard"></div><div class="rp-win-sash"><span>WIN</span></div>${shine}</div>
+      <div class="rp-win-strip">
+        <div class="rp-win-line">${scoreHtml(v)}<span class="rp-win-against">vs ${em(v.op)}<span class="rp-win-nm">${escapeHtml(v.op.name)}</span></span></div>
+        ${head}${ufHtml(v)}
+      </div>${site}
+    </div>`;
+  }
+  if (anim === 'ribbon') {
+    // 上が赤い帯 (WIN)、下に白で結果
+    return `<div class="rp-win-panel rp-win-p-band" data-win-panel>
+      <div class="rp-win-band">${shine}<span class="rp-win-word">WIN</span></div>
+      <div class="rp-win-body">${head}${names}${ufHtml(v)}${site}</div>
+    </div>`;
+  }
+  // letters / confetti: 白い紙。上に WIN、赤い細線
+  return `<div class="rp-win-panel rp-win-p-sheet" data-win-panel>
+    ${shine}<div class="rp-win-word">WIN</div><div class="rp-win-rule"></div>${head}${names}${ufHtml(v)}${site}
   </div>`;
 }
 
-/** 演出の飾り (案ごと) @param {string} anim */
+/** 演出の飾り @param {string} anim */
 function fxHtml(anim) {
-  // どの案も、演出の間は大きな WIN (b) を出し、止まったら勝利画面と入れ替える。線 (i) は止まった後もうすく残って少し動く
-  const fx = (/** @type {string} */ inner) => '<div class="rp-win-fx" aria-hidden="true">' + inner + '<b>WIN</b></div>';
-  if (anim === 'stripes') return fx('<i></i>'.repeat(6));
-  if (anim === 'burst') return fx('<i></i>');
-  if (anim === 'stamp') return fx('');
-  return fx('<i></i><i></i>');   // slash
+  if (anim === 'letters') return '<div class="rp-win-fx" aria-hidden="true"><i class="l"></i><i class="r"></i><b><span>W</span><span>I</span><span>N</span></b></div>';
+  if (anim === 'ribbon') return '<div class="rp-win-fx" aria-hidden="true"><i class="rb"><span>VICTORY</span></i></div>';
+  if (anim === 'confetti') {
+    // 紙吹雪: 位置・色・回り方・落ちる速さを散らす (毎回同じ並び。見た目が安定するように)
+    let h = '';
+    for (let k = 0; k < 36; k++) {
+      const x = (k * 37) % 100, d = 2.6 + ((k * 13) % 10) / 4, delay = -((k * 7) % 30) / 10, rot = (k * 47) % 360;
+      const c = ['#dc2626', '#f87171', '#fecaca', '#ef4444'][k % 4];
+      h += `<i class="cf" style="left:${x}%;--d:${d}s;--dl:${delay}s;--r:${rot}deg;--c:${c};--dx:${((k * 29) % 60) - 30}vw"></i>`;
+    }
+    return '<div class="rp-win-fx" aria-hidden="true">' + h + '<b>WIN</b></div>';
+  }
+  return '<div class="rp-win-fx" aria-hidden="true"></div>';   // card: 飾りはカードの上 (たすき)
 }
 
 /** 演出 → 勝利画面。閉じたら解ける @param {Victory} v @returns {Promise<void>} */
-export function showVictory(v) {
+export async function showVictory(v) {
   const anim = WIN_ANIMS.includes(v.anim || '') ? /** @type {string} */ (v.anim) : WIN_ANIMS[Math.floor(Math.random() * WIN_ANIMS.length)];
   const ov = document.createElement('div');
   ov.className = 'rp-win-ov rp-win-' + anim;
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-label', i18n('report.win.aria'));
-  ov.innerHTML = `${fxHtml(anim)}${panelHtml(v)}
+  ov.innerHTML = `${fxHtml(anim)}${panelHtml(v, anim)}
     <div class="rp-win-actions">
       <button type="button" class="rp-btn rp-primary" data-win-tweet>${escapeHtml(i18n('report.win.tweet_btn'))}</button>
       <button type="button" class="rp-btn" data-win-save>${escapeHtml(i18n('report.win.save'))}</button>
@@ -71,16 +99,22 @@ export function showVictory(v) {
     </div>
     <div class="rp-win-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
   document.body.appendChild(ov);
-  // 振動: 触れたことがあるときだけ (report.js のマッチングと同じ)
-  const ua = /** @type {any} */ (navigator).userActivation;
-  if (!ua || ua.hasBeenActive) { try { if (navigator.vibrate) navigator.vibrate([60, 40, 120]); } catch (e) { /* 震えないだけ */ } }
-  // 演出 (約 1.6 秒) → 止まって勝利画面 (.still)。演出の間のタップで飛ばす
-  const still = () => { if (!ov.classList.contains('still')) ov.classList.add('still'); };
-  // 動きを減らす設定のときは、すぐ勝利画面
-  const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  if (reduce) still();
-  const timer = setTimeout(still, 1700);
+  // 演出 → 止まって勝利画面 (.still)。演出の間のタップで飛ばす (カードを読んでいる間も)。動きを減らす設定ならすぐ
+  const still = () => { if (!ov.classList.contains('still')) ov.classList.add('go', 'still'); };
   ov.addEventListener('click', (e) => { if (!ov.classList.contains('still') && !(/** @type {HTMLElement} */ (e.target)).closest('button')) still(); });
+  // card: カードを描いてフォントがそろってから動かす (たいてい VS のときに読み終えている。最大 1.5 秒)
+  const cardEl = /** @type {HTMLElement | null} */ (ov.querySelector('.rp-win-pcard'));
+  if (cardEl) {
+    const nd = () => mountNoDataCard(cardEl, v.me.name);
+    const mount = v.me.uid ? mountPlayerCard(cardEl, v.me.uid).then((ok) => { if (!ok) nd(); }).catch(nd) : Promise.resolve(nd());
+    await Promise.race([mount.then(() => cardSettled(cardEl)), new Promise((r) => setTimeout(r, 1500))]);
+  }
+  ov.classList.add('go');
+  // 振動: 触れたことがあるときだけ (report.js のマッチングと同じ)。飛ばしたときは鳴らさない
+  const ua = /** @type {any} */ (navigator).userActivation;
+  if (!ov.classList.contains('still') && (!ua || ua.hasBeenActive)) { try { if (navigator.vibrate) navigator.vibrate([60, 40, 120]); } catch (e) { /* 震えないだけ */ } }
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) still();
+  const timer = setTimeout(still, anim === 'card' ? 1900 : 1700);
   return new Promise((res) => {
     const close = () => {
       clearTimeout(timer);

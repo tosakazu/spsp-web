@@ -383,104 +383,134 @@ body {
 
 
 /* ── 勝利の演出と勝利画面 (src/pages/report_win.js) ─────────────────────────────
- * 演出 (約 1.6 秒、大きな WIN) → .still で勝利画面 (パネル + ボタン)。色はサイトと同じ白・濃いグレー・赤
- * 案: slash (濃いグレーの地に赤白の斜めの帯) / stamp (白地に赤い判子) / stripes (赤とグレーの縞が流れる) / burst (赤い放射の線が回る) */
-.rp-win-ov { position: fixed; inset: 0; z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  background: #fff; overflow: hidden; padding: 16px; -webkit-tap-highlight-color: transparent; }
+ * 演出 (.go から約 1.6 秒) → .still で勝利画面 + ボタン。色は白と赤だけ (文字の濃い色を除き、黒・グレーの地は使わない)
+ * 案: card / letters / ribbon / confetti。勝利画面の形は card (自分のカード) / band (上が赤い帯) / sheet (白い紙) */
+.rp-win-ov { position: fixed; inset: 0; z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 16px; overflow: hidden; -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(120% 70% at 50% 0%, #fff1f1 0%, #fff 55%) #fff; }
 .rp-win-ov.out { opacity: 0; transition: opacity .25s; }
-.rp-win-slash { background: #111827; }
 .rp-win-fx { position: absolute; inset: 0; pointer-events: none; }
-.rp-win-fx i { position: absolute; display: block; }
-.rp-win-fx b { position: absolute; left: 0; right: 0; top: 50%; text-align: center; transform: translateY(-50%);
-  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(88px, 30vw, 200px); line-height: 1; color: #dc2626; letter-spacing: -.02em; }
-.rp-win-ov.still .rp-win-fx b { opacity: 0; transition: opacity .25s; }
-
-/* 勝利画面 */
-.rp-win-panel { position: relative; overflow: hidden; width: min(92vw, 420px); box-sizing: border-box; padding: 16px 18px 12px; border-radius: 16px;
-  background: #fff; color: #111827; border: 1px solid #e5e7eb; border-top: 6px solid #dc2626; box-shadow: 0 12px 32px rgba(17, 24, 39, .18);
-  text-align: center; opacity: 0; transform: translateY(16px) scale(.96); }
-.rp-win-ov.still .rp-win-panel { opacity: 1; transform: none; transition: opacity .35s ease-out, transform .45s cubic-bezier(.2, 1.4, .4, 1); }
-.rp-win-slash .rp-win-panel { background: #1f2937; color: #f9fafb; border-color: #374151; border-top-color: #dc2626; }
-.rp-win-word { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 64px; line-height: 1; color: #dc2626; letter-spacing: -.01em; }
-.rp-win-tour { margin-top: 8px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-.rp-win-round { margin-top: 2px; font-size: 12px; color: #6b7280; overflow-wrap: anywhere; }
-.rp-win-slash .rp-win-round { color: #9ca3af; }
-.rp-win-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 14px; }
-.rp-win-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-.rp-win-em { font-size: 34px; line-height: 1.1; min-height: 1.1em; }
-.rp-win-nm { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
-.rp-win-op .rp-win-nm { color: #6b7280; font-weight: 600; }
-.rp-win-slash .rp-win-op .rp-win-nm { color: #9ca3af; }
-.rp-win-score { display: flex; align-items: baseline; gap: 6px; font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 46px; line-height: 1; }
-.rp-win-score b:first-child { color: #dc2626; }
-.rp-win-score b:last-child { color: #9ca3af; }
-.rp-win-score span { font-size: 28px; color: #d1d5db; }
-.rp-win-uf { display: inline-flex; align-items: baseline; gap: 5px; margin-top: 12px; padding: 4px 12px; border-radius: 999px; background: #fef2f2; border: 1px solid #fecaca; }
-.rp-win-slash .rp-win-uf { background: rgba(220, 38, 38, .15); border-color: rgba(220, 38, 38, .5); }
-.rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 20px; color: #dc2626; }
-.rp-win-uf span { font-family: "Zalando Sans", sans-serif; font-weight: 700; font-size: 13px; color: #dc2626; }
-.rp-win-uf em { font-style: normal; font-size: 11px; color: #9ca3af; }
-.rp-win-site { margin-top: 10px; text-align: right; font-family: "Zalando Sans", sans-serif; font-size: 10px; color: #9ca3af; }
-/* 止まった後: パネルの上を光が通る (少し動く。画像で保存には写らない) */
-.rp-win-shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent); transform: skewX(-20deg); opacity: 0; }
-.rp-win-slash .rp-win-shine { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .12), transparent); }
-.rp-win-ov.still .rp-win-shine { opacity: 1; animation: rp-win-shine 3.6s ease-in-out .6s infinite; }
-@keyframes rp-win-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
-.rp-win-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; opacity: 0; pointer-events: none; position: relative; }
-.rp-win-ov.still .rp-win-actions { opacity: 1; pointer-events: auto; transition: opacity .3s .25s; }
-.rp-win-slash .rp-win-actions .rp-btn:not(.rp-primary) { background: #374151; color: #f9fafb; border-color: #4b5563; }
-.rp-win-skip { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; font-size: 12px; color: #9ca3af; }
+.rp-win-fx > b { position: absolute; left: 0; right: 0; top: 50%; text-align: center; transform: translateY(-50%); opacity: 0;
+  font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(96px, 32vw, 220px); line-height: 1; color: #dc2626; letter-spacing: -.03em; }
+.rp-win-ov.still .rp-win-fx > b { opacity: 0 !important; transition: opacity .2s; animation: none; }
+.rp-win-skip { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 12px; color: #f87171; letter-spacing: .04em; }
 .rp-win-ov.still .rp-win-skip { display: none; }
 
-/* slash: 赤と白の帯が斜めに走り、WIN が横から入る。止まった後も帯はうすく残って揺れる */
-.rp-win-slash .rp-win-fx i:nth-child(1) { left: -20%; width: 140%; top: 36%; height: 28%; background: #dc2626; transform-origin: 0 50%;
-  transform: skewY(-12deg) scaleX(0); animation: rp-win-band .4s cubic-bezier(.6, 0, .2, 1) .05s forwards; }
-.rp-win-slash .rp-win-fx i:nth-child(2) { left: -20%; width: 140%; top: 66%; height: 2.5%; background: #fff; transform-origin: 100% 50%;
-  transform: skewY(-12deg) scaleX(0); animation: rp-win-band .35s cubic-bezier(.6, 0, .2, 1) .25s forwards; }
-.rp-win-slash .rp-win-fx b { color: #fff; text-shadow: 6px 6px 0 #111827; opacity: 0; animation: rp-win-slide .45s cubic-bezier(.2, 1.2, .4, 1) .4s forwards; }
-.rp-win-slash.still .rp-win-fx i { opacity: .35; transition: opacity .4s; animation: rp-win-sway 4s ease-in-out infinite alternate; transform: skewY(-12deg) scaleX(1); }
-@keyframes rp-win-band { to { transform: skewY(-12deg) scaleX(1); } }
-@keyframes rp-win-slide { from { opacity: 0; transform: translate(-60vw, -50%) skewX(-12deg); } to { opacity: 1; transform: translate(0, -50%) skewX(-12deg); } }
-@keyframes rp-win-sway { from { transform: skewY(-12deg) translateX(-3%); } to { transform: skewY(-12deg) translateX(3%); } }
+/* 勝利画面 (共通) */
+.rp-win-panel { position: relative; overflow: hidden; width: min(92vw, 400px); box-sizing: border-box; border-radius: 20px; background: #fff;
+  border: 1px solid #fde2e2; box-shadow: 0 18px 48px rgba(220, 38, 38, .14), 0 2px 6px rgba(220, 38, 38, .06); color: #1f2937; text-align: center;
+  opacity: 0; transform: translateY(20px) scale(.97); }
+.rp-win-ov.still .rp-win-panel { opacity: 1; transform: none; transition: opacity .35s ease-out, transform .5s cubic-bezier(.2, 1.3, .4, 1); }
+.rp-win-word { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 60px; line-height: 1; color: #dc2626; letter-spacing: -.02em; }
+.rp-win-tour { font-size: 13px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.rp-win-round { margin-top: 3px; font-size: 12px; font-weight: 600; color: #dc2626; overflow-wrap: anywhere; }
+.rp-win-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; margin-top: 16px; }
+.rp-win-side { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.rp-win-side .rp-win-em { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; font-size: 30px; line-height: 1; }
+.rp-win-me .rp-win-em { background: #fee2e2; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #dc2626; }
+.rp-win-op .rp-win-em { background: #fff5f5; }
+.rp-win-nm { font-size: 14px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.rp-win-op .rp-win-nm { font-weight: 500; opacity: .75; }
+.rp-win-score { display: flex; align-items: baseline; justify-content: center; gap: 6px; font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; line-height: 1; font-size: 48px; }
+.rp-win-score b:first-child { color: #dc2626; }
+.rp-win-score b:last-child { color: #fca5a5; }
+.rp-win-score i { font-style: normal; font-weight: 500; font-size: .5em; color: #fecaca; }
+.rp-win-uf { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 14px; padding: 5px 14px; border-radius: 999px; border: 1.5px solid #dc2626; color: #dc2626; }
+.rp-win-uf b { font-family: "Zalando Sans", sans-serif; font-weight: 800; font-size: 20px; line-height: 1; }
+.rp-win-uf span { font-family: "Zalando Sans", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .03em; }
+.rp-win-site { margin-top: 12px; text-align: right; font-family: "Zalando Sans", sans-serif; font-size: 10px; letter-spacing: .04em; color: #f87171; }
+/* 止まった後: 光が通る (画像で保存には写らない) */
+.rp-win-shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 35%; pointer-events: none; z-index: 2; opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .7), rgba(255, 255, 255, 0)); transform: skewX(-20deg); }
+.rp-win-ov.still .rp-win-shine { opacity: 1; animation: rp-win-shine 4s ease-in-out .7s infinite; }
+@keyframes rp-win-shine { 0% { left: -60%; } 40%, 100% { left: 140%; } }
+.rp-win-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; opacity: 0; pointer-events: none; position: relative; z-index: 1; }
+.rp-win-ov.still .rp-win-actions { opacity: 1; pointer-events: auto; transition: opacity .3s .3s; }
+.rp-win-actions .rp-btn { border-radius: 999px; padding: 9px 18px; }
+.rp-win-actions .rp-btn:not(.rp-primary) { border-color: #fecaca; color: #dc2626; }
 
-/* stamp: 白地に赤い判子が押される (少し揺れる)。止まった後は角に赤い斜線 */
-.rp-win-stamp .rp-win-fx b { left: 50%; right: auto; padding: 0 .12em; border: .06em solid #dc2626; border-radius: .1em; background: #fff;
-  font-size: clamp(72px, 24vw, 160px); opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(-16deg);
-  animation: rp-win-stamp .5s cubic-bezier(.5, 0, .7, 1.4) .15s forwards, rp-win-shake .3s ease-out .65s; }
-@keyframes rp-win-stamp { 70% { opacity: 1; transform: translate(-50%, -50%) scale(.92) rotate(-8deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-8deg); } }
-@keyframes rp-win-shake { 0%, 100% { margin-left: 0; } 25% { margin-left: -6px; } 50% { margin-left: 5px; } 75% { margin-left: -3px; } }
-.rp-win-stamp::before, .rp-win-stamp::after { content: ''; position: absolute; width: 60vmax; height: 3px; background: #dc2626; opacity: 0; transform: rotate(-35deg); }
-.rp-win-stamp::before { left: -18vmax; top: 10vh; }
-.rp-win-stamp::after { right: -18vmax; bottom: 10vh; }
-.rp-win-stamp.still::before, .rp-win-stamp.still::after { opacity: .5; transition: opacity .5s; }
+/* sheet (letters / confetti): 白い紙。WIN の下に赤い細線 */
+.rp-win-p-sheet { padding: 22px 20px 14px; }
+.rp-win-rule { width: 48px; height: 3px; margin: 10px auto 12px; border-radius: 2px; background: #dc2626; }
 
-/* stripes: 赤と濃いグレーの縞が左から右へ流れ、そのあと WIN。止まった後は縞がうすくゆっくり流れる */
-.rp-win-stripes .rp-win-fx i { top: -20%; bottom: -20%; width: 16vw; left: 0; transform: translateX(-30vw) skewX(-20deg);
-  animation: rp-win-stripe .7s cubic-bezier(.5, 0, .3, 1) forwards; }
-.rp-win-stripes .rp-win-fx i:nth-child(odd) { background: #dc2626; }
-.rp-win-stripes .rp-win-fx i:nth-child(even) { background: #1f2937; }
-.rp-win-stripes .rp-win-fx i:nth-child(2) { animation-delay: .06s; } .rp-win-stripes .rp-win-fx i:nth-child(3) { animation-delay: .12s; }
-.rp-win-stripes .rp-win-fx i:nth-child(4) { animation-delay: .18s; } .rp-win-stripes .rp-win-fx i:nth-child(5) { animation-delay: .24s; }
-.rp-win-stripes .rp-win-fx i:nth-child(6) { animation-delay: .3s; }
-.rp-win-stripes .rp-win-fx b { opacity: 0; animation: rp-win-pop .4s cubic-bezier(.2, 1.5, .4, 1) .75s forwards; }
-.rp-win-stripes.still .rp-win-fx i { opacity: .1; animation: rp-win-drift 9s linear infinite; }
-.rp-win-stripes.still .rp-win-fx i:nth-child(2) { animation-delay: -1.5s; } .rp-win-stripes.still .rp-win-fx i:nth-child(3) { animation-delay: -3s; }
-.rp-win-stripes.still .rp-win-fx i:nth-child(4) { animation-delay: -4.5s; } .rp-win-stripes.still .rp-win-fx i:nth-child(5) { animation-delay: -6s; }
-.rp-win-stripes.still .rp-win-fx i:nth-child(6) { animation-delay: -7.5s; }
-@keyframes rp-win-stripe { to { transform: translateX(130vw) skewX(-20deg); } }
-@keyframes rp-win-drift { from { transform: translateX(-30vw) skewX(-20deg); } to { transform: translateX(130vw) skewX(-20deg); } }
-@keyframes rp-win-pop { from { opacity: 0; transform: translateY(-50%) scale(.4); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+/* band (ribbon): 上が赤い帯で白い WIN */
+.rp-win-band { position: relative; overflow: hidden; padding: 16px 0 14px; background: linear-gradient(100deg, #dc2626 0%, #ef4444 55%, #dc2626 100%); }
+.rp-win-band .rp-win-word { color: #fff; }
+.rp-win-band::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: repeating-linear-gradient(-60deg, rgba(255, 255, 255, .22) 0 6px, transparent 6px 12px); }
+.rp-win-body { padding: 14px 20px 14px; }
 
-/* burst: 赤い放射の線が広がって回り、WIN が弾ける。止まった後もうすく回り続ける */
-.rp-win-burst .rp-win-fx i { left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; border-radius: 50%;
-  background: repeating-conic-gradient(#dc2626 0 5deg, transparent 5deg 15deg); opacity: .9; transform: scale(0) rotate(0);
-  animation: rp-win-burst .8s cubic-bezier(.2, .8, .3, 1) forwards; }
-.rp-win-burst .rp-win-fx b { opacity: 0; text-shadow: 0 0 0 #fff, 4px 4px 0 #fff, -4px -4px 0 #fff, 4px -4px 0 #fff, -4px 4px 0 #fff; animation: rp-win-pop .45s cubic-bezier(.2, 1.6, .4, 1) .3s forwards; }
-.rp-win-burst.still .rp-win-fx i { opacity: .08; transform: scale(1); animation: rp-win-spin 40s linear infinite; transition: opacity .5s; }
-@keyframes rp-win-burst { to { transform: scale(1) rotate(30deg); } }
-@keyframes rp-win-spin { from { transform: scale(1) rotate(30deg); } to { transform: scale(1) rotate(390deg); } }
+/* card: 自分のカード + 赤いたすき。下に結果 */
+.rp-win-p-card { padding: 14px 14px 12px; }
+.rp-win-cardwrap { position: relative; overflow: hidden; border-radius: 12px; }
+.rp-win-pcard { width: 100%; }
+.rp-win-sash { position: absolute; top: 18px; right: -46px; width: 190px; transform: rotate(35deg); background: #dc2626; text-align: center; padding: 4px 0;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, .35); }
+.rp-win-sash span { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: 22px; letter-spacing: .06em; color: #fff; }
+.rp-win-strip { padding: 12px 4px 0; }
+.rp-win-line { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
+.rp-win-line .rp-win-score { font-size: 40px; }
+.rp-win-against { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: #dc2626; font-weight: 600; min-width: 0; }
+.rp-win-against .rp-win-em { font-size: 22px; }
+.rp-win-against .rp-win-nm { color: #1f2937; }
+
+/* ── 演出 ── */
+/* card: 演出の間も勝利画面のカードを使う (パネルの枠は後から)。カードが回って入り、たすきが掛かる */
+.rp-win-ov.rp-win-card .rp-win-panel { opacity: 1; transform: none; background: transparent; border-color: transparent; box-shadow: none; }
+.rp-win-ov.rp-win-card .rp-win-strip, .rp-win-ov.rp-win-card .rp-win-site { opacity: 0; }
+.rp-win-ov.rp-win-card .rp-win-cardwrap { opacity: 0; transform: perspective(900px) rotateY(-80deg) scale(.8); }
+.rp-win-ov.rp-win-card.go .rp-win-cardwrap { animation: rp-win-cardin .7s cubic-bezier(.2, 1.1, .4, 1) .05s forwards; }
+.rp-win-ov.rp-win-card .rp-win-sash { transform: translate(120px, -60px) rotate(35deg); }
+.rp-win-ov.rp-win-card.go .rp-win-sash { animation: rp-win-sash .35s cubic-bezier(.3, 1.4, .5, 1) .8s forwards; }
+.rp-win-ov.rp-win-card.still .rp-win-cardwrap { opacity: 1; transform: none; animation: rp-win-float 5s ease-in-out infinite; }
+.rp-win-ov.rp-win-card.still .rp-win-sash { transform: rotate(35deg); animation: none; }
+.rp-win-ov.rp-win-card.still .rp-win-panel { background: #fff; border-color: #fde2e2; box-shadow: 0 18px 48px rgba(220, 38, 38, .14), 0 2px 6px rgba(220, 38, 38, .06);
+  transition: background .3s, box-shadow .3s, border-color .3s; }
+.rp-win-ov.rp-win-card.still .rp-win-strip, .rp-win-ov.rp-win-card.still .rp-win-site { opacity: 1; transition: opacity .35s .1s; }
+@keyframes rp-win-cardin { to { opacity: 1; transform: perspective(900px) rotateY(0) scale(1); } }
+@keyframes rp-win-sash { to { transform: rotate(35deg); } }
+@keyframes rp-win-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* letters: W・I・N が 1 字ずつ落ちてきて、赤い細線が左右に伸びる。止まった後は線がうすく脈打つ */
+.rp-win-letters .rp-win-fx > b { opacity: 1; }
+.rp-win-letters .rp-win-fx > b span { display: inline-block; opacity: 0; transform: translateY(-40px) scale(1.5); filter: blur(6px); }
+.rp-win-letters.go .rp-win-fx > b span { animation: rp-win-letter .38s cubic-bezier(.2, 1.4, .4, 1) forwards; }
+.rp-win-letters.go .rp-win-fx > b span:nth-child(2) { animation-delay: .14s; }
+.rp-win-letters.go .rp-win-fx > b span:nth-child(3) { animation-delay: .28s; }
+.rp-win-letters .rp-win-fx i { position: absolute; top: 50%; height: 2px; width: 0; background: #dc2626; }
+.rp-win-letters .rp-win-fx i.l { right: 50%; margin-right: min(40vw, 180px); background: linear-gradient(270deg, #dc2626, rgba(220, 38, 38, 0)); }
+.rp-win-letters .rp-win-fx i.r { left: 50%; margin-left: min(40vw, 180px); background: linear-gradient(90deg, #dc2626, rgba(220, 38, 38, 0)); }
+.rp-win-letters.go .rp-win-fx i { animation: rp-win-line .5s ease-out .5s forwards; }
+.rp-win-letters.still .rp-win-fx i { width: 50vw; margin: 0; top: 18%; opacity: .25; animation: rp-win-pulse 2.8s ease-in-out infinite; }
+.rp-win-letters.still .rp-win-fx i.l { right: 50%; } .rp-win-letters.still .rp-win-fx i.r { left: 50%; top: 82%; }
+@keyframes rp-win-letter { to { opacity: 1; transform: none; filter: none; } }
+@keyframes rp-win-line { to { width: 50vw; } }
+@keyframes rp-win-pulse { 0%, 100% { opacity: .12; } 50% { opacity: .35; } }
+
+/* ribbon: 赤いリボンが左から走って VICTORY。止まると勝利画面の帯に */
+.rp-win-ribbon .rp-win-fx i.rb { position: absolute; left: 0; right: 0; top: 50%; height: 84px; margin-top: -42px; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(100deg, #dc2626, #ef4444 55%, #dc2626); clip-path: inset(0 100% 0 0); box-shadow: 0 10px 30px rgba(220, 38, 38, .25); }
+.rp-win-ribbon .rp-win-fx i.rb::before, .rp-win-ribbon .rp-win-fx i.rb::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: #fff; opacity: .6; }
+.rp-win-ribbon .rp-win-fx i.rb::before { top: 8px; } .rp-win-ribbon .rp-win-fx i.rb::after { bottom: 8px; }
+.rp-win-ribbon .rp-win-fx i.rb span { font-family: "Zalando Sans", sans-serif; font-style: italic; font-weight: 900; font-size: clamp(40px, 13vw, 88px); letter-spacing: .08em; color: #fff;
+  opacity: 0; transform: translateX(-30px); }
+.rp-win-ribbon.go .rp-win-fx i.rb { animation: rp-win-ribbon .5s cubic-bezier(.7, 0, .2, 1) .05s forwards; }
+.rp-win-ribbon.go .rp-win-fx i.rb span { animation: rp-win-vic .45s cubic-bezier(.2, 1.2, .4, 1) .45s forwards; }
+.rp-win-ribbon.still .rp-win-fx i.rb { opacity: 0; transition: opacity .25s; }
+@keyframes rp-win-ribbon { to { clip-path: inset(0 0 0 0); } }
+@keyframes rp-win-vic { to { opacity: 1; transform: none; } }
+
+/* confetti: 赤とピンクの紙吹雪が弾けて WIN。止まった後もうすく降り続ける */
+.rp-win-confetti .rp-win-fx i.cf { position: absolute; top: -4vh; width: 8px; height: 13px; border-radius: 2px; background: var(--c); opacity: 0; }
+.rp-win-confetti.go .rp-win-fx i.cf { animation: rp-win-fall var(--d) linear var(--dl) infinite; }
+.rp-win-confetti .rp-win-fx > b { text-shadow: 0 0 0 #fff, 3px 3px 0 #fff, -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff; }
+.rp-win-confetti.go .rp-win-fx > b { animation: rp-win-pop .5s cubic-bezier(.2, 1.6, .4, 1) .1s forwards; }
+.rp-win-confetti.still .rp-win-fx i.cf { filter: saturate(.8); }
+.rp-win-confetti.still .rp-win-fx i.cf:nth-child(2n) { display: none; }
+@keyframes rp-win-fall { 0% { opacity: 0; transform: translate(0, 0) rotate(var(--r)); } 8% { opacity: .9; }
+  100% { opacity: .9; transform: translate(var(--dx), 110vh) rotate(calc(var(--r) + 540deg)); } }
+@keyframes rp-win-pop { from { opacity: 0; transform: translateY(-50%) scale(.3); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
 
 @media (prefers-reduced-motion: reduce) {
   .rp-win-ov *, .rp-win-ov::before, .rp-win-ov::after { animation: none !important; transition: none !important; }
+  .rp-win-confetti .rp-win-fx i.cf { display: none; }
 }

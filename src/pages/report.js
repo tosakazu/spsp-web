@@ -720,26 +720,32 @@ function wireForm(form, m) {
     setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
-    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(victoryOf(m, result));
+    if (won && ['reported', 'agreed', 'fixed'].includes(r.state)) await showVictory(await victoryOf(m, result));
     setTimeout(() => poll(true), 800);
   });
 }
 
-/** 勝利画面に出すもの。キャラ絵文字は報告で選んだキャラ (いちばん多く使ったもの。選んでいなければ出さない)。
- * UF (アップセットファクター) = 両者のシード順位から見た番狂わせの大きさ (大会ページの UF と同じ)。1 以上のときだけ出す */
-function victoryOf(m, result) {
+/** 勝利画面に出すもの。キャラ絵文字は報告で選んだキャラ (いちばん多く使ったもの)、選んでいなければその人の使用キャラ (SPSP のデータ、
+ * いちばん多いもの。読むのは最大 0.8 秒)。UF (Upset Factor) = 両者のシード順位から見た番狂わせの大きさ (大会ページの UF と同じ)。1 以上のときだけ出す */
+async function victoryOf(m, result) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
   const wins = (k) => result.g.filter((g) => g.w === k).length;
-  const emojiOf = (k) => {
+  const emojiOf = async (k) => {
     const n = new Map();
     for (const g of result.g) { const c = g.c && g.c[k]; if (c) n.set(c, (n.get(c) || 0) + 1); }
     const top = [...n].sort((a, b) => b[1] - a[1])[0];
-    const c = top ? charById(top[0]) : null;
+    let c = top ? charById(top[0]) : null;
+    const slot = m.slots[k];
+    if (!c && slot && slot.uid) {
+      const used = await Promise.race([usedCharsOf(slot.uid), new Promise((r) => setTimeout(() => r([]), 800))]);
+      c = used && used.length ? charById(used[0]) : null;
+    }
     return c ? c.emoji : '';
   };
+  const [eMe, eOp] = await Promise.all([emojiOf(m.mySide), emojiOf(1 - m.mySide)]);
   const uf = me && op && me.seed && op.seed ? placementToW2W(me.seed) - placementToW2W(op.seed) : 0;
   const uid = myUid();
-  return { me: { name: me ? me.name : '', emoji: emojiOf(m.mySide) }, op: { name: op ? op.name : '', emoji: emojiOf(1 - m.mySide) },
+  return { me: { name: me ? me.name : '', emoji: eMe, uid: me ? me.uid : null }, op: { name: op ? op.name : '', emoji: eOp, uid: op ? op.uid : null },
     score: [wins(m.mySide), wins(1 - m.mySide)], tour: INFO ? INFO.name || '' : '', phase: m.phase || '', pool: m.pool || '', round: m.round || '',
     uf: uf >= 1 ? uf : 0, url: uid ? SPSPLinks.playerHref(new URL('../', location.href).href, uid) : new URL('../', location.href).href, anim: WIN };
 }
@@ -1690,7 +1696,7 @@ async function runDemo() {
     MATCHES = [Object.assign({}, m, { state: 'complete', winner: 0, score: [2, 1] })];
     VIEW.sets = [demoRow(m.id, 'reported', res, null, P)];
     renderPlayer();
-    showVictory(victoryOf(m, res));
+    showVictory(await victoryOf(m, res));
     return;
   }   // ログインしたが出場者に居ない
   await loadChars();
