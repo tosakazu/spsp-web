@@ -17,6 +17,7 @@ window.SPSP_I18N.en = {
   'nav.seeding.priority': 'Priority list',
   'nav.seeding.class': 'Lower class',
   'nav.seeding.dupes': 'Duplicate entries',
+  'nav.seeding.report': 'Result reporting',
   'nav.method': 'About',
   'nav.method.overview': 'Basics',
   'nav.method.details': 'Theory: concepts',

@@ -18,6 +18,7 @@ window.SPSP_I18N.ja = {
   'nav.seeding.priority': '優先枠作成',
   'nav.seeding.class': '下位クラス作成',
   'nav.seeding.dupes': '重複参加チェック',
+  'nav.seeding.report': '結果報告管理',
   'nav.method': '解説',
   'nav.method.overview': '基本編',
   'nav.method.details': '理論編・概念',
