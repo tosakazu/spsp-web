@@ -185,23 +185,26 @@ function resultCardHtml(t, tabs, opts) {
   // 順位の色: 1-3位 = 金銀銅, 4-8位 (トップ8) = ピンク
   const placeCls = t.place === 1 ? 'gold' : t.place === 2 ? 'silver' : t.place === 3 ? 'bronze'
     : (t.place != null && t.place <= 8) ? 'top8' : '';
-  let hero = `<span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
-    (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '');
+  // 最新の大会結果と出場履歴でカードの中身の位置を揃える: アイコン・順位・SPR・パフォーマンスはそれぞれ幅の決まった箱 (無いときも空の箱)
+  let hero = `<span class="ph-pl"><span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
+    (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '') + `</span>`;
   // SPR は順位の横に大きく (ラベル+値+seed のスタック)
   if (!t.is_dq && t.spr != null) {
     const cls = t.spr > 0 ? 'pos' : (t.spr < 0 ? 'neg' : 'dim');
     const txt = t.spr > 0 ? `+${t.spr}` : (t.spr < 0 ? `${t.spr}` : '±0');
     hero += `<span class="ph-sep"></span>` +
-      `<span class="ph-perf"><span class="ph-perf-lbl">SPR</span>` +
+      `<span class="ph-perf ph-sprbox"><span class="ph-perf-lbl">SPR</span>` +
       `<span class="ph-spr ${cls}">${txt}</span>` +
       (t.seed != null ? `<span class="ph-perf-sub">seed ${t.seed}</span>` : '') +
       `</span>`;
+  } else {
+    hero += `<span class="ph-sep"></span><span class="ph-perf ph-sprbox"></span>`;
   }
   // パフォーマンスも同じ行 (ラベルを数値の上にスタック)
   let capHtml = '';
   if (perf) {
     hero += `<span class="ph-sep"></span>` +
-      `<span class="ph-perf">` +
+      `<span class="ph-perf ph-pfbox">` +
       `<span class="ph-perf-lbl">${i18n('player.performance')}` +
       `<button type="button" class="ph-help"${opts.latest ? ' id="ph-help-btn"' : ''} aria-label="${i18n('player.performance_help_aria')}">?</button></span>` +
       `<span class="ph-perf-val"><span class="ph-rank"><span class="ph-lbl">${i18n('common.national')}</span>#${perf.eq}<span class="ph-lbl">${i18n('player.equivalent')}</span></span>` +
@@ -210,6 +213,8 @@ function resultCardHtml(t, tabs, opts) {
     capHtml = `<div class="lr-cap"${opts.latest ? ' id="lr-cap"' : ''} style="display:none">` +
       i18n('player.performance_help') +
       `</div>`;
+  } else {
+    hero += `<span class="ph-sep"></span><span class="ph-perf ph-pfbox"></span>`;
   }
   // 順位評価 / 直対評価 chips (= 出場大会一覧の行と同じ表記、▶ 展開の中)
   const ELO_PER_UNIT2 = (META && META.params && META.params.ELO_PER_UNIT) || 29.48;
@@ -239,7 +244,7 @@ function resultCardHtml(t, tabs, opts) {
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
         <div class="lr-top">${dateHtml}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
-        <div class="perf-hero">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}${hero}<span class="chevron lr-chev">▶</span></div>
+        <div class="perf-hero"><span class="lr-ico">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}</span>${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
       </div>
