@@ -1106,7 +1106,9 @@ function ftPhaseHtml(ph, rule) {
       <select data-ft-from="${k}"><option value="">${escapeHtml(i18n('report.ft.no_change'))}</option>${from}</select>
       <select data-ft-b="${k}"${sd.from == null ? ' hidden' : ''}>${nums(sd.b || 3)}</select></div>`;
   };
-  const modes = [['', sgg ? i18n('report.ft.use_sgg') : i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')]];
+  // 既定は「設定しない」(スコアは勝ち越していればよい)。start.gg の設定はされていないことが多いので、読めたときだけ一番下に
+  const modes = [['', i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')],
+    ...(sgg ? [['sgg', i18n('report.ft.use_sgg') + ' (' + sgg + ')']] : [])];
   return `<div class="rp-ft-ph" data-ph="${escapeHtml(ph.key)}">
     <label>${escapeHtml(ph.name || i18n('report.ft.phase_all'))}
       <select data-ft-mode>${modes.map(([v, t]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
@@ -1127,6 +1129,13 @@ function readFt(root) {
   for (const ph of root.querySelectorAll('.rp-ft-ph')) {
     const mode = ph.querySelector('[data-ft-mode]').value;
     if (!mode) continue;
+    if (mode === 'sgg') {   // start.gg の何本勝負から (読めない側はもう一方と同じ)
+      const P = (PHASES || []).find((x) => String(x.key) === ph.getAttribute('data-ph'));
+      const pick = (k) => { const sd = P ? sggSide(P, k) : null; return sd ? { a: sd.a, from: sd.from, b: sd.b } : null; };
+      const w = pick('w'); const l = pick('l');
+      if (w || l) out[ph.getAttribute('data-ph')] = { w: w || l, l: l || w };
+      continue;
+    }
     if (mode !== 'split') { const n = Number(mode.slice(3)); out[ph.getAttribute('data-ph')] = { w: { a: n, from: null, b: n }, l: { a: n, from: null, b: n } }; continue; }
     const sd = (k) => {
       const a = ph.querySelector(`[data-ft-a="${k}"]`);

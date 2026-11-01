@@ -530,3 +530,24 @@ test('ホーム画面に追加: iPhone・iPad の Safari は手順 (通知はホ
   assert.strictEqual(mf.name, 'SPSP');
   for (const ic of mf.icons) assert.ok(fs.existsSync(path.join(ROOT, 'site/report', ic.src)), ic.src);
 });
+
+test('何先: 既定は「設定しない」、start.gg の設定は読めたときだけ一番下 (選ぶとその何本勝負で受付を始める)', { skip }, async () => {
+  const p = await open('?demo=setup');
+  assert.ok(await until(() => p.d.querySelector('input[name="rp-ev"]:not([disabled])')));
+  const r = p.d.querySelector('input[name="rp-ev"]:not([disabled])');
+  r.checked = true; r.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  assert.ok(await until(() => p.d.querySelectorAll('#rp-ft-set [data-ft-mode]').length === 2), 'フェーズごと');
+  const [pools, top] = [...p.d.querySelectorAll('#rp-ft-set [data-ft-mode]')];
+  for (const sel of [pools, top]) {
+    assert.strictEqual(sel.value, '', '既定 = 設定しない');
+    assert.strictEqual(sel.options[0].textContent, '設定しない');
+  }
+  // 見本の Pools は start.gg で全部 3 本勝負 → 一番下に「start.gg の設定どおり (勝者側 2 先 · 敗者側 2 先)」
+  assert.strictEqual(pools.options[pools.options.length - 1].value, 'sgg');
+  assert.match(pools.options[pools.options.length - 1].textContent, /start\.gg の設定どおり \(.*2 先/);
+  pools.value = 'sgg';
+  // 受付を始めるときに送る何先 (見本は送らずに止まるので、送る中身を api の手前で見る)
+  assert.ok(top.options[top.options.length - 1].value === 'sgg', 'Top 32 も読める');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
