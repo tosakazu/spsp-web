@@ -260,7 +260,8 @@
   /* 大会結果のカード (最新の大会結果・出場履歴、src/pages/p.js resultCardHtml): 箱の幅を決めて、どのカードでも同じ位置に */
   .perf-hero .lr-ico { flex: 0 0 44px; width: 44px; height: 44px; margin-right: 5px; line-height: 0; }
   .perf-hero .lr-ico img.lr-icon { margin-right: 0; }
-  .perf-hero .ph-pl { flex: 0 0 auto; min-width: 88px; display: flex; align-items: flex-end; justify-content: center; }
+  .perf-hero .ph-pl { flex: 0 0 auto; min-width: 88px; display: flex; align-items: baseline; justify-content: center; }
+  .perf-hero .ph-pl .ph-n { align-self: baseline; padding-bottom: 0; }   /* /人数 は順位の数字の下端 (ベースライン) に揃える */
   .perf-hero .ph-sprbox { flex: 0 0 auto; min-width: 42px; align-items: center; }
   .perf-hero .ph-pfbox { flex: 0 0 auto; min-width: 132px; }
   .tour-group .tour-item.has-icon .tour-ico { grid-column: 1; grid-row: 2; justify-self: center; line-height: 0; }
