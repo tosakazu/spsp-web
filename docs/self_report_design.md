@@ -112,7 +112,9 @@
 5. `PhaseGroup.rounds { number }` が読めるか (読めなければ試合の round だけで一覧を作る)。
 6. Challonge v2.1: 試合の更新 (`PUT matches/{id}.json`、`score_set` / `advancing`)・reopen (`change_state` の `reopen`)・`player1_prereq_match_id` の有無。
 
-## 9. 本番に入れる手順 (2026-10-31 時点。§8 の実物確認の後、ユーザーの OK が出てから)
+## 9. 本番に入れる手順 (2026-11-01 に実施済み。ユーザーの OK で §8 の実物確認の前に本番へ)
+
+2026-11-01: 本番 D1 に 0012〜0016 を execute --file で当てた (report_* の 6 表と managers 列を確認)。本番用の VAPID 鍵 (preview と別) を secret put。ナビは 大会運営支援 → 結果報告管理 (/report/)。PR #64 を merge → Actions で deploy。
 
 1. 本番 D1 (`spsp`) に 0012〜0014 を当てる。本番の d1_migrations は 0008 までしか記録が無く (0009〜0011 は手で当てた)、`migrations apply` は 0009 からやり直そうとして止まるので、`execute --file` で 1 本ずつ:
    `wrangler d1 execute spsp --remote --file migrations/0012_reports.sql` (0013・0014・0015・0016 も同じ。0015 = 通知の購読、0016 = 報告管理者、2026-11-01)。2026-10-31 に本番のスキーマを読み出して手元の SQLite に 0012〜0014 を当て、エラーなく 5 テーブルができることを確認済み。
