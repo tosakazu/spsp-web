@@ -831,7 +831,7 @@ async function matchAnimation(m) {
       clearTimeout(timer);
       document.removeEventListener('keydown', onKey);
       ov.classList.add(skip ? 'skip' : 'out');
-      setTimeout(() => { ov.remove(); res(); }, skip ? 120 : 350);
+      setTimeout(() => { ov.remove(); res(!!skip); }, skip ? 120 : 350);
     };
     const onKey = (e) => { if (['Escape', 'Enter', ' '].includes(e.key)) { e.preventDefault(); done(true); } };
     ov.addEventListener('click', () => done(true));
@@ -841,9 +841,11 @@ async function matchAnimation(m) {
   });
 }
 
-/** アニメーションの後、相手のカードが画面の上に来るところまでスクロールする (1 試合 1 回。その下に台・試合開始・入力欄が続く) */
+/** アニメーションの後、相手のカードが画面の上に来るところまでスクロールする (1 試合 1 回。その下に台・試合開始・入力欄が続く)。
+ * 飛ばしたとき (タップ) はすぐ動かす (なめらかに動かしている間は指のスクロールとぶつかって止まって見える)。
+ * なめらかに動かしている途中で触れたら、そこで止める (指のスクロールを優先) */
 const SCROLLED = new Set();
-function scrollToMatch(m) {
+function scrollToMatch(m, instant) {
   if (!m || SCROLLED.has(m.id)) return;
   SCROLLED.add(m.id);
   const op = document.querySelector('.rp-current .rp-op');
@@ -855,7 +857,14 @@ function scrollToMatch(m) {
   }
   const y = op.getBoundingClientRect().top + window.scrollY - top - 8;
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+  const smooth = !reduce && !instant;
+  window.scrollTo({ top: Math.max(0, y), behavior: smooth ? 'smooth' : 'auto' });
+  if (!smooth) return;
+  const evs = ['touchstart', 'wheel', 'keydown', 'pointerdown'];
+  const stop = () => { off(); window.scrollTo({ top: window.scrollY, behavior: 'auto' }); };
+  const off = () => { for (const e of evs) window.removeEventListener(e, stop, true); };
+  for (const e of evs) window.addEventListener(e, stop, { capture: true, passive: true });
+  setTimeout(off, 1500);
 }
 
 function renderPlayer() {
@@ -980,7 +989,7 @@ async function poll(force) {
       // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
       if (!LAST_SIG || sig !== LAST_SIG) renderPlayer();
       LAST_SIG = sig;
-      if (cur) matchAnimation(cur).then(() => scrollToMatch(cur));
+      if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
       setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
     }
   } catch (e) {
@@ -1833,7 +1842,7 @@ async function runDemo() {
   }
   const cur = MATCHES.find((m) => m.state === 'open');
   renderPlayer();
-  if (cur) matchAnimation(cur).then(() => scrollToMatch(cur));
+  if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
 }
 
 // ── はじめ ─────────────────────────────────────────────────────────
