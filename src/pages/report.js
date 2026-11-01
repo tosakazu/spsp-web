@@ -1292,7 +1292,22 @@ function wirePush(root) {
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
-  const r = await api({ action: 'report_admin', token: tok(), code: CODE });
+  let r = await api({ action: 'report_admin', token: tok(), code: CODE });
+  // まだこの受付の運営でない: start.gg の大会の管理者なら加わる (設定・試合の状態はほかの運営と共有)
+  if (!DEMO && r && !r.ok && r.error && r.error.code === 'not_admin') {
+    const j = await api({ action: 'report_join', token: tok(), code: CODE });
+    if (j && j.ok) r = await api({ action: 'report_admin', token: tok(), code: CODE });
+    else if (j && j.error && j.error.code === 'no_grant') {
+      root.innerHTML = `<section class="rp-card-sec"><p>${escapeHtml(i18n('report.join.need_login'))}</p>
+        <button type="button" class="rp-btn rp-primary" id="rp-join-login">${escapeHtml(i18n('report.setup.login_btn'))}</button>
+        <div class="rp-status" id="rp-join-status"></div></section>`;
+      $('rp-join-login').addEventListener('click', async () => {
+        setStatus($('rp-join-status'), i18n('report.setup.going'), 'busy');
+        if (!(await SpspReportAuth.start(location.pathname + location.search))) setStatus($('rp-join-status'), i18n('report.err.generic'), 'err');
+      });
+      return;
+    } else r = j && !j.ok ? j : r;
+  }
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
   const ev = r.report;
   const url = pageUrl(CODE, false);
@@ -1335,16 +1350,37 @@ async function renderAdmin() {
     drawFt(curFt);
   })();
   const formFt = () => (PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt);
+  // ほかの運営が設定を変えたら読み込む (試合の一覧と一緒に読み直す)。こちらで書きかけなら上書きせず知らせる
+  let lastSet = JSON.stringify(ev.settings || {});
+  let dirty = false;
+  for (const el of [root.querySelector('.rp-settings'), $('rp-ft-set')]) {
+    if (el) for (const t of ['input', 'change']) el.addEventListener(t, () => { dirty = true; });
+  }
   const saveSettings = async (msg) => {
     const settings = { ...readSettings(root), ft: formFt() };
     const x = await api({ action: 'report_settings', token: tok(), code: CODE, settings });
     setStatus($('rp-set-status'), x && x.ok ? msg || i18n('report.admin.saved') : errText(x), x && x.ok ? 'ok' : 'err');
-    if (x && x.ok) { curFt = x.settings.ft || null; if (INFO) INFO.settings = x.settings; }
+    if (x && x.ok) { curFt = x.settings.ft || null; if (INFO) INFO.settings = x.settings; dirty = false; lastSet = null; }
     return !!(x && x.ok);
+  };
+  let mgrSync = null;
+  ADMIN_SYNC = (r2) => {
+    if (mgrSync && r2.managers) mgrSync(r2.managers);
+    const s2 = r2.report && r2.report.settings ? r2.report.settings : {};
+    const js = JSON.stringify(s2);
+    if (lastSet === null) { lastSet = js; return; }   // 自分が保存した直後
+    if (js === lastSet) return;
+    lastSet = js;
+    if (dirty) { setStatus($('rp-set-status'), i18n('report.admin.settings_other'), 'warn'); return; }
+    fillSettings(root, s2);
+    curFt = s2.ft || null;
+    if (INFO) INFO.settings = s2;
+    if (PHASES) drawFt(curFt);
+    setStatus($('rp-set-status'), i18n('report.admin.settings_synced'), 'ok');
   };
   $('rp-save-set').addEventListener('click', () => saveSettings());
   wirePush(root);
-  if (ev.kind === 'startgg') wireMgr(root, r.managers || []);
+  if (ev.kind === 'startgg') mgrSync = wireMgr(root, r.managers || []);
   // 保存した設定を呼び出す = 入力に入れて、この大会の設定として保存する
   const loadPreset = async (p, name) => {
     await phasesP;
@@ -1405,19 +1441,30 @@ function mgrHtml() {
     <h3>${escapeHtml(i18n('report.mgr.title'))}</h3>
     <p class="rp-muted">${escapeHtml(i18n('report.mgr.help'))}</p>
     <ul class="rp-mgr-list" id="rp-mgr-list"></ul>
+    <div class="rp-mgr-roles" role="radiogroup">
+      ${['report', 'full'].map((k) => `<label class="rp-check"><input type="radio" name="rp-mgr-role" value="${k}"${k === 'report' ? ' checked' : ''}> ${escapeHtml(i18n('report.mgr.role_' + k))}</label>`).join('')}
+    </div>
     <div class="rp-mgr-add">
-      <input type="text" id="rp-mgr-q" autocomplete="off" placeholder="${escapeHtml(i18n('report.mgr.placeholder'))}" aria-label="${escapeHtml(i18n('report.mgr.placeholder'))}">
+      <div class="rp-mgr-row">
+        <input type="text" id="rp-mgr-q" autocomplete="off" placeholder="${escapeHtml(i18n('report.mgr.placeholder'))}" aria-label="${escapeHtml(i18n('report.mgr.placeholder'))}">
+        <button type="button" class="rp-btn" id="rp-mgr-check">${escapeHtml(i18n('report.mgr.check'))}</button>
+      </div>
       <div class="rp-mgr-sug" id="rp-mgr-sug" role="listbox" hidden></div>
     </div>
+    <div class="rp-mgr-confirm" id="rp-mgr-confirm" hidden></div>
     <div class="rp-status" id="rp-mgr-status"></div>
   </section>`;
 }
+/** 管理者の欄。一覧を外から差し替える関数を返す (ほかの運営が変えたとき) */
 function wireMgr(root, initial) {
   let list = initial.slice();
   const q = root.querySelector('#rp-mgr-q'); const sug = root.querySelector('#rp-mgr-sug'); const st = root.querySelector('#rp-mgr-status');
-  const ul = root.querySelector('#rp-mgr-list');
+  const ul = root.querySelector('#rp-mgr-list'); const cf = root.querySelector('#rp-mgr-confirm');
+  const roleNow = () => { const r = root.querySelector('input[name="rp-mgr-role"]:checked'); return r && r.value === 'full' ? 'full' : 'report'; };
+  const roleText = (k) => i18n(k === 'full' ? 'report.mgr.role_full' : 'report.mgr.role_report');
   const draw = () => {
     ul.innerHTML = list.length ? list.map((m) => `<li><span class="rp-mgr-nm">${escapeHtml(m.name || '?')}</span>${m.disc ? `<span class="rp-muted">${escapeHtml(m.disc)}</span>` : ''}
+      <span class="rp-tag rp-mgr-role-${m.role === 'full' ? 'full' : 'report'}">${escapeHtml(roleText(m.role))}</span>
       <button type="button" class="rp-link" data-mgr-rm="${escapeHtml(m.id)}">${escapeHtml(i18n('report.mgr.remove'))}</button></li>`).join('')
       : `<li class="rp-muted">${escapeHtml(i18n('report.mgr.none'))}</li>`;
     for (const b of ul.querySelectorAll('[data-mgr-rm]')) {
@@ -1431,26 +1478,44 @@ function wireMgr(root, initial) {
     }
   };
   draw();
-  const add = async (body) => {
+  // 足す前に start.gg で確かめて、名前を見てから承認する
+  const check = async (body) => {
     sug.hidden = true;
+    cf.hidden = true;
     setStatus(st, i18n('report.sending'), 'busy');
-    const x = await api({ action: 'report_manager_add', token: tok(), code: CODE, ...body });
+    const x = await api({ action: 'report_manager_lookup', token: tok(), code: CODE, ...body });
     if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
-    list = x.managers || [];
-    draw();
-    q.value = '';
-    setStatus(st, i18n('report.mgr.added', { name: x.added ? x.added.name : '' }), 'ok');
+    const u = x.user;
+    if (x.current === 'startgg_admin') { setStatus(st, i18n('report.mgr.is_admin', { name: u.name }), 'warn'); return; }
+    setStatus(st, '', '');
+    const role = roleNow();
+    cf.innerHTML = `<p>${escapeHtml(x.current ? i18n('report.mgr.confirm_change', { name: u.name || '?', disc: u.disc, role: roleText(role) }) : i18n('report.mgr.confirm', { name: u.name || '?', disc: u.disc, role: roleText(role) }))}</p>
+      <button type="button" class="rp-btn rp-primary" data-mgr-ok>${escapeHtml(i18n('report.mgr.ok'))}</button>
+      <button type="button" class="rp-btn" data-mgr-cancel>${escapeHtml(i18n('report.mgr.cancel'))}</button>`;
+    cf.hidden = false;
+    cf.querySelector('[data-mgr-cancel]').addEventListener('click', () => { cf.hidden = true; });
+    cf.querySelector('[data-mgr-ok]').addEventListener('click', async () => {
+      cf.hidden = true;
+      setStatus(st, i18n('report.sending'), 'busy');
+      const y = await api({ action: 'report_manager_add', token: tok(), code: CODE, uid: u.id, role });
+      if (!y || !y.ok) { setStatus(st, errText(y), 'err'); return; }
+      list = y.managers || [];
+      draw();
+      q.value = '';
+      setStatus(st, i18n('report.mgr.added', { name: y.added ? y.added.name : '' }), 'ok');
+    });
   };
   let seq = 0;
+  let hits = [];
   const show = async () => {
     const my = ++seq;
     const v = String(q.value || '').trim();
-    if (!v) { sug.hidden = true; return; }
+    if (!v) { sug.hidden = true; hits = []; return; }
     const lv = v.toLowerCase();
     const cands = await mgrCands();
     if (my !== seq) return;
     const taken = new Set(list.map((m) => m.id));
-    const hits = [];
+    hits = [];
     for (const p of cands) {
       if (taken.has(p.uid)) continue;
       if (p.tag.toLowerCase().includes(lv) || (p.disc && p.disc.toLowerCase().includes(lv))) { hits.push(p); if (hits.length >= 10) break; }
@@ -1463,33 +1528,52 @@ function wireMgr(root, initial) {
     sug.innerHTML = h;
     sug.hidden = false;
   };
-  q.addEventListener('input', () => { show(); });
+  /** 「確認」・Enter: discriminator (URL でもよい) ならそれで、でなければ候補の先頭 */
+  const checkTyped = async () => {
+    const v = String(q.value || '').trim();
+    const dm = DISC_RE.exec(v);
+    if (dm) { const p = (await mgrCands()).find((x) => x.disc === dm[1].toLowerCase()); await check(p ? { uid: p.uid } : { discriminator: dm[1].toLowerCase() }); return; }
+    if (v) await show();
+    if (hits.length) { await check({ uid: hits[0].uid }); return; }
+    setStatus(st, i18n('report.mgr.need_input'), 'warn');
+  };
+  q.addEventListener('input', () => { cf.hidden = true; show(); });
   q.addEventListener('focus', () => { if (q.value) show(); });
   q.addEventListener('blur', () => { setTimeout(() => { sug.hidden = true; }, 200); });
-  q.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const first = sug.hidden ? null : sug.querySelector('[data-uid], [data-disc]');
-    if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-  });
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkTyped(); } });
+  root.querySelector('#rp-mgr-check').addEventListener('click', () => { checkTyped(); });
   // mousedown: blur で候補が消える前に拾う
   sug.addEventListener('mousedown', (e) => {
     const it = e.target instanceof Element ? e.target.closest('[data-uid], [data-disc]') : null;
     if (!it) return;
     e.preventDefault();
-    if (it.hasAttribute('data-uid')) add({ uid: it.getAttribute('data-uid') });
-    else add({ discriminator: it.getAttribute('data-disc') });
+    if (it.hasAttribute('data-uid')) check({ uid: it.getAttribute('data-uid') });
+    else check({ discriminator: it.getAttribute('data-disc') });
   });
+  return (managers) => {
+    if (JSON.stringify(managers || []) === JSON.stringify(list)) return;
+    list = (managers || []).slice();
+    draw();
+  };
 }
 
 /** 試合の一覧だけ読み直す (設定の入力は消さない)。直している最中は待つ */
+/** 運営の画面: 読み直した受付の設定・管理者を入力に入れる (renderAdmin が置く。報告管理者の画面には無い) */
+let ADMIN_SYNC = null;
+/** 設定の入力に値を入れる (受付の開始・トップ N・下位クラス・取り込み方・通知) */
+function fillSettings(root, s) {
+  applySettingsInputs(root, s);
+  const op = root.querySelector('[data-set-open]'); if (op) op.value = toLocalInput(s && s.opens_ms);
+  const ap = root.querySelector(`[data-set-apply][value="${(s && s.apply) || 'auto'}"]`); if (ap) ap.checked = true;
+  const nt = root.querySelector('[data-set-notify]'); if (nt) nt.value = (s && s.notify) || 'off';
+}
 async function refreshAdminSets(force) {
   clearTimeout(adminTimer);
   const box = $('rp-adm-sets');
   const busy = !!box && (box.contains(document.activeElement) || !!ADMIN_FORM_OPEN);
   if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
     const r = await api({ action: 'report_admin', token: tok(), code: CODE });
-    if (r && r.ok) renderAdminSets(r.sets || []);
+    if (r && r.ok) { renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
   }
   adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
 }
@@ -1878,6 +1962,7 @@ const DEMO_PHASES = [
     { n: -5, label: 'Losers Semi-Final' }, { n: -6, label: 'Losers Final' }] },
 ];
 let DEMO_MGRS = [];
+const DEMO_SEEN = {};   // 見本: 確認した start.gg のユーザー
 async function demoApi(body) {
   const P = DEMO_P;
   if (body.action === 'report_submit') {
@@ -1903,9 +1988,14 @@ async function demoApi(body) {
         { id: 21, name: 'Singles', slug: 'tournament/demo2/event/singles', entrants: 48, game: ULT, code: null }] }] };
   }
   if (body.action === 'report_settings') return { ok: true, settings: body.settings };
-  if (body.action === 'report_manager_add') {
+  if (body.action === 'report_manager_lookup' || body.action === 'report_manager_add') {
     const p = body.uid ? (await mgrCands()).find((x) => x.uid === String(body.uid)) : null;
-    const m = p ? { id: p.uid, name: p.tag, disc: p.disc } : { id: String(900000 + DEMO_MGRS.length), name: 'start.gg user', disc: String(body.discriminator || '') };
+    const known = body.uid ? DEMO_MGRS.find((x) => x.id === String(body.uid)) || DEMO_SEEN[String(body.uid)] : null;
+    const u = p ? { id: p.uid, name: p.tag, disc: p.disc } : known ? { id: known.id, name: known.name, disc: known.disc }
+      : { id: String(900000 + parseInt(String(body.discriminator || '0').slice(0, 6), 16) % 99999), name: 'start.gg user', disc: String(body.discriminator || '') };
+    DEMO_SEEN[u.id] = u;
+    if (body.action === 'report_manager_lookup') return { ok: true, user: u, current: (DEMO_MGRS.find((x) => x.id === u.id) || { role: null }).role };
+    const m = { ...u, role: body.role === 'full' ? 'full' : 'report' };
     DEMO_MGRS = DEMO_MGRS.filter((x) => x.id !== m.id).concat([m]);
     return { ok: true, managers: DEMO_MGRS, added: m };
   }

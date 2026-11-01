@@ -422,7 +422,13 @@ test('報告管理者: 運営の画面で名前・discriminator から探して�
   assert.match(sug.textContent, /Alpha.*a1b2c3d4/);
   assert.ok(!/TeamX/.test(sug.textContent));
   sug.querySelector('[data-uid="7001"]').dispatchEvent(new p.w.MouseEvent('mousedown', { bubbles: true }));
+  // 確認してから足す (既定 = 報告の管理のみ)
+  const cf = p.d.getElementById('rp-mgr-confirm');
+  assert.ok(await until(() => !cf.hidden), '確認');
+  assert.match(cf.textContent, /Alpha \(a1b2c3d4\) を「報告の管理のみ」として追加しますか/);
+  cf.querySelector('[data-mgr-ok]').click();
   assert.ok(await until(() => /Alpha/.test(p.d.getElementById('rp-mgr-list').textContent)), '足した');
+  assert.match(p.d.getElementById('rp-mgr-list').textContent, /報告の管理のみ/);
   // discriminator で探す (SPSP の選手)
   type('E5F6A7B8');
   assert.ok(await until(() => !sug.hidden && sug.querySelector('[data-uid="7002"]')));
@@ -430,8 +436,24 @@ test('報告管理者: 運営の画面で名前・discriminator から探して�
   // SPSP にデータの無い人は discriminator で
   type('https://www.start.gg/user/0badc0de');
   assert.ok(await until(() => !sug.hidden && sug.querySelector('[data-disc="0badc0de"]')));
+  // 「確認」ボタン → 名前を見て承認。報告と設定の管理を選ぶ
+  p.d.querySelector('input[name="rp-mgr-role"][value="full"]').checked = true;
+  p.d.getElementById('rp-mgr-check').click();
+  assert.ok(await until(() => !cf.hidden && /0badc0de/.test(cf.textContent)));
+  assert.match(cf.textContent, /報告と設定の管理/);
+  cf.querySelector('[data-mgr-ok]').click();
+  assert.ok(await until(() => /0badc0de/.test(p.d.getElementById('rp-mgr-list').textContent)), 'ボタンで足す');
+  // やめる
+  type('alp');
+  await until(() => !sug.hidden);
   q.dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'Enter' }));
-  assert.ok(await until(() => /0badc0de/.test(p.d.getElementById('rp-mgr-list').textContent)), 'Enter で足す');
+  await until(() => !cf.hidden);
+  cf.querySelector('[data-mgr-cancel]').click();
+  assert.ok(cf.hidden);
+  // 候補も discriminator も無い
+  type('zzzz');
+  p.d.getElementById('rp-mgr-check').click();
+  assert.ok(await until(() => /discriminator/.test(p.d.getElementById('rp-mgr-status').textContent)));
   // 外す
   p.w.confirm = () => true;
   p.d.querySelector('[data-mgr-rm="7001"]').click();

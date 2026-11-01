@@ -850,7 +850,12 @@ test('報告管理者: 運営が SPSP の選手 (uid) か discriminator で足�
   assert.strictEqual((await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'zz' })).error.code, 'bad_request');
   assert.strictEqual((await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'ffff0000' })).error.code, 'not_found');
   let r = await e.call({ action: 'report_manager_add', token: TO, code: e.code, uid: '33' });
-  assert.deepStrictEqual(r.added, { id: '33', name: 'Mgr33', disc: 'aaaa1111' });
+  assert.deepStrictEqual(r.added, { id: '33', name: 'Mgr33', disc: 'aaaa1111', role: 'report' }, '既定は報告の管理のみ');
+  // 確認 (足す前): 名前と今の役割
+  const lk = await e.call({ action: 'report_manager_lookup', token: TO, code: e.code, discriminator: 'abcd1234' });
+  assert.deepStrictEqual([lk.user.name, lk.current], ['NoData', null]);
+  assert.strictEqual((await e.call({ action: 'report_manager_lookup', token: TO, code: e.code, uid: '33' })).current, 'report');
+  assert.strictEqual((await e.call({ action: 'report_manager_lookup', token: M, code: e.code, uid: '33' })).error.code, 'not_admin');
   r = await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'https://www.start.gg/user/ABCD1234' });
   assert.deepStrictEqual(r.managers.map((m) => m.id), ['33', '44']);
   // 報告管理者: 一覧・直すはできる
@@ -871,4 +876,54 @@ test('報告管理者: 運営が SPSP の選手 (uid) か discriminator で足�
   r = await e.call({ action: 'report_manager_remove', token: TO, code: e.code, id: '33' });
   assert.deepStrictEqual(r.managers.map((m) => m.id), ['44']);
   assert.strictEqual((await e.call({ action: 'report_admin', token: M, code: e.code })).error.code, 'not_admin');
+});
+
+test('管理者 (報告と設定): 設定・停止以外に管理者の追加もできる。start.gg の大会の管理者は運営の画面を開くと加わり、設定・状態は共有される', async () => {
+  const fake = fakeStartgg();
+  const base = fake.fetch;
+  let currentUser = 4242;
+  fake.fetch = async (url, init) => {
+    const b = init && init.body ? String(init.body) : '';
+    if (String(url).includes('/gql/') && /SpspReportUser/.test(b)) {
+      const v = JSON.parse(b).variables;
+      return new Response(JSON.stringify({ data: { user: v.id === '55' ? { id: 55, discriminator: 'bbbb2222', player: { gamerTag: 'Full55' } } : v.id === '66' ? { id: 66, discriminator: 'cccc3333', player: { gamerTag: 'R66' } } : null } }), { status: 200 });
+    }
+    // 2 人目の運営 (start.gg の大会の管理者 7777) のログイン
+    if (String(url).includes('/gql/') && /SpspClassAdmin\b/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } }), { status: 200 });
+    if (String(url).includes('/gql/') && /currentUser/.test(b) && !/tournaments/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser, slug: 'user/x', player: { gamerTag: 'TO' + currentUser } } } }), { status: 200 });
+    return base(url, init);
+  };
+  const e = await enabled(fake, { top_cut: null, classes_only: false, apply: 'approve' });
+  const TO = e.login.token;
+  await e.call({ action: 'report_manager_add', token: TO, code: e.code, uid: '55', role: 'full' });
+  const F = await e.tok(55);
+  assert.strictEqual((await e.call({ action: 'report_admin', token: F, code: e.code })).role, 'admin', '報告と設定 = 運営と同じ画面');
+  assert.strictEqual((await e.call({ action: 'report_settings', token: F, code: e.code, settings: { top_cut: 8, classes_only: false, apply: 'approve' } })).ok, true);
+  assert.strictEqual((await e.call({ action: 'report_manager_add', token: F, code: e.code, uid: '66' })).ok, true, '管理者の追加もできる');
+  assert.strictEqual((await e.call({ action: 'report_manager_remove', token: F, code: e.code, id: '55' })).error.code, 'bad_request', '自分は外せない');
+  // 役割を変える (同じ人を足し直す)
+  const ch = await e.call({ action: 'report_manager_add', token: TO, code: e.code, uid: '66', role: 'full' });
+  assert.deepStrictEqual(ch.managers.map((m) => [m.id, m.role]), [['55', 'full'], ['66', 'full']]);
+
+  // 2 人目の start.gg の運営 7777: 運営のログインをして、受付中のイベントを開くと加わる。設定は 1 人目のまま
+  const S = await e.tok(7777);
+  assert.strictEqual((await e.call({ action: 'report_admin', token: S, code: e.code })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_join', token: S, code: e.code })).error.code, 'no_grant', '運営のログインが要る');
+  currentUser = 7777;
+  e.tick(1000);
+  const l2 = await toLogin(e);
+  let j = await e.call({ action: 'report_join', token: l2.token, code: e.code });
+  assert.deepStrictEqual([j.ok, j.joined], [true, true], JSON.stringify(j));
+  const a2 = await e.call({ action: 'report_admin', token: l2.token, code: e.code });
+  assert.deepStrictEqual([a2.role, parseSettings(a2.report.settings).top_cut, parseSettings(a2.report.settings).apply], ['admin', 8, 'approve'], '設定は共有');
+  // 受付を始める画面から同じイベントを選んでも、設定は上書きしない (加わるだけ)
+  const en = await e.call({ action: 'report_enable', token: l2.token, event: 'https://www.start.gg/tournament/t/event/singles', settings: { top_cut: null, classes_only: false } });
+  assert.deepStrictEqual([en.ok, en.joined, en.report.code], [true, true, e.code]);
+  assert.strictEqual(parseSettings((await e.store.getReportEvent(e.code)).settings).top_cut, 8);
+  // start.gg の管理者でない人は加われない
+  currentUser = 8888;
+  e.tick(1000);
+  const l3 = await toLogin(e);
+  j = await e.call({ action: 'report_join', token: l3.token, code: e.code });
+  assert.strictEqual(j.error.code, 'not_admin');
 });

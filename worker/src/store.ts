@@ -227,6 +227,8 @@ export interface Store {
   updateReportEventToken(code: string, tokenEnc: string, tokenExpMs: number): Promise<void>;
   /** 運営の設定 (JSON) を書き換える。 */
   updateReportEventSettings(code: string, settings: string): Promise<void>;
+  /** 運営 (start.gg の大会の管理者で、受付を始めた・加わった人。カンマ区切り) を書き換える。 */
+  updateReportEventAdmins(code: string, admins: string): Promise<void>;
   /** 報告管理者 (JSON) を書き換える。 */
   updateReportEventManagers(code: string, managers: string): Promise<void>;
   /** その人の保存した設定 (新しい順)。 */

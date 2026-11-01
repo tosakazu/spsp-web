@@ -314,6 +314,10 @@ export class D1Store implements Store {
     await this.db.prepare('UPDATE report_events SET token_enc = ?, token_exp_ms = ? WHERE code = ?').bind(tokenEnc, tokenExpMs, code).run();
   }
 
+  async updateReportEventAdmins(code: string, admins: string): Promise<void> {
+    await this.db.prepare('UPDATE report_events SET admins = ? WHERE code = ?').bind(admins, code).run();
+  }
+
   async updateReportEventManagers(code: string, managers: string): Promise<void> {
     await this.db.prepare('UPDATE report_events SET managers = ? WHERE code = ?').bind(managers, code).run();
   }

@@ -40,7 +40,7 @@ import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
 import { managersOf, MANAGERS_MAX } from './report_logic.ts';
-import type { ReportManager } from './report_logic.ts';
+import type { ManagerRole, ReportManager } from './report_logic.ts';
 import { adminDecision, APPLY_DELAY_MS, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
@@ -89,10 +89,11 @@ function publicOf(ev: ReportEventRow, now: number) {
 
 const admins = (ev: ReportEventRow): string[] => ev.admins.split(',').filter(Boolean);
 
-/** その人の役割: admin = 運営 (受付を始めた人) / manager = 報告管理者 / null = どちらでもない */
+/** その人の役割: admin = 運営 (受付を始めた・加わった start.gg の運営と、結果と設定の管理者) / manager = 報告管理者 (結果だけ) / null = どちらでもない */
 export function roleOf(ev: ReportEventRow, uid: string): 'admin' | 'manager' | null {
   if (admins(ev).includes(uid)) return 'admin';
-  return managersOf(ev).some((m) => m.id === uid) ? 'manager' : null;
+  const m = managersOf(ev).find((x) => x.id === uid);
+  return m ? (m.role === 'full' ? 'admin' : 'manager') : null;
 }
 const addAdmin = (list: string, uid: string): string => Array.from(new Set([...list.split(',').filter(Boolean), uid])).slice(-20).join(',');
 
@@ -233,11 +234,14 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
     name, slug: typeof evRaw.slug === 'string' ? evRaw.slug : '', admins: addAdmin(old ? old.admins : '', user.id),
     token_enc: await sealJson(cfg, sealed), token_exp_ms: sealed.exp, status: 'active', created_ms: old ? old.created_ms : now,
     expires_ms: reportExpiry(Number(t.endAt) || null, now, cfg.tsOffsetMin),
-    settings: JSON.stringify(req.settings !== undefined ? parseSettings(req.settings) : parseSettings(old ? old.settings : '{}')),
+    // 受付中 (ほかの運営が始めた等) なら設定は今のまま (同じ受付に運営として加わるだけ。設定・試合の状態は共有)
+    settings: old && old.status === 'active' && old.token_enc && old.expires_ms >= now ? old.settings
+      : JSON.stringify(req.settings !== undefined ? parseSettings(req.settings) : parseSettings(old ? old.settings : '{}')),
   };
+  const joined = !!(old && old.status === 'active' && old.token_enc && old.expires_ms >= now);
   await store.upsertReportEvent(row);
   const saved = (await store.getReportEventByTarget('startgg', String(eventId))) || row;
-  return ok({ report: publicOf(saved, now) });
+  return ok({ report: publicOf(saved, now), joined });
 }
 
 const tokenOk = (v: unknown, max: number): v is string => typeof v === 'string' && !!v && v.length <= max && !/\s/.test(v);
@@ -676,7 +680,7 @@ export async function handleReportStop(cfg: Config, store: Store, req: Record<st
   if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
   const ev = await store.getReportEvent(req.code);
   if (!ev) return err('not_found', '報告ページの URL が正しくありません。', 'no_event');
-  if (!admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが止められます。', 'not_admin');
+  if (roleOf(ev, sess.id) !== 'admin') return err('not_admin', 'この受付の運営だけが止められます。', 'not_admin');
   await store.stopReportEvent(ev.code);
   return ok({ code: ev.code });
 }
@@ -724,7 +728,7 @@ export async function handleReportSettings(cfg: Config, store: Store, req: Recor
   if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
   const ev = await store.getReportEvent(req.code);
   if (!ev) return err('not_found', '報告ページの URL が正しくありません。', 'no_event');
-  if (!admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが変えられます。', 'not_admin');
+  if (roleOf(ev, sess.id) !== 'admin') return err('not_admin', 'この受付の運営だけが変えられます。', 'not_admin');
   const old = parseSettings(ev.settings);
   const next = { ...parseSettings(req.settings), ...(old.double ? { double: true } : {}) };
   if (ev.kind === 'challonge') next.classes_only = false;
@@ -781,22 +785,41 @@ export function discOf(v: unknown): string | null {
   return m ? m[1].toLowerCase() : null;
 }
 
-/** action: "report_manager_add" — { token, code, uid } (SPSP の選手から) か { token, code, discriminator } (SPSP にデータの無い人)。start.gg で確かめて足す */
+/** start.gg のユーザーを読む ({ uid } か { discriminator })。足す前の確認と追加で使う */
+async function lookupUser(fetchFn: FetchFn, token: string, req: Record<string, unknown>): Promise<{ ok: true; m: { id: string; name: string; disc: string } } | { ok: false; res: HandlerResult }> {
+  const uid = typeof req.uid === 'string' || typeof req.uid === 'number' ? String(req.uid) : '';
+  const disc = req.discriminator !== undefined ? discOf(req.discriminator) : null;
+  if (!/^\d{1,12}$/.test(uid) && !disc) return { ok: false, res: err('bad_request', 'ユーザーを選ぶか、start.gg の discriminator (8 文字) を入れてください。', 'bad:user') };
+  const q = await startggGql(fetchFn, token, USER_QUERY, disc ? { slug: 'user/' + disc } : { id: uid });
+  if (!q.ok) return { ok: false, res: err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'user:' + q.note) };
+  const u = q.json.data ? q.json.data.user as { id?: unknown; discriminator?: unknown; player?: { gamerTag?: unknown } | null } | null : null;
+  if (!u || u.id === undefined || u.id === null) return { ok: false, res: err('not_found', 'start.gg にそのユーザーが見つかりません。discriminator を確かめてください。', 'user_not_found') };
+  return { ok: true, m: { id: String(u.id), name: String((u.player && u.player.gamerTag) || '').slice(0, 80), disc: String(u.discriminator || disc || '').slice(0, 20) } };
+}
+
+/** action: "report_manager_lookup" — 足す前の確認: start.gg の名前と、今の役割 (admin / manager / null) を返す */
+export async function handleReportManagerLookup(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now, true);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('not_allowed', '管理者の追加は start.gg の受付だけで使えます。', 'not_startgg');
+  const l = await lookupUser(fetchFn, o.token, req);
+  if (!l.ok) return l.res;
+  return ok({ user: l.m, current: admins(o.ev).includes(l.m.id) ? 'startgg_admin' : (managersOf(o.ev).find((x) => x.id === l.m.id) || { role: null }).role });
+}
+
+/** action: "report_manager_add" — { token, code, uid | discriminator, role: 'report' (既定) | 'full' }。start.gg で確かめて足す (同じ人なら役割を変える) */
 export async function handleReportManagerAdd(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const o = await adminOpen(cfg, store, fetchFn, req, now, true);
   if (!o.ok) return o.res;
-  if (o.ev.kind !== 'startgg') return err('not_allowed', '報告管理者は start.gg の受付だけで使えます。', 'not_startgg');
-  const uid = typeof req.uid === 'string' || typeof req.uid === 'number' ? String(req.uid) : '';
-  const disc = req.discriminator !== undefined ? discOf(req.discriminator) : null;
-  if (!/^\d{1,12}$/.test(uid) && !disc) return err('bad_request', 'ユーザーを選ぶか、start.gg の discriminator (8 文字) を入れてください。', 'bad:user');
-  const q = await startggGql(fetchFn, o.token, USER_QUERY, disc ? { slug: 'user/' + disc } : { id: uid });
-  if (!q.ok) return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'user:' + q.note);
-  const u = q.json.data ? q.json.data.user as { id?: unknown; discriminator?: unknown; player?: { gamerTag?: unknown } | null } | null : null;
-  if (!u || u.id === undefined || u.id === null) return err('not_found', 'start.gg にそのユーザーが見つかりません。', 'user_not_found');
-  const m: ReportManager = { id: String(u.id), name: String((u.player && u.player.gamerTag) || '').slice(0, 80), disc: String(u.discriminator || disc || '').slice(0, 20) };
-  if (admins(o.ev).includes(m.id)) return err('bad_request', 'その人はこの受付の運営です (足さなくても使えます)。', 'already_admin');
+  if (o.ev.kind !== 'startgg') return err('not_allowed', '管理者の追加は start.gg の受付だけで使えます。', 'not_startgg');
+  const l = await lookupUser(fetchFn, o.token, req);
+  if (!l.ok) return l.res;
+  const role: ManagerRole = req.role === 'full' ? 'full' : 'report';
+  const m: ReportManager = { ...l.m, role };
+  if (admins(o.ev).includes(m.id)) return err('bad_request', 'その人は start.gg の大会の運営として、この受付に加わっています (足さなくても全部使えます)。', 'already_admin');
+  if (m.id === o.uid) return err('bad_request', '自分は足せません。', 'self');
   const list = managersOf(o.ev).filter((x) => x.id !== m.id);
-  if (list.length >= MANAGERS_MAX) return err('rate_limited', '報告管理者は ' + MANAGERS_MAX + ' 人までです。', 'managers_max');
+  if (list.length >= MANAGERS_MAX) return err('rate_limited', '管理者は ' + MANAGERS_MAX + ' 人までです。', 'managers_max');
   list.push(m);
   await store.updateReportEventManagers(o.ev.code, JSON.stringify(list));
   return ok({ managers: list, added: m });
@@ -809,9 +832,34 @@ export async function handleReportManagerRemove(cfg: Config, store: Store, req: 
   if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
   const ev = await store.getReportEvent(req.code);
   if (!ev) return err('not_found', '報告ページの URL が正しくありません。', 'no_event');
-  if (!admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_admin');
+  if (roleOf(ev, sess.id) !== 'admin') return err('not_admin', 'この受付の運営だけが使えます。', 'not_admin');
   const id = String(req.id || '');
+  if (id === sess.id) return err('bad_request', '自分は外せません。', 'self');
   const list = managersOf(ev).filter((x) => x.id !== id);
   await store.updateReportEventManagers(ev.code, JSON.stringify(list));
   return ok({ managers: list });
+}
+
+/** action: "report_join" — { token, code } start.gg でこの大会の運営 (管理者) なら、この受付に運営として加わる (設定・試合の状態はそのまま共有)。
+ *  運営のログイン (report_login、tournament.reporter) が要る。受付のトークンは替えない */
+export async function handleReportJoin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const o = await openEvent(cfg, store, fetchFn, req.code, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg' || o.ev.event_id === null) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_startgg');
+  if (roleOf(o.ev, sess.id) === 'admin') return ok({ joined: false, role: 'admin' });
+  const g = await grantOf(cfg, store, fetchFn, sess.id, now);
+  if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
+  const adm = await checkStartggAdmin(fetchFn, g.at, o.ev.event_id);
+  if (!adm.ok) {
+    if (adm.code === 'not_admin') return err('not_admin', 'このアカウントは、この大会の start.gg の管理者ではありません。運営に「管理者の追加」で足してもらってください。', adm.note);
+    return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', adm.note);
+  }
+  if (adm.userId !== sess.id) return err('not_admin', 'ログイン中のアカウントと運営のログインが違います。もう一度 start.gg でログインしてください。', 'user_mismatch');
+  await store.updateReportEventAdmins(o.ev.code, addAdmin(o.ev.admins, sess.id));
+  // 足した管理者 (結果だけ) が start.gg の運営でもあったら、運営のほうに寄せる
+  const rest = managersOf(o.ev).filter((x) => x.id !== sess.id);
+  if (rest.length !== managersOf(o.ev).length) await store.updateReportEventManagers(o.ev.code, JSON.stringify(rest));
+  return ok({ joined: true, role: 'admin' });
 }

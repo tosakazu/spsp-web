@@ -29,7 +29,7 @@ import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefre
 import { handleToolLog } from './tool_log.ts';
 import {
   handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
-  handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
+  handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
@@ -154,6 +154,10 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleReportPushUnsubscribe(ctx.cfg, ctx.store, r, now); break;
       case 'report_push_test':
         res = await handleReportPushTest(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manager_lookup':
+        return (await handleReportManagerLookup(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_join':
+        res = await handleReportJoin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_manager_add':
         res = await handleReportManagerAdd(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_manager_remove':
@@ -200,7 +204,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
   const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
-    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove'];
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

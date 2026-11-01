@@ -209,6 +209,7 @@ export class MemStore {
     this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.token_enc = tokenEnc; x.token_exp_ms = tokenExpMs; }
   }
 
+  async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
   async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
 
