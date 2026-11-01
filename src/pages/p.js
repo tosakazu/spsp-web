@@ -22,6 +22,7 @@ import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
+import SpspReportNotice from '../../site/js/report_notice.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import SpspLiveBrowser from '../../site/js/live_browser.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
@@ -1466,6 +1467,8 @@ function render() {
   }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
+  // 自分のページなら、参加中の大会の結果報告ページへの入口 (受付中のものだけ。js/report_notice.js)
+  SpspLogin.verify().then(() => { if (SpspLogin.isSelf(UID) || SpspReportNotice.isDemo()) SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {}); });
   buildRivalsSection();
 }
 

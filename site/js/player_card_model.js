@@ -267,24 +267,43 @@ export function buildCardModel(data, settings, titleText) {
   };
 }
 
+/** SPSP にデータが無い人 (初参加など) のカード: 既定の見た目で名前だけ、実績・総合評価は NO DATA (結果報告の VS、2026-10-31) @param {string} name */
+export function noDataCardModel(name) {
+  return {
+    name: SPSPFormat.stripTeamTag(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
+    color: DEFAULT_SETTINGS.color, achMode: /** @type {'auto'} */ ('auto'), achievements: [], latest: null, totalTournaments: 0, totalMatches: 0,
+    labels: {
+      evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: i18n('player.card.latest'),
+      overall: i18n('ranking.tab.ensemble'), national: i18n('common.national'), equivalent: i18n('player.equivalent'), noAch: 'NO DATA',
+    },
+  };
+}
+
 // ── データの読み込み (編集ページ用) ──
+/** @type {Promise<any> | null} */
+let SHARED = null;
+/** 選手によらないファイル (meta・海外・キャラ・県・サブ順位・geo)。1 ページで何枚描いても 1 回だけ読む (結果報告のページは先に読んでおく) */
+export function loadCardShared() {
+  if (!SHARED) {
+    const base = /** @type {string} */ (S.data);
+    const json = (/** @type {string} */ u) => fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    SHARED = Promise.all([json(base + 'meta.json'), json(base + 'data/overseas.json'), json(base + 'data/character_index.json'),
+      json(SPSPCharEmoji.url()), json(base + 'data/player_prefectures.json'), json(base + 'data/player_subranks.json'),
+      SPSPGeo.loadGeo(base).catch(() => null)])
+      .then(([meta, overseas, charIdx, charEmoji, prefs, subranks]) => {
+        if (!meta) SHARED = null;   // 読めなかったら次に描くときに読み直す
+        return { meta, overseas, charIdx, charEmoji, prefs, subranks };
+      });
+  }
+  return SHARED;
+}
 /** @param {number} uid @returns {Promise<CardData | null>} 選手がいなければ null */
 export async function loadCardData(uid) {
   const base = /** @type {string} */ (S.data);
-  const json = (/** @type {Response | null} */ r) => (r && r.ok ? r.json().catch(() => null) : null);
-  const [metaRes, player, overseasRes, charIdxRes, charEmojiRes, prefRes, , subrankRes] = await Promise.all([
-    fetch(base + 'meta.json'),
-    SPSPPlayerData.load(base, uid),
-    fetch(base + 'data/overseas.json').catch(() => null),
-    fetch(base + 'data/character_index.json').catch(() => null),
-    fetch(SPSPCharEmoji.url()).catch(() => null),
-    fetch(base + 'data/player_prefectures.json').catch(() => null),
-    SPSPGeo.loadGeo(base).catch(() => null),
-    fetch(base + 'data/player_subranks.json').catch(() => null),
-  ]);
+  const sharedP = loadCardShared();
+  const [player, shared] = await Promise.all([SPSPPlayerData.load(base, uid), sharedP]);
   if (!player) return null;
-  const [meta, overseas, charIdx, charEmoji, prefs, subranks] = await Promise.all(
-    [metaRes, overseasRes, charIdxRes, charEmojiRes, prefRes, subrankRes].map(json));
+  const { meta, overseas, charIdx, charEmoji, prefs, subranks } = shared;
   const p = /** @type {any} */ (player);
   return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji };
 }
@@ -356,5 +375,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, titleLang, cardAchievements, loadCardData, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };

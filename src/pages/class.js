@@ -806,6 +806,7 @@ async function loadMine() {
       <div class="cb-mine-meta">${escapeHtml(fmt(it.created_at))} · ${escapeHtml(i18n('class.mine.entrants', { n: it.entrant_count }))} · ${escapeHtml(stateText(it))}</div>
     </div>
     <button type="button" class="cb-sub-btn cb-copy-btn" data-copy="${escapeHtml(String(it.challonge_url || ''))}">${escapeHtml(i18n('class.copy'))}</button>
+    <button type="button" class="cb-sub-btn" data-report="${Number(it.id)}">${escapeHtml(i18n('class.report'))}</button>
     <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
   </li>`).join('');
   box.hidden = false;
@@ -845,6 +846,24 @@ function mineStatus(msg, kind = '') {
 $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) => {
   const cp = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-copy]'));
   if (cp) { copyText(String(cp.dataset.copy || ''), cp); return; }
+  // 選手の結果報告の受付 (report/、Challonge のトークンは Worker が暗号化して預かる)。設定は報告ページの運営の画面で変える
+  const rb = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-report]'));
+  if (rb) {
+    const chToken = challongeToken();
+    if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
+    if (!confirm(i18n('class.report_confirm'))) return;
+    let exp = null;
+    try { exp = (JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null') || {}).exp || null; } catch (e2) { exp = null; }
+    rb.disabled = true;
+    const r = await SpspLogin.api({ action: 'report_enable_class', startgg_token: sggToken(), challonge_token: chToken, challonge_exp: exp, class_id: Number(rb.dataset.report) });
+    rb.disabled = false;
+    if (r && r.ok && r.report) {
+      const S = /** @type {any} */ (window).SPSP || {};
+      location.href = (S.langRoot || '') + (typeof S.pageHref === 'function' ? S.pageHref('report/index.html') : 'report/') + '?c=' + encodeURIComponent(r.report.code) + '&admin=1';
+      return;
+    }
+    return mineStatus(i18n('class.err.report', { message: (r && r.error && r.error.message) || 'unknown' }), 'error');
+  }
   const b = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-id]'));
   if (!b || b.disabled) return;
   const chToken = challongeToken();

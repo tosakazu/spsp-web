@@ -88,6 +88,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     if (/\/math(\.html)?$/.test(p))     return 'math';
     if (/\/seed-upload\//.test(p))   return 'seed-upload';
     if (/\/class\//.test(p))         return 'class';
+    if (/\/report\//.test(p))        return 'report';
     if (/\/dupes\//.test(p))         return 'dupes';
     if (/\/seed\//.test(p))          return 'seed';
     if (/\/priority\//.test(p))      return 'priority';
@@ -108,7 +109,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
   }
   const cur = currentPage();
   const isRanking = cur === 'ranking' || cur === 'local-series' || cur === 'local-ranking' || cur === 'char-list' || cur === 'char-ranking' || cur === 'pref-list' || cur === 'pref-ranking' || cur === 'events' || cur === 'sim';
-  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class' || cur === 'dupes';
+  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class' || cur === 'dupes' || cur === 'report';
   const isMethod  = ['overview', 'details', 'eval', 'math', 'blog'].includes(cur);
 
   // 言語の切替 (日本語 ⇄ English)。同じ URL に ?lang=<言語> を付けたもの (js/lang_boot.js が読んで覚える。既定言語へ戻すときも明示する)。
@@ -163,6 +164,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
           <a href="${prefix}priority/"${cur === 'priority' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.priority')}</a>
           <a href="${prefix}class/"${cur === 'class' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.class')}</a>
           <a href="${prefix}dupes/"${cur === 'dupes' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.dupes')}</a>
+          <a href="${prefix}report/"${cur === 'report' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.report')}</a>
         </div>
       </div>
       <div class="nav-dropdown${isMethod ? ' has-current' : ''}">

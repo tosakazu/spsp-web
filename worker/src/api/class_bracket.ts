@@ -116,10 +116,10 @@ export type AdminCheck =
   | { ok: true; userId: string; tournamentId: number }
   | { ok: false; code: 'not_admin' | 'startgg_error' | 'bad_request'; note: string };
 
-type GqlResult = { ok: true; json: { data?: Record<string, unknown> | null; errors?: unknown[] } } | { ok: false; note: string };
+export type GqlResult = { ok: true; json: { data?: Record<string, unknown> | null; errors?: unknown[] } } | { ok: false; note: string };
 
 /** start.gg GraphQL を 1 回呼ぶ。キーは Authorization ヘッダにだけ入れる。 */
-async function startggGql(fetchFn: FetchFn, token: string, query: string, variables: Record<string, unknown>): Promise<GqlResult> {
+export async function startggGql(fetchFn: FetchFn, token: string, query: string, variables: Record<string, unknown>): Promise<GqlResult> {
   let res: Response;
   try {
     res = await fetchFn(GQL_URL, {
@@ -310,7 +310,7 @@ export async function handleClassDone(cfg: Config, store: Store, req: Record<str
 const CURRENT_USER_QUERY = 'query SpspCurrentUser { currentUser { id } }';
 
 /** start.gg のキーの持ち主のユーザー ID。 */
-async function startggCurrentUser(fetchFn: FetchFn, token: string): Promise<{ ok: true; userId: string } | { ok: false; note: string }> {
+export async function startggCurrentUser(fetchFn: FetchFn, token: string): Promise<{ ok: true; userId: string } | { ok: false; note: string }> {
   const r = await startggGql(fetchFn, token, CURRENT_USER_QUERY, {});
   if (!r.ok) return { ok: false, note: r.note };
   const cu = r.json && r.json.data ? (r.json.data.currentUser as { id?: unknown } | null) : null;

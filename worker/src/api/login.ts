@@ -1,6 +1,6 @@
 /** action: "login" — code を検証してセッショントークンを返す (gas/session.gs handleLogin_)。 */
 import type { Config } from '../config.ts';
-import { AUTHORIZE_URL, MANAGER_SCOPE, requireClientId } from '../config.ts';
+import { AUTHORIZE_URL, MANAGER_SCOPE, REPORTER_SCOPE, requireClientId } from '../config.ts';
 import type { Store } from '../store.ts';
 import type { FetchFn } from './oauth.ts';
 import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
@@ -14,8 +14,8 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   }
   // 署名 state の検証 (ここで単回使用にする)。
   const st0 = await checkStateToken(cfg, store, req.state, true, now);
-  // Challonge 用 (f='challonge')・大会運営用 (f='manager'、scope が違う) の state はここでは使わせない
-  const st = 'payload' in st0 && (st0.payload.f === 'challonge' || st0.payload.f === 'manager') ? { reason: 'wrong_flow' as const } : st0;
+  // Challonge 用 (f='challonge')・大会運営用 (f='manager' / 'reporter'、scope が違う) の state はここでは使わせない
+  const st = 'payload' in st0 && (st0.payload.f === 'challonge' || st0.payload.f === 'manager' || st0.payload.f === 'reporter') ? { reason: 'wrong_flow' as const } : st0;
   if ('reason' in st) {
     return err('state_invalid',
       '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
@@ -39,7 +39,7 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
 }
 
 /** ログインの記録 (ユーザー ID・時刻・どのログインか だけ。トークンなどは入れない)。記録に失敗してもログインは止めない */
-async function logLogin(store: Store, userId: string, flow: string, now: number): Promise<void> {
+export async function logLogin(store: Store, userId: string, flow: string, now: number): Promise<void> {
   try { await store.insertLogin({ user_id: String(userId), ts_ms: now, flow }); } catch (e) {
     console.error('login log failed: ' + (e instanceof Error ? e.message : String(e)));
   }
@@ -67,13 +67,13 @@ export async function handleStartggRefresh(cfg: Config, fetchFn: FetchFn, req: R
 const MSG_MANAGER_STATE = '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
   + '同じリンクを二度開いた可能性があります。元のページからやり直してください。';
 
-export async function handleManagerBegin(cfg: Config, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
+export async function handleManagerBegin(cfg: Config, req: Record<string, unknown>, now: number = Date.now(), flow: 'manager' | 'reporter' = 'manager'): Promise<HandlerResult> {
   const nonce = String(req && req.nonce ? req.nonce : '');
   const ret = String(req && req.returnPath ? req.returnPath : '');
   if (nonce.length > 128 || ret.length > 512) return err('bad_request', 'パラメータが長すぎます。');
-  const state = await signState(cfg, nonce, ret, 'manager', now);
+  const state = await signState(cfg, nonce, ret, flow, now);
   const q = new URLSearchParams({
-    response_type: 'code', client_id: requireClientId(cfg), scope: MANAGER_SCOPE, redirect_uri: cfg.redirectUri, state,
+    response_type: 'code', client_id: requireClientId(cfg), scope: flow === 'reporter' ? REPORTER_SCOPE : MANAGER_SCOPE, redirect_uri: cfg.redirectUri, state,
   });
   return ok({ url: AUTHORIZE_URL + '?' + q.toString(), ttlMs: cfg.stateTtlMs });
 }
