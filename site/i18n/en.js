@@ -2111,6 +2111,7 @@ window.SPSP_I18N.en = {
   'report.preset.loaded_setup2': 'Loaded "{name}".',
   'report.set.top_none': 'the end',
   'report.set.top_n': 'before top {n}',
+  'report.set.entrants': '{n} entrants',
   'report.set.classes_only': 'Players report only lower-class (B class etc.) matches',
   'report.set.apply': 'Applying reports',
   'report.set.apply_auto': 'Apply immediately',

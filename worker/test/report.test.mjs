@@ -217,7 +217,7 @@ function fakeStartgg() {
     if (name === 'SpspClassAdmin') return j({ currentUser: { id: 4242 }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: st.admins } } });
     if (name === 'SpspClassAdminTours') return j({ currentUser: { tournaments: { nodes: [] } } });
     if (name === 'SpspReportSet') return j({ set: String(variables.id) === String(st.set.id) ? st.set : null });
-    if (name === 'SpspReportPhases') return j({ event: { phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ id: 700, rounds: [{ number: 1, bestOf: 3 }, { number: -1, bestOf: null }] }] } }] } });
+    if (name === 'SpspReportPhases') return j({ event: { numEntrants: 40, phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ id: 700, rounds: [{ number: 1, bestOf: 3 }, { number: -1, bestOf: null }] }] } }] } });
     if (name === 'SpspReportGroupSets') return j({ phaseGroup: { sets: { pageInfo: { totalPages: 1 }, nodes: [{ round: 1, fullRoundText: 'Winners Round 1' }] } } });
     if (name === 'SpspReportNext') return j({ event: { sets: { nodes: st.next } } });
     if (name === 'SpspReportBracketSet' || name === 'SpspUpdateSet') {
@@ -265,6 +265,7 @@ test('受付の前: 運営のログインのトークンでイベントのフェ
   const l = await toLogin(e);
   const ph = await e.call({ action: 'report_phases', token: l.token, event: 'https://www.start.gg/tournament/t/event/singles' });
   assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1', bestOf: 3 }, { n: -1, label: null, bestOf: null }] }]);
+  assert.strictEqual(ph.entrants, 40, '参加人数 (トップ N の候補を絞る)');
   assert.strictEqual((await e.call({ action: 'report_phases', token: l.token, event: 'x' })).error.code, 'bad_request');
   assert.strictEqual((await e.call({ action: 'report_phases', token: await e.tok(11), event: 'tournament/t/event/singles' })).error.code, 'no_grant');
 });
@@ -410,6 +411,7 @@ test('運営: 一覧・直す (その後の選手の報告では動かない)・
   // 何先: フェーズの一覧・設定するとスコアを確かめる
   const ph = await e.call({ action: 'report_phases', token: TO, code: e.code });
   assert.deepStrictEqual(ph.phases, [{ key: '77', name: 'Pools', rounds: [{ n: 1, label: 'Winners Round 1', bestOf: 3 }, { n: -1, label: null, bestOf: null }] }]);
+  assert.strictEqual(ph.entrants, 40, '参加人数 (トップ N の候補を絞る)');
   assert.strictEqual((await e.call({ action: 'report_phases', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
   const ft1 = { 77: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
   assert.deepStrictEqual((await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, ft: ft1 } })).settings.ft, ft1);

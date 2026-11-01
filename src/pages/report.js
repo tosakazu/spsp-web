@@ -48,7 +48,7 @@ function animFxHtml(anim) {
 }
 const POLL_MS = 15000;
 const ULT = 1386;   // start.gg の videogame (スマブラ SP)
-const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];   // worker/src/api/report_logic.ts と同じ
+const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768];   // worker/src/api/report_logic.ts と同じ
 
 let INFO = null;      // report_info の report
 let VIEW = null;      // report_view の応答
@@ -1037,7 +1037,8 @@ function settingsFormHtml(s, kind) {
     <label>${escapeHtml(i18n('report.set.opens'))}
       <input type="datetime-local" data-set-open value="${escapeHtml(toLocalInput(s && s.opens_ms))}"></label>
     <label>${escapeHtml(i18n('report.set.top_cut'))}
-      <select data-set-top><option value="">${escapeHtml(i18n('report.set.top_none'))}</option>${TOP_CUTS.map((n) => `<option value="${n}"${n === tc ? ' selected' : ''}>${escapeHtml(i18n('report.set.top_n', { n }))}</option>`).join('')}</select></label>
+      <select data-set-top>${topOptions(tc, null)}</select></label>
+      <span class="rp-muted rp-top-note" data-set-top-note hidden></span>
     ${kind === 'challonge' ? '' : `<label class="rp-check"><input type="checkbox" data-set-cls${s && s.classes_only ? ' checked' : ''}> ${escapeHtml(i18n('report.set.classes_only'))}</label>`}
     <fieldset class="rp-apply"><legend class="rp-h-help">${escapeHtml(i18n('report.set.apply'))}<button type="button" class="rp-help" aria-expanded="false" aria-label="${escapeHtml(i18n('report.help'))}">?</button></legend>
       <dl class="rp-muted rp-help-text rp-apply-help" hidden>${APPLY_MODES.map((k) => `<dt>${escapeHtml(i18n('report.set.apply_' + k))}</dt><dd>${escapeHtml(i18n('report.set.apply_help_' + k))}</dd>`).join('')}</dl>
@@ -1052,6 +1053,19 @@ const APPLY_MODES = ['auto', 'delay1', 'delay3', 'delay', 'both', 'approve'];
 /** 待ってから取り込むときの分 (受付の設定 apply = delay1 / delay3 / delay) */
 const delayMin = () => ({ delay1: 1, delay3: 3 }[INFO && INFO.settings ? INFO.settings.apply : ''] || 5);
 const NOTIFY_LEVELS = ['off', 'action', 'all'];
+/** トップ N の選択肢。entrants (参加人数) が分かれば、それより小さいものだけ (今の値は残す) */
+function topOptions(tc, entrants) {
+  const ns = TOP_CUTS.filter((n) => !entrants || n < entrants || n === tc);
+  return `<option value="">${escapeHtml(i18n('report.set.top_none'))}</option>` + ns.map((n) => `<option value="${n}"${n === tc ? ' selected' : ''}>${escapeHtml(i18n('report.set.top_n', { n }))}</option>`).join('');
+}
+/** 参加人数が分かったら、トップ N の選択肢を絞って人数を出す */
+function setEntrants(root, entrants) {
+  const sel = root.querySelector('[data-set-top]'); const note = root.querySelector('[data-set-top-note]');
+  if (!sel) return;
+  const cur = sel.value ? Number(sel.value) : null;
+  sel.innerHTML = topOptions(cur, entrants);
+  if (note) { note.hidden = !entrants; note.textContent = entrants ? i18n('report.set.entrants', { n: entrants }) : ''; }
+}
 function readSettings(root) {
   const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]'); const op = root.querySelector('[data-set-open]');
   const out = { top_cut: top && top.value ? Number(top.value) : null, classes_only: !!(cls && cls.checked) };
@@ -1422,7 +1436,7 @@ async function renderAdmin() {
     wireFt(box);
   };
   const phasesP = (async () => {
-    if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; }
+    if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; if (p && p.ok) setEntrants(root, p.entrants || null); }
     drawFt(curFt);
   })();
   const formFt = () => (PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt);
@@ -1835,6 +1849,8 @@ async function renderSetup() {
   const ftBox = $('rp-ft-set');
   const startOf = new Map();
   for (const t of tours) for (const e of t.events || []) startOf.set(e.slug || String(e.id), e.startAt || t.startAt || null);
+  const entrantsOf = new Map();
+  for (const t of tours) for (const e of t.events || []) if (e.entrants) entrantsOf.set(e.slug || String(e.id), e.entrants);
   const setOpen = (sec) => { const op = root.querySelector('[data-set-open]'); if (op) op.value = sec ? toLocalInput(sec * 1000) : ''; };
   const drawFt = (ft) => {
     ftBox.innerHTML = PHASES.length ? PHASES.map((ph) => ftPhaseHtml(ph, ft && ft[ph.key])).join('') : `<p class="rp-muted">${escapeHtml(i18n('report.ft.no_phases'))}</p>`;
@@ -1852,6 +1868,7 @@ async function renderSetup() {
     if (!p || !p.ok) { PHASES = null; ftBox.innerHTML = `<p class="rp-err">${escapeHtml(errText(p))}</p>`; return; }
     PHASES = p.phases || [];
     if (!startOf.has(ev)) { startOf.set(ev, p.startAt || null); setOpen(p.startAt); }
+    setEntrants(root, entrantsOf.get(ev) || p.entrants || null);
     drawFt(presetFt().ft);
   };
   for (const x of root.querySelectorAll('input[name="rp-ev"]')) {
@@ -2075,7 +2092,7 @@ async function demoApi(body) {
     return { ok: true, managers: DEMO_MGRS, added: m };
   }
   if (body.action === 'report_manager_remove') { DEMO_MGRS = DEMO_MGRS.filter((x) => x.id !== String(body.id)); return { ok: true, managers: DEMO_MGRS }; }
-  if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES };
+  if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES, entrants: 128 };
   // 保存した設定 (見本はこの画面の中だけ)
   if (body.action === 'report_presets') return { ok: true, presets: DEMO_PRESETS };
   if (body.action === 'report_preset_save') { DEMO_PRESETS = [{ name: body.name, settings: body.settings }, ...DEMO_PRESETS.filter((p) => p.name !== body.name)]; return { ok: true, presets: DEMO_PRESETS }; }

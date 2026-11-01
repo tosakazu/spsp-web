@@ -68,7 +68,8 @@ export const NOTIFY_LEVELS: NotifyLevel[] = ['off', 'action', 'all'];
 /** 運営の設定 (report_events.settings) */
 /** opens_ms = 選手が報告できるようになる時刻 (無ければ受付を始めたときから、2026-10-30) */
 export interface ReportSettings { top_cut: number | null; classes_only: boolean; double?: boolean; ft?: Record<string, FtRule>; opens_ms?: number; apply?: ApplyMode; notify?: NotifyLevel }
-export const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
+/** トップ N の候補 (start.gg の順位の区切り)。画面は大会の参加人数より小さいものだけ出す (2026-11-01) */
+export const TOP_CUTS = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768];
 
 function ftNum(v: unknown): number | null {
   const n = Number(v);

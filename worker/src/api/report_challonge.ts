@@ -183,7 +183,7 @@ export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, 
       if (!r.ok) return { ok: false, note: r.note };
       const ns = [...new Set(r.data.matches.map((x) => x.round).filter((n): n is number => n !== null && n !== 0))];
       ns.sort((a, b) => (a > 0) === (b > 0) ? Math.abs(a) - Math.abs(b) : b - a);
-      return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: cRoundLabel(r.data, n, double), bestOf: null })) }] };
+      return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: cRoundLabel(r.data, n, double), bestOf: null })) }], entrants: r.data.participants.size || null };
     },
     async readSet(setId) {
       const r = await readChallonge(fetchFn, token, tid);
