@@ -571,3 +571,9 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-a2hs p { margin: 0 0 6px; }
 .rp-a2hs ol { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
 .rp-a2hs-ic { display: inline-flex; vertical-align: -3px; color: #2563eb; }
+/* 報告の取り込み: 説明は「?」で (選択肢は名前だけ) */
+.rp-apply legend.rp-h-help { display: flex; align-items: center; gap: 6px; }
+.rp-apply-help { margin: 0 0 4px; font-size: 11px; line-height: 1.5; }
+.rp-apply-help dt { font-weight: 700; color: #374151; margin-top: 4px; }
+.rp-apply-help dd { margin: 0; }
+.rp-settings .rp-apply label.rp-radio { padding: 6px 10px; align-items: center; }
