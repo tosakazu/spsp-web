@@ -31,6 +31,8 @@ const SERVER_MS = 60 * 1000;    // ブラウザで読み直しているときに
 const opened = new Set();
 const { compactBracketLabel, placementToW2W } = SPSPMatch;
 const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
+/** 最後に描いた中身 (描き直しが要るか) @type {WeakMap<object, string>} */
+const lastHtml = new WeakMap();
 /** 最後に描いた予想 (event_id → 予想)。ボタンを押したときに使う @type {Map<string, any>} */
 const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
@@ -327,7 +329,11 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
-  el.innerHTML = cards.join('');
+  // 中身が同じなら描き直さない (15 秒ごとに描き直すと、その間に押したカードの開け閉めが効かないことがある)
+  const html = cards.join('');
+  if (lastHtml.get(el) === html) return cards.length;
+  lastHtml.set(el, html);
+  el.innerHTML = html;
   // 開いている部門の全国順位の変化は、読み直しても新しい予想で出し直す
   if (el.querySelectorAll) el.querySelectorAll('.live-group.expanded .live-rank').forEach(b => fillRank(/** @type {HTMLElement} */ (b), /** @type {HTMLElement} */ (b).dataset.eid || '', opts));
   return cards.length;
