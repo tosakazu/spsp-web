@@ -200,15 +200,16 @@ export class MemStore {
   async upsertReportEvent(row) {
     this._rep();
     const i = this.reportEvents.findIndex((x) => x.kind === row.kind && x.target_id === row.target_id);
-    if (i < 0) { this.reportEvents.push({ ...row }); return; }
+    if (i < 0) { this.reportEvents.push({ managers: '[]', ...row }); return; }
     const old = this.reportEvents[i];
-    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms };
+    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms, managers: old.managers || '[]' };
   }
 
   async updateReportEventToken(code, tokenEnc, tokenExpMs) {
     this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.token_enc = tokenEnc; x.token_exp_ms = tokenExpMs; }
   }
 
+  async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
   async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
 
   async listReportPresets(userId) {

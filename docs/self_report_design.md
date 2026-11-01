@@ -31,7 +31,7 @@
 - この画面のプレイヤーカードのリンク (地域・キャラ・大会) は押せない (試合の画面から離れないように)。
 - 報告の取り込み方 (2026-11-01、受付の設定 `apply`): `auto` = すぐ (既定) / `delay` = 5 分待ってから (その間に相手の違う報告 → 食い違い、運営の「止める」→ review/hold、運営の採用・直す・取り消し → それに従う。相手の同じ報告が来たらすぐ) / `both` = 両者の報告が一致したら / `approve` = 運営が承認したら (両者が一致していても)。待っている試合は状態 `pending` (note = wait_delay / wait_both / wait_admin)。承認 = 既存の「片方の報告を採用」(adopt)。定時の処理は無いので、5 分たった試合は選手・運営の画面が読みに来たとき (report_view / report_admin、1 回 3 件まで) に送る。取り込み方を変えたときも同じ (待つ理由が無くなった試合を送る)。勝利画面は pending でも出す。
 - 運営への通知 (2026-11-01、受付の設定 `notify`、worker/src/api/report_notify.ts・webpush.ts・site/report/sw.js): `off` (既定) / `action` = 対応が要るとき (食い違い・確認・承認待ち) / `all` = 選手の報告のたび。送り先は、その受付の運営が運営の画面の「この端末で通知を受け取る」で登録した端末 (D1 report_push_subs、1 人 5 台まで)。Web Push (VAPID + aes128gcm、npm の部品なし)。押すと運営の画面を開く。同じ試合の続報は端末で置き換わる (tag)。送り先が 404/410 なら購読を消す。iPhone・iPad はホーム画面に追加したときだけ受け取れる (画面に注記)。鍵は Worker の secret VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (worker/scripts/gen_vapid.mjs で作る、未設定なら通知の欄は「まだ使えません」)。preview は 2026-11-01 に設定済み。
-
+- 報告管理者 (2026-11-01、report_events.managers = migration 0016): 運営 (受付を始めた人) が受付ごとに足す、試合結果の管理だけができる人 (運営の画面の一覧・承認・採用・直す・取り消す・止める、通知の受け取り)。設定の変更・受付の停止・報告管理者の追加と外すはできない。足すのは運営の画面の「報告管理者」欄: 名前・discriminator で SPSP の選手 (players_index + discriminators.json) から探す。SPSP にデータの無い人は discriminator (8 文字、start.gg のユーザーページの URL でもよい) で足す。どちらも start.gg の user(id / slug) で確かめてから入れる (受付のトークンで読む)。20 人まで、start.gg の受付だけ。受付をし直しても残る。報告管理者が運営の画面を開くと、試合の一覧と通知の欄だけが出る (見本は ?demo=admin&role=manager)。
 ## 2. 流れ
 
 ```
@@ -114,7 +114,7 @@
 ## 9. 本番に入れる手順 (2026-10-31 時点。§8 の実物確認の後、ユーザーの OK が出てから)
 
 1. 本番 D1 (`spsp`) に 0012〜0014 を当てる。本番の d1_migrations は 0008 までしか記録が無く (0009〜0011 は手で当てた)、`migrations apply` は 0009 からやり直そうとして止まるので、`execute --file` で 1 本ずつ:
-   `wrangler d1 execute spsp --remote --file migrations/0012_reports.sql` (0013・0014・0015 も同じ。0015 = 通知の購読、2026-11-01)。2026-10-31 に本番のスキーマを読み出して手元の SQLite に 0012〜0014 を当て、エラーなく 5 テーブルができることを確認済み。
+   `wrangler d1 execute spsp --remote --file migrations/0012_reports.sql` (0013・0014・0015・0016 も同じ。0015 = 通知の購読、0016 = 報告管理者、2026-11-01)。2026-10-31 に本番のスキーマを読み出して手元の SQLite に 0012〜0014 を当て、エラーなく 5 テーブルができることを確認済み。
 2. 通知の鍵を本番に入れる: `node worker/scripts/gen_vapid.mjs` の値を `wrangler secret put VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (本番は preview と別の鍵)。そのほかの秘密の値・設定は追加なし (SESSION_SECRET・STARTGG_CLIENT_SECRET・CHALLONGE_CLIENT_ID / SECRET は本番にある。2026-10-31 に名前を確認)。start.gg アプリ (本番 619) の redirect は既存の callback.html のまま。
 3. main に merge (PR) → Actions の deploy。
 4. 本番で確かめる: 運営のログイン → 大会一覧 → 受付を始める (テスト用の大会で) → 選手 2 人で報告 → 食い違い → 運営の直し → 停止。トップ・プレイヤーページのお知らせ。

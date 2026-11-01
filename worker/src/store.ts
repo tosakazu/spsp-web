@@ -139,6 +139,8 @@ export interface ReportEventRow {
   code: string; kind: 'startgg' | 'challonge'; target_id: string;
   event_id: number | null; tournament_id: number | null; class_id: number | null;
   name: string; slug: string; admins: string; token_enc: string; token_exp_ms: number; settings: string;
+  /** 報告管理者 (JSON の配列 [{ id, name, disc }]、0016)。古い行・テストの行には無いことがある */
+  managers?: string;
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
@@ -225,6 +227,8 @@ export interface Store {
   updateReportEventToken(code: string, tokenEnc: string, tokenExpMs: number): Promise<void>;
   /** 運営の設定 (JSON) を書き換える。 */
   updateReportEventSettings(code: string, settings: string): Promise<void>;
+  /** 報告管理者 (JSON) を書き換える。 */
+  updateReportEventManagers(code: string, managers: string): Promise<void>;
   /** その人の保存した設定 (新しい順)。 */
   listReportPresets(userId: string): Promise<ReportPresetRow[]>;
   /** 名前が同じなら置き換える。名前が新しくて既に max 件あれば足さずに false */

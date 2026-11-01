@@ -328,3 +328,13 @@ export function adminDecision(kind: 'fix' | 'reset' | 'hold', result: Result | n
   // 勝者もスコアも同じならキャラ・ステージだけ直す。違えば一度取り消して入れ直す
   return { op: sameOutcome(result, set.remote) ? 'update' : 'rereport', state: 'fixed', result, note: 'admin' };
 }
+
+/** 報告管理者 (運営が受付ごとに足す。試合結果の管理だけ。設定・停止・報告管理者の追加はできない、2026-11-01) */
+export interface ReportManager { id: string; name: string; disc: string }
+export const MANAGERS_MAX = 20;
+export function managersOf(ev: { managers?: string }): ReportManager[] {
+  let v: unknown = [];
+  try { v = JSON.parse(ev.managers || '[]'); } catch (_) { v = []; }
+  return Array.isArray(v) ? v.filter((m): m is ReportManager => !!m && typeof m.id === 'string' && /^\d{1,12}$/.test(m.id))
+    .map((m) => ({ id: m.id, name: String(m.name || '').slice(0, 80), disc: String(m.disc || '').slice(0, 20) })) : [];
+}

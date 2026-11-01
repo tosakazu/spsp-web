@@ -543,3 +543,14 @@ body {
   .rp-win-ov *, .rp-win-ov::before, .rp-win-ov::after { animation: none !important; transition: none !important; }
   .rp-win-confetti .rp-win-fx i.cf { display: none; }
 }
+
+/* 報告管理者 (運営の画面) */
+.rp-mgr-list { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rp-mgr-list li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rp-mgr-nm { font-weight: 700; }
+.rp-mgr-add { position: relative; max-width: 420px; }
+.rp-mgr-add input { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }
+.rp-mgr-sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 5; margin-top: 2px; background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .08); max-height: 320px; overflow-y: auto; }
+.rp-mgr-it { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 10px; border: 0; background: none; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }

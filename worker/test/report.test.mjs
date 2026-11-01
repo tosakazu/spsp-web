@@ -826,3 +826,49 @@ test('運営への通知: 端末を登録 → 設定 (対応が要るときだ�
   await e.call({ action: 'report_push_unsubscribe', token: e.login.token, endpoint: sub.endpoint });
   assert.strictEqual((await e.store.listReportPushSubs(['4242'])).length, 0);
 });
+
+// ── 報告管理者 (2026-11-01) ──
+test('報告管理者: 運営が SPSP の選手 (uid) か discriminator で足す → 結果の管理はできる、設定・停止・追加はできない。外したら使えない', async () => {
+  const fake = fakeStartgg();
+  const base = fake.fetch;
+  fake.fetch = async (url, init) => {
+    if (String(url).includes('/gql/') && init && /SpspReportUser/.test(String(init.body))) {
+      const v = JSON.parse(init.body).variables;
+      const u = v.id === '33' ? { id: 33, discriminator: 'aaaa1111', player: { gamerTag: 'Mgr33' } }
+        : v.slug === 'user/abcd1234' ? { id: 44, discriminator: 'abcd1234', player: { gamerTag: 'NoData' } } : null;
+      return new Response(JSON.stringify({ data: { user: u } }), { status: 200 });
+    }
+    return base(url, init);
+  };
+  const e = await enabled(fake);
+  const TO = e.login.token;
+  const M = await e.tok(33); const N = await e.tok(44); const A = await e.tok(11);
+  // まだ報告管理者でない
+  assert.strictEqual((await e.call({ action: 'report_admin', token: M, code: e.code })).error.code, 'not_admin');
+  // 運営以外は足せない・形が違えば弾く・start.gg にいなければ弾く
+  assert.strictEqual((await e.call({ action: 'report_manager_add', token: A, code: e.code, uid: '33' })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'zz' })).error.code, 'bad_request');
+  assert.strictEqual((await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'ffff0000' })).error.code, 'not_found');
+  let r = await e.call({ action: 'report_manager_add', token: TO, code: e.code, uid: '33' });
+  assert.deepStrictEqual(r.added, { id: '33', name: 'Mgr33', disc: 'aaaa1111' });
+  r = await e.call({ action: 'report_manager_add', token: TO, code: e.code, discriminator: 'https://www.start.gg/user/ABCD1234' });
+  assert.deepStrictEqual(r.managers.map((m) => m.id), ['33', '44']);
+  // 報告管理者: 一覧・直すはできる
+  const adm = await e.call({ action: 'report_admin', token: M, code: e.code });
+  assert.deepStrictEqual([adm.ok, adm.role], [true, 'manager']);
+  assert.strictEqual((await e.call({ action: 'report_view', token: N, code: e.code })).admin, true, '選手の画面から運営の画面へ行ける');
+  const f = await e.call({ action: 'report_admin_fix', token: N, code: e.code, set_id: '100', result: { w: 1, g: [{ w: 1 }, { w: 1 }] } });
+  assert.deepStrictEqual([f.ok, f.state], [true, 'fixed'], JSON.stringify(f));
+  // 設定・停止・追加・外すはできない
+  assert.strictEqual((await e.call({ action: 'report_settings', token: M, code: e.code, settings: { top_cut: 8, classes_only: false } })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_stop', token: M, code: e.code })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_manager_add', token: M, code: e.code, uid: '33' })).error.code, 'not_admin');
+  assert.strictEqual((await e.call({ action: 'report_manager_remove', token: M, code: e.code, id: '44' })).error.code, 'not_admin');
+  // 受付をし直しても残る
+  await e.call({ action: 'report_enable', token: TO, event: 'https://www.start.gg/tournament/t/event/singles' });
+  assert.strictEqual((await e.call({ action: 'report_admin', token: M, code: e.code })).role, 'manager');
+  // 外す
+  r = await e.call({ action: 'report_manager_remove', token: TO, code: e.code, id: '33' });
+  assert.deepStrictEqual(r.managers.map((m) => m.id), ['44']);
+  assert.strictEqual((await e.call({ action: 'report_admin', token: M, code: e.code })).error.code, 'not_admin');
+});

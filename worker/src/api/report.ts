@@ -39,6 +39,8 @@ import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch } from './report_challonge.ts';
 import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
+import { managersOf, MANAGERS_MAX } from './report_logic.ts';
+import type { ReportManager } from './report_logic.ts';
 import { adminDecision, APPLY_DELAY_MS, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
@@ -86,6 +88,12 @@ function publicOf(ev: ReportEventRow, now: number) {
 }
 
 const admins = (ev: ReportEventRow): string[] => ev.admins.split(',').filter(Boolean);
+
+/** その人の役割: admin = 運営 (受付を始めた人) / manager = 報告管理者 / null = どちらでもない */
+export function roleOf(ev: ReportEventRow, uid: string): 'admin' | 'manager' | null {
+  if (admins(ev).includes(uid)) return 'admin';
+  return managersOf(ev).some((m) => m.id === uid) ? 'manager' : null;
+}
 const addAdmin = (list: string, uid: string): string => Array.from(new Set([...list.split(',').filter(Boolean), uid])).slice(-20).join(',');
 
 // ── 運営: 受付を始める ────────────────────────────────────────────────
@@ -536,7 +544,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const rows = await store.listReportSetsForUser(sess.id, [o.ev.code]);
   const sets = [];
   for (const r of rows) sets.push(await setView(store, r, sess.id));
-  const out: Record<string, unknown> = { report: publicOf(o.ev, now), me: { id: sess.id }, admin: admins(o.ev).includes(sess.id), sets };
+  const out: Record<string, unknown> = { report: publicOf(o.ev, now), me: { id: sess.id }, admin: !!roleOf(o.ev, sess.id), role: roleOf(o.ev, sess.id), sets };
   if (o.ev.kind === 'challonge') {
     const d = await challongeData(fetchFn, o.token, o.ev.target_id);
     out.challonge = d.ok ? challongeMine(d.data, sess.id, parseSettings(o.ev.settings).double === true) : { error: d.note };
@@ -560,13 +568,17 @@ export async function handleReportNotices(cfg: Config, store: Store, req: Record
 
 // ── 運営の画面 ───────────────────────────────────────────────────────
 
-async function adminOpen(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<Opened & { uid?: string }> {
+/** 運営の画面の操作。adminOnly = 運営 (受付を始めた人) だけ。でなければ報告管理者も */
+async function adminOpen(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number, adminOnly = false): Promise<Opened & { uid?: string; role?: 'admin' | 'manager' }> {
   const sess = await sessionOf(cfg, req, now);
   if (!sess) return { ok: false, res: err('auth_failed', MSG_LOGIN, 'session') };
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o;
-  if (!admins(o.ev).includes(sess.id)) return { ok: false, res: err('not_admin', 'この受付を始めた運営だけが使えます。運営の方は受付をし直すと使えるようになります。', 'not_admin') };
-  return { ...o, uid: sess.id };
+  const role = roleOf(o.ev, sess.id);
+  if (!role || (adminOnly && role !== 'admin')) {
+    return { ok: false, res: err('not_admin', adminOnly ? 'この受付を始めた運営だけが使えます。' : 'この受付の運営・報告管理者だけが使えます。運営の方は受付をし直すと使えるようになります。', 'not_admin') };
+  }
+  return { ...o, uid: sess.id, role };
 }
 
 /** action: "report_admin" — 試合ごとの状態と両者の報告 */
@@ -576,7 +588,7 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   await flushPending(store, providerOf(fetchFn, o), o.ev, now).catch(() => 0);
   const sets = [];
   for (const r of await store.listReportSets(o.ev.code)) sets.push(await setView(store, r, null));
-  return ok({ report: publicOf(o.ev, now), sets });
+  return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev) });
 }
 
 /** action: "report_phases" — 何先の設定に使うフェーズとラウンド。受付の前 (受付を始める画面) は { token, event } で、運営のログインのトークンで読む */
@@ -753,9 +765,53 @@ export async function handleReportPushTest(cfg: Config, store: Store, fetchFn: F
   if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
   if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
   const ev = await store.getReportEvent(req.code);
-  if (!ev || !admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_admin');
+  if (!ev || !roleOf(ev, sess.id)) return err('not_admin', 'この受付の運営・報告管理者だけが使えます。', 'not_admin');
   const act = await store.reportSubmissionActivity(sess.id, now - DAY);
   if (act.count >= REPORT_ADMIN_MAX_PER_DAY) return err('rate_limited', '今日はこれ以上送れません。', 'rate');
   const n = await notifyTest(cfg, store, fetchFn, sess.id, ev.code);
   return ok({ sent: n });
+}
+
+// ── 報告管理者 (運営だけが足す・外す) ────────────────────────────────
+
+const USER_QUERY = 'query SpspReportUser($id: ID, $slug: String) { user(id: $id, slug: $slug) { id discriminator player { gamerTag } } }';
+/** "user/1a2b3c4d"・start.gg のユーザーページの URL・discriminator だけ → discriminator */
+export function discOf(v: unknown): string | null {
+  const m = /^(?:https?:\/\/(?:www\.)?start\.gg\/)?(?:user\/)?([0-9a-f]{8})\/?$/i.exec(String(v || '').trim());
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** action: "report_manager_add" — { token, code, uid } (SPSP の選手から) か { token, code, discriminator } (SPSP にデータの無い人)。start.gg で確かめて足す */
+export async function handleReportManagerAdd(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now, true);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('not_allowed', '報告管理者は start.gg の受付だけで使えます。', 'not_startgg');
+  const uid = typeof req.uid === 'string' || typeof req.uid === 'number' ? String(req.uid) : '';
+  const disc = req.discriminator !== undefined ? discOf(req.discriminator) : null;
+  if (!/^\d{1,12}$/.test(uid) && !disc) return err('bad_request', 'ユーザーを選ぶか、start.gg の discriminator (8 文字) を入れてください。', 'bad:user');
+  const q = await startggGql(fetchFn, o.token, USER_QUERY, disc ? { slug: 'user/' + disc } : { id: uid });
+  if (!q.ok) return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'user:' + q.note);
+  const u = q.json.data ? q.json.data.user as { id?: unknown; discriminator?: unknown; player?: { gamerTag?: unknown } | null } | null : null;
+  if (!u || u.id === undefined || u.id === null) return err('not_found', 'start.gg にそのユーザーが見つかりません。', 'user_not_found');
+  const m: ReportManager = { id: String(u.id), name: String((u.player && u.player.gamerTag) || '').slice(0, 80), disc: String(u.discriminator || disc || '').slice(0, 20) };
+  if (admins(o.ev).includes(m.id)) return err('bad_request', 'その人はこの受付の運営です (足さなくても使えます)。', 'already_admin');
+  const list = managersOf(o.ev).filter((x) => x.id !== m.id);
+  if (list.length >= MANAGERS_MAX) return err('rate_limited', '報告管理者は ' + MANAGERS_MAX + ' 人までです。', 'managers_max');
+  list.push(m);
+  await store.updateReportEventManagers(o.ev.code, JSON.stringify(list));
+  return ok({ managers: list, added: m });
+}
+
+/** action: "report_manager_remove" — { token, code, id } */
+export async function handleReportManagerRemove(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  if (typeof req.code !== 'string' || !CODE_RE.test(req.code)) return err('bad_request', '報告ページの URL が正しくありません。', 'bad:code');
+  const ev = await store.getReportEvent(req.code);
+  if (!ev) return err('not_found', '報告ページの URL が正しくありません。', 'no_event');
+  if (!admins(ev).includes(sess.id)) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_admin');
+  const id = String(req.id || '');
+  const list = managersOf(ev).filter((x) => x.id !== id);
+  await store.updateReportEventManagers(ev.code, JSON.stringify(list));
+  return ok({ managers: list });
 }

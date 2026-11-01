@@ -407,3 +407,45 @@ test('勝利画面の共有: 画面を撮らずに Canvas で 1200×675 を描�
     q.close();
   }
 });
+
+test('報告管理者: 運営の画面で名前・discriminator から探して足す・外す。報告管理者の画面は結果の管理だけ', { skip }, async () => {
+  const rows = [[7001, 'TeamX | Alpha', 1, 1, 1, 3, 0, 0, 1271, null, 0, 0], [7002, 'Beta', 2, 2, 2, 3, 0, 0, 1272, null, 0, 0]];
+  const index = { format: 1, columns: ['uid', 'name', 'ens', 'tjpr', 'bt', 'lv', 'prov', 'ovs', 'char', 'pref', 'last', 'b'], rows };
+  const json = (u) => (/players_index\.json$/.test(u) ? index : /discriminators\.json$/.test(u) ? { 7001: 'a1b2c3d4', 7002: 'e5f6a7b8' } : null);
+  const p = await open('?demo=admin', { json });
+  assert.ok(await until(() => p.d.getElementById('rp-mgr-q')), '報告管理者の欄');
+  const q = p.d.getElementById('rp-mgr-q'); const sug = p.d.getElementById('rp-mgr-sug');
+  const type = (v) => { q.value = v; q.dispatchEvent(new p.w.Event('input')); };
+  // 名前で探す (チーム名は外す)
+  type('alp');
+  assert.ok(await until(() => !sug.hidden && sug.querySelector('[data-uid="7001"]')), '候補');
+  assert.match(sug.textContent, /Alpha.*a1b2c3d4/);
+  assert.ok(!/TeamX/.test(sug.textContent));
+  sug.querySelector('[data-uid="7001"]').dispatchEvent(new p.w.MouseEvent('mousedown', { bubbles: true }));
+  assert.ok(await until(() => /Alpha/.test(p.d.getElementById('rp-mgr-list').textContent)), '足した');
+  // discriminator で探す (SPSP の選手)
+  type('E5F6A7B8');
+  assert.ok(await until(() => !sug.hidden && sug.querySelector('[data-uid="7002"]')));
+  assert.strictEqual(sug.querySelector('[data-disc]'), null, 'SPSP にいる人は discriminator の追加を出さない');
+  // SPSP にデータの無い人は discriminator で
+  type('https://www.start.gg/user/0badc0de');
+  assert.ok(await until(() => !sug.hidden && sug.querySelector('[data-disc="0badc0de"]')));
+  q.dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'Enter' }));
+  assert.ok(await until(() => /0badc0de/.test(p.d.getElementById('rp-mgr-list').textContent)), 'Enter で足す');
+  // 外す
+  p.w.confirm = () => true;
+  p.d.querySelector('[data-mgr-rm="7001"]').click();
+  assert.ok(await until(() => !/Alpha/.test(p.d.getElementById('rp-mgr-list').textContent)), '外した');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+  // 報告管理者の画面: 設定・停止・報告管理者の欄は無く、試合の一覧と通知だけ
+  const m = await open('?demo=admin&role=manager');
+  assert.ok(await until(() => m.d.querySelector('.rp-adm-row')), '試合の一覧');
+  assert.strictEqual(m.d.getElementById('rp-save-set'), null);
+  assert.strictEqual(m.d.getElementById('rp-stop'), null);
+  assert.strictEqual(m.d.getElementById('rp-mgr-q'), null);
+  assert.ok(m.d.getElementById('rp-push-on'));
+  assert.match(m.d.getElementById('rp-admin').textContent, /報告管理者です/);
+  assert.deepStrictEqual(m.errs, []);
+  m.close();
+});

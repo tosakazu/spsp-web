@@ -1296,6 +1296,17 @@ async function renderAdmin() {
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
   const ev = r.report;
   const url = pageUrl(CODE, false);
+  if (r.role === 'manager') {
+    // 報告管理者: 試合結果の管理と通知だけ (設定・停止・報告管理者の追加は無い)
+    root.innerHTML = `<section class="rp-card-sec">
+      <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
+      ${pushHtml()}
+    </section>
+    <section class="rp-card-sec" id="rp-adm-sets"></section>`;
+    wirePush(root);
+    await adminSetsStart(r);
+    return;
+  }
   root.innerHTML = `<section class="rp-card-sec">
     <h2>${escapeHtml(i18n('report.admin.share'))}</h2>
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
@@ -1309,6 +1320,7 @@ async function renderAdmin() {
     <button type="button" class="rp-btn" id="rp-save-set">${escapeHtml(i18n('report.admin.save'))}</button> <span class="rp-status" id="rp-set-status"></span>
     ${pushHtml()}
   </section>
+  ${ev.kind === 'startgg' ? mgrHtml() : ''}
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
@@ -1332,6 +1344,7 @@ async function renderAdmin() {
   };
   $('rp-save-set').addEventListener('click', () => saveSettings());
   wirePush(root);
+  if (ev.kind === 'startgg') wireMgr(root, r.managers || []);
   // 保存した設定を呼び出す = 入力に入れて、この大会の設定として保存する
   const loadPreset = async (p, name) => {
     await phasesP;
@@ -1350,6 +1363,11 @@ async function renderAdmin() {
     const x = await api({ action: 'report_stop', token: tok(), code: CODE });
     if (x && x.ok) location.reload(); else alert(errText(x));
   });
+  await adminSetsStart(r);
+}
+
+/** 試合の一覧を出して、定期的に読み直す (運営・報告管理者) */
+async function adminSetsStart(r) {
   // 直しの欄のキャラ・ステージ (ステージは start.gg の一覧。普段のログインのトークンが無ければステージは出さない)
   await loadChars();
   if (INFO && INFO.kind === 'startgg' && !STAGES) {
@@ -1361,6 +1379,107 @@ async function renderAdmin() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAdminSets(true); });
     adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
   }
+}
+
+// ── 報告管理者 (運営だけが足す・外す)。名前・discriminator で SPSP の選手から探す。SPSP にデータが無い人は discriminator で ──
+let MGR_CANDS_P = null;
+/** 候補 (SPSP の選手。名前は players_index、discriminator は discriminators.json)。最初に打ったときに 1 回だけ読む */
+function mgrCands() {
+  if (!MGR_CANDS_P) {
+    MGR_CANDS_P = Promise.all([
+      // 分割データ (manifest つき) が読めなければ players_index.json を直接 (見本と同じ)
+      SPSPViews.at(SPSP.data || '').index().catch(() => null).then((I) => (I ? I.list() : fetch((SPSP.data || '') + 'data/views/players_index.json')
+        .then((x) => (x.ok ? x.json() : null)).then((j) => { const cols = (j && (j.cols || j.columns)) || []; const ci = (k) => cols.indexOf(k);
+          return ((j && j.rows) || []).map((r) => ({ uid: r[ci('uid')], name: r[ci('name')], ens: r[ci('ens')] })); }).catch(() => []))),
+      fetch((SPSP.data || '') + 'data/discriminators.json').then((x) => (x.ok ? x.json() : {})).catch(() => ({})),
+    ]).then(([rows, disc]) => (rows || []).map((row) => {
+      const d = String(row.name || '');
+      return { uid: String(row.uid), tag: d.slice(d.lastIndexOf('|') + 1).trim(), disc: String((disc || {})[String(row.uid)] || ''), rank: row.ens || null };
+    }).filter((p) => p.tag).sort((a, b) => (a.rank || Infinity) - (b.rank || Infinity)));
+  }
+  return MGR_CANDS_P;
+}
+const DISC_RE = /^(?:https?:\/\/(?:www\.)?start\.gg\/)?(?:user\/)?([0-9a-f]{8})\/?$/i;
+function mgrHtml() {
+  return `<section class="rp-card-sec rp-mgr">
+    <h3>${escapeHtml(i18n('report.mgr.title'))}</h3>
+    <p class="rp-muted">${escapeHtml(i18n('report.mgr.help'))}</p>
+    <ul class="rp-mgr-list" id="rp-mgr-list"></ul>
+    <div class="rp-mgr-add">
+      <input type="text" id="rp-mgr-q" autocomplete="off" placeholder="${escapeHtml(i18n('report.mgr.placeholder'))}" aria-label="${escapeHtml(i18n('report.mgr.placeholder'))}">
+      <div class="rp-mgr-sug" id="rp-mgr-sug" role="listbox" hidden></div>
+    </div>
+    <div class="rp-status" id="rp-mgr-status"></div>
+  </section>`;
+}
+function wireMgr(root, initial) {
+  let list = initial.slice();
+  const q = root.querySelector('#rp-mgr-q'); const sug = root.querySelector('#rp-mgr-sug'); const st = root.querySelector('#rp-mgr-status');
+  const ul = root.querySelector('#rp-mgr-list');
+  const draw = () => {
+    ul.innerHTML = list.length ? list.map((m) => `<li><span class="rp-mgr-nm">${escapeHtml(m.name || '?')}</span>${m.disc ? `<span class="rp-muted">${escapeHtml(m.disc)}</span>` : ''}
+      <button type="button" class="rp-link" data-mgr-rm="${escapeHtml(m.id)}">${escapeHtml(i18n('report.mgr.remove'))}</button></li>`).join('')
+      : `<li class="rp-muted">${escapeHtml(i18n('report.mgr.none'))}</li>`;
+    for (const b of ul.querySelectorAll('[data-mgr-rm]')) {
+      b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-mgr-rm');
+        const m = list.find((x) => x.id === id);
+        if (!confirm(i18n('report.mgr.remove_confirm', { name: m ? m.name : '' }))) return;
+        const x = await api({ action: 'report_manager_remove', token: tok(), code: CODE, id });
+        if (x && x.ok) { list = x.managers || []; draw(); setStatus(st, '', ''); } else setStatus(st, errText(x), 'err');
+      });
+    }
+  };
+  draw();
+  const add = async (body) => {
+    sug.hidden = true;
+    setStatus(st, i18n('report.sending'), 'busy');
+    const x = await api({ action: 'report_manager_add', token: tok(), code: CODE, ...body });
+    if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
+    list = x.managers || [];
+    draw();
+    q.value = '';
+    setStatus(st, i18n('report.mgr.added', { name: x.added ? x.added.name : '' }), 'ok');
+  };
+  let seq = 0;
+  const show = async () => {
+    const my = ++seq;
+    const v = String(q.value || '').trim();
+    if (!v) { sug.hidden = true; return; }
+    const lv = v.toLowerCase();
+    const cands = await mgrCands();
+    if (my !== seq) return;
+    const taken = new Set(list.map((m) => m.id));
+    const hits = [];
+    for (const p of cands) {
+      if (taken.has(p.uid)) continue;
+      if (p.tag.toLowerCase().includes(lv) || (p.disc && p.disc.toLowerCase().includes(lv))) { hits.push(p); if (hits.length >= 10) break; }
+    }
+    const dm = DISC_RE.exec(v);
+    const disc = dm ? dm[1].toLowerCase() : null;
+    let h = hits.map((p) => `<button type="button" class="rp-mgr-it" data-uid="${escapeHtml(p.uid)}"><span>${escapeHtml(p.tag)}</span><span class="rp-muted">${p.rank ? '#' + p.rank + ' · ' : ''}${escapeHtml(p.disc)}</span></button>`).join('');
+    if (disc && !hits.some((p) => p.disc === disc)) h += `<button type="button" class="rp-mgr-it" data-disc="${escapeHtml(disc)}"><span>${escapeHtml(i18n('report.mgr.add_disc', { d: disc }))}</span></button>`;
+    if (!h) h = `<div class="rp-mgr-it rp-muted">${escapeHtml(i18n('report.mgr.no_hit'))}</div>`;
+    sug.innerHTML = h;
+    sug.hidden = false;
+  };
+  q.addEventListener('input', () => { show(); });
+  q.addEventListener('focus', () => { if (q.value) show(); });
+  q.addEventListener('blur', () => { setTimeout(() => { sug.hidden = true; }, 200); });
+  q.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const first = sug.hidden ? null : sug.querySelector('[data-uid], [data-disc]');
+    if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  });
+  // mousedown: blur で候補が消える前に拾う
+  sug.addEventListener('mousedown', (e) => {
+    const it = e.target instanceof Element ? e.target.closest('[data-uid], [data-disc]') : null;
+    if (!it) return;
+    e.preventDefault();
+    if (it.hasAttribute('data-uid')) add({ uid: it.getAttribute('data-uid') });
+    else add({ discriminator: it.getAttribute('data-disc') });
+  });
 }
 
 /** 試合の一覧だけ読み直す (設定の入力は消さない)。直している最中は待つ */
@@ -1758,6 +1877,7 @@ const DEMO_PHASES = [
     { n: 5, label: 'Grand Final', bestOf: 5 }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
     { n: -5, label: 'Losers Semi-Final' }, { n: -6, label: 'Losers Final' }] },
 ];
+let DEMO_MGRS = [];
 async function demoApi(body) {
   const P = DEMO_P;
   if (body.action === 'report_submit') {
@@ -1769,7 +1889,8 @@ async function demoApi(body) {
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
     return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
-      sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)] };
+      sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)],
+      role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS };
   }
   if (body.action === 'report_tournaments') {
     // 見本: 開催中 1 つ (イベント 2 つ、片方は受付中) とこれから 1 つ
@@ -1782,6 +1903,13 @@ async function demoApi(body) {
         { id: 21, name: 'Singles', slug: 'tournament/demo2/event/singles', entrants: 48, game: ULT, code: null }] }] };
   }
   if (body.action === 'report_settings') return { ok: true, settings: body.settings };
+  if (body.action === 'report_manager_add') {
+    const p = body.uid ? (await mgrCands()).find((x) => x.uid === String(body.uid)) : null;
+    const m = p ? { id: p.uid, name: p.tag, disc: p.disc } : { id: String(900000 + DEMO_MGRS.length), name: 'start.gg user', disc: String(body.discriminator || '') };
+    DEMO_MGRS = DEMO_MGRS.filter((x) => x.id !== m.id).concat([m]);
+    return { ok: true, managers: DEMO_MGRS, added: m };
+  }
+  if (body.action === 'report_manager_remove') { DEMO_MGRS = DEMO_MGRS.filter((x) => x.id !== String(body.id)); return { ok: true, managers: DEMO_MGRS }; }
   if (body.action === 'report_phases') return { ok: true, phases: DEMO_PHASES };
   // 保存した設定 (見本はこの画面の中だけ)
   if (body.action === 'report_presets') return { ok: true, presets: DEMO_PRESETS };

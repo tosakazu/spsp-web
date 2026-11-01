@@ -1,7 +1,7 @@
 /**
  * 結果報告の運営への通知 (Web Push、2026-11-01、docs/self_report_design.md)。
  *   受付の設定 notify: off = 送らない / action = 運営の対応が要るとき (食い違い・確認・承認待ち) / all = 選手の報告のたび。
- *   送り先 = その受付の運営 (report_events.admins) が「この端末で通知を受け取る」で登録した端末 (report_push_subs)。
+ *   送り先 = その受付の運営 (report_events.admins) と報告管理者 (managers) が「この端末で通知を受け取る」で登録した端末 (report_push_subs)。
  *   本文は { title, body, url, tag }。url は報告ページ (site/report/sw.js の範囲) からの相対。tag が同じ通知は端末で置き換わる (同じ試合の続報)。
  * 送れなくても報告は止めない (呼ぶ側は結果を見ない)。送り先が 404/410 なら購読を消す。
  */
@@ -9,12 +9,14 @@ import type { Config } from '../config.ts';
 import type { FetchFn } from './oauth.ts';
 import type { ReportEventRow, Store } from '../store.ts';
 import type { Decision, NSet, Result } from './report_logic.ts';
-import { parseSettings, score } from './report_logic.ts';
+import { managersOf, parseSettings, score } from './report_logic.ts';
 import { sendPush } from './webpush.ts';
+
 
 export const PUSH_SUBS_PER_USER = 5;
 
-const admins = (ev: ReportEventRow): string[] => ev.admins.split(',').map((s) => s.trim()).filter(Boolean);
+/** 送り先 = 運営 + 報告管理者 */
+const admins = (ev: ReportEventRow): string[] => [...ev.admins.split(',').map((s) => s.trim()).filter(Boolean), ...managersOf(ev).map((m) => m.id)];
 
 /** 運営の対応が要る状態か */
 export function needsAction(state: string, note: string): boolean {
