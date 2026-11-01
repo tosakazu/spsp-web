@@ -560,3 +560,9 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-mgr-confirm { margin-top: 8px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #f9fafb; font-size: 13px; }
 .rp-mgr-confirm p { margin: 0 0 8px; }
 .rp-tag.rp-mgr-role-full { background: #fef2f2; border-color: #fecaca; }
+/* 見出しの「?」(押すと説明が出る) */
+.rp-h-help { display: flex; align-items: center; gap: 6px; }
+.rp-help { flex: none; width: 20px; height: 20px; padding: 0; border: 1px solid #d1d5db; border-radius: 50%; background: #fff; color: #6b7280;
+  font: inherit; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; cursor: pointer; }
+.rp-help[aria-expanded="true"] { background: #f3f4f6; color: #111827; }
+.rp-help-text { margin-top: -2px; }

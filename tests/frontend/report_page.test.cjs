@@ -471,3 +471,19 @@ test('報告管理者: 運営の画面で名前・discriminator から探して�
   assert.deepStrictEqual(m.errs, []);
   m.close();
 });
+
+test('運営の画面: 管理者の追加・通知の説明は「?」を押したときだけ出る。受付の期限に注記は付けない', { skip }, async () => {
+  const p = await open('?demo=admin');
+  assert.ok(await until(() => p.d.querySelectorAll('.rp-help').length >= 2));
+  for (const b of p.d.querySelectorAll('.rp-help')) {
+    const t = b.parentElement.nextElementSibling;
+    assert.ok(t.hidden, '最初は出さない');
+    b.click();
+    assert.ok(!t.hidden && b.getAttribute('aria-expanded') === 'true', '押すと出る');
+    b.click();
+    assert.ok(t.hidden, 'もう一度押すと隠す');
+  }
+  assert.ok([...p.d.querySelectorAll('#rp-admin p')].some((e) => /^受付の期限: [^(]+$/.test(e.textContent.trim())), '期限だけ');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});

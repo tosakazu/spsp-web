@@ -1226,10 +1226,22 @@ function applySettingsInputs(root, p) {
 
 // ── 運営への通知 (Web Push)。この端末で受け取る / やめる / 試しに送る。何を送るかは設定の「通知」(受付ごと) ──
 const pushOk = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+/** 見出しと「?」。説明は「?」を押したときだけ出す (押すたびに出す・隠す) */
+function helpHead(title, text) {
+  return `<h3 class="rp-h-help">${escapeHtml(title)}<button type="button" class="rp-help" aria-expanded="false" aria-label="${escapeHtml(i18n('report.help'))}">?</button></h3>
+    <p class="rp-muted rp-help-text" hidden>${escapeHtml(text)}</p>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target instanceof Element ? e.target.closest('.rp-help') : null;
+  if (!b) return;
+  const p = b.parentElement && b.parentElement.nextElementSibling;
+  if (!p || !p.classList.contains('rp-help-text')) return;
+  p.hidden = !p.hidden;
+  b.setAttribute('aria-expanded', String(!p.hidden));
+});
 function pushHtml() {
   return `<div class="rp-push">
-    <h3>${escapeHtml(i18n('report.push.title'))}</h3>
-    <p class="rp-muted">${escapeHtml(i18n('report.push.help'))}</p>
+    ${helpHead(i18n('report.push.title'), i18n('report.push.help'))}
     <div class="rp-push-btns">
       <button type="button" class="rp-btn rp-primary" id="rp-push-on">${escapeHtml(i18n('report.push.on'))}</button>
       <button type="button" class="rp-btn" id="rp-push-off" hidden>${escapeHtml(i18n('report.push.off'))}</button>
@@ -1438,8 +1450,7 @@ function mgrCands() {
 const DISC_RE = /^(?:https?:\/\/(?:www\.)?start\.gg\/)?(?:user\/)?([0-9a-f]{8})\/?$/i;
 function mgrHtml() {
   return `<section class="rp-card-sec rp-mgr">
-    <h3>${escapeHtml(i18n('report.mgr.title'))}</h3>
-    <p class="rp-muted">${escapeHtml(i18n('report.mgr.help'))}</p>
+    ${helpHead(i18n('report.mgr.title'), i18n('report.mgr.help'))}
     <ul class="rp-mgr-list" id="rp-mgr-list"></ul>
     <div class="rp-mgr-roles" role="radiogroup">
       ${['report', 'full'].map((k) => `<label class="rp-check"><input type="radio" name="rp-mgr-role" value="${k}"${k === 'report' ? ' checked' : ''}> ${escapeHtml(i18n('report.mgr.role_' + k))}</label>`).join('')}
