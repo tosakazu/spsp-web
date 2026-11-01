@@ -209,7 +209,13 @@
   .lr-tab.active { background: #dc2626; color: #fff; border-color: #dc2626; }
   .latestres-card .lr-top { margin-top: -1px; }
   .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
-  .tour-group .tour-item.latestres-card { padding: 4px 4px 2px; }   /* 出場履歴の行 (.tour-group .tour-item の上下 6px) より詰める */
+  .tour-group .tour-item.latestres-card { padding: 4px 4px 2px; }   /* .tour-group .tour-item の上下 6px より詰める */
+  /* 出場履歴 (#recent) の 1 件 = 最新の大会結果と同じカード (.rc がタブ + カード)。区切り線は .rc に */
+  #recent .rc { border-bottom: 1px solid #f3f4f6; padding: 2px 0 4px; }
+  #recent .rc:last-child { border-bottom: none; }
+  #recent .rc .tour-group { border-bottom: none; }
+  #recent .rc .lr-tabs { margin-top: 4px; }
+  .latestres-card .rc-date { font-size: 10px; color: #9ca3af; margin-right: 6px; font-variant-numeric: tabular-nums; }
   /* ▶ は順位などの列とは別に右端 (幅が足りなくても ▶ だけ次の行に落ちないように) */
   .latestres-card .perf-hero { position: relative; padding: 0 12px 0 0; flex-wrap: nowrap; white-space: nowrap; }
   .live-toggle { cursor: pointer; }
