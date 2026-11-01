@@ -159,6 +159,8 @@ test('受付を始める画面: 何先と受付の開始の欄がある', { skip
   assert.ok(await until(() => p.d.querySelector('[data-set-open]')), '受付の開始の欄');
   assert.ok(p.d.getElementById('rp-ft-set'), '何先の欄');
   assert.ok(p.d.querySelector('[data-set-open]').value, '開始の既定値が入っている');
+  assert.strictEqual(p.d.querySelector('[data-set-apply]:checked').value, 'auto', '取り込み方の既定 = すぐ');
+  assert.strictEqual(p.d.querySelector('[data-set-notify]').value, 'off', '通知の既定 = しない');
   assert.ok(p.d.querySelector('.rp-demo'), '見本の帯が出る');
   assert.deepStrictEqual(p.errs, []);
   p.close();
