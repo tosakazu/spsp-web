@@ -719,7 +719,7 @@ function wireForm(form, m) {
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
     const sentKind = r.state === 'pending' && ['wait_delay', 'wait_both', 'wait_admin'].includes(r.note) ? r.note
       : ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
-    setStatus(st, i18n('report.sent.' + sentKind), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
+    setStatus(st, i18n('report.sent.' + sentKind, { n: delayMin() }), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
     if (won && ['reported', 'agreed', 'fixed', 'pending'].includes(r.state)) await showVictory(await victoryOf(m, result), advanceAfter(m));
@@ -1016,7 +1016,7 @@ async function loadMains() {
 
 function noteText(note) {
   const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold'].includes(note) ? note : 'other';
-  return i18n('report.note.' + k) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
+  return i18n('report.note.' + k, { n: delayMin() }) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
 }
 
 /** 受付の開始 (datetime-local の値 ⇔ ms、端末の時刻で) */
@@ -1047,7 +1047,9 @@ function settingsFormHtml(s, kind) {
       <select data-set-notify>${NOTIFY_LEVELS.map((k) => `<option value="${k}"${(s && s.notify ? s.notify : 'off') === k ? ' selected' : ''}>${escapeHtml(i18n('report.set.notify_' + k))}</option>`).join('')}</select></label>
   </div>`;
 }
-const APPLY_MODES = ['auto', 'delay', 'both', 'approve'];
+const APPLY_MODES = ['auto', 'delay3', 'delay', 'both', 'approve'];
+/** 待ってから取り込むときの分 (受付の設定 apply = delay3 / delay) */
+const delayMin = () => (INFO && INFO.settings && INFO.settings.apply === 'delay3' ? 3 : 5);
 const NOTIFY_LEVELS = ['off', 'action', 'all'];
 function readSettings(root) {
   const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]'); const op = root.querySelector('[data-set-open]');
@@ -1225,6 +1227,22 @@ function applySettingsInputs(root, p) {
 }
 
 // ── 運営への通知 (Web Push)。この端末で受け取る / やめる / 試しに送る。何を送るかは設定の「通知」(受付ごと) ──
+/** iPhone・iPad (iPadOS の Safari は Mac と名乗るので、触れる Mac も)。ホーム画面から開いているか */
+const isIOS = () => /iP(hone|od|ad)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints || 0) > 1);
+const isStandalone = () => /** @type {any} */ (navigator).standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+/** iOS の共有ボタンの形 (□に↑) */
+const SHARE_GLYPH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M6 11H5v10h14V11h-1"/></svg>';
+const isAndroid = () => /Android/.test(navigator.userAgent);
+/** Android の Chrome: ホーム画面に追加 (インストール) の確認を出せる。来たら取っておく (ページを開いてすぐ来るので先に聞く) */
+let INSTALL_PROMPT = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    INSTALL_PROMPT = e;
+    const b = document.getElementById('rp-push-install');
+    if (b && isAndroid() && !isStandalone()) b.hidden = false;
+  });
+}
 const pushOk = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 /** 見出しと「?」。説明は「?」を押したときだけ出す (押すたびに出す・隠す) */
 function helpHead(title, text) {
@@ -1246,6 +1264,22 @@ function pushHtml() {
       <button type="button" class="rp-btn rp-primary" id="rp-push-on">${escapeHtml(i18n('report.push.on'))}</button>
       <button type="button" class="rp-btn" id="rp-push-off" hidden>${escapeHtml(i18n('report.push.off'))}</button>
       <button type="button" class="rp-btn" id="rp-push-test" hidden>${escapeHtml(i18n('report.push.test'))}</button>
+      <button type="button" class="rp-btn rp-primary" id="rp-push-a2hs" hidden>${escapeHtml(i18n('report.push.ios_btn'))}</button>
+      <button type="button" class="rp-btn" id="rp-push-install" hidden>${escapeHtml(i18n('report.push.android_btn'))}</button>
+    </div>
+    <div class="rp-a2hs" id="rp-a2hs-android" hidden>
+      <ol>
+        <li>${escapeHtml(i18n('report.push.android_1'))}</li>
+        <li>${escapeHtml(i18n('report.push.android_2'))}</li>
+      </ol>
+    </div>
+    <div class="rp-a2hs" id="rp-a2hs" hidden>
+      <p>${escapeHtml(i18n('report.push.ios_lead'))}</p>
+      <ol>
+        <li>${escapeHtml(i18n('report.push.ios_1'))} <span class="rp-a2hs-ic" aria-hidden="true">${SHARE_GLYPH}</span></li>
+        <li>${escapeHtml(i18n('report.push.ios_2'))}</li>
+        <li>${escapeHtml(i18n('report.push.ios_3'))}</li>
+      </ol>
     </div>
     <div class="rp-status" id="rp-push-status"></div>
   </div>`;
@@ -1265,6 +1299,26 @@ function wirePush(root) {
   const st = root.querySelector('#rp-push-status');
   if (!on) return;
   const show = (subscribed) => { on.hidden = subscribed; off.hidden = !subscribed; test.hidden = !subscribed; };
+  // Android: ホーム画面に追加 (通知は追加しなくても受け取れる)。Chrome は確認の画面、ほかは手順
+  if (isAndroid() && !isStandalone()) {
+    const b = root.querySelector('#rp-push-install'); const guide = root.querySelector('#rp-a2hs-android');
+    b.hidden = false;
+    b.addEventListener('click', async () => {
+      if (INSTALL_PROMPT) {
+        const pr = INSTALL_PROMPT;
+        INSTALL_PROMPT = null;
+        try { await pr.prompt(); const c = await pr.userChoice; if (c && c.outcome === 'accepted') b.hidden = true; } catch (e) { guide.hidden = false; }
+      } else guide.hidden = !guide.hidden;
+    });
+  }
+  // iPhone・iPad: ホーム画面に追加して開いたときだけ通知を受け取れる。Safari で開いているときは追加の手順を出す (iOS のときだけ)
+  if (isIOS() && !isStandalone()) {
+    on.hidden = true;
+    const a = root.querySelector('#rp-push-a2hs'); const guide = root.querySelector('#rp-a2hs');
+    a.hidden = false;
+    a.addEventListener('click', () => { guide.hidden = !guide.hidden; });
+    return;
+  }
   if (DEMO) { on.addEventListener('click', () => { show(true); setStatus(st, i18n('report.push.done'), 'ok'); }); off.addEventListener('click', () => { show(false); setStatus(st, '', ''); }); test.addEventListener('click', () => setStatus(st, i18n('report.push.test_sent', { n: 1 }), 'ok')); return; }
   if (!pushOk()) { on.disabled = true; setStatus(st, i18n('report.push.unsupported'), 'warn'); return; }
   (async () => { const reg = await pushReg(); const sub = reg ? await reg.pushManager.getSubscription() : null; show(!!sub && Notification.permission === 'granted'); })().catch(() => {});

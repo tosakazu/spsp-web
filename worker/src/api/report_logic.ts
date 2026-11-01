@@ -50,13 +50,16 @@ const FT_PHASES_MAX = 30;
 /**
  * 報告の取り込み方 (2026-11-01)。
  *   auto    = すぐ取り込む (既定)
+ *   delay3  = 3 分待ってから取り込む (delay と同じきまりで、待つ時間だけ違う、2026-11-01)
  *   delay   = 5 分待ってから取り込む (その間に相手の違う報告・運営の操作があれば取り込まない。相手の同じ報告が来たらすぐ)
  *   both    = 両者の報告がそろって一致したら取り込む
  *   approve = 運営が承認したら取り込む (両者が一致していても)
  */
-export type ApplyMode = 'auto' | 'delay' | 'both' | 'approve';
-export const APPLY_MODES: ApplyMode[] = ['auto', 'delay', 'both', 'approve'];
+export type ApplyMode = 'auto' | 'delay3' | 'delay' | 'both' | 'approve';
+export const APPLY_MODES: ApplyMode[] = ['auto', 'delay3', 'delay', 'both', 'approve'];
 export const APPLY_DELAY_MS = 5 * 60 * 1000;
+/** 待ってから取り込む取り込み方の待ち時間 (それ以外は 0) */
+export function applyDelayMs(mode: ApplyMode): number { return mode === 'delay' ? APPLY_DELAY_MS : mode === 'delay3' ? 3 * 60 * 1000 : 0; }
 /** 運営への通知: off = なし / action = 対応が要るとき (食い違い・確認・承認待ち) / all = 報告のたび */
 export type NotifyLevel = 'off' | 'action' | 'all';
 export const NOTIFY_LEVELS: NotifyLevel[] = ['off', 'action', 'all'];
@@ -166,7 +169,7 @@ export function playerGate(set: NSet, s: ReportSettings): 'top_cut' | 'classes_o
   return null;
 }
 
-/** pending = 取り込み待ち (note: wait_delay = 5 分待ち / wait_both = 相手の報告待ち / wait_admin = 運営の承認待ち)。
+/** pending = 取り込み待ち (note: wait_delay = 3 分・5 分待ち / wait_both = 相手の報告待ち / wait_admin = 運営の承認待ち)。
  *  review の note が hold = 運営が止めた (選手の報告では動かさない) */
 export type ReportState = 'reported' | 'agreed' | 'conflict' | 'review' | 'fixed' | 'reset' | 'pending';
 export type Op = 'none' | 'report' | 'update' | 'reset' | 'rereport';
@@ -307,7 +310,7 @@ export function reconcile(prev: { state: ReportState; applied: Result | null; no
   if (!set.complete) {
     if (mode === 'both') return none('pending', 'wait_both');
     if (mode === 'approve') return none('pending', 'wait_admin');
-    if (mode === 'delay' && now - one.ts < APPLY_DELAY_MS) return none('pending', 'wait_delay');
+    if (applyDelayMs(mode) && now - one.ts < applyDelayMs(mode)) return none('pending', 'wait_delay');
     return { op: 'report', state: 'reported', result: r, note: '' };
   }
   if (external) return sameOutcome(r, set.remote) ? none('agreed') : none('review', 'external_mismatch');

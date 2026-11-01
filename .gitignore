@@ -30,5 +30,7 @@ node_modules/
 .vscode/
 .claude/
 *.png
+# ホーム画面に追加のアイコン (結果報告の manifest.json)
+!site/report/icon-*.png
 __pycache__/
 *.pyc

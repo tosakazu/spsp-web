@@ -566,3 +566,8 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
   font: inherit; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; cursor: pointer; }
 .rp-help[aria-expanded="true"] { background: #f3f4f6; color: #111827; }
 .rp-help-text { margin-top: -2px; }
+/* iPhone・iPad: ホーム画面に追加の手順 */
+.rp-a2hs { margin-top: 8px; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fff7f7; font-size: 13px; }
+.rp-a2hs p { margin: 0 0 6px; }
+.rp-a2hs ol { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
+.rp-a2hs-ic { display: inline-flex; vertical-align: -3px; color: #2563eb; }

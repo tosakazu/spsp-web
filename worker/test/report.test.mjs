@@ -927,3 +927,18 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
   j = await e.call({ action: 'report_join', token: l3.token, code: e.code });
   assert.strictEqual(j.error.code, 'not_admin');
 });
+
+test('3 分後に取り込む: 3 分たったら送る (5 分の設定と同じきまり)', async () => {
+  const fake = fakeStartgg();
+  const e = await enabled(fake, { top_cut: null, classes_only: false, apply: 'delay3' });
+  const A = await e.tok(11);
+  const r = await e.call({ action: 'report_submit', token: A, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } });
+  assert.deepStrictEqual([r.state, r.note], ['pending', 'wait_delay']);
+  e.tick(2 * 60e3 + 50e3);
+  await e.call({ action: 'report_view', token: A, code: e.code });
+  assert.notStrictEqual(fake.set.state, 3, '2 分 50 秒ではまだ');
+  e.tick(11e3);
+  await e.call({ action: 'report_view', token: A, code: e.code });
+  assert.strictEqual(fake.set.state, 3, '3 分たったら送る');
+  assert.strictEqual(parseSettings({ apply: 'delay3' }).apply, 'delay3');
+});

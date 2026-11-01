@@ -194,7 +194,7 @@ test('運営の画面: 食い違いは片方の報告を採用して解決でき
   assert.ok(await until(() => row() && row().classList.contains('rp-state-fixed'), 3000), '確定した');
   // 取り込み方 (見本は 5 分後) と通知の設定。取り込み待ちの試合は承認・止めるができる
   assert.strictEqual(p.d.querySelector('[data-set-apply]:checked').value, 'delay');
-  assert.strictEqual(p.d.querySelectorAll('[data-set-apply]').length, 4);
+  assert.strictEqual(p.d.querySelectorAll('[data-set-apply]').length, 5);
   assert.strictEqual(p.d.querySelector('[data-set-notify]').value, 'action');
   assert.ok(p.d.getElementById('rp-push-on'), 'この端末で通知を受け取る');
   const pend = () => p.d.querySelector('.rp-adm-row[data-set="106"]');
@@ -486,4 +486,47 @@ test('運営の画面: 管理者の追加・通知の説明は「?」を押し�
   assert.ok([...p.d.querySelectorAll('#rp-admin p')].some((e) => /^受付の期限: [^(]+$/.test(e.textContent.trim())), '期限だけ');
   assert.deepStrictEqual(p.errs, []);
   p.close();
+});
+
+test('ホーム画面に追加: iPhone・iPad の Safari は手順 (通知はホーム画面からだけ)、Android は追加のボタン。ホーム画面から開いたときは出さない。3 分後に取り込むもある', { skip }, async () => {
+  for (const [ua, standalone, want] of [['Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148', false, true],
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148', true, false],
+    ['Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130 Mobile', false, false]]) {
+    const p = await open('?demo=admin', { before: (w) => {
+      Object.defineProperty(w.navigator, 'userAgent', { value: ua, configurable: true });
+      Object.defineProperty(w.navigator, 'standalone', { value: standalone, configurable: true });
+    } });
+    assert.ok(await until(() => p.d.getElementById('rp-push-a2hs')));
+    const a = p.d.getElementById('rp-push-a2hs');
+    assert.strictEqual(!a.hidden, want, ua + ' standalone=' + standalone);
+    if (want) {
+      assert.ok(p.d.getElementById('rp-push-on').hidden, '通知のボタンは隠す');
+      a.click();
+      assert.ok(!p.d.getElementById('rp-a2hs').hidden, '手順が出る');
+      assert.match(p.d.getElementById('rp-a2hs').textContent, /ホーム画面に追加/);
+    }
+    if (ua.includes('Android')) assert.ok(p.d.querySelector('[data-set-apply][value="delay3"]'), '3 分後に取り込む');
+    // Android: ホーム画面に追加 (Chrome は確認の画面、来ていなければ手順)。iOS では出さない
+    const inst = p.d.getElementById('rp-push-install');
+    assert.strictEqual(!inst.hidden, ua.includes('Android'));
+    if (ua.includes('Android')) {
+      inst.click();
+      assert.ok(!p.d.getElementById('rp-a2hs-android').hidden, '確認が来ていなければ手順');
+      let prompted = 0;
+      const ev = new p.w.Event('beforeinstallprompt');
+      ev.prompt = async () => { prompted++; };
+      ev.userChoice = Promise.resolve({ outcome: 'accepted' });
+      p.w.dispatchEvent(ev);
+      inst.click();
+      assert.ok(await until(() => prompted === 1 && inst.hidden), 'Chrome の確認を出して、追加したらボタンを消す');
+    }
+    assert.deepStrictEqual(p.errs, []);
+    p.close();
+  }
+  assert.ok(fs.readFileSync(path.join(ROOT, 'site/report/index.html'), 'utf8').includes('rel="manifest"'));
+  const mf = JSON.parse(fs.readFileSync(path.join(ROOT, 'site/report/manifest.json'), 'utf8'));
+  assert.strictEqual(mf.display, 'standalone');
+  assert.strictEqual(mf.start_url, undefined, '追加したときのページ (受付の URL) で開く');
+  assert.strictEqual(mf.name, 'SPSP');
+  for (const ic of mf.icons) assert.ok(fs.existsSync(path.join(ROOT, 'site/report', ic.src)), ic.src);
 });

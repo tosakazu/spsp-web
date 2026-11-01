@@ -41,7 +41,7 @@ import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge 
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
 import { managersOf, MANAGERS_MAX } from './report_logic.ts';
 import type { ManagerRole, ReportManager } from './report_logic.ts';
-import { adminDecision, APPLY_DELAY_MS, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
+import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
 import { notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
@@ -404,7 +404,7 @@ export async function flushPending(store: Store, p: Provider, ev: ReportEventRow
   const mode = parseSettings(ev.settings).apply || 'auto';
   if (mode === 'both' || mode === 'approve') return 0;   // 待つ理由が時間ではない (報告・承認で動く)
   const due = (await store.listReportSets(ev.code)).filter((r) => r.state === 'pending'
-    && (mode === 'auto' || (r.note === 'wait_delay' && now - r.updated_ms >= APPLY_DELAY_MS) || r.note !== 'wait_delay'));
+    && (mode === 'auto' || (r.note === 'wait_delay' && now - r.updated_ms >= applyDelayMs(mode)) || r.note !== 'wait_delay'));
   let n = 0;
   for (const row of due.slice(0, max)) {
     const rs = await p.readSet(row.set_id);
