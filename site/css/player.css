@@ -56,7 +56,7 @@ body {
   height: 11px; font-size: 9px; color: #9ca3af; margin-top: 1px;
 }
 .tour-group.expanded .chevron { transform: rotate(90deg); color: #9ca3af; }
-.tour-matches { display: none; padding: 4px 0 8px; background: #fafafa; }
+.tour-matches { display: none; padding: 2px 0 6px; background: #fafafa; }
 .tour-group.expanded .tour-matches { display: block; }
 .match-row .m-player, .match-row .m-opp {
   flex: 1 1 0; min-width: 0; overflow-wrap: anywhere;
@@ -95,7 +95,7 @@ body {
 .pager .page-btn:disabled { opacity: 0.35; cursor: default; }
 .pager .page-info { min-width: 56px; text-align: center; color: #6b7280; }
 .match-header {
-  padding: 8px 12px 4px; font-size: 12px; color: #111827; font-weight: 600;
+  padding: 4px 12px 0; font-size: 12px; color: #111827; font-weight: 600;
   display: flex; align-items: baseline; gap: 8px;
 }
 .match-header .seed {

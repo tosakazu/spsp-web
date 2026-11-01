@@ -72,6 +72,17 @@ test('確定した順位はそのまま。下位クラスにいる人はクラ�
   assert.match(e2.innerHTML, /brackets\/3\/30/);
 });
 
+test('中身が同じなら描き直さない (描き直しの間に押した開け閉めが消えないように)', () => {
+  const L = load();
+  let writes = 0, html = '';
+  const e = { get innerHTML() { return html; }, set innerHTML(v) { writes++; html = v; } };
+  L.render(e, 11, [{ summary: {}, doc: doc() }]);
+  L.render(e, 11, [{ summary: {}, doc: doc() }]);
+  assert.strictEqual(writes, 1);
+  L.render(e, 11, [{ summary: {}, doc: { ...doc(), updated_at: 1800000600 } }]);
+  assert.strictEqual(writes, 2);
+});
+
 test('出ていない部門は描かない', () => {
   assert.strictEqual(load().render(el(), 99, [{ summary: {}, doc: doc() }]), 0);
 });
