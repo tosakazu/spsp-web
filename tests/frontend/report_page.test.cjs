@@ -302,7 +302,8 @@ test('勝利画面 (見本): 演出 → 止まって勝利画面。自分と相�
     assert.ok(await until(() => opened, 1500), '投稿画面を開く');
     const text = decodeURIComponent((/[?&]text=([^&]*)/.exec(opened) || [])[1] || '');
     assert.ok(/^https:\/\/x\.com\/intent\/tweet\?/.test(opened), opened);
-    assert.match(text, /で .+ に 2-1 で勝ちました！ \(UF \+\d+\)\n勝者側Top 32進出$/);
+    assert.match(text, /^(\S+で )?\S* ?.+ に 2-1 で勝利！ \(UF \+\d+\)\n\S.* Winners Final\n勝者側Top 32進出$/);
+    assert.ok(!/Pools|B3|\/ /.test(text), 'プール・フェーズ・イベント名は入れない: ' + text);
     ov.querySelector('[data-win-close]').click();
     assert.ok(await until(() => !p.d.querySelector('.rp-win-ov'), 1000), '閉じる');
     assert.deepStrictEqual(p.errs, []);
@@ -400,7 +401,7 @@ test('勝利画面の共有: 画面を撮らずに Canvas で 1200×675 を描�
     q.d.querySelector('[data-win-share]').click();
     assert.ok(await until(() => shared, 3000), '共有シート');
     assert.match(shared.files[0].name, /^SPSP_win_.+\.png$/);
-    assert.match(shared.text, /勝ちました！[\s\S]*勝者側Top 32進出/);
+    assert.match(shared.text, /勝利！[\s\S]*勝者側Top 32進出/);
     assert.strictEqual(opened, '', 'スマホは投稿画面を別に開かない');
     assert.deepStrictEqual(q.errs, []);
     q.close();

@@ -20,14 +20,17 @@ export const WIN_ANIMS = ['card', 'letters', 'ribbon', 'confetti'];
  * @typedef {{ name: string, emoji: string, uid?: string | null }} WinSide
  * @typedef {{ phase: string, side: 'w' | 'l' | null }} Advance  次のフェーズへの進出 (side = そのフェーズの勝者側 / 敗者側)
  * @typedef {{ me: WinSide, op: WinSide, score: [number, number], tour: string, phase: string, pool: string, round: string,
- *   uf: number, url: string, anim?: string, advance?: Advance | null }} Victory
+ *   uf: number, url: string, anim?: string, advance?: Advance | null, tourName?: string }} Victory  tourName = 大会名だけ (共有の文。イベント名なし)
  */
 
-/** X (Twitter) の投稿の文 @param {Victory} v */
+/** 共有の文 (短く): 「🍄で ☁️ 相手 に 2-1 で勝利！ (UF +6)」/「大会名 ラウンド」/「勝者側Top 32進出」。プール・イベント名は入れない (画像にある)。
+ * キャラ絵文字は分かるときだけ @param {Victory} v */
 export function tweetText(v) {
-  const where = [v.tour, [v.phase, v.pool, v.round].filter(Boolean).join(' ')].filter(Boolean).join(' ');
-  return i18n('report.win.tweet', { where, op: v.op.name, s: v.score[0] + '-' + v.score[1] })
+  const op = (v.op.emoji ? v.op.emoji + ' ' : '') + v.op.name;
+  return (v.me.emoji ? i18n('report.win.tweet_char', { c: v.me.emoji }) : '')
+    + i18n('report.win.tweet', { op, s: v.score[0] + '-' + v.score[1] })
     + (v.uf >= 1 ? ' ' + i18n('report.win.tweet_uf', { n: v.uf }) : '')
+    + (v.tourName || v.round ? '\n' + [v.tourName || '', v.round].filter(Boolean).join(' ') : '')
     + (v.advance ? '\n' + advText(v.advance) : '');
 }
 
