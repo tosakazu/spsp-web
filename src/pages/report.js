@@ -106,7 +106,8 @@ const normChar = (x) => String(x).replace(/[ぁ-ゖ]/g, (c) => String.fromCharCo
 const charById = (id) => (id && CHARS ? CHARS.find((x) => x.id === Number(id)) || null : null);
 function cpLabel(id) {
   const c = charById(id);
-  return c ? `<span class="rp-cp-em">${escapeHtml(c.emoji || '🎮')}</span><span class="rp-cp-nm">${escapeHtml(c.name)}</span>`
+  // 選んだ後は絵文字だけ (名前を出すとボタンが大きくなる)。名前は title (押したときの一覧・マウスを乗せたとき) で分かる
+  return c ? `<span class="rp-cp-em" title="${escapeHtml(c.name)}">${escapeHtml(c.emoji || '🎮')}</span>`
     : `<span class="rp-cp-nm rp-cp-none">${escapeHtml(i18n('report.char.pick'))}</span>`;
 }
 /** 入力欄 (hidden の値 = キャラ ID) とボタン。attr は data-char="0" など */
@@ -116,7 +117,7 @@ function charPickHtml(attr, label) {
 function setChar(input, id) {
   input.value = id ? String(id) : '';
   const btn = input.parentElement && input.parentElement.querySelector('.rp-cp-btn');
-  if (btn) btn.innerHTML = cpLabel(input.value);
+  if (btn) { btn.innerHTML = cpLabel(input.value); const c = charById(input.value); if (c) btn.title = c.name; else btn.removeAttribute('title'); }
 }
 function wireCharPickers(root, m) {
   for (const b of root.querySelectorAll('[data-cp-open]')) {
