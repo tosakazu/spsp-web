@@ -169,16 +169,16 @@ function resultCardHtml(t, tabs, opts) {
   const lcTag = playerTourTag(t, 'lc');
   const stTag = playerTourTag(t, 'status');
   const rsTag = playerTourTag(t, 'rs');
-  // 当時全国 → 大会後。改善時のみ (+N) を付ける (悪化時は注記なし)
+  // 集計対象バッジ (この選手にとって評価に使われた大会か)
+  const counted = !!(t.bt_used || (t.tjpr_lv || 0) > 0 || (t.tjpr_raw || 0) > 0);
+  // 当時全国 → 大会後 (集計対象の大会だけ。集計対象外は順位が動かないので出さない)。改善時のみ (+N) を付ける (悪化時は注記なし)
   let zenHtml = '';
-  if (t.pretour_ranks && t.pretour_ranks.ensemble != null) {
+  if (counted && t.pretour_ranks && t.pretour_ranks.ensemble != null) {
     const pre = t.pretour_ranks.ensemble;
     const d = t.rank_delta_ensemble;
     zenHtml = `<div class="lr-zen">${i18n('common.national')} <b>#${pre}</b>${d != null ? ` → <b>#${pre - d}</b>` : ''}${
       /** @type {number} */ (d) > 0 ? ` <span class="lr-zen-up">(+${d})</span>` : ''}</div>`;
   }
-  // 集計対象バッジ (この選手にとって評価に使われた大会か)
-  const counted = !!(t.bt_used || (t.tjpr_lv || 0) > 0 || (t.tjpr_raw || 0) > 0);
   const cntTag = counted
     ? `<span class="lr-badge ok">${i18n('player.counted')}</span>`
     : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
