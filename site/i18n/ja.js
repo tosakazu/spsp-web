@@ -2164,6 +2164,7 @@ window.SPSP_I18N.ja = {
   'report.preset.loaded_setup2': '「{name}」を入れました。',
   'report.set.top_none': '最後まで',
   'report.set.top_n': 'トップ {n} の手前まで',
+  'report.set.entrants': '参加 {n} 人',
   'report.set.classes_only': '下位クラス (Bクラス等) の試合だけ選手が報告',
   'report.set.apply': '報告の取り込み',
   'report.set.apply_auto': 'すぐ取り込む',

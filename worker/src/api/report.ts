@@ -611,13 +611,13 @@ export async function handleReportPhases(cfg: Config, store: Store, fetchFn: Fet
     const r = await startggProvider(fetchFn, g.at, String(evRaw.id)).phases();
     if (!r.ok) return err('provider_error', providerMessage('startgg', r.note), r.note);
     const startAt = Number(evRaw.startAt) || Number(evRaw.tournament && evRaw.tournament.startAt) || null;   // 受付の開始の既定値 (秒)
-    return ok({ phases: r.phases, startAt });
+    return ok({ phases: r.phases, startAt, entrants: r.entrants ?? null });
   }
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
   const r = await providerOf(fetchFn, o).phases();
   if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
-  return ok({ phases: r.phases });
+  return ok({ phases: r.phases, entrants: r.entrants ?? null });
 }
 
 /** 運営が採用する側の報告 (adopt) から結果を作る: 勝敗・スコア・ステージはその側、キャラは各側の本人の入力 (選手の報告がそろったときと同じ)。

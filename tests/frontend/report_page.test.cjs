@@ -551,3 +551,22 @@ test('何先: 既定は「設定しない」、start.gg の設定は読めたと
   assert.deepStrictEqual(p.errs, []);
   p.close();
 });
+
+test('選手が報告できる範囲 (トップ N): 参加人数より小さいものだけ選べて、人数を出す', { skip }, async () => {
+  // 運営の画面 (見本は 128 人)
+  const p = await open('?demo=admin');
+  assert.ok(await until(() => { const n = p.d.querySelector('[data-set-top-note]'); return n && !n.hidden; }), '人数が出る');
+  const vals = () => [...p.d.querySelectorAll('[data-set-top] option')].map((o) => o.value).filter(Boolean).map(Number);
+  assert.match(p.d.querySelector('[data-set-top-note]').textContent, /参加 128 人/);
+  assert.strictEqual(Math.max(...vals()), 96);
+  p.close();
+  // 受付を始める画面: 一覧の人数 (Crew Battle 16 人は受付中なので、Singles 128 人。開催中の 1 つは最初から選ばれている)
+  const s = await open('?demo=setup');
+  assert.ok(await until(() => s.d.querySelector('input[name="rp-ev"]:not([disabled])')));
+  const r = s.d.querySelector('input[name="rp-ev"]:not([disabled])');
+  r.checked = true; r.dispatchEvent(new s.w.Event('change', { bubbles: true }));
+  assert.ok(await until(() => { const n = s.d.querySelector('[data-set-top-note]'); return n && !n.hidden; }));
+  assert.strictEqual(Math.max(...[...s.d.querySelectorAll('[data-set-top] option')].map((o) => Number(o.value) || 0)), 96);
+  assert.deepStrictEqual(s.errs, []);
+  s.close();
+});

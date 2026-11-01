@@ -14,7 +14,8 @@ export type ProviderResult = { ok: true } | { ok: false; note: string };
 /** 何先の設定に使うフェーズとラウンド (n = 勝者側 1, 2, …・敗者側 -1, -2, …、label = start.gg の名前。無ければ null) */
 export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null; bestOf?: number | null }[] }
 export interface Provider {
-  phases(): Promise<{ ok: true; phases: PhaseInfo[] } | { ok: false; note: string }>;
+  /** entrants = 参加人数 (分からなければ null。トップ N の候補を絞るのに使う) */
+  phases(): Promise<{ ok: true; phases: PhaseInfo[]; entrants?: number | null } | { ok: false; note: string }>;
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
@@ -51,7 +52,7 @@ const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $se
  * そのブロックの試合の fullRoundText (ラウンドの名前、Winners Semi-Final 等)。rounds が読めなければ試合の round だけで作る。
  */
 const PHASES_QUERY = (withRounds: boolean) => `query SpspReportPhases($id: ID!) {
-  event(id: $id) { phases { id name phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id ${withRounds ? 'rounds { number bestOf }' : ''} } } } }
+  event(id: $id) { numEntrants phases { id name phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id ${withRounds ? 'rounds { number bestOf }' : ''} } } } }
 }`;
 const GROUP_SETS_QUERY = `query SpspReportGroupSets($id: ID!, $page: Int!) {
   phaseGroup(id: $id) { sets(page: $page, perPage: 80, sortType: STANDARD) { pageInfo { totalPages } nodes { round fullRoundText } } }
@@ -216,7 +217,8 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
         }
         out.push(phaseInfoOf(ph, sets));
       }
-      return { ok: true, phases: out };
+      const ne = Number((r.json.data.event as { numEntrants?: unknown }).numEntrants);
+      return { ok: true, phases: out, entrants: Number.isInteger(ne) && ne > 0 ? ne : null };
     },
     async readSet(setId) {
       const r = await startggGql(fetchFn, token, SET_QUERY, { id: setId });
