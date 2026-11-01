@@ -160,6 +160,8 @@
   .stat-row .v.pos { color: #16a34a; }
   .stat-row .v.neg { color: #2563eb; }
   .stat-row.hl-headline { border-bottom: none; padding-bottom: 2px; }
+  .stat-row > span:first-child { white-space: nowrap; flex: none; margin-right: 10px; }   /* 左の見出し (アップセット・シード超え) は折り返さない。右の値が折り返す */
+  .stat-row > span + span { min-width: 0; }
   .hl-place {
     display: inline-block; text-align: center; line-height: 1.1;
     font-variant-numeric: tabular-nums;
