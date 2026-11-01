@@ -9,7 +9,7 @@ import type { Config } from '../config.ts';
 import type { FetchFn } from './oauth.ts';
 import type { ReportEventRow, Store } from '../store.ts';
 import type { Decision, NSet, Result } from './report_logic.ts';
-import { managersOf, parseSettings, score } from './report_logic.ts';
+import { applyDelayMs, managersOf, parseSettings, score } from './report_logic.ts';
 import { sendPush } from './webpush.ts';
 
 
@@ -35,7 +35,7 @@ export function noticeText(ev: ReportEventRow, set: NSet, d: Pick<Decision, 'sta
   const head = d.state === 'conflict' ? '食い違い'
     : d.state === 'review' ? '運営の確認が必要'
     : d.state === 'pending' && d.note === 'wait_admin' ? '承認待ち'
-    : d.state === 'pending' && d.note === 'wait_delay' ? '報告 (' + (parseSettings(ev.settings).apply === 'delay3' ? 3 : 5) + ' 分後に反映)'
+    : d.state === 'pending' && d.note === 'wait_delay' ? '報告 (' + applyDelayMs(parseSettings(ev.settings).apply || 'delay') / 60000 + ' 分後に反映)'
     : d.state === 'pending' && d.note === 'wait_both' ? '報告 (相手の報告待ち)'
     : '報告';
   return { title: `${head}: ${n0} vs ${n1}`, body: [res, ev.name].filter(Boolean).join('\n') };

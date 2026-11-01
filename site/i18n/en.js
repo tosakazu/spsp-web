@@ -2114,6 +2114,8 @@ window.SPSP_I18N.en = {
   'report.set.apply': 'Applying reports',
   'report.set.apply_auto': 'Apply immediately',
   'report.set.apply_help_auto': 'Results go to start.gg / Challonge as soon as a player reports (recommended).',
+  'report.set.apply_delay1': 'Apply after 1 minute',
+  'report.set.apply_help_delay1': 'Waits 1 minute before applying. Not applied if the opponent reports differently or the organizers act in the meantime. Applied at once if the opponent reports the same result.',
   'report.set.apply_delay3': 'Apply after 3 minutes',
   'report.set.apply_help_delay3': 'Waits 3 minutes before applying. Not applied if the opponent reports differently or the organizers act in the meantime. Applied at once if the opponent reports the same result.',
   'report.set.apply_delay': 'Apply after 5 minutes',

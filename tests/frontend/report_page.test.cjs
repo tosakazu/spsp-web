@@ -194,7 +194,7 @@ test('運営の画面: 食い違いは片方の報告を採用して解決でき
   assert.ok(await until(() => row() && row().classList.contains('rp-state-fixed'), 3000), '確定した');
   // 取り込み方 (見本は 5 分後) と通知の設定。取り込み待ちの試合は承認・止めるができる
   assert.strictEqual(p.d.querySelector('[data-set-apply]:checked').value, 'delay');
-  assert.strictEqual(p.d.querySelectorAll('[data-set-apply]').length, 5);
+  assert.strictEqual(p.d.querySelectorAll('[data-set-apply]').length, 6);
   assert.strictEqual(p.d.querySelector('[data-set-notify]').value, 'action');
   assert.ok(p.d.getElementById('rp-push-on'), 'この端末で通知を受け取る');
   const pend = () => p.d.querySelector('.rp-adm-row[data-set="106"]');

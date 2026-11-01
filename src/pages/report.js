@@ -1047,9 +1047,9 @@ function settingsFormHtml(s, kind) {
       <select data-set-notify>${NOTIFY_LEVELS.map((k) => `<option value="${k}"${(s && s.notify ? s.notify : 'off') === k ? ' selected' : ''}>${escapeHtml(i18n('report.set.notify_' + k))}</option>`).join('')}</select></label>
   </div>`;
 }
-const APPLY_MODES = ['auto', 'delay3', 'delay', 'both', 'approve'];
-/** 待ってから取り込むときの分 (受付の設定 apply = delay3 / delay) */
-const delayMin = () => (INFO && INFO.settings && INFO.settings.apply === 'delay3' ? 3 : 5);
+const APPLY_MODES = ['auto', 'delay1', 'delay3', 'delay', 'both', 'approve'];
+/** 待ってから取り込むときの分 (受付の設定 apply = delay1 / delay3 / delay) */
+const delayMin = () => ({ delay1: 1, delay3: 3 }[INFO && INFO.settings ? INFO.settings.apply : ''] || 5);
 const NOTIFY_LEVELS = ['off', 'action', 'all'];
 function readSettings(root) {
   const top = root.querySelector('[data-set-top]'); const cls = root.querySelector('[data-set-cls]'); const op = root.querySelector('[data-set-open]');

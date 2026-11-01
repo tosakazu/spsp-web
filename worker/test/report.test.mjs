@@ -941,4 +941,7 @@ test('3 分後に取り込む: 3 分たったら送る (5 分の設定と同じ�
   await e.call({ action: 'report_view', token: A, code: e.code });
   assert.strictEqual(fake.set.state, 3, '3 分たったら送る');
   assert.strictEqual(parseSettings({ apply: 'delay3' }).apply, 'delay3');
+  // 1 分
+  assert.strictEqual(reconcile(null, [{ result: R(0, G(0), G(0)), ts: 0 }, null], set0(), 'delay1', 59e3).state, 'pending');
+  assert.strictEqual(reconcile(null, [{ result: R(0, G(0), G(0)), ts: 0 }, null], set0(), 'delay1', 60e3).op, 'report');
 });

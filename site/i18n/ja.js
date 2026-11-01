@@ -2167,6 +2167,8 @@ window.SPSP_I18N.ja = {
   'report.set.apply': '報告の取り込み',
   'report.set.apply_auto': 'すぐ取り込む',
   'report.set.apply_help_auto': '選手が報告したらすぐ start.gg / Challonge に反映します (おすすめ)。',
+  'report.set.apply_delay1': '1 分後に取り込む',
+  'report.set.apply_help_delay1': '1 分待ってから反映します。その間に相手の違う報告や運営の操作があれば反映しません。相手も同じ結果を報告したらすぐ反映します。',
   'report.set.apply_delay3': '3 分後に取り込む',
   'report.set.apply_help_delay3': '3 分待ってから反映します。その間に相手の違う報告や運営の操作があれば反映しません。相手も同じ結果を報告したらすぐ反映します。',
   'report.set.apply_delay': '5 分後に取り込む',
