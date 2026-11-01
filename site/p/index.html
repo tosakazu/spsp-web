@@ -524,7 +524,7 @@
     flex: 1 1 0; text-align: left; min-width: 0;
     overflow-wrap: anywhere; line-height: 1.3;   /* 長い名前は省略せず折り返す */
   }
-  .match-row .m-delta { flex: 0 0 auto; min-width: 50px; }
+  .match-row .m-delta { flex: 0 0 auto; }   /* 幅は数字の分だけ (右寄せなので列はそろう)。余りは相手の名前に回す */
 
   /* ─── モバイル (max-width: 720px) ─── */
   @media (max-width: 720px) {
