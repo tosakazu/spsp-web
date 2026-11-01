@@ -1046,63 +1046,6 @@ function render() {
     return passesFilterByEid(m.event_id);
   }
 
-  /** @param {PTour[]} items */
-  function renderContribs(items) {
-    return items.map(t => {
-      const w = (t.tjpr_w || 0) * TJPR_SCALE;
-      const base = (t.tjpr_raw || 0) * TJPR_SCALE;
-      return tournamentItem(t,
-        `<span style="color:#16a34a">+${w.toFixed(1)}</span>` +
-        `<br><span style="color:#9ca3af;font-size:11px">(${base.toFixed(1)})</span>`);
-    }).join('');
-  }
-  function renderTopContribs() {
-    if (!PLAYER) return;
-    const tcAll = (PLAYER.top_tjpr_contribs || []).filter(t => passesFilter(t));
-    setupPaginated(tcAll, 'top-contribs', 'top-contribs-pager',
-      arr => renderContribs(arr),
-      i18n('player.empty.top_tjpr'));
-  }
-
-  // Top BT gains — per-match format: vs opponent at tournament
-  /** @param {PMatch} m */
-  function matchItem(m) {
-    const oppLink = m.opp_uid
-      ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, escapeHtml(m.opp_display || ''), ' style="color:#dc2626;text-decoration:none;font-weight:500"')
-      : escapeHtml(m.opp_display || '');
-    const tName = m.event_id
-      ? SPSPLinks.tournamentLink(SPSP.langRoot, m.event_id, escapeHtml(m.tournament_name || ''), ' style="color:#dc2626;text-decoration:none"')
-      : escapeHtml(m.tournament_name || '');
-    // per-match の rate 変化は内部レート (current) のみ
-    const btD = (m.bt_internal_d != null ? m.bt_internal_d : (m.bt_d || 0));
-    const str = `${btD >= 0 ? '+' : ''}${(btD * ELO_PER_UNIT).toFixed(1)}`;
-    const color = btD > 0 ? '#16a34a' : (btD < 0 ? '#2563eb' : '#9ca3af');
-    // 左 place 列: 上に score (3-2 等、自分が左)、下に bracket (W.Top64 等).
-    const scoreStr = (m.p_score != null && m.o_score != null) ? `${m.p_score}-${m.o_score}` : '';
-    const bracketStr = compactBracketLabel(m.global_bracket_label, m.round_text, m.bracket_type);
-    const placeHtml = `
-      <span class="place" style="font-size:13px">
-        ${scoreStr ? `<span class="num" style="font-size:14px">${scoreStr}</span>` : ''}
-        ${bracketStr ? `<span class="frac">${bracketStr}</span>` : ''}
-      </span>`;
-    return `
-      <div class="tour-item">
-        <span class="date-top">${m.date}</span>
-        ${placeHtml}
-        <div class="meta">
-          vs ${oppLink}
-          <br><span class="date date-inline">${m.date}</span> · ${tName}
-        </div>
-        <div class="v" style="text-align:right;color:${color}">${str}</div>
-      </div>`;
-  }
-  function renderTopBT() {
-    if (!PLAYER) return;
-    const items = (PLAYER.top_bt_gains || []).filter(passesFilterEntry);
-    setupPaginated(items, 'top-bt', 'top-bt-pager',
-      arr => arr.map(matchItem).join(''),
-      i18n('player.empty.top_bt'));
-  }
   // SPR item: UF と同じ「左 place 列に +N SPR」スタイル.
   /** @param {PTour} t */
   const renderSprItem = t => {
@@ -1417,11 +1360,9 @@ function render() {
 
   // 初回 + フィルタ変更時の再描画ハンドル
   function applyFilter() {
-    renderTopContribs();
-    renderTopBT();
+    renderRecentSection();
     renderTopSPR();
     renderTopUFs();
-    renderRecentSection();
   }
   applyFilter();
   if (recentQ) {
