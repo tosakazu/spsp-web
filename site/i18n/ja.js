@@ -2114,7 +2114,7 @@ window.SPSP_I18N.ja = {
   'report.char.used': '使用キャラ',
   'report.char.search': 'キャラ名で絞り込み',
   'report.ft.all': '全部 {n} 先',
-  'report.ft.split': '勝者側・敗者側で別々',
+  'report.ft.split': '細かく設定',
   'report.ft.winners': '勝者側',
   'report.ft.losers': '敗者側',
   'report.ft.no_change': '最後まで同じ',

@@ -2061,7 +2061,7 @@ window.SPSP_I18N.en = {
   'report.char.used': 'Their characters',
   'report.char.search': 'Filter by character name',
   'report.ft.all': 'All first to {n}',
-  'report.ft.split': 'Winners / losers separately',
+  'report.ft.split': 'Custom',
   'report.ft.winners': 'Winners',
   'report.ft.losers': 'Losers',
   'report.ft.no_change': 'Same to the end',
