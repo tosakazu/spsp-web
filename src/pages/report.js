@@ -1039,9 +1039,10 @@ function settingsFormHtml(s, kind) {
     <label>${escapeHtml(i18n('report.set.top_cut'))}
       <select data-set-top><option value="">${escapeHtml(i18n('report.set.top_none'))}</option>${TOP_CUTS.map((n) => `<option value="${n}"${n === tc ? ' selected' : ''}>${escapeHtml(i18n('report.set.top_n', { n }))}</option>`).join('')}</select></label>
     ${kind === 'challonge' ? '' : `<label class="rp-check"><input type="checkbox" data-set-cls${s && s.classes_only ? ' checked' : ''}> ${escapeHtml(i18n('report.set.classes_only'))}</label>`}
-    <fieldset class="rp-apply"><legend>${escapeHtml(i18n('report.set.apply'))}</legend>
+    <fieldset class="rp-apply"><legend class="rp-h-help">${escapeHtml(i18n('report.set.apply'))}<button type="button" class="rp-help" aria-expanded="false" aria-label="${escapeHtml(i18n('report.help'))}">?</button></legend>
+      <dl class="rp-muted rp-help-text rp-apply-help" hidden>${APPLY_MODES.map((k) => `<dt>${escapeHtml(i18n('report.set.apply_' + k))}</dt><dd>${escapeHtml(i18n('report.set.apply_help_' + k))}</dd>`).join('')}</dl>
       ${APPLY_MODES.map((k) => `<label class="rp-radio"><input type="radio" name="rp-apply" value="${k}" data-set-apply${(s && s.apply ? s.apply : 'auto') === k ? ' checked' : ''}>
-        <span><b>${escapeHtml(i18n('report.set.apply_' + k))}</b><small>${escapeHtml(i18n('report.set.apply_help_' + k))}</small></span></label>`).join('')}
+        <span><b>${escapeHtml(i18n('report.set.apply_' + k))}</b></span></label>`).join('')}
     </fieldset>
     <label>${escapeHtml(i18n('report.set.notify'))}
       <select data-set-notify>${NOTIFY_LEVELS.map((k) => `<option value="${k}"${(s && s.notify ? s.notify : 'off') === k ? ' selected' : ''}>${escapeHtml(i18n('report.set.notify_' + k))}</option>`).join('')}</select></label>
