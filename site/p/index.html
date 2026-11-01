@@ -196,6 +196,7 @@
   .tour-clickable:hover { background: #fafafa; }
   /* 最新の大会結果カード: 順位とパフォーマンスを統合したヒーロー表示 */
   #latestres-section h2 { margin-bottom: 0; }
+  #live-section h2 { margin-bottom: 2px; }
   /* 最新の大会結果の本戦 / 下位クラスのタブ (見た目は .chart-tab と同じ。.chart-tab はグラフ切替が全部拾うので別名) */
   .lr-tabs { display: flex; gap: 4px; margin: 6px 0 2px; }
   .lr-tab {
@@ -206,6 +207,7 @@
   .lr-tab.active { background: #dc2626; color: #fff; border-color: #dc2626; }
   .latestres-card .lr-top { margin-top: -1px; }
   .tour-item.latestres-card { display: block; padding: 0 4px 2px; }
+  .tour-group .tour-item.latestres-card { padding: 4px 4px 2px; }   /* 出場履歴の行 (.tour-group .tour-item の上下 6px) より詰める */
   /* ▶ は順位などの列とは別に右端 (幅が足りなくても ▶ だけ次の行に落ちないように) */
   .latestres-card .perf-hero { position: relative; padding: 0 12px 0 0; flex-wrap: nowrap; white-space: nowrap; }
   .live-toggle { cursor: pointer; }
@@ -218,13 +220,15 @@
   .lr-badge.live-end { background: #e5e7eb; color: #4b5563; }
   .live-group + .live-group { margin-top: 10px; }
   .live-event { text-align: center; font-size: 11px; color: #6b7280; margin-top: 2px; }
-  .live-links { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 11px; margin: 2px 0 4px; }
+  .live-links { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 11px; margin: 2px 0 0; }
+  .live-links:empty { display: none; }
   .live-link { color: #2563eb; text-decoration: none; }
   .live-cls { color: #7c3aed; font-weight: 600; }
   .live-sets { border-top: 1px solid #f3f4f6; margin-top: 4px; }
   .live-sets .dim { color: #9ca3af; }
   .live-next { font-size: 11px; font-weight: 700; }
-  .live-foot { font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
+  .live-foot { display: none; font-size: 10px; color: #9ca3af; margin: 4px 4px 0; text-align: right; }
+  .live-group.expanded .live-foot { display: block; }   /* 更新時刻は開いたときだけ */
   /* start.gg のトークンが無いときの案内 (js/live.js、ログインするとブラウザが start.gg から自動で読み直す) */
   .live-browser-note { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #6b7280; margin: 8px 0 0; }
   .live-browser-note[hidden] { display: none; }
@@ -476,8 +480,8 @@
   .tour-group .tour-item {
     grid-template-columns: 50px 1fr;
     grid-template-rows: auto auto auto;
-    column-gap: 8px; row-gap: 4px;
-    padding: 10px 6px;
+    column-gap: 8px; row-gap: 2px;
+    padding: 6px 6px;
   }
   .tour-group .tour-item .date-top {
     display: block; grid-column: 1; grid-row: 1;

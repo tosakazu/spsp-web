@@ -1463,6 +1463,7 @@ function render() {
       hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
       ...livePredictOpts(),
       browser: SpspLiveBrowser,   // ログインしていればブラウザが start.gg から 15 秒ごとに読み直す
+      reflected: liveReflected(),
     });
   }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
@@ -1470,6 +1471,17 @@ function render() {
   // 自分のページなら、参加中の大会の結果報告ページへの入口 (受付中のものだけ。js/report_notice.js)
   SpspLogin.verify().then(() => { if (SpspLogin.isSelf(UID) || SpspReportNotice.isDemo()) SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {}); });
   buildRivalsSection();
+}
+
+// 参加中の大会のうち、結果がもう選手の記録に入っている部門 (最新の大会結果と同じものを二重に出さない)。
+// 下位クラスの行は event_id が無く parent_event_id で親の部門を指すので、下位クラスにいる人は下位クラスの行があるかで見る
+function liveReflected() {
+  const main = new Set(), cls = new Set();
+  for (const t of (PLAYER && PLAYER.tournaments) || []) {
+    if (t.event_id != null) main.add(String(t.event_id));
+    else if (t.parent_event_id != null) cls.add(String(t.parent_event_id));
+  }
+  return (/** @type {string} */ eid, /** @type {boolean} */ inClass) => (inClass ? cls : main).has(eid);
 }
 
 // 参加中の大会の予想 (js/live_predict.js)。全選手の数値 (sim_pop) は速報に載っているときだけ読む

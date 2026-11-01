@@ -35,9 +35,11 @@ const shortName = (/** @type {string} */ s) => SPSPFormat.shortName(s);
 const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
  * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
- * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化
+ * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化、
+ * reflected = 「その部門の結果がもう選手の記録 (最新の大会結果・出場履歴) に入っているか」(event_id, 下位クラスにいるか)。入っていれば出さない
  * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
  *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any>,
+             reflected?: (eventId: string, inClass: boolean) => boolean,
  *             browser?: { pick: (doc: any) => any, refresh: (doc: any) => Promise<any>, status: () => string } }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
@@ -291,6 +293,7 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
     const pred = preds[idx] || null;
     const [myId, e] = entrantOf(doc, uid);
     if (!e || myId == null) continue;
+    if (opts.reflected && opts.reflected(String(doc.event_id ?? ''), !!e.in_class)) continue;   // 最新の大会結果と同じものを出さない
     const pool = poolOf(doc, e.pg);
     // 今のプールのブラケット (start.gg)。部門のページは大会名のリンクと被るので出さない
     const poolLink = pool && pool.group.url

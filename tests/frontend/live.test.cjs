@@ -76,6 +76,16 @@ test('出ていない部門は描かない', () => {
   assert.strictEqual(load().render(el(), 99, [{ summary: {}, doc: doc() }]), 0);
 });
 
+test('結果がもう選手の記録に入っている部門は描かない (本戦と下位クラスを分けて見る)', () => {
+  const L = load();
+  const d = { ...doc(), event_id: 7 };
+  const seen = [];
+  const reflected = (eid, inClass) => { seen.push([eid, inClass]); return eid === '7' && !inClass; };
+  assert.strictEqual(L.render(el(), 11, [{ summary: {}, doc: d }], { reflected }), 0);
+  assert.strictEqual(L.render(el(), 22, [{ summary: {}, doc: d }], { reflected }), 1);   // 下位クラスにいる人は下位クラスの行で見る
+  assert.strictEqual(JSON.stringify(seen), JSON.stringify([['7', false], ['7', true]]));
+});
+
 test('見本 (?live=sample) は spsp.games 以外だけ', () => {
   assert.strictEqual(load('?live=sample').liveRoot(), 'https://data.spsp.games/live/jp/');
   assert.strictEqual(load('?live=sample', 'spsp-web-live-preview.tosakazu.workers.dev').liveRoot(), 'https://data.spsp.games/live/sample/');
