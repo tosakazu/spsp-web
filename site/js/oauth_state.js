@@ -72,7 +72,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       r: typeof o.r === 'string' ? o.r : '',
       // f = このフローが投票のログインか投稿か。GAS が署名時に載せる。
       // 保存領域が引き継がれない経路でも判別するために state 側に持たせている。
-      f: (o.f === 'post' || o.f === 'login' || o.f === 'manager') ? o.f : null,
+      // Worker の signState (worker/src/api/session.ts) が載せる flow と同じものを全部通す。reporter / challonge が抜けていて、
+      // 保存領域が引き継がれない経路 (別のタブ・別のブラウザで戻る) で投稿フロー扱いになり「下書きが見つかりません」と出ていた (2026-11-01)
+      f: (o.f === 'post' || o.f === 'login' || o.f === 'manager' || o.f === 'reporter' || o.f === 'challonge') ? o.f : null,
     };
   }
 
