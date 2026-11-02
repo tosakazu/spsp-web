@@ -371,13 +371,10 @@ async function buildRivalsSection() {
     if (f) { c.display = f.display; c.rank = f.rank; }
   });
   // ---- 描画: 各カテゴリ 順位昇順 + 自分の行を挟む ----
-  // 横幅が足りないのでチームタグ (例 "ZETA | あcola" の ZETA) は省略し、
+  // 横幅が足りないのでチームタグ (例 "ZETA | あcola" の ZETA) と「/name」は省略し (直対・ランキングと同じ js/format.js shortName)、
   // 代わりにメインキャラ絵文字を名前の前に付ける
   /** @param {string | undefined} s */
-  const stripTag = s => {
-    const i = (s || '').lastIndexOf('|');
-    return i >= 0 ? /** @type {string} */ (s).slice(i + 1).trim() : s;
-  };
+  const stripTag = s => SPSPFormat.shortName(s || '');
   /** @param {number} uid */
   const emojiOf = uid => { const e = charEmojiOf(uid); return e ? e + ' ' : ''; };
   const boxes = cats.map(cat => {

@@ -51,13 +51,14 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
    *
    * - チームタグ (「ZETA | あcola」の「ZETA |」部分) は落とす。
    *   一覧では場所を食うわりに情報が薄く、選手名の視認性を下げるため。
-   *   (処理は js/format.js stripTeamTag。プレイヤーページ最上部のカードも同じ)
+   * - 「名前/name」「名前 [補足]」は区切りの前だけ (「れの/Reno」→「れの」、2026-11-02〜)。
+   *   (処理は js/format.js shortName。直対の行・プレイヤーカード・ライバルも同じ)
    * - 末尾の空白 (半角・全角) を落とす。start.gg の登録名に紛れており、
    *   そのまま出すと右側が不自然に空く。
    *
    * 並べ替え・絞り込みは元の表記で行う (タグで検索したい人がいるため)。
    */
-  const displayName = SPSPFormat.stripTeamTag;
+  const displayName = SPSPFormat.shortName;
 
   // === Format helpers ===
   function getRank(rec, method) {
