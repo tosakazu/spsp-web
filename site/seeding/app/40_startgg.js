@@ -360,30 +360,17 @@ export function filterAndRerank(seedInfos) {
 export function downloadCsv() {
   if (!DATA.length) return;
   if (!S.EVENT_CONTEXT) return;
-  const methodLabel = {
-    ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
-  }[S.currentMethod] || i18n('seed.startgg.s12');
   // Sort by current method's rank (or 被り回避適用順), then assign phaseseed 1..N
+  // 列は phaseseed,seedId,player,discriminator だけ (2026-11-03 ユーザー指定: スコア・original_seed・user_id 以降は出さない)。
+  // discriminator は start.gg の参加者データ、無ければ discriminators.json (uid → disc)。シードアップロードはこの列で照合できる
   const recs = orderedRecs();
-  const lines = ['phaseseed,seedId,player,user_id,method,banzuke_rank,avg_rank,score,original_seed'];
+  const lines = ['phaseseed,seedId,player,discriminator'];
   recs.forEach((r, i) => {
     const phaseseed = i + 1;
     const sid = r.seedId != null ? r.seedId : '';
     const player = (r.display || '').replace(/"/g, '""');
-    const uid = r.user_id != null ? r.user_id : '';
-    let bRank = '', avgR = '', score = '';
-    if (!r.unranked) {
-      bRank = r.ranks[S.currentMethod];
-      const ar = r.scores.ensemble_avg_rank;
-      avgR = ar != null ? ar.toFixed(2) : '';
-      const sc = (S.currentMethod === 'tjpr') ? r.scores.tjpr_elo
-                : (S.currentMethod === 'bt_gated') ? r.scores.bt_gated_elo
-                : (r.scores.ensemble_avg_score != null ? r.scores.ensemble_avg_score
-                  : (r.scores.tjpr_elo + r.scores.bt_gated_elo) / 2);
-      score = typeof sc === 'number' ? sc.toFixed(2) : '';
-    }
-    const origSeed = r.original_seed != null ? r.original_seed : '';
-    lines.push([phaseseed, sid, `"${player}"`, uid, methodLabel, bRank, avgR, score, origSeed].join(','));
+    const disc = r.discriminator || (r.user_id != null && S.DISCRIMINATORS ? S.DISCRIMINATORS[String(r.user_id)] : '') || '';
+    lines.push([phaseseed, sid, `"${player}"`, String(disc).replace(/[",\r\n]/g, '')].join(','));
   });
   const csv = '\uFEFF' + lines.join('\r\n') + '\r\n';
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

@@ -178,6 +178,7 @@ test('jsdom: downloadCsv が最適化後順で phaseseed を採番', { skip: !JS
     var EVENT_CONTEXT = { eventName: 'Test', phaseId: 1 };
     var MANUAL = null;                   // 手動調整なし
     var SEED_SPEC = null;
+    var DISCRIMINATORS = { '101': 'j101' };   // 参加者データに disc が無い人は discriminators.json から
     function _projectSeedLocks(a) { return a; }
     function manualOrder() { return MANUAL ? MANUAL.base.slice() : []; }
     ${extractFn(HTML, 'orderedRecs')}
@@ -186,7 +187,7 @@ test('jsdom: downloadCsv が最適化後順で phaseseed を採番', { skip: !JS
   win.eval(setup);
   const recs = [];
   for (let i = 1; i <= 8; i++) recs.push({
-    user_id: 100 + i, display: 'P' + i, seedId: 9000 + i, original_seed: i,
+    user_id: 100 + i, display: 'P' + i, seedId: 9000 + i, original_seed: i, discriminator: i === 1 ? null : 'd' + (100 + i),
     ranks: { ensemble: i, tjpr: i, bt_gated: i },
     scores: { tjpr_elo: 0, bt_gated_elo: 0, ensemble_avg_rank: null, ensemble_avg_score: 0 },
   });
@@ -197,13 +198,12 @@ test('jsdom: downloadCsv が最適化後順で phaseseed を採番', { skip: !JS
   const lines = text.replace(/^﻿/, '').trim().split(/\r\n/);
   // header + 8 行
   assert.strictEqual(lines.length, 9);
-  // phaseseed 1 の user_id は最適化後先頭 = 108
-  const row1 = lines[1].split(',');
-  // 列: phaseseed,seedId,player,user_id,...
-  assert.strictEqual(row1[0], '1');
-  assert.strictEqual(row1[3], '108');
-  // phaseseed 2 → 101
-  assert.strictEqual(lines[2].split(',')[3], '101');
+  // 列は phaseseed,seedId,player,discriminator だけ (スコア・original_seed・user_id は出さない)
+  assert.strictEqual(lines[0], 'phaseseed,seedId,player,discriminator');
+  // phaseseed 1 は最適化後先頭 = 108
+  assert.deepStrictEqual(lines[1].split(','), ['1', '9008', '"P8"', 'd108']);
+  // phaseseed 2 → 101 (disc は discriminators.json から)
+  assert.deepStrictEqual(lines[2].split(','), ['2', '9001', '"P1"', 'j101']);
 });
 
 // 手動調整は既定でオン。プール数/ウェーブ数の入力はどの状態でも出す。
