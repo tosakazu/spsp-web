@@ -40,8 +40,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   // 画面に出す選手名 (直対の行・ランキング一覧・プレイヤーカード・ライバル・速報): チームタグを落とし、さらに区切り (/ [ と全角) の前までにする。
   // 「れの/Reno」→「れの」、「リノハ [休日は…]」→「リノハ」。区切りが先頭 (「[RE]キの」) なら切らない。
   // # と ( は名前の一部のことが多いので切らない (「TG(トリグリ)」「sy#OKPG」はそのまま)
+  // 区切りの前が名前でない人 (登録の書き方の都合) は手で直す。キーはチームタグを落とした表記 (改名したら効かなくなる)
+  var SHORT_NAME_FIX = { 'PND/あまねこ': 'あまねこ' };   // 2026-11-02 ユーザー指定
   function shortName(name) {
     var s = stripTeamTag(name);
+    if (Object.prototype.hasOwnProperty.call(SHORT_NAME_FIX, s)) return SHORT_NAME_FIX[s];
     var m = s.match(/^(.*?)[\/／\[［【]/);
     var head = m ? m[1].replace(/[\s\u3000]+$/, '') : '';
     return head || s;
