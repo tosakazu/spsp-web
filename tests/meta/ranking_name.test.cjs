@@ -13,11 +13,12 @@ const SRC = require('../helpers/built.cjs').built('ranking-table.js');
 // 実ソースから関数だけ取り出して動かす (定義が変わったら落ちる)
 const FMT = fs.readFileSync(path.join(SITE, 'js', 'format.js'), 'utf8');
 const fnSrc = FMT.match(/function stripTeamTag\(name\) \{[\s\S]*?\n  \}/);
+const fixSrc = FMT.match(/var SHORT_NAME_FIX = .*;/);
 const shortSrc = FMT.match(/function shortName\(name\) \{[\s\S]*?\n  \}/);
 assert.ok(fnSrc && shortSrc, 'stripTeamTag / shortName が見つからない');
 assert.ok(/const displayName = SPSPFormat\.shortName;/.test(SRC), 'ranking-table.js の displayName は shortName (直対と同じ)');
 // eslint-disable-next-line no-eval
-const displayName = eval('(() => { ' + fnSrc[0] + '\n' + shortSrc[0] + '\n return shortName; })()');
+const displayName = eval('(() => { ' + fnSrc[0] + '\n' + fixSrc[0] + '\n' + shortSrc[0] + '\n return shortName; })()');
 
 test('チームタグを落とす', () => {
   assert.strictEqual(displayName('ZETA | あcola'), 'あcola');
@@ -33,6 +34,8 @@ test('「名前/name」は名前だけ (直対と同じ)', () => {
   assert.strictEqual(displayName('リノハ [休日は…]'), 'リノハ');
   assert.strictEqual(displayName('[RE]キの'), '[RE]キの');           // 区切りが先頭なら切らない
   assert.strictEqual(displayName('TG(トリグリ)'), 'TG(トリグリ)');
+  assert.strictEqual(displayName('PND/あまねこ'), 'あまねこ');       // 手で直す人
+  assert.strictEqual(displayName('ABC | PND/あまねこ'), 'あまねこ');
 });
 
 test('プレイヤーカードも同じ', () => {
