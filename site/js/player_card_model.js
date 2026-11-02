@@ -253,8 +253,8 @@ export function buildCardModel(data, settings, titleText) {
     id === 'default' ? null : !id || !titleText ? '' : typeof titleText === 'function' ? titleText(id, slot) : (titleText[slot] || '');
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
-    // 名前はチームタグ無し (ランキング一覧と同じ)
-    name: SPSPFormat.stripTeamTag(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    // 名前はチームタグ・「/name」無し (ランキング一覧・直対と同じ js/format.js shortName)
+    name: SPSPFormat.shortName(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
     latest,
@@ -270,7 +270,7 @@ export function buildCardModel(data, settings, titleText) {
 /** SPSP にデータが無い人 (初参加など) のカード: 既定の見た目で名前だけ、実績・総合評価は NO DATA (結果報告の VS、2026-10-31) @param {string} name */
 export function noDataCardModel(name) {
   return {
-    name: SPSPFormat.stripTeamTag(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
+    name: SPSPFormat.shortName(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
     color: DEFAULT_SETTINGS.color, achMode: /** @type {'auto'} */ ('auto'), achievements: [], latest: null, totalTournaments: 0, totalMatches: 0,
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: i18n('player.card.latest'),

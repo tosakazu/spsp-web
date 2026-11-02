@@ -28,7 +28,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   function fmtRank(r) { return r != null && r > 0 ? r.toLocaleString() : '—'; }
 
   // 選手名からチームタグ (「ZETA | あcola」の「ZETA |」) と前後の空白 (半角・全角) を落とす。
-  // ランキング一覧と、プレイヤーページ最上部のカードで使う。タグしか無い名前は空にせず元の表記を返す
+  // ページの題・共有文・カード編集の見出しで使う (表示する名前は下の shortName)。タグしか無い名前は空にせず元の表記を返す
   function stripTeamTag(name) {
     var raw = String(name == null ? '' : name);
     var trim = function (x) { return x.replace(/^[\s\u3000]+|[\s\u3000]+$/g, ''); };
@@ -37,7 +37,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     return cut || trim(raw) || raw;
   }
 
-  // 狭い場所 (直対の行) 用の短い名前: チームタグを落とし、さらに区切り (/ [ と全角) の前までにする。
+  // 画面に出す選手名 (直対の行・ランキング一覧・プレイヤーカード・ライバル・速報): チームタグを落とし、さらに区切り (/ [ と全角) の前までにする。
   // 「れの/Reno」→「れの」、「リノハ [休日は…]」→「リノハ」。区切りが先頭 (「[RE]キの」) なら切らない。
   // # と ( は名前の一部のことが多いので切らない (「TG(トリグリ)」「sy#OKPG」はそのまま)
   function shortName(name) {

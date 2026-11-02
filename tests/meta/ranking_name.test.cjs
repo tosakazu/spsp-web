@@ -1,6 +1,7 @@
 'use strict';
 // ランキング表に出す名前の整形。
-// チームタグは一覧とプレイヤーカードでは落とす。末尾の空白も落とす。整形は js/format.js stripTeamTag (ranking-table.js の displayName はそれ)。
+// チームタグと「/name」「[補足]」は一覧・プレイヤーカード・直対で落とす。末尾の空白も落とす。整形は js/format.js shortName
+// (ranking-table.js の displayName はそれ、中で stripTeamTag を使う。2026-11-02 から直対と同じ)。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -12,16 +13,32 @@ const SRC = require('../helpers/built.cjs').built('ranking-table.js');
 // 実ソースから関数だけ取り出して動かす (定義が変わったら落ちる)
 const FMT = fs.readFileSync(path.join(SITE, 'js', 'format.js'), 'utf8');
 const fnSrc = FMT.match(/function stripTeamTag\(name\) \{[\s\S]*?\n  \}/);
-assert.ok(fnSrc, 'stripTeamTag が見つからない');
-assert.ok(/const displayName = SPSPFormat\.stripTeamTag;/.test(SRC), 'ranking-table.js の displayName は stripTeamTag');
+const shortSrc = FMT.match(/function shortName\(name\) \{[\s\S]*?\n  \}/);
+assert.ok(fnSrc && shortSrc, 'stripTeamTag / shortName が見つからない');
+assert.ok(/const displayName = SPSPFormat\.shortName;/.test(SRC), 'ranking-table.js の displayName は shortName (直対と同じ)');
 // eslint-disable-next-line no-eval
-const displayName = eval('(' + fnSrc[0].replace(/^function stripTeamTag/, 'function') + ')');
+const displayName = eval('(() => { ' + fnSrc[0] + '\n' + shortSrc[0] + '\n return shortName; })()');
 
 test('チームタグを落とす', () => {
   assert.strictEqual(displayName('ZETA | あcola'), 'あcola');
   assert.strictEqual(displayName('Mindset | Riko'), 'Riko');
   assert.strictEqual(displayName('TSM|Leo'), 'Leo');       // 空白なしの区切りも
   assert.strictEqual(displayName('タグ無し'), 'タグ無し');
+});
+
+test('「名前/name」は名前だけ (直対と同じ)', () => {
+  assert.strictEqual(displayName('れの/Reno'), 'れの');
+  assert.strictEqual(displayName('BUZZ | たいけい/Taikei'), 'たいけい');
+  assert.strictEqual(displayName('とみさ／Tomisa'), 'とみさ');       // 全角
+  assert.strictEqual(displayName('リノハ [休日は…]'), 'リノハ');
+  assert.strictEqual(displayName('[RE]キの'), '[RE]キの');           // 区切りが先頭なら切らない
+  assert.strictEqual(displayName('TG(トリグリ)'), 'TG(トリグリ)');
+});
+
+test('プレイヤーカードも同じ', () => {
+  const card = fs.readFileSync(path.join(SITE, 'js', 'player_card_model.js'), 'utf8');
+  assert.doesNotMatch(card, /name: SPSPFormat\.stripTeamTag/, 'カードの名前が stripTeamTag のまま');
+  assert.match(card, /name: SPSPFormat\.shortName\(rec\.display\)/);
 });
 
 test('末尾・先頭の空白を落とす (半角・全角とも)', () => {
