@@ -475,13 +475,16 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
   /** @param {HTMLElement} menu @param {string} myId */
   function renderMyEvents(menu, myId) {
     if (!SpspReportNotice || !SpspLiveRoot) return;
-    Promise.all([SpspReportNotice.items().catch(() => ({ events: [] })), SpspLiveRoot.myEvents(myId).catch(() => [])]).then(([rep, live]) => {
+    Promise.all([SpspReportNotice.items().catch(() => ({ events: [], conflicts: [], admin: [] })), SpspLiveRoot.myEvents(myId).catch(() => [])]).then(([rep, live]) => {
       const now = SpspLogin && SpspLogin.session();
       if (!now || String(now.user.id) !== myId || menu.querySelector('.nav-user-ev')) return;
       const repIds = new Set(rep.events.filter((/** @type {any} */ e) => e.event_id != null).map((/** @type {any} */ e) => String(e.event_id)));
+      const adm = /** @type {any[]} */ (rep.admin || []);
       const links = rep.events.map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(SpspReportNotice.hrefOf(e))}" role="menuitem">${escHTML(t('nav.user.report_ev', { name: e.name || '' }))}</a>`)
         .concat(live.filter((/** @type {any} */ e) => !repIds.has(e.event_id))
-          .map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(e.href)}" role="menuitem">${escHTML(t('nav.user.live_ev', { name: e.name }))}</a>`));
+          .map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(e.href)}" role="menuitem">${escHTML(t('nav.user.live_ev', { name: e.name }))}</a>`))
+        // 運営・報告管理者の受付: 運営の画面へ (2026-11-04)
+        .concat(adm.map((/** @type {any} */ a) => `<a class="nav-user-ev" href="${escHTML(SpspReportNotice.adminHrefOf(a))}" role="menuitem">${escHTML(t('nav.user.report_admin', { name: a.name || '' }))}</a>`));
       if (!links.length) return;
       // 結果報告を受付中の大会があれば人型の左上に赤い星 (二つ名の右上の点とは別の印)
       if (rep.events.length) { const tr = document.querySelector('.nav-user-trigger'); if (tr) tr.classList.add('has-report'); }

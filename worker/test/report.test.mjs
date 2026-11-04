@@ -353,6 +353,10 @@ test('報告の流れ: 1 人目で反映 → 2 人目が違えば取り消し �
   const n = await e.call({ action: 'report_notices', token: B });
   assert.strictEqual(n.mine.length, 1);
   assert.strictEqual(n.events[0].code, e.code);
+  assert.deepStrictEqual(n.admin, []);   // 選手は運営の画面へのリンクを持たない
+  const na = await e.call({ action: 'report_notices', token: e.login.token });
+  assert.deepStrictEqual(na.admin.map((x) => [x.code, x.role]), [[e.code, 'admin']]);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices' })).admin, []);
   e.tick(5000);
   r = await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, 1310] }, { w: 0, c: [null, 1311] }] } });
   assert.deepStrictEqual([r.state, r.op], ['agreed', 'report']);

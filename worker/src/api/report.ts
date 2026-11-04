@@ -893,15 +893,23 @@ export async function handleReportPick(cfg: Config, store: Store, req: Record<st
 /** action: "report_notices" — 受付中の大会 (だれでも) と、ログイン中なら自分の試合の食い違い・運営確認 */
 export async function handleReportNotices(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   await store.purgeReportTokens(now);
-  const events = (await store.listActiveReportEvents(now)).filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now));   // 受付の開始前はお知らせに出さない
+  const active = await store.listActiveReportEvents(now);
+  const events = active.filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now));   // 受付の開始前はお知らせに出さない
   const sess = req.token ? await sessionOf(cfg, req, now) : null;
   const mine = [];
+  // admin = この人が運営・報告管理者の受付 (受付の開始前も)。人型のメニューとトップの帯から運営の画面へ (2026-11-04)
+  const admin: { code: string; name: string; kind: string; role: 'admin' | 'manager' }[] = [];
   if (sess) {
     for (const r of await store.listReportSetsForUser(sess.id, events.map((e) => e.code))) {
       if (r.state === 'conflict' || r.state === 'review') mine.push(await setView(store, r, sess.id));
     }
+    for (const e of active.slice(0, 50)) {
+      const row = await store.getReportEvent(e.code);
+      const role = row ? roleOf(row, sess.id) : null;
+      if (role) admin.push({ code: e.code, name: e.name, kind: e.kind, role });
+    }
   }
-  return ok({ events, mine });
+  return ok({ events, mine, admin });
 }
 
 // ── 運営の画面 ───────────────────────────────────────────────────────

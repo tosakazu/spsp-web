@@ -1665,6 +1665,17 @@ async function watchNotStarted() {
   }, 60000);
 }
 
+/** 管理者用の URL (運営の画面)。開いても運営・報告管理者でなければ何もできない (Worker が毎回確かめる)。2026-11-04 */
+function adminShareHtml() {
+  return `<h3>${escapeHtml(i18n('report.admin.share_admin'))}</h3>
+    <div class="rp-share"><input type="text" readonly value="${escapeHtml(pageUrl(CODE, true))}" id="rp-share-admin-url"><button type="button" class="rp-btn" id="rp-copy-admin">${escapeHtml(i18n('report.admin.copy'))}</button></div>
+    <p class="rp-muted">${escapeHtml(i18n('report.admin.share_admin_help'))}</p>`;
+}
+function wireAdminShare() {
+  const b = $('rp-copy-admin');
+  if (b) b.addEventListener('click', () => { const i = /** @type {HTMLInputElement} */ ($('rp-share-admin-url')); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
+}
+
 /** (テスト用) SPSP からブラケット開始。結果 (ブロックごと) とエラーを画面に出す */
 async function startBracketTest() {
   const out = $('rp-start-bracket-out');
@@ -1722,6 +1733,7 @@ async function renderAdmin() {
     root.innerHTML = `<div id="rp-adm-notstarted" hidden></div>
     <section class="rp-card-sec">
       <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
+      ${adminShareHtml()}
       ${pushHtml()}
     </section>
     <section class="rp-card-sec rp-unsynced" id="rp-adm-unsynced" hidden></section>
@@ -1729,6 +1741,7 @@ async function renderAdmin() {
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
     wirePush(root);
+    wireAdminShare();
     if (ev.kind === 'startgg') watchNotStarted();
     await adminSetsStart(r);
     return;
@@ -1737,6 +1750,7 @@ async function renderAdmin() {
   <section class="rp-card-sec">
     <h2>${escapeHtml(i18n('report.admin.share'))}</h2>
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
+    ${adminShareHtml()}
     <p class="rp-muted">${escapeHtml(i18n('report.admin.expires', { t: new Date(ev.expires_ms).toLocaleString() }))}</p>
     ${matchLinks(null)}
     <h3>${escapeHtml(i18n('report.admin.settings'))}</h3>
@@ -1754,6 +1768,7 @@ async function renderAdmin() {
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
+  wireAdminShare();
   let curFt = ev.settings && ev.settings.ft ? ev.settings.ft : null;
   const drawFt = (ft) => {
     const box = $('rp-ft-set');
