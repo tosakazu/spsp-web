@@ -31,6 +31,7 @@ export function bracketOfSnap(snap: Snapshot): Bracket {
   for (const g of gids) {
     const sets = (setsByGroup.get(g) || []).map((s) => ({
       id: s.i, round: s.r, identifier: s.x, wPlacement: s.wp ?? null, lPlacement: s.lp,
+      winnerProgressionSeed: s.wn ? { id: s.wn } : null, loserProgressionSeed: s.ln ? { id: s.ln } : null,
       slots: s.sl.map((x) => ({ prereqType: x.pt, prereqId: x.pi, prereqPlacement: x.pp })),
     }));
     addGroup(b, g, snap.groups[g] ? snap.groups[g].b || null : null, sets, seedsByGroup.get(g) || []);

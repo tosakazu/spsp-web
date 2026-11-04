@@ -11,7 +11,8 @@
  *   - グランドファイナルのやり直し (両方の枠が同じ試合の 1 と 2) は、グランドファイナルの勝者が敗者側の試合 (round < 0) から来た枠の人のときだけ行う。
  *     行わないときは void (その試合は無い)。
  *   - 順位 = 出場者が最後にいる「どの試合にも使われない出口」の順位 (勝者なら wPlacement・敗者なら lPlacement)。
- *   - 前のフェーズからのシード = 元のブロックで originPlacement の出口を下の順に並べた originOrder 番目。同じ順位の出口が全部決まるまでは決まらない。
+ *   - 前のフェーズからのシード = その試合の勝者 / 敗者 (start.gg の winnerProgressionSeed / loserProgressionSeed、2026-11-05)。
+ *     リンクが無いときだけ: 元のブロックで originPlacement の出口を下の順に並べた originOrder 番目。同じ順位の出口が全部決まるまでは決まらない。
  *     並び = 上位シード (groupSeedNum の小さい方) が全部勝ったとしたときにその出口に来るシード番号の順。敗者側の試合で負けて抜ける出口だけは、その試合の勝者に来るシード番号の順。
  * 総当たり (ROUND_ROBIN) は全部の試合がシード同士なので対戦者は決まるが、順位 (同率の決め方) はここでは計算しない (rr = true)。
  */
@@ -23,7 +24,8 @@ export const PENDING = null;
 export type Occ = string | typeof PENDING;   // 出場者 ID / BYE / VOID / null
 
 export interface BSlot { k: 'seed' | 'set' | 'bye' | null; id: string | null; p: number | null }
-export interface BSet { id: string; g: string; r: number; sl: [BSlot, BSlot]; wp: number | null; lp: number | null; ident?: string }
+/** wn / ln = この試合の勝者 / 敗者が入る次のフェーズのシード (start.gg の winnerProgressionSeed / loserProgressionSeed) */
+export interface BSet { id: string; g: string; r: number; sl: [BSlot, BSlot]; wp: number | null; lp: number | null; ident?: string; wn?: string | null; ln?: string | null }
 export interface BSeed { id: string; g: string; gs: number | null; e: string | null; src: { g: string; pl: number; ord: number } | null }
 export interface BGroup { id: string; rr: boolean }
 export interface Bracket { groups: Record<string, BGroup>; sets: Record<string, BSet>; seeds: Record<string, BSeed> }
@@ -51,7 +53,8 @@ export interface Resolved {
 export function addGroup(b: Bracket, gid: string, bracketType: string | null, rawSets: unknown[], rawSeeds: unknown[]): void {
   b.groups[gid] = { id: gid, rr: bracketType === 'ROUND_ROBIN' };
   for (const x of rawSets) {
-    const s = x as { id?: unknown; round?: unknown; identifier?: unknown; wPlacement?: unknown; lPlacement?: unknown; slots?: unknown[] } | null;
+    const s = x as { id?: unknown; round?: unknown; identifier?: unknown; wPlacement?: unknown; lPlacement?: unknown; slots?: unknown[];
+      winnerProgressionSeed?: { id?: unknown } | null; loserProgressionSeed?: { id?: unknown } | null } | null;
     if (!s || s.id == null) continue;
     const sl = (Array.isArray(s.slots) ? s.slots : []).slice(0, 2).map((y): BSlot => {
       const o = (y || {}) as { prereqType?: unknown; prereqId?: unknown; prereqPlacement?: unknown };
@@ -63,6 +66,8 @@ export function addGroup(b: Bracket, gid: string, bracketType: string | null, ra
       id: String(s.id), g: gid, r: Number(s.round) || 0, sl: [sl[0], sl[1]],
       wp: s.wPlacement == null ? null : Number(s.wPlacement), lp: s.lPlacement == null ? null : Number(s.lPlacement),
       ident: typeof s.identifier === 'string' ? s.identifier : undefined,
+      wn: s.winnerProgressionSeed && s.winnerProgressionSeed.id != null ? String(s.winnerProgressionSeed.id) : null,
+      ln: s.loserProgressionSeed && s.loserProgressionSeed.id != null ? String(s.loserProgressionSeed.id) : null,
     };
   }
   for (const x of rawSeeds) {
@@ -93,6 +98,9 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     const key = sl.id + '#' + (sl.p || 1);
     const a = consumers.get(key); if (a) a.push(s.id); else consumers.set(key, [s.id]);
   }
+  // 次のフェーズのシード → それに入る (試合, 1 = 勝者 | 2 = 敗者)。start.gg が試合ごとに返す (winnerProgressionSeed / loserProgressionSeed)
+  const seedFrom = new Map<string, { set: string; p: 1 | 2 }>();
+  for (const s of Object.values(b.sets)) { if (s.wn) seedFrom.set(s.wn, { set: s.id, p: 1 }); if (s.ln) seedFrom.set(s.ln, { set: s.id, p: 2 }); }
   const seedsOfGroup = new Map<string, BSeed[]>();
   for (const s of Object.values(b.seeds)) { const a = seedsOfGroup.get(s.g); if (a) a.push(s); else seedsOfGroup.set(s.g, [s]); }
 
@@ -105,7 +113,11 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     const sd = b.seeds[seedId];
     let v: Occ;
     if (!sd) v = PENDING;   // 写しに無いシード
-    else if (sd.src && opts.fromSources) v = fromSource(sd);
+    else if (sd.src && opts.fromSources) {
+      const link = seedFrom.get(seedId);
+      if (link) { const st = stateOf(link.set); v = st.void ? PENDING : link.p === 1 ? st.w : st.l; if (v === VOID) v = PENDING; }
+      else v = fromSource(sd);   // リンクが無いとき (古い写し等) だけ、順位と並べ方のきまりから
+    }
     else v = sd.e === null ? (sd.src ? PENDING : BYE) : sd.e;
     out.seed[seedId] = v;
     return v;
@@ -236,7 +248,8 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
 
   for (const id of Object.keys(b.sets)) stateOf(id);
   for (const g of Object.keys(b.groups)) { const p = placeOf(g); if (p) out.place[g] = p.of; }
-  const fed = new Set(Object.values(b.seeds).filter((x) => x.src).map((x) => x.src!.g));
+  // 並べ方のきまりを使う (= リンクの無い通過がある) ブロックだけ
+  const fed = new Set(Object.values(b.seeds).filter((x) => x.src && !seedFrom.has(x.id)).map((x) => x.src!.g));
   for (const g of fed) {
     const p = placeOf(g);
     if (!p) continue;

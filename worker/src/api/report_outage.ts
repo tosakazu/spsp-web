@@ -143,7 +143,8 @@ export function flipResult(r: Result): Result {
 /** pd = 計算で埋めた (start.gg にはまだ出ていない) 出場者 (report_bracket.ts の projectSnap) */
 export interface SnapSlot { pt: string | null; pi: string | null; pp: number | null; e: string | null; sc: number | null; pd?: 1 }
 /** wp = 勝ったときの順位・x = 試合の記号 (A, B, …)。2026-11-05 から (それより前の写しには無い) */
-export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; wp?: number | null; x?: string; g: string; st: number | null; z: number; sl: SnapSlot[] }
+/** wn / ln = 勝者 / 敗者が入る次のフェーズのシード (winnerProgressionSeed / loserProgressionSeed) */
+export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; wp?: number | null; x?: string; wn?: string | null; ln?: string | null; g: string; st: number | null; z: number; sl: SnapSlot[] }
 /** シード (2026-11-05): g = ブロック・gs = ブロックのシード順・e = 出場者・src = 前のフェーズのどこから来るか (元のブロック・順位・同順位の中の順番) */
 export interface SnapSeed { g: string; gs: number | null; e: string | null; src: { g: string; pl: number; ord: number } | null }
 export interface Snapshot {
@@ -190,7 +191,7 @@ const SNAP_MAX_BYTES = 1_800_000;
 const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!, $perPage: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) {
   sets(page: $page, perPage: $perPage, sortType: ${inc ? 'RECENT' : 'STANDARD'}, filters: { hideEmpty: false, showByes: true${inc ? ', updatedAfter: $after' : ''} }) {
     pageInfo { totalPages }
-    nodes { id state round identifier fullRoundText winnerId wPlacement lPlacement updatedAt ${extra ? 'station { number }' : ''}
+    nodes { id state round identifier fullRoundText winnerId wPlacement lPlacement updatedAt winnerProgressionSeed { id } loserProgressionSeed { id } ${extra ? 'station { number }' : ''}
       phaseGroup { id displayIdentifier bracketType phase { id name groupCount } }
       slots { prereqType prereqId prereqPlacement entrant { id name initialSeedNum participants { user { id } } } standing { stats { score { value } } } } } } } }`;
 
@@ -225,6 +226,8 @@ export function absorbSet(snap: Snapshot, raw: unknown, pass: number): number {
   snap.sets[String(s.id)] = {
     i: String(s.id), s: Number(s.state) || 1, r: numOf(s.round), t: String(s.fullRoundText ?? '').slice(0, 60), w: idOf(s.winnerId), lp: numOf(s.lPlacement),
     wp: numOf(s.wPlacement), x: typeof s.identifier === 'string' ? s.identifier.slice(0, 8) : '',
+    ...(s.winnerProgressionSeed ? { wn: idOf((s.winnerProgressionSeed as { id?: unknown }).id) } : {}),
+    ...(s.loserProgressionSeed ? { ln: idOf((s.loserProgressionSeed as { id?: unknown }).id) } : {}),
     g: gid || '', st: st ? numOf(st.number) : null, z: pass, sl: slots,
   };
   return numOf(s.updatedAt) || 0;

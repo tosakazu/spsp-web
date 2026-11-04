@@ -11,6 +11,8 @@ import { checkSnap, projectFull, projectSnap, trustedGroups } from '../src/api/r
 import { absorbSeed, absorbSet, emptySnapshot } from '../src/api/report_outage.ts';
 
 const FX = JSON.parse(fs.readFileSync(new URL('./fixtures/startgg_brackets.json', import.meta.url), 'utf8'));
+/** 試合の通過先のリンク (winnerProgressionSeed / loserProgressionSeed) を外した実例 (控えのきまりの検証用) */
+const noLinks = (groups) => groups.map((g) => ({ ...g, sets: g.sets.map(({ winnerProgressionSeed, loserProgressionSeed, ...x }) => x) }));
 const norm = (v) => (v === BYE || v === VOID || v == null ? null : v);
 
 function build(groups) {
@@ -32,7 +34,7 @@ function sameAsStartgg(groups, r) {
   return n;
 }
 
-for (const [name, groups] of Object.entries(FX)) {
+for (const [name, groups] of [...Object.entries(FX), ...Object.entries(FX).map(([k, v]) => [k + ' (リンクなし)', noLinks(v)])]) {
   test(`実例 ${name}: 最初のシードと勝者だけで全部の試合の対戦者・順位・次のフェーズのシードが start.gg と一致する`, () => {
     const { b, winners } = build(groups);
     const r = resolve(b, winners, { fromSources: true });
@@ -77,8 +79,16 @@ test('グランドファイナルのやり直し: 勝者側から来た人が勝
   assert.deepStrictEqual([r.place.g.A, r.place.g.B], [1, 2]);
 });
 
-test('同じ順位の通過順は確かめたブロックだけ使う (confirmed)。総当たりからの通過は計算しない', () => {
+test('通過先のリンクがあれば確かめなくても次のフェーズが埋まり、確かめる並び (ties) も出ない', () => {
   const { b, winners } = build(FX.pools);
+  const top = FX.pools.find((g) => g.seeds.some((s) => s.progressionSource));
+  const r = resolve(b, winners, { fromSources: true, confirmed: () => false });
+  assert.deepStrictEqual(r.ties, {});
+  for (const sd of top.seeds) if (sd.progressionSource && sd.entrant) assert.strictEqual(r.seed[String(sd.id)], String(sd.entrant.id));
+});
+
+test('リンクが無いとき: 同じ順位の通過順は確かめたブロックだけ使う (confirmed)。総当たりからの通過は計算しない', () => {
+  const { b, winners } = build(noLinks(FX.pools));
   const pools = FX.pools.filter((g) => g.seeds.every((s) => !s.progressionSource));
   const top = FX.pools.find((g) => g.seeds.some((s) => s.progressionSource));
   const r0 = resolve(b, winners, { fromSources: true, confirmed: () => false });
@@ -144,8 +154,8 @@ test('写し: 照合で一致すれば信用し、障害中の SPSP の結果か
   assert.strictEqual(projectSnap(bad, { [String(r2.id)]: String(r2.winnerId) }), bad);
 });
 
-test('写し: プールが終わっても、同じ順位の通過順は運営が確かめるまで次のフェーズを埋めない', () => {
-  const groups = FX.pools;
+test('写し (リンクなし): プールが終わっても、同じ順位の通過順は運営が確かめるまで次のフェーズを埋めない', () => {
+  const groups = noLinks(FX.pools);
   const top = groups.find((g) => g.seeds.some((s) => s.progressionSource));
   const poolSets = groups.filter((g) => g !== top).flatMap((g) => g.sets.map((s) => String(s.id)));
   const snap = snapOf(groups, new Set(poolSets));
@@ -169,4 +179,23 @@ test('写し: プールが終わっても、同じ順位の通過順は運営が
     const sl = b.snap.sets[String(s.id)].sl;
     for (let i = 0; i < 2; i++) if (sl[i].e) assert.strictEqual(sl[i].e, norm(tr.sets[s.id].occ[i]));
   }
+});
+
+test('写し (リンクあり): プールが終われば確かめなくても次のフェーズが埋まり、start.gg の本戦と一致する', () => {
+  const groups = FX.pools;
+  const top = groups.find((g) => g.seeds.some((s) => s.progressionSource));
+  const snap = snapOf(groups, new Set(groups.filter((g) => g !== top).flatMap((g) => g.sets.map((s) => String(s.id)))));
+  checkSnap(snap, 1);
+  assert.deepStrictEqual(snap.chk.bad, {});
+  const a = projectFull(snap, {}, [], new Set());
+  assert.deepStrictEqual(a.ties, {});
+  const truth = build(groups);
+  const tr = resolve(truth.b, truth.winners, { fromSources: true });
+  let filled = 0;
+  // 本戦でシードから入る枠 (勝者側 1 回戦と、敗者側に直接入る人)
+  for (const s of top.sets.filter((x) => x.slots.some((y) => y.prereqType === 'seed'))) {
+    const sl = a.snap.sets[String(s.id)].sl;
+    for (let i = 0; i < 2; i++) { if (norm(tr.sets[s.id].occ[i])) { assert.strictEqual(sl[i].e, norm(tr.sets[s.id].occ[i])); filled++; } }
+  }
+  assert.ok(filled > 10);
 });

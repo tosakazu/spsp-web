@@ -6,6 +6,8 @@ import path from 'node:path';
 import { addGroup, emptyBracket, resolve, BYE, VOID } from '../../worker/src/api/bracket_engine.ts';
 
 const dir = process.argv[2];
+// --no-links = 試合の winnerProgressionSeed / loserProgressionSeed (cache/p<gid>.json) を使わず、順位と並べ方のきまりだけで (控えのきまりの検証)
+const useLinks = !process.argv.includes('--no-links');
 const show = Number((process.argv.find((a) => a.startsWith('--show=')) || '--show=5').split('=')[1]);
 const byEvent = new Map();
 for (const f of fs.readdirSync(dir)) {
@@ -23,6 +25,12 @@ for (const [ev, groups] of byEvent) {
   const actualOcc = {}; const winners = {};
   for (const g of groups) {
     st.groups++; st.types[g.bracketType] = (st.types[g.bracketType] || 0) + 1;
+    const lf = path.join(dir, 'p' + g.gid + '.json');
+    if (useLinks && fs.existsSync(lf)) {
+      const links = new Map(JSON.parse(fs.readFileSync(lf, 'utf8')).map((x) => [x[0], x]));
+      g.sets = g.sets.map((s) => { const l = links.get(String(s.id)); return l ? { ...s, winnerProgressionSeed: l[1] ? { id: l[1] } : null, loserProgressionSeed: l[2] ? { id: l[2] } : null } : s; });
+      st.linkGroups = (st.linkGroups || 0) + 1;
+    }
     addGroup(b, String(g.gid), g.bracketType, g.sets, g.seeds);
     for (const s of g.sets) {
       actualOcc[s.id] = (s.slots || []).slice(0, 2).map((x) => (x && x.entrant ? String(x.entrant.id) : null));
