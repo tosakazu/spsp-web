@@ -183,3 +183,4 @@ D1 = migration 0018 (`report_dqs` / `report_noshows` / `report_starts`)。コー
 - 対戦開始が start.gg に入ったか (migration 0019、report_starts.sgg: 0 まだ / 1 入った / 2 要らない (結果が入った) / -1 断られた)。0 は画面の読みのたびに 1 分ごとにやり直す (`syncStarts`)。指定した試合の対戦開始は start.gg の試合に移ったときに移す。選手の画面の「対戦開始」にも「start.gg には未反映」の札。
 - 模擬の最後に `unsynced` が空になることを確かめる (各 1000 通り)。
 - 本番に入れるとき: 本番 D1 に `migrations/0019_report_start_sync.sql` を execute --file (ALTER TABLE なので 1 回だけ)。
+- start.gg の大会の管理者一覧 (migration 0020、report_events.sgg_admins / sgg_admins_ms、2026-11-05)。受付を始めたとき・report_join で読み、受付が使われている間 (openEvent) は 10 分に 1 回読み直す。お知らせ (report_notices) は D1 を見るだけで start.gg を読まない。一覧に入っている人は普段のログインだけで運営の画面の導線が出て、開くと運営に加わる。本番に入れるとき: 0020 を execute --file (deploy より先に)。

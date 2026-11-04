@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -228,6 +228,12 @@ test('試合結果の報告: 受付の upsert (code は変えない)・期限切
   await store.updateReportEventSettings('abcdefghjk', '{}');
   await store.updateReportEventToken('abcdefghjk', 'v1.c.d', 20);
   assert.strictEqual((await store.getReportEvent('abcdefghjk')).token_enc, 'v1.c.d');
+  await store.updateReportEventSggAdmins('abcdefghjk', '1,7', 30);
+  await store.updateReportEventSggAdmins('abcdefghjk', null, 40);
+  await store.upsertReportEvent({ ...ev, admins: '1,2', settings: '{}' });
+  const sa = await store.getReportEvent('abcdefghjk');
+  assert.deepStrictEqual([sa.sgg_admins, sa.sgg_admins_ms], ['1,7', 40], '時刻だけ・受付の上書きでも一覧は残る');
+  await store.updateReportEventToken('abcdefghjk', 'v1.c.d', 20);
   await store.purgeReportTokens(2000);
   const p = await store.getReportEvent('abcdefghjk');
   assert.deepStrictEqual([p.status, p.token_enc], ['stopped', '']);

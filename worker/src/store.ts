@@ -141,6 +141,8 @@ export interface ReportEventRow {
   name: string; slug: string; admins: string; token_enc: string; token_exp_ms: number; settings: string;
   /** 報告管理者 (JSON の配列 [{ id, name, disc }]、0016)。古い行・テストの行には無いことがある */
   managers?: string;
+  /** start.gg の大会の管理者 (owner と admins の ID、カンマ区切り) と最後に読もうとした時刻 (0020)。古い行・テストの行には無いことがある */
+  sgg_admins?: string; sgg_admins_ms?: number;
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
@@ -254,6 +256,8 @@ export interface Store {
   updateReportEventAdmins(code: string, admins: string): Promise<void>;
   /** 報告管理者 (JSON) を書き換える。 */
   updateReportEventManagers(code: string, managers: string): Promise<void>;
+  /** start.gg の大会の管理者一覧と読もうとした時刻を書き換える (ids = null なら時刻だけ)。 */
+  updateReportEventSggAdmins(code: string, ids: string | null, ms: number): Promise<void>;
   /** その人の保存した設定 (新しい順)。 */
   listReportPresets(userId: string): Promise<ReportPresetRow[]>;
   /** 名前が同じなら置き換える。名前が新しくて既に max 件あれば足さずに false */
