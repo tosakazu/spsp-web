@@ -2235,7 +2235,6 @@ window.SPSP_I18N.en = {
   'report.manual.title': 'Set the next match (while start.gg is down)',
   'report.bk.title': 'Bracket',
   'report.bk.group': 'Pool',
-  'report.bk.legend': 'Drawn from the copy SPSP keeps (may lag start.gg a little). "Not on start.gg yet" = something SPSP has that start.gg does not show yet (a result, and the player it sends to the next match, marked *).',
   'report.bk.none': 'No bracket yet (it appears a little after reporting opens).',
   'report.bk.synced': 'as of {t}',
   'report.bk.winners': 'Winners',

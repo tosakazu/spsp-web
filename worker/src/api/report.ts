@@ -1279,13 +1279,14 @@ export async function handleReportBracketView(cfg: Config, store: Store, fetchFn
   }
   if (!snap.groups[gid]) return err('bad_request', 'そのブロックはありません。', 'bad:group');
   const pj = await projectedFull(store, o.ev.code, snap);
-  const trusted = !!(snap.chk && !snap.chk.bad[gid]);
+  // bad = 照合して食い違った (計算では埋めない)。まだ照合していない (構造を読んでいる途中・古い写し) は食い違いではない
+  const bad = !!(snap.chk && snap.chk.bad[gid]);
   const ents: Record<string, string> = {};
   const sets = Object.values(pj.snap.sets).filter((x) => x.g === gid).map((x) => ({
     i: x.i, r: x.r, t: x.t, x: x.x || '', s: x.s, w: x.w, st: x.st, hw: x.s !== 3 && pj.extra[x.i] ? pj.extra[x.i] : null,
     sl: x.sl.map((y) => { if (y.e) ents[y.e] = snap.ents[y.e] ? snap.ents[y.e].n : ''; return { e: y.e, sc: y.sc, pd: y.pd || 0, pt: y.pt, pi: y.pi, pp: y.pp }; }),
   }));
-  return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, trusted }, sets, ents });
+  return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, bad }, sets, ents });
 }
 
 /** action: "report_progression" — { token, code } 前のフェーズからの通過順 (同じ順位が 2 人以上・start.gg がまだ次のフェーズを埋めていないブロック)。

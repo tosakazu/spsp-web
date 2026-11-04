@@ -22,7 +22,6 @@ export function mountBracketView(root, ctx) {
   root.innerHTML = `<section class="rp-card-sec bk-sec"><details data-bk>
     <summary>${escapeHtml(t('report.bk.title'))}</summary>
     <div class="bk-bar"><select data-bk-group aria-label="${escapeHtml(t('report.bk.group'))}"></select> <span class="rp-muted" data-bk-at></span></div>
-    <p class="rp-muted bk-legend">${escapeHtml(t('report.bk.legend'))}</p>
     <div data-bk-body><p class="rp-muted">${escapeHtml(t('report.loading'))}</p></div>
   </details></section>`;
   const det = /** @type {HTMLDetailsElement} */ (root.querySelector('[data-bk]'));
@@ -84,7 +83,7 @@ export function renderGroup(r, t) {
   const sets = r.sets.filter((s) => !isBye(s));
   const byId = new Map(r.sets.map((s) => [s.i, s]));
   let h = '';
-  if (!r.group.trusted) h += `<p class="rp-warn">${escapeHtml(t('report.bk.untrusted'))}</p>`;
+  if (r.group.bad) h += `<p class="rp-warn">${escapeHtml(t('report.bk.untrusted'))}</p>`;
   if (r.group.b === 'ROUND_ROBIN') return h + rrHtml(sets, r.ents, me, t);
   const side = (want) => {
     const list = sets.filter((s) => (want > 0 ? (s.r || 0) > 0 : (s.r || 0) < 0));

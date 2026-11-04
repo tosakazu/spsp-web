@@ -2288,7 +2288,6 @@ window.SPSP_I18N.ja = {
   'report.manual.title': '次の試合を指定 (start.gg が止まっているとき)',
   'report.bk.title': 'トーナメント表',
   'report.bk.group': 'ブロック',
-  'report.bk.legend': 'SPSP にある写しから描いています (start.gg より少し遅れることがあります)。「start.gg 未反映」= SPSP には届いているが start.gg にまだ出ていないもの (結果と、その結果で次の試合に入った人。名前に *)。',
   'report.bk.none': 'まだトーナメント表がありません (受付を始めてしばらくすると出ます)。',
   'report.bk.synced': '{t} 時点',
   'report.bk.winners': '勝者側',

@@ -634,7 +634,6 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 /* トーナメント表 (report_bracket_view.js、2026-11-05) */
 .bk-sec summary { cursor: pointer; font-weight: 700; }
 .bk-bar { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.bk-legend { font-size: 12px; }
 .bk-side { margin: 12px 0 4px; font-size: 14px; }
 .bk-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
 .bk-cols { display: flex; gap: 10px; align-items: stretch; min-width: min-content; }
