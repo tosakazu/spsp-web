@@ -144,7 +144,9 @@ export function flipResult(r: Result): Result {
 export interface SnapSlot { pt: string | null; pi: string | null; pp: number | null; e: string | null; sc: number | null; pd?: 1 }
 /** wp = 勝ったときの順位・x = 試合の記号 (A, B, …)。2026-11-05 から (それより前の写しには無い) */
 /** wn / ln = 勝者 / 敗者が入る次のフェーズのシード (winnerProgressionSeed / loserProgressionSeed) */
-export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; wp?: number | null; x?: string; wn?: string | null; ln?: string | null; g: string; st: number | null; z: number; sl: SnapSlot[] }
+export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; wp?: number | null; x?: string; wn?: string | null; ln?: string | null; g: string; st: number | null; z: number; sl: SnapSlot[];
+  /** 速報の Worker が取った構造から足した試合 (不戦勝の試合など。1 周で見なくても消さない) */
+  fs?: 1 }
 /** シード (2026-11-05): g = ブロック・gs = ブロックのシード順・e = 出場者・src = 前のフェーズのどこから来るか (元のブロック・順位・同順位の中の順番) */
 export interface SnapSeed { g: string; gs: number | null; e: string | null; src: { g: string; pl: number; ord: number } | null }
 export interface Snapshot {
@@ -166,6 +168,9 @@ export interface Snapshot {
   seeds?: Record<string, SnapSeed>;
   sq?: [string, number][];
   sp?: number;
+  /** 速報の Worker の構造 (live/jp/struct/) を取り込んだブロック → その構造を取った時刻。lc = 一覧を見た時刻 (ms) */
+  ls?: Record<string, number>;
+  lc?: number;
   /** 構造の照合 (bracket_engine で計算した対戦者と start.gg の対戦者)。bad = 食い違ったブロック → 理由 */
   chk?: { ms: number; ok: number; bad: Record<string, string> };
 }
@@ -254,10 +259,74 @@ export function absorbSeed(snap: Snapshot, raw: unknown): void {
   };
 }
 
+// ── 速報の Worker が開始時に取ったブロックの構造 (2026-11-05、spsp-build deploy/live-worker の struct/) ──────────
+export const LIVE_STRUCT_BASE = 'https://data.spsp.games/live/jp/struct/';
+const LIVE_STRUCT_CHECK_MS = 60 * 1000;
+
+/** 構造 1 ブロック分を写しに入れる (試合のつながり・順位・通過先・シード。出場者と結果は写しのまま) */
+export function absorbStruct(snap: Snapshot, doc: unknown): boolean {
+  const d = doc as { v?: unknown; pg?: unknown; phase_id?: unknown; type?: unknown; fetched_at?: unknown; sets?: unknown; seeds?: unknown } | null;
+  if (!d || d.v !== 1 || d.pg == null || !Array.isArray(d.sets) || !Array.isArray(d.seeds)) return false;
+  const pg = String(d.pg);
+  const g = snap.groups[pg];
+  snap.groups[pg] = { d: g ? g.d : '', p: g ? g.p : String(d.phase_id ?? ''), ...(typeof d.type === 'string' ? { b: d.type } : g && g.b ? { b: g.b } : {}) };
+  const keep = new Set<string>();
+  for (const x of d.sets as unknown[]) {
+    if (!Array.isArray(x) || x.length < 8) continue;
+    const [id, round, ident, wp, lp, wn, ln, slots] = x as [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown];
+    const sid = String(id);
+    if (!/^\d+$/.test(sid)) continue;
+    keep.add(sid);
+    const sl = (Array.isArray(slots) ? slots : []).slice(0, 2).map((y) => (Array.isArray(y) ? y : []));
+    while (sl.length < 2) sl.push([]);
+    const cur = snap.sets[sid];
+    const slot = (k: number): SnapSlot => {
+      const c = cur ? cur.sl[k] : null;
+      return { pt: typeof sl[k][0] === 'string' ? sl[k][0] as string : null, pi: idOf(sl[k][1]), pp: numOf(sl[k][2]), e: c ? c.e : null, sc: c ? c.sc : null };
+    };
+    snap.sets[sid] = {
+      i: sid, s: cur ? cur.s : 1, r: numOf(round), t: cur ? cur.t : '', w: cur ? cur.w : null, lp: numOf(lp), wp: numOf(wp), x: typeof ident === 'string' ? ident.slice(0, 8) : '',
+      wn: idOf(wn), ln: idOf(ln), g: pg, st: cur ? cur.st : null, z: cur ? cur.z : snap.pass, sl: [slot(0), slot(1)], fs: 1,
+    };
+  }
+  // 作り直しで消えた試合 (前の構造から足したもの) は落とす
+  for (const [id, x] of Object.entries(snap.sets)) if (x.g === pg && x.fs && !keep.has(id)) delete snap.sets[id];
+  if (!snap.seeds) snap.seeds = {};
+  for (const [id, x] of Object.entries(snap.seeds)) if (x.g === pg) delete snap.seeds[id];
+  for (const x of d.seeds as unknown[]) {
+    if (!Array.isArray(x) || x.length < 4) continue;
+    const src = Array.isArray(x[3]) && x[3][0] != null && x[3][1] != null ? { g: String(x[3][0]), pl: Number(x[3][1]), ord: numOf(x[3][2]) || 1 } : null;
+    snap.seeds[String(x[0])] = { g: pg, gs: numOf(x[1]), e: idOf(x[2]), src };
+  }
+  if (!snap.ls) snap.ls = {};
+  snap.ls[pg] = numOf(d.fetched_at) || 1;
+  return true;
+}
+
+/** 速報の Worker の構造の一覧を見て、変わったブロックだけ読んで写しに入れる (1 分に 1 回まで)。戻り値 = 入れたブロックの数 */
+export async function absorbLiveStructs(fetchFn: FetchFn, snap: Snapshot, eventId: string, now: number): Promise<number> {
+  if (snap.lc && now - snap.lc < LIVE_STRUCT_CHECK_MS) return 0;
+  snap.lc = now;
+  let n = 0;
+  try {
+    const r = await fetchFn(LIVE_STRUCT_BASE + 'e' + encodeURIComponent(eventId) + '.json', { headers: { Accept: 'application/json' } });
+    if (!r.ok) return 0;
+    const idx = await r.json() as { groups?: Record<string, number> } | null;
+    for (const [pg, at] of Object.entries((idx && idx.groups) || {})) {
+      if (!/^\d+$/.test(pg) || (snap.ls && snap.ls[pg] === at)) continue;
+      const g = await fetchFn(LIVE_STRUCT_BASE + pg + '.json', { headers: { Accept: 'application/json' } });
+      if (g.ok && absorbStruct(snap, await g.json())) n++;
+    }
+  } catch (_) { /* 読めなければ写しのまま (シードは start.gg から) */ }
+  return n;
+}
+
 /** シードを読み進める (1 周ごとに全フェーズを読み直す)。失敗したページは次の回に読み直す (試合の写しの成否には数えない)。戻り値 = 失敗の符号 */
 async function advanceSeeds(fetchFn: FetchFn, token: string, snap: Snapshot, allowed: () => Promise<boolean>): Promise<string | null> {
   if (snap.full && snap.sp !== snap.pass && !(snap.sq && snap.sq.length)) {
-    snap.sq = Object.keys(snap.phases).map((pid) => [pid, 1] as [string, number]);
+    // 速報の構造でシードが揃っているフェーズ (そのフェーズのブロックが全部 ls にある) は読まない
+    const covered = (pid: string) => { const gs = Object.entries(snap.groups).filter(([, g]) => g.p === pid).map(([id]) => id); return gs.length > 0 && gs.every((id) => snap.ls && snap.ls[id]); };
+    snap.sq = Object.keys(snap.phases).filter((pid) => !covered(pid)).map((pid) => [pid, 1] as [string, number]);
     snap.sp = snap.pass;
   }
   for (let n = 0; n < SEED_PAGES_PER_CALL && snap.sq && snap.sq.length; n++) {
@@ -320,7 +389,7 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
     if (!snap.full && hw) snap.cur = Math.max(snap.cur, hw);
     if (snap.rot >= r.total) {
       // 2 周続けて見なかった試合だけ落とす (周の途中で並びがずれて 1 回見落としても消さない)
-      for (const [id, s] of Object.entries(snap.sets)) if (s.z < snap.pass - 1) delete snap.sets[id];
+      for (const [id, s] of Object.entries(snap.sets)) if (s.z < snap.pass - 1 && !s.fs) delete snap.sets[id];
       snap.pass += 1; snap.rot = 1; snap.full = true;
     } else snap.rot += 1;
     return null;

@@ -49,7 +49,7 @@ import { EVENT_QUERY, probeStartBracket, startggProvider } from './report_startg
 import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
 import type { Held, Snapshot } from './report_outage.ts';
 import {
-  advanceSnapshot, bracketCandidates, candidateFor, emptySnapshot, flipResult, groupName, guardProvider, Health, heldResult, isManualId, isOutageNote, isQueuedRow,
+  absorbLiveStructs, advanceSnapshot, bracketCandidates, candidateFor, emptySnapshot, flipResult, groupName, guardProvider, Health, heldResult, isManualId, isOutageNote, isQueuedRow,
   manualNSet, manualSlots, manualView, offlineDecision, parseSnapshot, PROBE_GAP_MS, SNAP_FIRST_MIN_MS, SNAP_MIN_MS, snapMine, snapNSet, snapshotJson,
 } from './report_outage.ts';
 import { validSub } from './webpush.ts';
@@ -678,6 +678,8 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
     if (startsDue.length) await syncStarts(store, p, ev, now, startsDue);
     if (snapDue) {
       const snap = (await keptSnap(store, ev.code, loaded)) || emptySnapshot();
+      // 速報の Worker がブロックの開始時に取った構造 (不戦勝の試合・順位・通過先・シード) を先に入れる (2026-11-05)
+      await absorbLiveStructs(fetchFn, snap, ev.target_id, now);
       const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
       if (!e) { try { checkSnap(snap, now); } catch (_) { /* 照合できなくても写しは残す */ } }
       if (e && e !== 'outage_skip' && isOutageNote(e)) await health.fail(e, now);

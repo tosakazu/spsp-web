@@ -8,7 +8,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import { addGroup, emptyBracket, resolve, BYE, VOID } from '../src/api/bracket_engine.ts';
 import { checkSnap, projectFull, projectSnap, trustedGroups } from '../src/api/report_bracket.ts';
-import { absorbSeed, absorbSet, emptySnapshot } from '../src/api/report_outage.ts';
+import { absorbLiveStructs, absorbSeed, absorbSet, absorbStruct, emptySnapshot, LIVE_STRUCT_BASE } from '../src/api/report_outage.ts';
 
 const FX = JSON.parse(fs.readFileSync(new URL('./fixtures/startgg_brackets.json', import.meta.url), 'utf8'));
 /** 試合の通過先のリンク (winnerProgressionSeed / loserProgressionSeed) を外した実例 (控えのきまりの検証用) */
@@ -198,4 +198,58 @@ test('写し (リンクあり): プールが終われば確かめなくても次
     for (let i = 0; i < 2; i++) { if (norm(tr.sets[s.id].occ[i])) { assert.strictEqual(sl[i].e, norm(tr.sets[s.id].occ[i])); filled++; } }
   }
   assert.ok(filled > 10);
+});
+
+/** 速報の Worker の struct/<pg>.json の形 (spsp-build deploy/live-worker の fetchStruct) */
+function structDoc(g, at = 1000) {
+  const id = (v) => (v == null ? null : String(v));
+  return { v: 1, pg: g.gid, event_id: '9', phase_id: 'p' + g.gid, type: g.bracketType, group_state: 2, fetched_at: at,
+    sets: g.sets.map((x) => [String(x.id), x.round, x.identifier, x.wPlacement, x.lPlacement, id(x.winnerProgressionSeed && x.winnerProgressionSeed.id), id(x.loserProgressionSeed && x.loserProgressionSeed.id),
+      x.slots.map((sl) => [sl.prereqType, id(sl.prereqId), sl.prereqPlacement])]),
+    seeds: g.seeds.map((x) => [String(x.id), x.groupSeedNum, x.entrant ? String(x.entrant.id) : null,
+      x.progressionSource && x.progressionSource.originPhaseGroup ? [String(x.progressionSource.originPhaseGroup.id), x.progressionSource.originPlacement, x.progressionSource.originOrder] : null]) };
+}
+
+test('速報の構造 (struct/): 構造の無い写し (不戦勝の試合・順位・シード無し) に入れると、照合が通って計算で埋まる', async () => {
+  const groups = FX.pools;
+  const top = groups.find((g) => g.seeds.some((x) => x.progressionSource));
+  const done = new Set(groups.filter((g) => g !== top).flatMap((g) => g.sets.map((x) => String(x.id))));
+  const full = snapOf(groups, done);
+  // 古い写しの形: 不戦勝の試合が無く、wp / 通過先 / シードも無い
+  const old = emptySnapshot();
+  for (const [id, x] of Object.entries(full.sets)) {
+    if (x.sl.some((y) => y.pt === 'bye')) continue;
+    const { wp, wn, ln, ...rest } = x;
+    old.sets[id] = rest;
+  }
+  old.groups = Object.fromEntries(Object.entries(full.groups).map(([k, v]) => [k, { d: v.d, p: v.p }]));
+  old.full = true;
+  checkSnap(old, 1);
+  assert.strictEqual(old.chk, undefined, '構造が無ければ照合しない');
+  // 速報の構造を一覧から読む
+  const files = { ['e9.json']: { v: 1, event_id: '9', groups: Object.fromEntries(groups.map((g) => [g.gid, 1000])) } };
+  for (const g of groups) files[g.gid + '.json'] = structDoc(g);
+  const reads = [];
+  const fetchFn = async (url) => { reads.push(url); const k = url.slice(LIVE_STRUCT_BASE.length); return files[k] ? new Response(JSON.stringify(files[k])) : new Response('no', { status: 404 }); };
+  assert.strictEqual(await absorbLiveStructs(fetchFn, old, '9', 5000), groups.length);
+  assert.strictEqual(await absorbLiveStructs(fetchFn, old, '9', 6000), 0, '1 分以内は見ない');
+  const n = reads.length;
+  assert.strictEqual(await absorbLiveStructs(fetchFn, old, '9', 70000), 0, '変わっていないブロックは読まない');
+  assert.strictEqual(reads.length, n + 1, '一覧だけ');
+  checkSnap(old, 1);
+  assert.deepStrictEqual(old.chk.bad, {});
+  const a = projectFull(old, {}, [], new Set());
+  assert.deepStrictEqual(a.ties, {}, '通過先のリンクがあるので確かめ待ちは無い');
+  const truth = build(groups);
+  const tr = resolve(truth.b, truth.winners, { fromSources: true });
+  for (const x of top.sets.filter((y) => y.slots.some((z) => z.prereqType === 'seed'))) {
+    const sl = a.snap.sets[String(x.id)].sl;
+    for (let i = 0; i < 2; i++) if (norm(tr.sets[x.id].occ[i])) assert.strictEqual(sl[i].e, norm(tr.sets[x.id].occ[i]));
+  }
+  // 作り直し: 構造が変わったら前の構造から足した試合は消える
+  const g0 = groups[0];
+  const d2 = structDoc(g0, 2000);
+  d2.sets = d2.sets.filter((x) => x[7].some((sl) => sl[0] === 'bye') === false);
+  assert.ok(absorbStruct(old, d2));
+  assert.ok(!Object.values(old.sets).some((x) => x.g === g0.gid && x.sl.some((y) => y.pt === 'bye')));
 });
