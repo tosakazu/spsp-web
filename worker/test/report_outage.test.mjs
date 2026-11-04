@@ -45,7 +45,9 @@ test('heldResult: 運営の直し → その結果、選手の報告 → 一致�
 test('flipResult / pickFound: 指定した 2 人の並びが start.gg と逆なら側を入れ替える。結果の入った試合は選ばない', () => {
   assert.deepStrictEqual(flipResult(R(0, G(0, 1, 2, 3), G(1, 4, 5, null))), R(1, G(1, 2, 1, 3), G(0, 5, 4, null)));
   const n = (id, state, round, a, b) => ({ id, state, round, slots: [{ entrant: a ? { id: a } : null }, { entrant: b ? { id: b } : null }] });
-  assert.deepStrictEqual(pickFound([n(5, 3, -1, 'e1', 'e2'), n(6, 1, 2, 'e2', 'e1')], ['e1', 'e2'], 'l'), { id: '6', flip: true }, '終わった試合 (以前の対戦) は選ばない');
+  assert.deepStrictEqual(pickFound([n(5, 3, -1, 'e1', 'e2'), n(6, 1, -2, 'e2', 'e1')], ['e1', 'e2'], 'l'), { id: '6', flip: true }, '終わった試合 (以前の対戦) は選ばない');
+  assert.strictEqual(pickFound([n(6, 1, 2, 'e1', 'e2')], ['e1', 'e2'], 'l'), null, '側 (勝者側 / 敗者側) が合わない試合は選ばない (後の再戦など)');
+  assert.deepStrictEqual(pickFound([n(6, 1, 2, 'e1', 'e2')], ['e1', 'e2'], 'g'), { id: '6', flip: false }, 'グランドファイナルは勝者側のラウンド');
   assert.deepStrictEqual(pickFound([n(6, 1, 2, 'e1', 'e2'), n(7, 1, -2, 'e1', 'e2')], ['e1', 'e2'], 'l'), { id: '7', flip: false }, '敗者側を先に');
   assert.strictEqual(pickFound([n(8, 1, -2, 'e1', null), n(9, 1, -2, 'e1', 'e3')], ['e1', 'e2'], 'l'), null);
 });
@@ -140,7 +142,15 @@ function fakeBracket() {
     if (name === 'SpspClassAdmin') return j({ currentUser: { id: 4242 }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: [{ id: 4242 }] } } });
     if (name === 'SpspReportSnap') return j({ event: { sets: { pageInfo: { totalPages: 1 }, nodes: st.sets } } });
     if (name === 'SpspReportSet') return j({ set: byId(variables.id) || null });
-    if (name === 'SpspReportNext' || name === 'SpspReportFind') {
+    if (name === 'SpspReportDq') {
+      const s = byId(variables.setId);
+      s.state = 3; s.winnerId = Number(variables.winnerId); s.games = null;
+      st.mutations.push(['dq', String(variables.setId), Number(variables.winnerId)]);
+      advance(s);
+      return j({ x: { id: s.id, state: 3 } });
+    }
+    if (name === 'SpspStartSet') { const s = byId(variables.setId); s.state = 2; st.mutations.push(['start', String(variables.setId)]); return j({ x: { id: s.id, state: 2 } }); }
+    if (name === 'SpspReportNext' || name === 'SpspReportFind' || name === 'SpspReportSetsOf') {
       const ids = variables.entrantIds.map(String);
       return j({ event: { sets: { pageInfo: { totalPages: 1 }, nodes: st.sets.filter((s) => s.slots.some((x) => x.entrant && ids.includes(String(x.entrant.id)))) } } });
     }
@@ -409,4 +419,100 @@ test('未反映の結果の書き出し: SPSP にあって start.gg に無い結
   assert.deepStrictEqual(x.items.map((i) => [i.set_id, i.group, i.round, i.winner, i.score, i.loser, i.state]),
     [['100', 'Main', 'R1', 'P1', '2-1', 'P2', 'queued'], ['101', 'Main', 'R1', null, null, null, 'conflict']]);
   assert.strictEqual((await e.call({ action: 'report_held_export', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
+});
+
+// ── 対戦開始・対戦相手が見つからない・DQ (docs §12) ──
+test('対戦相手が見つからない: 運営と相手に知らせる (最初と 10 分ごとだけ、連打は時刻と回数だけ)。相手か本人が対戦開始で解決・start.gg を試合中に', async () => {
+  const e = await setup();
+  await e.view(11);
+  const keyA = await pushKeys('https://push.example/admin');
+  const keyB = await pushKeys('https://push.example/p2');
+  e.cfg.vapid = keyA.vapid;
+  await e.call({ action: 'report_push_subscribe', token: e.admin, sub: keyA.sub });
+  await e.call({ action: 'report_push_subscribe', token: await e.tok(12), sub: keyB.sub });
+  const ns = async (uid) => e.call({ action: 'report_noshow', token: await e.tok(uid), code: e.code, set_id: '100' });
+  let r = await ns(11);
+  assert.deepStrictEqual([r.ok, r.notified, r.noshow.count], [true, true, 1], JSON.stringify(r));
+  assert.deepStrictEqual(e.fake.pushes.sort(), ['https://push.example/admin', 'https://push.example/p2'], '運営と相手');
+  r = await ns(11);   // 連打
+  assert.deepStrictEqual([r.notified, r.noshow.count], [false, 1], '3 秒より短い押し直しは書かない');
+  e.tick(60 * 1000);
+  r = await ns(11);
+  assert.deepStrictEqual([r.notified, r.noshow.count], [false, 2], '時刻と回数だけ進める');
+  assert.strictEqual(e.fake.pushes.length, 2, '通知はしない');
+  assert.strictEqual((await ns(13)).error.code, 'not_player');
+  // 運営の画面・両者の画面
+  let a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.deepStrictEqual(a.noshows.map((x) => [x.set_id, x.me, x.opp, x.count, x.status]), [['100', 'P1', 'P2', 2, 'open']]);
+  assert.deepStrictEqual((await e.view(12)).noshows.map((x) => [x.set_id, x.by_me]), [['100', false]], '相手の画面に出る');
+  e.tick(10 * 60 * 1000);
+  r = await ns(11);
+  assert.strictEqual(r.notified, true, '10 分たったらもう一度知らせる');
+  // 運営への通知は設定で止められる (相手には送る)
+  await e.call({ action: 'report_settings', token: e.admin, code: e.code, settings: { top_cut: null, classes_only: false, notify_noshow: false } });
+  e.fake.pushes.length = 0;
+  e.tick(11 * 60 * 1000);
+  await ns(11);
+  assert.deepStrictEqual(e.fake.pushes, ['https://push.example/p2']);
+  // 相手が対戦開始 → 解決・start.gg を試合中に。2 回目は記録を変えない
+  const st = await e.call({ action: 'report_start', token: await e.tok(12), code: e.code, set_id: '100' });
+  assert.deepStrictEqual([st.ok, st.first, st.startgg, st.start.user_id], [true, true, true, '12'], JSON.stringify(st));
+  assert.deepStrictEqual(e.fake.mutations, [['start', '100']]);
+  const st2 = await e.call({ action: 'report_start', token: await e.tok(11), code: e.code, set_id: '100' });
+  assert.deepStrictEqual([st2.first, st2.start.user_id], [false, '12']);
+  a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.deepStrictEqual(a.noshows.map((x) => [x.status, x.note]), [['resolved', 'started']]);
+  const v = await e.view(11);
+  assert.deepStrictEqual(v.noshows, []);
+  assert.deepStrictEqual(v.starts.map((x) => [x.set_id, x.by_me]), [['100', false]]);
+  // 運営も対戦開始できる・選手でも運営でもない人はできない
+  assert.strictEqual((await e.call({ action: 'report_start', token: e.admin, code: e.code, set_id: '101' })).ok, true);
+  assert.strictEqual((await e.call({ action: 'report_start', token: await e.tok(99), code: e.code, set_id: '101' })).error.code, 'not_player');
+  // 結果が来たら見つからないは解決
+  e.tick(4000);
+  await e.call({ action: 'report_noshow', token: await e.tok(13), code: e.code, set_id: '101' });
+  e.tick(4000);
+  await e.submit(13, '101', W2(0));
+  a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.ok(a.noshows.filter((x) => x.set_id === '101').every((x) => x.status === 'resolved' && x.note === 'reported'));
+});
+
+test('DQ: 勝者側だけ = いまの勝者側の試合を相手の勝ちに / 敗者側だけ = 敗者側の試合が決まったら / 残り全部。候補からも外れる・障害中は待つ', async () => {
+  const e = await setup();
+  await e.view(11);
+  // P2 を勝者側だけ DQ → 100 は P1 の勝ち (DQ)
+  let d = await e.call({ action: 'report_dq', token: e.admin, code: e.code, entrant: '2', scope: 'w' });
+  assert.strictEqual(d.ok, true, JSON.stringify(d));
+  assert.deepStrictEqual(e.fake.mutations, [['dq', '100', 1]]);
+  assert.deepStrictEqual([d.dq.status, d.dq.done_sets], ['done', '100']);
+  const row = await e.store.getReportSet(e.code, '100');
+  assert.deepStrictEqual([row.state, row.note], ['fixed', 'dq']);
+  // P4 を敗者側だけ DQ: 敗者側の試合 (103) はまだ相手がいない → 待つ。勝者側 101 は DQ にしない
+  d = await e.call({ action: 'report_dq', token: e.admin, code: e.code, entrant: '4', scope: 'l' });
+  assert.strictEqual(d.dq.status, 'open');
+  assert.strictEqual(e.fake.mutations.length, 1);
+  // 候補: P4 は敗者側の候補に出ない (DQ が start.gg に入る前でも)
+  const b = await e.call({ action: 'report_bracket', token: e.admin, code: e.code });
+  assert.ok(!b.groups[0].entrants.filter((x) => candidateFor(x, 'l')).some((x) => x.id === '4'));
+  // 101 (P3 vs P4) を P3 の勝ちで報告 → 103 に P2 vs P4 がそろう → 次の読みで DQ (障害中は待つ)
+  e.tick(4000);
+  await e.submit(13, '101', W2(0));
+  e.fake.down = true;
+  e.tick(31000); await e.view(11); e.tick(31000); await e.view(11);
+  assert.ok(!e.fake.mutations.some((m) => m[1] === '103'), '障害中は待つ');
+  e.fake.down = false;
+  e.tick(31000); await e.view(11);
+  e.tick(31000); await e.view(11);
+  assert.deepStrictEqual(e.fake.mutations.find((m) => m[1] === '103'), ['dq', '103', 2], '103 は P2 の勝ち (P4 の DQ)');
+  const a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.deepStrictEqual(a.dqs.map((x) => [x.name, x.scope, x.status]), [['P4', 'l', 'done'], ['P2', 'w', 'done']]);
+  // 運営: 参加者の試合 (対戦開始・DQ の欄)
+  const ps = await e.call({ action: 'report_player_sets', token: e.admin, code: e.code, entrant: '1' });
+  assert.deepStrictEqual(ps.sets.map((x) => [x.set_id, x.opp_name, x.started]), [['102', 'P3', false]]);
+  // 外す
+  const d3 = await e.call({ action: 'report_dq', token: e.admin, code: e.code, entrant: '3', scope: 'a' });
+  assert.strictEqual(d3.dq.status, 'open');
+  assert.ok(e.fake.mutations.some((m) => m[0] === 'dq' && m[1] === '102' && m[2] === 1), '残り全部: 102 も DQ');
+  assert.strictEqual((await e.call({ action: 'report_dq_cancel', token: e.admin, code: e.code, id: d3.dq.id })).ok, true);
+  assert.strictEqual((await e.call({ action: 'report_dq', token: await e.tok(11), code: e.code, entrant: '3', scope: 'a' })).error.code, 'not_admin');
 });

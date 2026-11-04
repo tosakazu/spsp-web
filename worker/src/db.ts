@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportHealthRow, ReportManualRow, ReportSnapshotRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
+import type { LoginRow, ReportDqRow, ReportNoshowRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportHealthRow, ReportManualRow, ReportSnapshotRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -535,6 +535,65 @@ export class D1Store implements Store {
 
   async listReportPicks(code: string, sinceMs: number): Promise<{ user_id: string; set_id: string; ts_ms: number }[]> {
     const r = await this.db.prepare('SELECT user_id, set_id, ts_ms FROM report_picks WHERE code = ? AND ts_ms >= ? LIMIT 2000').bind(code, sinceMs).all<{ user_id: string; set_id: string; ts_ms: number }>();
+    return r.results || [];
+  }
+
+  async insertReportDq(r: ReportDqRow): Promise<number> {
+    const res = await this.db.prepare(
+      'INSERT INTO report_dqs (code, entrant_id, name, scope, set_id, status, done_sets, note, created_by, created_ms, updated_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(r.code, r.entrant_id, r.name, r.scope, r.set_id || '', r.status, r.done_sets, r.note, r.created_by, r.created_ms, r.updated_ms).run();
+    return Number(res.meta?.last_row_id ?? 0);
+  }
+
+  async listReportDqs(code: string): Promise<ReportDqRow[]> {
+    const r = await this.db.prepare('SELECT * FROM report_dqs WHERE code = ? ORDER BY id DESC LIMIT 200').bind(code).all<ReportDqRow>();
+    return (r.results || []).map((x) => ({ ...x, id: Number(x.id) }));
+  }
+
+  async updateReportDq(code: string, id: number, status: string, doneSets: string, note: string, nowMs: number): Promise<void> {
+    await this.db.prepare('UPDATE report_dqs SET status = ?, done_sets = ?, note = ?, updated_ms = ? WHERE code = ? AND id = ?').bind(status, doneSets, note, nowMs, code, id).run();
+  }
+
+  async getReportNoshow(code: string, setId: string, userId: string): Promise<ReportNoshowRow | null> {
+    return await this.db.prepare('SELECT * FROM report_noshows WHERE code = ? AND set_id = ? AND user_id = ?').bind(code, setId, userId).first<ReportNoshowRow>() ?? null;
+  }
+
+  async upsertReportNoshow(r: ReportNoshowRow, notifiedMs: number | null): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO report_noshows (code, set_id, user_id, users, info, first_ms, last_ms, count, notified_ms, status, note) VALUES (?1, ?2, ?3, ?9, ?4, ?5, ?6, 1, ?7, 'open', '')
+       ON CONFLICT (code, set_id, user_id) DO UPDATE SET info = ?4, users = ?9, last_ms = ?6, count = count + 1, status = 'open', note = '',
+         first_ms = CASE WHEN status = 'open' THEN first_ms ELSE ?6 END, notified_ms = COALESCE(?8, notified_ms)`)
+      .bind(r.code, r.set_id, r.user_id, r.info, r.first_ms, r.last_ms, notifiedMs ?? 0, notifiedMs, r.users).run();
+  }
+
+  async listReportNoshows(code: string, sinceMs: number): Promise<ReportNoshowRow[]> {
+    const r = await this.db.prepare('SELECT * FROM report_noshows WHERE code = ? AND last_ms >= ? ORDER BY last_ms DESC LIMIT 200').bind(code, sinceMs).all<ReportNoshowRow>();
+    return r.results || [];
+  }
+
+  async resolveReportNoshows(code: string, setId: string, note: string, userId: string | null): Promise<void> {
+    if (userId === null) await this.db.prepare("UPDATE report_noshows SET status = 'resolved', note = ? WHERE code = ? AND set_id = ? AND status = 'open'").bind(note, code, setId).run();
+    else await this.db.prepare("UPDATE report_noshows SET status = 'resolved', note = ? WHERE code = ? AND set_id = ? AND user_id = ? AND status = 'open'").bind(note, code, setId, userId).run();
+  }
+
+  async insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number): Promise<boolean> {
+    const res = await this.db.prepare('INSERT OR IGNORE INTO report_starts (code, set_id, users, user_id, ts_ms) VALUES (?, ?, ?, ?, ?)').bind(code, setId, users, userId, nowMs).run();
+    return (res.meta?.changes ?? 0) > 0;
+  }
+
+  async getReportStart(code: string, setId: string): Promise<{ set_id: string; user_id: string; ts_ms: number } | null> {
+    return await this.db.prepare('SELECT set_id, user_id, ts_ms FROM report_starts WHERE code = ? AND set_id = ?').bind(code, setId).first<{ set_id: string; user_id: string; ts_ms: number }>() ?? null;
+  }
+
+  async listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<{ set_id: string; user_id: string; ts_ms: number }[]> {
+    const r = await this.db.prepare('SELECT set_id, user_id, ts_ms FROM report_starts WHERE code = ? AND users LIKE ? AND ts_ms >= ? LIMIT 100')
+      .bind(code, '%|' + userId + '|%', sinceMs).all<{ set_id: string; user_id: string; ts_ms: number }>();
+    return r.results || [];
+  }
+
+  async listReportNoshowsForUser(code: string, userId: string, sinceMs: number): Promise<ReportNoshowRow[]> {
+    const r = await this.db.prepare('SELECT * FROM report_noshows WHERE code = ? AND users LIKE ? AND last_ms >= ? LIMIT 100')
+      .bind(code, '%|' + userId + '|%', sinceMs).all<ReportNoshowRow>();
     return r.results || [];
   }
 

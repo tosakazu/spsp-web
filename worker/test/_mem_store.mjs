@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; this.reportPicks = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; this.reportPicks = []; this.reportDqs = []; this.reportNoshows = []; this.reportStarts = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -322,6 +322,36 @@ export class MemStore {
   }
   async deleteReportPicksForSet(code, setId) { this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.set_id === setId)); }
   async listReportPicks(code, sinceMs) { this._rep(); return this.reportPicks.filter((x) => x.code === code && x.ts_ms >= sinceMs).map(({ user_id, set_id, ts_ms }) => ({ user_id, set_id, ts_ms })); }
+
+  async insertReportDq(row) { this._rep(); const id = this.reportDqs.length + 1; this.reportDqs.push({ ...row, id }); return id; }
+  async listReportDqs(code) { this._rep(); return this.reportDqs.filter((x) => x.code === code).sort((a, b) => b.id - a.id).map((x) => ({ ...x })); }
+  async updateReportDq(code, id, status, doneSets, note, nowMs) {
+    this._rep(); for (const x of this.reportDqs) if (x.code === code && x.id === id) Object.assign(x, { status, done_sets: doneSets, note, updated_ms: nowMs });
+  }
+  async getReportNoshow(code, setId, userId) { this._rep(); const r = this.reportNoshows.find((x) => x.code === code && x.set_id === setId && x.user_id === userId); return r ? { ...r } : null; }
+  async upsertReportNoshow(row, notifiedMs) {
+    this._rep(); const r = this.reportNoshows.find((x) => x.code === row.code && x.set_id === row.set_id && x.user_id === row.user_id);
+    if (!r) { this.reportNoshows.push({ ...row, count: 1, notified_ms: notifiedMs ?? 0, status: 'open', note: '' }); return; }
+    if (r.status !== 'open') r.first_ms = row.last_ms;
+    Object.assign(r, { info: row.info, users: row.users, last_ms: row.last_ms, count: r.count + 1, status: 'open', note: '' });
+    if (notifiedMs !== null) r.notified_ms = notifiedMs;
+  }
+  async listReportNoshows(code, sinceMs) { this._rep(); return this.reportNoshows.filter((x) => x.code === code && x.last_ms >= sinceMs).sort((a, b) => b.last_ms - a.last_ms).map((x) => ({ ...x })); }
+  async resolveReportNoshows(code, setId, note, userId) {
+    this._rep(); for (const x of this.reportNoshows) if (x.code === code && x.set_id === setId && x.status === 'open' && (userId === null || x.user_id === userId)) Object.assign(x, { status: 'resolved', note });
+  }
+
+  async insertReportStart(code, setId, users, userId, nowMs) {
+    this._rep(); if (this.reportStarts.some((x) => x.code === code && x.set_id === setId)) return false;
+    this.reportStarts.push({ code, set_id: setId, users, user_id: userId, ts_ms: nowMs }); return true;
+  }
+  async getReportStart(code, setId) { this._rep(); const r = this.reportStarts.find((x) => x.code === code && x.set_id === setId); return r ? { set_id: r.set_id, user_id: r.user_id, ts_ms: r.ts_ms } : null; }
+  async listReportStartsForUser(code, userId, sinceMs) {
+    this._rep(); return this.reportStarts.filter((x) => x.code === code && x.users.includes('|' + userId + '|') && x.ts_ms >= sinceMs).map(({ set_id, user_id, ts_ms }) => ({ set_id, user_id, ts_ms }));
+  }
+  async listReportNoshowsForUser(code, userId, sinceMs) {
+    this._rep(); return this.reportNoshows.filter((x) => x.code === code && (x.users || '').includes('|' + userId + '|') && x.last_ms >= sinceMs).map((x) => ({ ...x }));
+  }
 
   async reportSubmissionActivity(userId, sinceMs) {
     this._rep();

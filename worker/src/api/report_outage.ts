@@ -84,7 +84,10 @@ export function guardProvider(p: Provider, h: Health, now: number): Provider {
     readSet: (id) => wrap(() => p.readSet(id), { ok: false as const, code: 'provider_error' as const, note: 'outage_skip' }),
     apply: (s, r, m) => wrap(() => p.apply(s, r, m), skip),
     reset: (s) => wrap(() => p.reset(s), skip),
-    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>) => wrap(() => p.findSet!(ids, side, exclude), { ok: false as const, note: 'outage_skip' }) } : {}),
+    ...(p.dq ? { dq: (s: NSet, w: Side) => wrap(() => p.dq!(s, w), skip) } : {}),
+    ...(p.start ? { start: (id: string) => wrap(() => p.start!(id), skip) } : {}),
+    ...(p.setsOf ? { setsOf: (e: string) => wrap(() => p.setsOf!(e), { ok: false as const, note: 'outage_skip' }) } : {}),
+    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>, skip?: FoundSkip) => wrap(() => p.findSet!(ids, side, exclude, skip), { ok: false as const, note: 'outage_skip' }) } : {}),
   };
 }
 
@@ -470,7 +473,9 @@ const FIND_QUERY = `query SpspReportFind($eventId: ID!, $entrantIds: [ID], $page
  * 運営が指定した 2 人の、まだ結果の無い start.gg の試合。勝者側 / 敗者側が合うものを先に。
  * 結果が入った試合は選ばない (以前に同じ 2 人が当たった試合を取り違えないように)。flip = 枠の並びが指定と逆
  */
-export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude: Set<string> = new Set()): { id: string; flip: boolean } | null {
+/** skip = 選ばない試合 (先に出した DQ が当てはまる試合など、report.ts) */
+export type FoundSkip = (s: { id: string; round: number | null; entrants: string[] }) => boolean;
+export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude: Set<string> = new Set(), skip?: FoundSkip): { id: string; flip: boolean } | null {
   const cands: { id: string; flip: boolean; ok: boolean }[] = [];
   for (const n of nodes) {
     const x = n as { id?: unknown; state?: unknown; round?: unknown; slots?: { entrant?: { id?: unknown } | null }[] } | null;
@@ -481,13 +486,15 @@ export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | '
     const rev = e[0] === ids[1] && e[1] === ids[0];
     if (!same && !rev) continue;
     const r = Number(x.round);
-    cands.push({ id: String(x.id), flip: rev, ok: side === 'r' || (Number.isFinite(r) && (side === 'w' || side === 'g' ? r > 0 : r < 0)) });
+    if (skip && skip({ id: String(x.id), round: Number.isFinite(r) ? r : null, entrants: [e[0], e[1]] })) continue;
+    cands.push({ id: String(x.id), flip: rev, ok: side === 'r' || !Number.isFinite(r) || x.round === null || (side === 'w' || side === 'g' ? r > 0 : r < 0) });
   }
-  const best = cands.find((c) => c.ok) || cands[0];
+  // 側 (勝者側 / 敗者側) が合うものだけ (合わない試合は後の再戦などの別の試合)。ラウンドが分からない試合は合うことにする
+  const best = cands.find((c) => c.ok);
   return best ? { id: best.id, flip: best.flip } : null;
 }
 
-export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>):
+export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>, skip?: FoundSkip):
   Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }> {
   const nodes: unknown[] = [];
   for (let page = 1; page <= 3; page++) {
@@ -499,5 +506,5 @@ export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: s
     const total = Number(ev.sets.pageInfo && ev.sets.pageInfo.totalPages);
     if (!Number.isFinite(total) || page >= total) break;
   }
-  return { ok: true, found: pickFound(nodes, ids, side, exclude) };
+  return { ok: true, found: pickFound(nodes, ids, side, exclude, skip) };
 }

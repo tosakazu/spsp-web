@@ -7,6 +7,7 @@ import type { FetchFn } from './oauth.ts';
 import { startggGql } from './class_bracket.ts';
 import type { NSet, NSlot, Result, Side } from './report_logic.ts';
 import { findStartggSet } from './report_outage.ts';
+import type { FoundSkip } from './report_outage.ts';
 
 /** 下位クラスのフェーズ・イベントの名前 (site/js/live_fetch.js の LOWER_CLASS_NAME_PAT と同じ) */
 export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z])[BCDE][\s_\-]*class(?![A-Za-z])/i;
@@ -21,7 +22,13 @@ export interface Provider {
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
   /** 運営が指定した 2 人の、まだ結果の無い試合を探す (start.gg だけ。report_outage.ts) */
-  findSet?(ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>): Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }>;
+  /** その参加者の試合 (DQ の対象を探す。start.gg だけ) */
+  setsOf?(entrantId: string): Promise<{ ok: true; sets: { id: string; state: number; round: number | null; entrants: (string | null)[] }[] } | { ok: false; note: string }>;
+  /** DQ: winnerSide の側の勝ち (reportBracketSet isDQ)。start.gg だけ */
+  dq?(set: NSet, winnerSide: Side): Promise<ProviderResult>;
+  /** 対戦開始: start.gg の試合を試合中にする (markSetInProgress)。start.gg だけ */
+  start?(setId: string): Promise<ProviderResult>;
+  findSet?(ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>, skip?: FoundSkip): Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }>;
 }
 
 const SET_QUERY = `query SpspReportSet($id: ID!) {
@@ -47,6 +54,14 @@ const REPORT_MUTATION = `mutation SpspReportBracketSet($setId: ID!, $winnerId: I
 }`;
 const UPDATE_MUTATION = `mutation SpspUpdateSet($setId: ID!, $winnerId: ID!, $gameData: [BracketSetGameDataInput]) {
   updateBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) { id state }
+}`;
+const DQ_MUTATION = `mutation SpspReportDq($setId: ID!, $winnerId: ID!) { reportBracketSet(setId: $setId, winnerId: $winnerId, isDQ: true) { id state } }`;
+const START_MUTATION = `mutation SpspStartSet($setId: ID!) { markSetInProgress(setId: $setId) { id state } }`;
+const SETS_OF_QUERY = `query SpspReportSetsOf($eventId: ID!, $entrantIds: [ID], $page: Int!) {
+  event(id: $eventId) { sets(perPage: 60, page: $page, filters: { entrantIds: $entrantIds, hideEmpty: true }) {
+    pageInfo { totalPages }
+    nodes { id state round slots { entrant { id } } }
+  } }
 }`;
 const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $setId) { id state } }`;
 
@@ -252,8 +267,35 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
     reset(set) {
       return mutate(RESET_MUTATION, { setId: set.id });
     },
-    findSet(ids, side, exclude) {
-      return findStartggSet(fetchFn, token, eventId, ids, side, exclude);
+    dq(set, winnerSide) {
+      const w = set.slots[winnerSide];
+      if (!w) return Promise.resolve({ ok: false, note: 'no_entrant' });
+      return mutate(DQ_MUTATION, { setId: set.id, winnerId: w.id });
+    },
+    start(setId) {
+      return mutate(START_MUTATION, { setId });
+    },
+    async setsOf(entrantId) {
+      const out: { id: string; state: number; round: number | null; entrants: (string | null)[] }[] = [];
+      for (let page = 1; page <= 3; page++) {
+        const r = await startggGql(fetchFn, token, SETS_OF_QUERY, { eventId, entrantIds: [entrantId], page });
+        if (!r.ok) return { ok: false, note: 'sets_of:' + r.note };
+        const ev = r.json.data ? r.json.data.event as { sets?: { nodes?: unknown; pageInfo?: { totalPages?: unknown } } } | null : null;
+        if (!ev || !ev.sets) return { ok: false, note: 'sets_of:' + gqlNote(r.json) };
+        for (const n of Array.isArray(ev.sets.nodes) ? ev.sets.nodes : []) {
+          const x = n as { id?: unknown; state?: unknown; round?: unknown; slots?: { entrant?: { id?: unknown } | null }[] } | null;
+          if (!x || !/^\d+$/.test(String(x.id))) continue;
+          const rd = Number(x.round);
+          out.push({ id: String(x.id), state: Number(x.state) || 1, round: Number.isFinite(rd) ? rd : null,
+            entrants: (Array.isArray(x.slots) ? x.slots : []).map((s) => (s && s.entrant && s.entrant.id !== undefined && s.entrant.id !== null ? String(s.entrant.id) : null)) });
+        }
+        const total = Number(ev.sets.pageInfo && ev.sets.pageInfo.totalPages);
+        if (!Number.isFinite(total) || page >= total) break;
+      }
+      return { ok: true, sets: out };
+    },
+    findSet(ids, side, exclude, skip) {
+      return findStartggSet(fetchFn, token, eventId, ids, side, exclude, skip);
     },
   };
 }

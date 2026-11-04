@@ -98,7 +98,16 @@ function fakeStartgg(rand = Math.random, flaky = 0, lost = 0, STRUCT = DE8) {
       return j({ event: { sets: { pageInfo: { totalPages: Math.max(1, Math.ceil(nodes.length / per)) }, nodes: nodes.slice((page - 1) * per, page * per) } } });
     }
     if (name === 'SpspReportSet') return j({ set: byId(variables.id) || null });
-    if (name === 'SpspReportNext' || name === 'SpspReportFind') {
+    if (name === 'SpspReportDq') {
+      const s = byId(variables.setId);
+      if (s.state === 3 || !s.slots[0].entrant || !s.slots[1].entrant) return new Response(JSON.stringify({ errors: [{ message: 'Set is not ready' }], data: null }), { status: 200 });
+      s.state = 3; s.winnerId = Number(variables.winnerId); s.games = null; touch(s); fill(s);
+      st.mutations.push(['dq', s.id, s.winnerId]);
+      if (lost && rand() < lost) return new Response('', { status: 503 });
+      return j({ x: { id: s.id, state: 3 } });
+    }
+    if (name === 'SpspStartSet') { const s = byId(variables.setId); if (s.state === 1) { s.state = 2; touch(s); } return j({ x: { id: s.id, state: s.state } }); }
+    if (name === 'SpspReportNext' || name === 'SpspReportFind' || name === 'SpspReportSetsOf') {
       const ids = variables.entrantIds.map(String);
       return j({ event: { sets: { pageInfo: { totalPages: 1 }, nodes: st.sets.filter((s) => s.slots.some((x) => x.entrant && ids.includes(String(x.entrant.id)))) } } });
     }
@@ -179,13 +188,16 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8) {
     if (r < 0.55) { await send(sides[0], res); return send(sides[1], res); }
     return send(sides[rand() < 0.5 ? 0 : 1], res);
   };
-  let steps = 0;
+  let steps = 0; let dqs = 0;
+  // 総当たりでは「次の試合」の DQ が決まらないので、この試合だけの DQ (s) のときだけ
+  const dqOk = STRUCT === DE8;
   while (truth.ready().length && steps++ < 100) {
     // 繋がっているあいだは、送る待ち・食い違いが片付くまで待ってから次へ (取り違えた結果が start.gg に残ったまま次の試合に進むと、
     // 設計どおり運営の確認待ちになる。それはここでは流さない)
     for (let i = 0; i < 20 && !fake.down; i++) {
       const rows = await store.listReportSets(code);
-      if (!rows.some((r) => r.state === 'queued' || r.state === 'conflict')) break;
+      const dqWait = (await store.listReportDqs(code)).some((d) => d.status === 'open');
+      if (!rows.some((r) => r.state === 'queued' || r.state === 'conflict') && !dqWait) break;
       tick(31000); await view(1 + (i % 8));
     }
     // 障害の始まり・終わり (1 試合ごとに 25% で切り替え)
@@ -203,6 +215,29 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8) {
     let needManual = !(realSides[0] && realSides[1]);
     if (!needManual) sides = realSides;
     let r = null;
+    // 会えない・対戦開始 (結果には関係しない。障害中で写しに枠が無いと断られることがある)
+    if (rand() < 0.3) {
+      const who = sides[rand() < 0.5 ? 0 : 1];   // start.gg の今の枠の 2 人
+      const sid = needManual ? null : setId;
+      if (sid) {
+        tick(1000); const ns = await call({ action: 'report_noshow', token: await tok(10 + who), code, set_id: sid });
+        assert.ok(ns.ok || ['not_ready', 'provider_error', 'not_player', 'bad_request'].includes(ns.error.code), JSON.stringify(ns));   // 障害中は写し (少し古い) で確かめる
+        tick(1000); const stt = await call({ action: 'report_start', token: await tok(10 + (who === sides[0] ? sides[1] : sides[0])), code, set_id: sid });
+        assert.ok(stt.ok || ['not_ready', 'provider_error', 'not_player', 'bad_request'].includes(stt.error.code), JSON.stringify(stt));
+      }
+    }
+    // 運営が負けた側を DQ にする (10%): start.gg の試合が分かっていればこの試合だけ、まだなら負けた側の次の試合
+    // (同じ人に同じ範囲の DQ がまだ入っていなければ。同じ DQ は 1 つにまとまる = 画面の二度押し対策)
+    const pendingDq = (await store.listReportDqs(code)).some((d) => d.status === 'open' && d.entrant_id === String(res.l));
+    if (rand() < 0.1 && dqOk && !pendingDq) {
+      const scope = needManual ? (x.round > 0 ? 'w' : 'l') : 's';
+      const dq = await call({ action: 'report_dq', token: admin, code, entrant: String(res.l), scope, ...(scope === 's' ? { set_id: setId } : {}) });
+      assert.strictEqual(dq.ok, true, 'seed ' + seed + ' ' + JSON.stringify(dq));
+      log.push(['dq', res.l, scope, setId]);
+      dqs++;
+      (x.round > 0 && x.round < 4 ? lossesW : lossesL).add(res.l);
+      continue;
+    }
     if (!needManual) {
       r = await report(setId, sides, R2(sides[0] === res.w ? 0 : 1));
       if (!r.ok && r.error.code === 'not_ready') needManual = true;   // 障害中で、写しにはまだ枠が無かった
@@ -234,32 +269,35 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8) {
     await call({ action: 'report_admin', token: admin, code });
     const rows = await store.listReportSets(code);
     const manualOpen = (await store.listReportManual(code)).filter((m) => m.status === 'open');
-    if (!rows.some((r) => r.state === 'queued' || (r.state === 'conflict' && /outage|manual/.test(r.note))) && !manualOpen.length) break;
+    const dqOpen = (await store.listReportDqs(code)).some((d) => d.status === 'open');
+    if (!rows.some((r) => r.state === 'queued' || (r.state === 'conflict' && /outage|manual/.test(r.note))) && !manualOpen.length && !dqOpen) break;
   }
   // 確かめる
   for (const [n] of STRUCT) {
     const s = fake.sets.find((y) => y.id === 1000 + n);
     const tr = truth.t.get(n);
     assert.ok(tr, 'seed ' + seed + ' 試合 ' + n + ' が流れていない');
-    assert.strictEqual(s.state, 3, `seed ${seed}: 試合 ${n} に結果が無い (${JSON.stringify(await store.listReportSets(code))}) log=${JSON.stringify(log.slice(-12))}`);
-    assert.strictEqual(s.winnerId, tr.w, `seed ${seed}: 試合 ${n} の勝者が違う truth=${JSON.stringify(tr)} muts=${JSON.stringify(fake.mutations.filter((m) => m[1] === 1000 + n))} row=${JSON.stringify(await store.getReportSet(code, String(1000 + n)))} subs=${JSON.stringify((await store.listReportSubmissions(code, String(1000 + n))).map((x) => [x.id, x.side, JSON.parse(x.result || 'null') && JSON.parse(x.result).w, x.outcome]))} log=${JSON.stringify(log.filter((x) => x[0] === String(1000 + n) || x[0] === 'down' || /^m/.test(x[0])))} manual=${JSON.stringify(await store.listReportManual(code))}`);
+    assert.strictEqual(s.state, 3, `seed ${seed}: 試合 ${n} に結果が無い truth=${JSON.stringify([...truth.t])} log=${JSON.stringify(log)} dqs=${JSON.stringify((await store.listReportDqs(code)).map((d) => [d.name, d.scope, d.set_id, d.status, d.done_sets]))} manual=${JSON.stringify((await store.listReportManual(code)).map((m) => [m.id, m.side, m.status, m.set_id, m.slots]))} fake=${JSON.stringify(fake.sets.map((x) => [x.id, x.state, x.winnerId, x.slots.map((y) => y.entrant && y.entrant.id)]))}`);
+    assert.strictEqual(s.winnerId, tr.w, `seed ${seed}: 試合 ${n} の勝者が違う truth=${JSON.stringify(tr)} muts=${JSON.stringify(fake.mutations.filter((m) => m[1] === 1000 + n))} row=${JSON.stringify(await store.getReportSet(code, String(1000 + n)))} subs=${JSON.stringify((await store.listReportSubmissions(code, String(1000 + n))).map((x) => [x.id, x.side, JSON.parse(x.result || 'null') && JSON.parse(x.result).w, x.outcome]))} log=${JSON.stringify(log)} dqs=${JSON.stringify((await store.listReportDqs(code)).map((d) => [d.name, d.scope, d.set_id, d.status, d.done_sets, d.note]))} truthall=${JSON.stringify([...truth.t])} manual=${JSON.stringify(await store.listReportManual(code))}`);
   }
   const rows = await store.listReportSets(code);
   const bad = rows.filter((r) => r.state === 'review' || r.state === 'queued' || r.state === 'conflict');
   assert.deepStrictEqual(bad.map((r) => [r.set_id, r.state, r.note]), [], 'seed ' + seed + ' 残った行');
   assert.ok(!(await store.listReportManual(code)).some((m) => m.status === 'open'), 'seed ' + seed + ' 指定した試合が残った');
   // 同じ試合に 2 回 report を送っていない (start.gg が「もう結果がある」と断る送り方をしていない)
-  return { checks, mutations: fake.mutations.length, manual: (await store.listReportManual(code)).length };
+  assert.ok(!(await store.listReportDqs(code)).some((d) => d.status === 'open' && d.scope !== 'a'), 'seed ' + seed + ' DQ が残った ' + JSON.stringify((await store.listReportDqs(code)).map((d) => [d.name, d.scope, d.set_id, d.status, d.done_sets, d.note])) + ' log=' + JSON.stringify(log) + ' truth=' + JSON.stringify([...truth.t]) + ' fake=' + JSON.stringify(fake.sets.map((x) => [x.id, x.state, x.winnerId, x.slots.map((y) => y.entrant && y.entrant.id)])));
+  return { checks, dqs, mutations: fake.mutations.length, manual: (await store.listReportManual(code)).length };
 }
 
 test('障害を挟んで 8 人のダブルイリミを最後まで流す (乱数 40 通り): start.gg の結果が全部正しい・候補のきまり・確認待ちが残らない',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
-    let checks = 0; let manual = 0;
+    let checks = 0; let manual = 0; let dqs = 0;
     const n = Number(process.env.SPSP_SIM_SEEDS) || 40;   // 多めに回すときは SPSP_SIM_SEEDS=300
-    for (let seed = 1; seed <= n; seed++) {
+    for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) {
       const r = await runOne(seed);
-      checks += r.checks; manual += r.manual;
+      checks += r.checks; manual += r.manual; dqs += r.dqs;
     }
+    assert.ok(dqs > 10, 'DQ を十分に通った (' + dqs + ')');
     assert.ok(manual > 20, '運営の指定を十分に通った (' + manual + ')');
     assert.ok(checks > 20);
   });
@@ -267,7 +305,7 @@ test('障害を挟んで 8 人のダブルイリミを最後まで流す (乱数
 test('同じ流れで、繋がっているときも 10% で 503・書き込みの 20% は応答が失われる (書けているのに失敗に見える)',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
     const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
-    for (let seed = 1; seed <= n; seed++) await runOne(1000 + seed, 0.1, 0.2);
+    for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) await runOne(1000 + seed, 0.1, 0.2);
   });
 
 /** 5 人の総当たり (10 試合、全部最初から開いている) */
