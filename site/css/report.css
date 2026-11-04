@@ -630,3 +630,36 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-unsynced { border: 1px solid #fde047; background: #fefce8; }
 .rp-unsynced.rp-unsynced-ok { border-color: #e5e7eb; background: #fff; }
 .rp-unsynced h2 { color: #854d0e; }
+
+/* トーナメント表 (report_bracket_view.js、2026-11-05) */
+.bk-sec summary { cursor: pointer; font-weight: 700; }
+.bk-bar { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bk-legend { font-size: 12px; }
+.bk-side { margin: 12px 0 4px; font-size: 14px; }
+.bk-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+.bk-cols { display: flex; gap: 10px; align-items: stretch; min-width: min-content; }
+.bk-col { display: flex; flex-direction: column; width: 168px; flex: 0 0 168px; }
+.bk-rt { font-size: 11px; color: var(--muted, #888); text-align: center; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk-sets { display: flex; flex-direction: column; justify-content: space-around; gap: 6px; flex: 1; }
+.bk-set { border: 1px solid var(--border, #ccc); border-radius: 6px; background: var(--card, #fff); font-size: 12px; overflow: hidden; }
+.bk-set.bk-mine { border-color: #e0a100; box-shadow: 0 0 0 1px #e0a100; }
+.bk-head { font-size: 10px; color: var(--muted, #888); padding: 1px 6px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.bk-row { display: flex; justify-content: space-between; gap: 4px; padding: 2px 6px; border-top: 1px solid var(--border, #eee); }
+.bk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-sc { font-variant-numeric: tabular-nums; min-width: 1.5em; text-align: right; }
+.bk-win { font-weight: 700; }
+.bk-lose { opacity: .55; }
+.bk-empty .bk-name { color: var(--muted, #999); font-style: italic; }
+.bk-pd .bk-name::after { content: ' *'; color: #c77700; }
+.bk-me .bk-name { text-decoration: underline; text-decoration-color: #e0a100; }
+.bk-tag { border-radius: 3px; padding: 0 4px; font-size: 10px; color: #fff; }
+.bk-live { background: #d33; }
+.bk-held { background: #c77700; }
+.bk-rr { border-collapse: collapse; font-size: 12px; }
+.bk-rr th, .bk-rr td { border: 1px solid var(--border, #ddd); padding: 3px 6px; text-align: center; white-space: nowrap; }
+.bk-rr tr.bk-me th { text-decoration: underline; }
+.bk-rr td.bk-rr-self { background: var(--border, #eee); }
+.bk-rr td.bk-held-cell { outline: 2px solid #c77700; outline-offset: -2px; }
+.rp-prog { margin: 8px 0; }
+.rp-prog-g { margin: 8px 0; }
+.rp-prog-g h4 { margin: 4px 0; }

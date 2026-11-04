@@ -140,13 +140,21 @@ export function flipResult(r: Result): Result {
 
 // ── ブラケットの写し ─────────────────────────────────────────────────
 
-export interface SnapSlot { pt: string | null; pi: string | null; pp: number | null; e: string | null; sc: number | null }
-export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; g: string; st: number | null; z: number; sl: SnapSlot[] }
+/** pd = 計算で埋めた (start.gg にはまだ出ていない) 出場者 (report_bracket.ts の projectSnap) */
+export interface SnapSlot { pt: string | null; pi: string | null; pp: number | null; e: string | null; sc: number | null; pd?: 1 }
+/** wp = 勝ったときの順位・x = 試合の記号 (A, B, …)。2026-11-05 から (それより前の写しには無い) */
+/** wn / ln = 勝者 / 敗者が入る次のフェーズのシード (winnerProgressionSeed / loserProgressionSeed) */
+export interface SnapSet { i: string; s: number; r: number | null; t: string; w: string | null; lp: number | null; wp?: number | null; x?: string; wn?: string | null; ln?: string | null; g: string; st: number | null; z: number; sl: SnapSlot[];
+  /** 速報の Worker が取った構造から足した試合 (不戦勝の試合など。1 周で見なくても消さない) */
+  fs?: 1 }
+/** シード (2026-11-05): g = ブロック・gs = ブロックのシード順・e = 出場者・src = 前のフェーズのどこから来るか (元のブロック・順位・同順位の中の順番) */
+export interface SnapSeed { g: string; gs: number | null; e: string | null; src: { g: string; pl: number; ord: number } | null }
 export interface Snapshot {
   v: 1;
   sets: Record<string, SnapSet>;
   ents: Record<string, { n: string; u: string[]; s: number | null }>;
-  groups: Record<string, { d: string; p: string }>;
+  /** b = ブロックの形式 (DOUBLE_ELIMINATION / ROUND_ROBIN …、2026-11-05 から) */
+  groups: Record<string, { d: string; p: string; b?: string }>;
   phases: Record<string, { n: string; c: number | null }>;
   /** 変わった試合を読む基準 (start.gg の updatedAt、秒) */
   cur: number;
@@ -156,6 +164,15 @@ export interface Snapshot {
   inc: boolean; extra: boolean;
   /** 1 ページの件数 (start.gg に「複雑すぎる」と言われたら半分にする。速報 live_fetch.js の fetchAllNodes と同じ) */
   per?: number;
+  /** シード (2026-11-05)。sq = まだ読んでいない [フェーズ, ページ]・sp = シードを読み終えた周 */
+  seeds?: Record<string, SnapSeed>;
+  sq?: [string, number][];
+  sp?: number;
+  /** 速報の Worker の構造 (live/jp/struct/) を取り込んだブロック → その構造を取った時刻。lc = 一覧を見た時刻 (ms) */
+  ls?: Record<string, number>;
+  lc?: number;
+  /** 構造の照合 (bracket_engine で計算した対戦者と start.gg の対戦者)。bad = 食い違ったブロック → 理由 */
+  chk?: { ms: number; ok: number; bad: Record<string, string> };
 }
 export const emptySnapshot = (): Snapshot => ({ v: 1, sets: {}, ents: {}, groups: {}, phases: {}, cur: 0, rot: 1, pass: 1, full: false, inc: true, extra: true });
 
@@ -177,10 +194,10 @@ export const SNAP_FIRST_MIN_MS = 5 * 1000;
 const SNAP_MAX_BYTES = 1_800_000;
 
 const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!, $perPage: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) {
-  sets(page: $page, perPage: $perPage, sortType: ${inc ? 'RECENT' : 'STANDARD'}, filters: { hideEmpty: false${inc ? ', updatedAfter: $after' : ''} }) {
+  sets(page: $page, perPage: $perPage, sortType: ${inc ? 'RECENT' : 'STANDARD'}, filters: { hideEmpty: false, showByes: true${inc ? ', updatedAfter: $after' : ''} }) {
     pageInfo { totalPages }
-    nodes { id state round fullRoundText winnerId lPlacement updatedAt ${extra ? 'station { number }' : ''}
-      phaseGroup { id displayIdentifier phase { id name groupCount } }
+    nodes { id state round identifier fullRoundText winnerId wPlacement lPlacement updatedAt winnerProgressionSeed { id } loserProgressionSeed { id } ${extra ? 'station { number }' : ''}
+      phaseGroup { id displayIdentifier bracketType phase { id name groupCount } }
       slots { prereqType prereqId prereqPlacement entrant { id name initialSeedNum participants { user { id } } } standing { stats { score { value } } } } } } } }`;
 
 const idOf = (v: unknown): string | null => (v === null || v === undefined || v === '' ? null : String(v));
@@ -190,11 +207,11 @@ const numOf = (v: unknown): number | null => { const n = Number(v); return v !==
 export function absorbSet(snap: Snapshot, raw: unknown, pass: number): number {
   const s = raw as Record<string, unknown> | null;
   if (!s || !/^\d+$/.test(String(s.id))) return 0;
-  const pg = s.phaseGroup as { id?: unknown; displayIdentifier?: unknown; phase?: { id?: unknown; name?: unknown; groupCount?: unknown } | null } | null;
+  const pg = s.phaseGroup as { id?: unknown; displayIdentifier?: unknown; bracketType?: unknown; phase?: { id?: unknown; name?: unknown; groupCount?: unknown } | null } | null;
   const gid = pg ? idOf(pg.id) : null;
   if (pg && gid) {
     const pid = pg.phase ? idOf(pg.phase.id) : null;
-    snap.groups[gid] = { d: String(pg.displayIdentifier ?? ''), p: pid || '' };
+    snap.groups[gid] = { d: String(pg.displayIdentifier ?? ''), p: pid || '', ...(typeof pg.bracketType === 'string' ? { b: pg.bracketType } : {}) };
     if (pid && pg.phase) snap.phases[pid] = { n: String(pg.phase.name ?? '').slice(0, 80), c: numOf(pg.phase.groupCount) };
   }
   const slots = (Array.isArray(s.slots) ? s.slots : []).slice(0, 2).map((x) => {
@@ -213,9 +230,118 @@ export function absorbSet(snap: Snapshot, raw: unknown, pass: number): number {
   const st = s.station as { number?: unknown } | null | undefined;
   snap.sets[String(s.id)] = {
     i: String(s.id), s: Number(s.state) || 1, r: numOf(s.round), t: String(s.fullRoundText ?? '').slice(0, 60), w: idOf(s.winnerId), lp: numOf(s.lPlacement),
+    wp: numOf(s.wPlacement), x: typeof s.identifier === 'string' ? s.identifier.slice(0, 8) : '',
+    ...(s.winnerProgressionSeed ? { wn: idOf((s.winnerProgressionSeed as { id?: unknown }).id) } : {}),
+    ...(s.loserProgressionSeed ? { ln: idOf((s.loserProgressionSeed as { id?: unknown }).id) } : {}),
     g: gid || '', st: st ? numOf(st.number) : null, z: pass, sl: slots,
   };
   return numOf(s.updatedAt) || 0;
+}
+
+const SEEDS_QUERY = `query SpspReportSeeds($id: ID!, $page: Int!) { phase(id: $id) { seeds(query: { page: $page, perPage: 100 }) {
+  pageInfo { totalPages }
+  nodes { id seedNum groupSeedNum phaseGroup { id } entrant { id } progressionSource { originPlacement originOrder originPhaseGroup { id } } } } } }`;
+/** 1 回の写しで読むシードのページ */
+const SEED_PAGES_PER_CALL = 2;
+
+/** start.gg のシード 1 つを写しに入れる */
+export function absorbSeed(snap: Snapshot, raw: unknown): void {
+  const s = raw as { id?: unknown; seedNum?: unknown; groupSeedNum?: unknown; phaseGroup?: { id?: unknown } | null; entrant?: { id?: unknown } | null;
+    progressionSource?: { originPlacement?: unknown; originOrder?: unknown; originPhaseGroup?: { id?: unknown } | null } | null } | null;
+  if (!s || s.id == null || !s.phaseGroup || s.phaseGroup.id == null) return;
+  const ps = s.progressionSource;
+  const og = ps && ps.originPhaseGroup ? idOf(ps.originPhaseGroup.id) : null;
+  const pl = ps ? numOf(ps.originPlacement) : null;
+  if (!snap.seeds) snap.seeds = {};
+  snap.seeds[String(s.id)] = {
+    g: String(s.phaseGroup.id), gs: numOf(s.groupSeedNum) ?? numOf(s.seedNum), e: s.entrant ? idOf(s.entrant.id) : null,
+    src: og && pl !== null ? { g: og, pl, ord: numOf(ps!.originOrder) || 1 } : null,
+  };
+}
+
+// ── 速報の Worker が開始時に取ったブロックの構造 (2026-11-05、spsp-build deploy/live-worker の struct/) ──────────
+export const LIVE_STRUCT_BASE = 'https://data.spsp.games/live/jp/struct/';
+const LIVE_STRUCT_CHECK_MS = 60 * 1000;
+
+/** 構造 1 ブロック分を写しに入れる (試合のつながり・順位・通過先・シード。出場者と結果は写しのまま) */
+export function absorbStruct(snap: Snapshot, doc: unknown): boolean {
+  const d = doc as { v?: unknown; pg?: unknown; phase_id?: unknown; type?: unknown; fetched_at?: unknown; sets?: unknown; seeds?: unknown } | null;
+  if (!d || d.v !== 1 || d.pg == null || !Array.isArray(d.sets) || !Array.isArray(d.seeds)) return false;
+  const pg = String(d.pg);
+  const g = snap.groups[pg];
+  snap.groups[pg] = { d: g ? g.d : '', p: g ? g.p : String(d.phase_id ?? ''), ...(typeof d.type === 'string' ? { b: d.type } : g && g.b ? { b: g.b } : {}) };
+  const keep = new Set<string>();
+  for (const x of d.sets as unknown[]) {
+    if (!Array.isArray(x) || x.length < 8) continue;
+    const [id, round, ident, wp, lp, wn, ln, slots] = x as [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown];
+    const sid = String(id);
+    if (!/^\d+$/.test(sid)) continue;
+    keep.add(sid);
+    const sl = (Array.isArray(slots) ? slots : []).slice(0, 2).map((y) => (Array.isArray(y) ? y : []));
+    while (sl.length < 2) sl.push([]);
+    const cur = snap.sets[sid];
+    const slot = (k: number): SnapSlot => {
+      const c = cur ? cur.sl[k] : null;
+      return { pt: typeof sl[k][0] === 'string' ? sl[k][0] as string : null, pi: idOf(sl[k][1]), pp: numOf(sl[k][2]), e: c ? c.e : null, sc: c ? c.sc : null };
+    };
+    snap.sets[sid] = {
+      i: sid, s: cur ? cur.s : 1, r: numOf(round), t: cur ? cur.t : '', w: cur ? cur.w : null, lp: numOf(lp), wp: numOf(wp), x: typeof ident === 'string' ? ident.slice(0, 8) : '',
+      wn: idOf(wn), ln: idOf(ln), g: pg, st: cur ? cur.st : null, z: cur ? cur.z : snap.pass, sl: [slot(0), slot(1)], fs: 1,
+    };
+  }
+  // 作り直しで消えた試合 (前の構造から足したもの) は落とす
+  for (const [id, x] of Object.entries(snap.sets)) if (x.g === pg && x.fs && !keep.has(id)) delete snap.sets[id];
+  if (!snap.seeds) snap.seeds = {};
+  for (const [id, x] of Object.entries(snap.seeds)) if (x.g === pg) delete snap.seeds[id];
+  for (const x of d.seeds as unknown[]) {
+    if (!Array.isArray(x) || x.length < 4) continue;
+    const src = Array.isArray(x[3]) && x[3][0] != null && x[3][1] != null ? { g: String(x[3][0]), pl: Number(x[3][1]), ord: numOf(x[3][2]) || 1 } : null;
+    snap.seeds[String(x[0])] = { g: pg, gs: numOf(x[1]), e: idOf(x[2]), src };
+  }
+  if (!snap.ls) snap.ls = {};
+  snap.ls[pg] = numOf(d.fetched_at) || 1;
+  return true;
+}
+
+/** 速報の Worker の構造の一覧を見て、変わったブロックだけ読んで写しに入れる (1 分に 1 回まで)。戻り値 = 入れたブロックの数 */
+export async function absorbLiveStructs(fetchFn: FetchFn, snap: Snapshot, eventId: string, now: number): Promise<number> {
+  if (snap.lc && now - snap.lc < LIVE_STRUCT_CHECK_MS) return 0;
+  snap.lc = now;
+  let n = 0;
+  try {
+    const r = await fetchFn(LIVE_STRUCT_BASE + 'e' + encodeURIComponent(eventId) + '.json', { headers: { Accept: 'application/json' } });
+    if (!r.ok) return 0;
+    const idx = await r.json() as { groups?: Record<string, number> } | null;
+    for (const [pg, at] of Object.entries((idx && idx.groups) || {})) {
+      if (!/^\d+$/.test(pg) || (snap.ls && snap.ls[pg] === at)) continue;
+      const g = await fetchFn(LIVE_STRUCT_BASE + pg + '.json', { headers: { Accept: 'application/json' } });
+      if (g.ok && absorbStruct(snap, await g.json())) n++;
+    }
+  } catch (_) { /* 読めなければ写しのまま (シードは start.gg から) */ }
+  return n;
+}
+
+/** シードを読み進める (1 周ごとに全フェーズを読み直す)。失敗したページは次の回に読み直す (試合の写しの成否には数えない)。戻り値 = 失敗の符号 */
+async function advanceSeeds(fetchFn: FetchFn, token: string, snap: Snapshot, allowed: () => Promise<boolean>): Promise<string | null> {
+  if (snap.full && snap.sp !== snap.pass && !(snap.sq && snap.sq.length)) {
+    // 速報の構造でシードが揃っているフェーズ (そのフェーズのブロックが全部 ls にある) は読まない
+    const covered = (pid: string) => { const gs = Object.entries(snap.groups).filter(([, g]) => g.p === pid).map(([id]) => id); return gs.length > 0 && gs.every((id) => snap.ls && snap.ls[id]); };
+    snap.sq = Object.keys(snap.phases).filter((pid) => !covered(pid)).map((pid) => [pid, 1] as [string, number]);
+    snap.sp = snap.pass;
+  }
+  for (let n = 0; n < SEED_PAGES_PER_CALL && snap.sq && snap.sq.length; n++) {
+    if (!(await allowed())) return 'outage_skip';
+    const [pid, page] = snap.sq[0];
+    const r = await startggGql(fetchFn, token, SEEDS_QUERY, { id: pid, page });
+    if (!r.ok) return r.note;
+    const ph = r.json.data ? r.json.data.phase as { seeds?: { nodes?: unknown; pageInfo?: { totalPages?: unknown } } | null } | null : null;
+    snap.sq.shift();
+    if (!ph || !ph.seeds || !Array.isArray(ph.seeds.nodes)) continue;   // 読めないフェーズは飛ばす (照合で分かる)
+    for (const x of ph.seeds.nodes) absorbSeed(snap, x);
+    const total = Number(ph.seeds.pageInfo && ph.seeds.pageInfo.totalPages) || 1;
+    if (page < total) snap.sq.unshift([pid, page + 1]);
+  }
+  return null;
 }
 
 function isComplexity(json: { errors?: unknown[] }): boolean {
@@ -263,13 +389,14 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
     if (!snap.full && hw) snap.cur = Math.max(snap.cur, hw);
     if (snap.rot >= r.total) {
       // 2 周続けて見なかった試合だけ落とす (周の途中で並びがずれて 1 回見落としても消さない)
-      for (const [id, s] of Object.entries(snap.sets)) if (s.z < snap.pass - 1) delete snap.sets[id];
+      for (const [id, s] of Object.entries(snap.sets)) if (s.z < snap.pass - 1 && !s.fs) delete snap.sets[id];
       snap.pass += 1; snap.rot = 1; snap.full = true;
     } else snap.rot += 1;
     return null;
   };
   if (!snap.full) {
     while (!snap.full && calls < SNAP_FIRST_CALLS) { const e = await rotate(); if (e) return e; }
+    if (snap.full) await advanceSeeds(fetchFn, token, snap, allowed);
     return null;
   }
   if (snap.inc) {
@@ -283,7 +410,9 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
       if (page >= r.total) break;
     }
   }
-  return rotate();
+  const e = await rotate();
+  if (!e) await advanceSeeds(fetchFn, token, snap, allowed);
+  return e;
 }
 
 export function snapshotJson(snap: Snapshot): string | null {

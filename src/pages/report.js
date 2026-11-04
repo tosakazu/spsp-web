@@ -22,6 +22,7 @@ import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
 import { placementToW2W } from '../../site/js/match.js';
 import SPSPLinks from '../../site/js/links.js';
 import { showVictory, WIN_ANIMS } from './report_win.js';
+import { mountBracketView } from './report_bracket_view.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
@@ -789,7 +790,8 @@ function wireForm(form, m) {
     const st = form.querySelector('[data-form-status]');
     setStatus(st, i18n('report.sending'), 'busy');
     submit.disabled = true;
-    const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
+    // ents = この画面が見ている 2 人の並び (Worker が自分の並びと合わせる。逆なら入れ替え、違えば読み直し)
+    const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result, ents: entsOf(m.slots) });
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
     // offline = start.gg に送れず SPSP に保存した (障害中・運営が指定した試合)
     const sentKind = r.offline ? (r.state === 'conflict' ? 'conflict_offline' : /^manual/.test(r.note || '') && !outageNow() ? 'queued_manual'
@@ -1082,9 +1084,20 @@ function wireMatchActions(root) {
   }
 }
 
+/** 試合の 2 人の並び (出場者 ID)。結果を送るときに付ける (枠の番号の取り違え防止、2026-11-05) */
+const entsOf = (slots) => (Array.isArray(slots) && slots.length === 2 ? slots.map((x) => (x && x.id != null ? String(x.id) : null)) : undefined);
+/** トーナメント表 (start.gg の受付だけ。選手・運営の画面の下に 1 つ。2026-11-05) */
+let BRACKET_VIEW = null;
+function ensureBracketView() {
+  if (BRACKET_VIEW || (DEMO && DEMO !== 'bracket') || !INFO || INFO.kind !== 'startgg' || (!CODE && !DEMO)) return;
+  const el = $('rp-bracket');
+  if (!el) return;
+  BRACKET_VIEW = mountBracketView(el, { api, tok, code: CODE || 'demo', t: i18n, hhmm });
+}
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
+  ensureBracketView();
   const cur = currentMatch();
   const waiting = MATCHES.find((m) => m.state === 'waiting');
   const done = MATCHES.filter((m) => m.state === 'complete');
@@ -1726,6 +1739,7 @@ async function renderAdmin() {
     } else r = j && !j.ok ? j : r;
   }
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
+  ensureBracketView();
   const ev = r.report;
   const url = pageUrl(CODE, false);
   if (r.role === 'manager') {
@@ -2066,7 +2080,7 @@ function manDrawList(sec) {
       const wn = m.slots && m.slots[result.w] ? m.slots[result.w].name : '';
       if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
       setStatus(fst, i18n('report.sending'), 'busy');
-      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: m.set_id, result });
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: m.set_id, result, ents: entsOf(m.slots) });
       setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
       if (x && x.ok) { MAN.fixOpen = null; setTimeout(() => { if (MAN.groups) manLoad(sec, true); manRefresh(); }, 600); }
     },
@@ -2083,6 +2097,7 @@ function manualUpdate(r) {
     MAN.built = true;
     sec.innerHTML = `<div data-moutage></div>
       <p class="rp-muted rp-msnap" data-msnap></p>
+      <div data-mprog></div>
       <details class="rp-manual" data-mdet>
         <summary>${escapeHtml(i18n('report.manual.title'))}</summary>
         <p class="rp-muted">${escapeHtml(i18n('report.manual.help'))}</p>
@@ -2108,11 +2123,48 @@ function manualUpdate(r) {
   sec.querySelector('[data-msnap]').textContent = snap && snap.sets
     ? i18n('report.snap.status', { n: snap.sets, t: hhmm(snap.synced_ms) }) + (snap.full ? '' : ' ' + i18n('report.snap.partial'))
     : i18n('report.snap.none');
+  // 前のフェーズからの通過順の確認 (障害中・復旧待ちのあいだだけ読む)
+  if (outage || held) progLoad(sec);
+  else sec.querySelector('[data-mprog]').innerHTML = '';
   // 結果を入れている途中は一覧を描き直さない
   if (!(MAN.fixOpen && sec.querySelector('[data-mfixbox]'))) manDrawList(sec);
   // 障害になったら一度だけ開く (候補を読む)
   const det = sec.querySelector('[data-mdet]');
   if (outage && !MAN.opened) { MAN.opened = true; det.open = true; }
+}
+
+/**
+ * 前のフェーズからの通過順 (2026-11-05)。同じ順位で抜ける人が 2 人以上のとき、次のフェーズのどのシードに入るかを start.gg は API で返さないので、
+ * 障害中に SPSP が次のフェーズを計算で埋めるのは、運営がこの並びを確かめたブロックだけ。
+ */
+const PROG = { busy: false, key: '' };
+async function progLoad(sec) {
+  if (PROG.busy || DEMO) return;
+  PROG.busy = true;
+  try {
+    const r = await api({ action: 'report_progression', token: tok(), code: CODE });
+    const box = sec.querySelector('[data-mprog]');
+    if (!box || !r || !r.ok) return;
+    const key = JSON.stringify(r.groups);
+    if (key === PROG.key) return;
+    PROG.key = key;
+    box.innerHTML = r.groups.length ? `<div class="rp-banner rp-prog"><b>${escapeHtml(i18n('report.prog.title'))}</b>
+      <p class="rp-muted">${escapeHtml(i18n('report.prog.help'))}</p>
+      ${r.groups.map((g) => `<div class="rp-prog-g"><h4>${escapeHtml(g.group_name)}</h4>
+        ${g.places.map((p) => `<div>${escapeHtml(i18n('report.prog.place', { pl: p.pl }))}: ${p.entrants.map((e, i) => `${i + 1}. ${escapeHtml(e.name)}`).join(' / ')}</div>`).join('')}
+        ${g.confirmed ? `<p class="rp-ok">✓ ${escapeHtml(i18n('report.prog.confirmed'))}</p>`
+          : `<button type="button" class="rp-btn" data-prog-ok="${escapeHtml(g.group)}" data-prog-key="${escapeHtml(g.key)}">${escapeHtml(i18n('report.prog.btn'))}</button>`}
+        <span class="rp-status" data-prog-st="${escapeHtml(g.group)}"></span></div>`).join('')}</div>` : '';
+    box.querySelectorAll('[data-prog-ok]').forEach((b) => b.addEventListener('click', async () => {
+      const gid = b.getAttribute('data-prog-ok');
+      if (!confirm(i18n('report.prog.confirm'))) return;
+      const x = await api({ action: 'report_progression_ok', token: tok(), code: CODE, group: gid, key: b.getAttribute('data-prog-key') });
+      const st = box.querySelector(`[data-prog-st="${gid}"]`);
+      if (st) setStatus(st, x && x.ok ? i18n('report.prog.confirmed') : errText(x), x && x.ok ? 'ok' : 'err');
+      PROG.key = '';
+      setTimeout(() => progLoad(sec), 300);
+    }));
+  } finally { PROG.busy = false; }
 }
 
 // ── 運営: 対戦相手が見つからない・参加者の試合 (対戦開始・DQ) (2026-11-04、docs §12) ─────────────
@@ -2563,7 +2615,7 @@ function renderAdminSets(sets, force) {
           const wn = s.slots && s.slots[result.w] ? s.slots[result.w].name : '';
           if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
           setStatus(fst, i18n('report.sending'), 'busy');
-          const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result });
+          const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result, ents: entsOf(s.slots) });
           setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
           if (x && x.ok) { ADMIN_FORM_OPEN = null; if (!DEMO) setTimeout(() => refreshAdminSets(true), 800); else setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 800); }
         },
@@ -2745,7 +2797,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'noshow', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'noshow', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'bracket', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -2910,8 +2962,17 @@ const DEMO_PHASES = [
 ];
 let DEMO_MGRS = [];
 const DEMO_SEEN = {};   // 見本: 確認した start.gg のユーザー
+/** 見本のトーナメント表 (site/report/demo_bracket.json = tools/report_demo/make_bracket_demo.mjs で作る。終わった大会を途中で切ったもの) */
+let DEMO_BRACKET = null;
 async function demoApi(body) {
   const P = DEMO_P;
+  if (body.action === 'report_bracket_view') {
+    if (!DEMO_BRACKET) DEMO_BRACKET = await (await fetch('./demo_bracket.json')).json();
+    const base = { ok: true, synced_ms: Date.now() - 40000, outage: null, checked: true, me: DEMO_BRACKET.me };
+    if (!body.group) return { ...base, groups: DEMO_BRACKET.groups };
+    const v = DEMO_BRACKET.view[body.group];
+    return v ? { ...base, ...v } : { ok: false, error: { code: 'bad_request', message: 'no group' } };
+  }
   if (body.action === 'report_submit') {
     const state = DEMO === 'conflict' ? 'agreed' : 'reported';
     const row = demoRow(body.set_id, state, body.result, DEMO === 'conflict' ? body.result : null, P);
@@ -3028,6 +3089,7 @@ async function runDemo() {
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin' || DEMO === 'admin_outage') { await renderAdmin(); return; }
+  if (DEMO === 'bracket') { ensureBracketView(); if (BRACKET_VIEW) BRACKET_VIEW.open(); return; }   // トーナメント表 (選手・運営の画面の下に出るもの)
   if (DEMO === 'login') { $('rp-login').hidden = false; return; }   // ログインしていない人が報告ページを開いた
   if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }
   if (DEMO === 'win') {   // 勝った側が報告した直後 (勝利の演出 → 勝利画面)。下の画面は報告した後の形

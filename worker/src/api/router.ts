@@ -28,7 +28,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportProgression, handleReportProgressionOk, handleReportBracketView, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -169,6 +169,13 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       // start.gg に繋がらないあいだに運営が次の試合を指定する (report.ts、docs/self_report_design.md §11)
       case 'report_bracket':
         return (await handleReportBracket(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      // 前のフェーズからの通過順 (障害中に次のフェーズを計算で埋める前に運営が確かめる、2026-11-05)
+      case 'report_bracket_view':
+        return (await handleReportBracketView(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ (D1 の写し)
+      case 'report_progression':
+        return (await handleReportProgression(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ
+      case 'report_progression_ok':
+        res = await handleReportProgressionOk(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       // 対戦開始・対戦相手が見つからない・DQ (docs §12)
       case 'report_noshow':
         return (await handleReportNoshow(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 連打されるので記録しない
@@ -230,7 +237,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
   const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
-    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket'];
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket', 'report_progression_ok'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

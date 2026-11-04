@@ -256,6 +256,9 @@ export interface Store {
   updateReportEventAdmins(code: string, admins: string): Promise<void>;
   /** 報告管理者 (JSON) を書き換える。 */
   updateReportEventManagers(code: string, managers: string): Promise<void>;
+  /** 運営が確かめた通過順 (report_prog_ok、0021) */
+  listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]>;
+  putReportProgOk(code: string, groupId: string, list: string, userId: string, ms: number): Promise<void>;
   /** start.gg の大会の管理者一覧と読もうとした時刻を書き換える (ids = null なら時刻だけ)。 */
   updateReportEventSggAdmins(code: string, ids: string | null, ms: number): Promise<void>;
   /** その人の保存した設定 (新しい順)。 */
