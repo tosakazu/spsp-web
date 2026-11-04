@@ -80,7 +80,7 @@ export async function notifyManual(cfg: Config, store: Store, fetchFn: FetchFn, 
   m: { id: number; side: string; station: string; group_name: string; slots: [{ name: string; users: string[] } | null, { name: string; users: string[] } | null] }): Promise<number> {
   if (!cfg.vapid) return 0;
   let n = 0;
-  const side = m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : '勝者側';
+  const side = m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : m.side === 'g' ? 'グランドファイナル' : '勝者側';
   for (const k of [0, 1]) {
     const me = m.slots[k]; const op = m.slots[1 - k];
     if (!me || !me.users.length) continue;

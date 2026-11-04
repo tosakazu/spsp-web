@@ -84,7 +84,7 @@ export function guardProvider(p: Provider, h: Health, now: number): Provider {
     readSet: (id) => wrap(() => p.readSet(id), { ok: false as const, code: 'provider_error' as const, note: 'outage_skip' }),
     apply: (s, r, m) => wrap(() => p.apply(s, r, m), skip),
     reset: (s) => wrap(() => p.reset(s), skip),
-    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l' | 'r') => wrap(() => p.findSet!(ids, side), { ok: false as const, note: 'outage_skip' }) } : {}),
+    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>) => wrap(() => p.findSet!(ids, side, exclude), { ok: false as const, note: 'outage_skip' }) } : {}),
   };
 }
 
@@ -151,6 +151,8 @@ export interface Snapshot {
   rot: number; pass: number; full: boolean;
   /** updatedAfter が使える / 台 (station) が読める */
   inc: boolean; extra: boolean;
+  /** 1 ページの件数 (start.gg に「複雑すぎる」と言われたら半分にする。速報 live_fetch.js の fetchAllNodes と同じ) */
+  per?: number;
 }
 export const emptySnapshot = (): Snapshot => ({ v: 1, sets: {}, ents: {}, groups: {}, phases: {}, cur: 0, rot: 1, pass: 1, full: false, inc: true, extra: true });
 
@@ -171,8 +173,8 @@ export const SNAP_FIRST_MIN_MS = 5 * 1000;
 /** D1 の 1 行の上限 (2 MB) より手前 */
 const SNAP_MAX_BYTES = 1_800_000;
 
-const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) {
-  sets(page: $page, perPage: ${SNAP_PER_PAGE}${inc ? '' : ', sortType: STANDARD'}, filters: { hideEmpty: false${inc ? ', updatedAfter: $after' : ''} }) {
+const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!, $perPage: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) {
+  sets(page: $page, perPage: $perPage, sortType: ${inc ? 'RECENT' : 'STANDARD'}, filters: { hideEmpty: false${inc ? ', updatedAfter: $after' : ''} }) {
     pageInfo { totalPages }
     nodes { id state round fullRoundText winnerId lPlacement updatedAt ${extra ? 'station { number }' : ''}
       phaseGroup { id displayIdentifier phase { id name groupCount } }
@@ -213,12 +215,21 @@ export function absorbSet(snap: Snapshot, raw: unknown, pass: number): number {
   return numOf(s.updatedAt) || 0;
 }
 
+function isComplexity(json: { errors?: unknown[] }): boolean {
+  return Array.isArray(json.errors) && json.errors.some((e) => /complex/i.test(String((e as { message?: unknown }).message || '')));
+}
 type PageResult = { ok: true; nodes: unknown[]; total: number } | { ok: false; note: string; gql: boolean };
 async function snapPage(fetchFn: FetchFn, token: string, eventId: string, snap: Snapshot, page: number, after: number | null): Promise<PageResult> {
   const inc = after !== null;
-  const vars: Record<string, unknown> = { id: eventId, page };
+  const vars: Record<string, unknown> = { id: eventId, page, perPage: snap.per || SNAP_PER_PAGE };
   if (inc) vars.after = after;
   let r = await startggGql(fetchFn, token, SNAP_QUERY(snap.extra, inc), vars);
+  // 複雑すぎる: 件数を半分にして 1 ページ目から (ページの区切りが変わるので)
+  if (r.ok && isComplexity(r.json) && (snap.per || SNAP_PER_PAGE) > 10) {
+    snap.per = Math.max(10, Math.floor((snap.per || SNAP_PER_PAGE) / 2));
+    if (!inc) snap.rot = 1;
+    return { ok: false, note: 'gql:complexity', gql: false };
+  }
   if (r.ok && Array.isArray(r.json.errors) && r.json.errors.length && snap.extra) {   // 台が読めない (権限) → 外して読み直す
     const r2 = await startggGql(fetchFn, token, SNAP_QUERY(false, inc), vars);
     if (r2.ok && !(Array.isArray(r2.json.errors) && r2.json.errors.length)) { snap.extra = false; r = r2; }
@@ -369,6 +380,7 @@ export function groupName(snap: Snapshot | null, gid: string): string {
 }
 
 export function manualView(m: ReportManualRow, snap: Snapshot | null) {
+  // side: w = 勝者側 / l = 敗者側 / g = グランドファイナル / r = 総当たり
   return { set_id: 'm' + m.id, id: m.id, side: m.side, group: m.group_id, group_name: groupName(snap, m.group_id), phase: snap && snap.groups[m.group_id] ? snap.groups[m.group_id].p : null,
     station: m.station || null, slots: manualSlots(m), status: m.status, real_set_id: m.set_id || null, created_ms: m.created_ms, updated_ms: m.updated_ms };
 }
@@ -436,9 +448,11 @@ export function bracketCandidates(snap: Snapshot, held: Held[], manualBusy: Set<
 }
 
 /** 候補として出すか (画面と同じきまり。テスト用) */
-export function candidateFor(e: CandEntrant, side: 'w' | 'l' | 'r'): boolean {
+export function candidateFor(e: CandEntrant, side: 'w' | 'l' | 'r' | 'g'): boolean {
   if (e.manual) return false;
   if (side === 'r') return true;   // 総当たり: 負けても残る
+  // グランドファイナル (start.gg では勝者側のラウンド): 敗者側から上がった人は勝者側で 1 回負けているので、敗者側と同じきまり
+  if (side === 'g') return !(e.ll || e.hl);
   if (side === 'w') return !(e.wl || e.ll || e.hw || e.hl);
   return !(e.ll || e.hl);
 }
@@ -456,24 +470,24 @@ const FIND_QUERY = `query SpspReportFind($eventId: ID!, $entrantIds: [ID], $page
  * 運営が指定した 2 人の、まだ結果の無い start.gg の試合。勝者側 / 敗者側が合うものを先に。
  * 結果が入った試合は選ばない (以前に同じ 2 人が当たった試合を取り違えないように)。flip = 枠の並びが指定と逆
  */
-export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l' | 'r'): { id: string; flip: boolean } | null {
+export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude: Set<string> = new Set()): { id: string; flip: boolean } | null {
   const cands: { id: string; flip: boolean; ok: boolean }[] = [];
   for (const n of nodes) {
     const x = n as { id?: unknown; state?: unknown; round?: unknown; slots?: { entrant?: { id?: unknown } | null }[] } | null;
-    if (!x || !/^\d+$/.test(String(x.id)) || Number(x.state) === 3 || !Array.isArray(x.slots)) continue;
+    if (!x || !/^\d+$/.test(String(x.id)) || Number(x.state) === 3 || !Array.isArray(x.slots) || exclude.has(String(x.id))) continue;
     const e = x.slots.map((s) => (s && s.entrant ? idOf(s.entrant.id) : null));
     if (e.length < 2 || !e[0] || !e[1]) continue;
     const same = e[0] === ids[0] && e[1] === ids[1];
     const rev = e[0] === ids[1] && e[1] === ids[0];
     if (!same && !rev) continue;
     const r = Number(x.round);
-    cands.push({ id: String(x.id), flip: rev, ok: side === 'r' || (Number.isFinite(r) && (side === 'w' ? r > 0 : r < 0)) });
+    cands.push({ id: String(x.id), flip: rev, ok: side === 'r' || (Number.isFinite(r) && (side === 'w' || side === 'g' ? r > 0 : r < 0)) });
   }
   const best = cands.find((c) => c.ok) || cands[0];
   return best ? { id: best.id, flip: best.flip } : null;
 }
 
-export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l' | 'r'):
+export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>):
   Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }> {
   const nodes: unknown[] = [];
   for (let page = 1; page <= 3; page++) {
@@ -485,5 +499,5 @@ export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: s
     const total = Number(ev.sets.pageInfo && ev.sets.pageInfo.totalPages);
     if (!Number.isFinite(total) || page >= total) break;
   }
-  return { ok: true, found: pickFound(nodes, ids, side) };
+  return { ok: true, found: pickFound(nodes, ids, side, exclude) };
 }

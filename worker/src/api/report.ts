@@ -394,8 +394,12 @@ async function settle(store: Store, p: Provider, code: string, first: NSet, seen
     const r = await perform(p, set, d);
     if (!r.ok) {
       // 繋がらなかった: 取り込み待ち (queued) にして復旧後に送り直す。それ以外の失敗は運営の確認
+      // 送った結果は「入ったかもしれない」として applied に残す (応答だけが失われることがある。復旧後に start.gg の結果がこれと同じなら SPSP が入れたもの)。
+      // 取り消しは前の applied のまま (取り消しが通っていなければ start.gg に前の結果が残っている)
+      // 取り消して入れ直す (rereport) で取り消しの段で失敗したときも同じ (perform の note が reset: で始まる)
+      const maybe = d.op === 'reset' || (d.op === 'rereport' && r.note.startsWith('reset:')) ? (row ? row.applied : '') : JSON.stringify(d.result);
       const back: ReportSetRow = isOutageNote(r.note)
-        ? { ...done, state: 'queued', note: queuedNote, applied: row ? row.applied : '', version: done.version + 1 }
+        ? { ...done, state: 'queued', note: queuedNote, applied: maybe, version: done.version + 1 }
         : { ...done, state: 'review', note: 'error:' + r.note.slice(0, 100), applied: row ? row.applied : '', version: done.version + 1 };
       await store.casReportSet(back, done.version);
       return { ok: false, why: 'provider', note: r.note };
@@ -542,13 +546,24 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
     if (!r.ok && r.why === 'provider' && isOutageNote(r.note)) return ops;
   }
   if (!p.findSet) return ops;
+  // 選ばない試合: ほかの指定がもう移った試合と、送る結果が待っている試合 (同じ 2 人が勝者側決勝とグランドファイナルで当たるとき、
+  // 先の試合の結果を送る前に後の指定まで先の試合に移さないように)
+  const taken = new Set<string>([
+    ...(await store.listReportManual(ev.code)).filter((m) => m.status === 'matched' && m.set_id).map((m) => m.set_id),
+    ...(await store.listReportSets(ev.code)).filter((r) => !isManualId(r.set_id) && (isQueuedRow(r) || r.state === 'pending')).map((r) => r.set_id),
+  ]);
+  // 同じ 2 人の指定は作った順にだけ移す (先の指定が移るまで後の指定は待つ。勝者側決勝とグランドファイナルなど)
+  const waiting = new Set<string>();
   for (const m of manualOpen.slice().sort((a, b) => (a.id || 0) - (b.id || 0))) {
-    if (ops >= FLUSH_OPS) break;
-    if (now - m.updated_ms < MANUAL_RECHECK_MS && m.updated_ms !== m.created_ms) continue;
     const sl = manualSlots(m);
     if (!sl[0] || !sl[1]) continue;
+    const pair = [sl[0].id, sl[1].id].sort().join('|');
+    if (waiting.has(pair)) continue;
+    waiting.add(pair);   // 移せたら外す
+    if (ops >= FLUSH_OPS) continue;
+    if (now - m.updated_ms < MANUAL_RECHECK_MS && m.updated_ms !== m.created_ms) continue;
     ops++;
-    const f = await p.findSet([sl[0].id, sl[1].id], m.side === 'l' ? 'l' : m.side === 'r' ? 'r' : 'w');
+    const f = await p.findSet([sl[0].id, sl[1].id], m.side === 'l' ? 'l' : m.side === 'r' ? 'r' : m.side === 'g' ? 'g' : 'w', taken);
     if (!f.ok) { if (isOutageNote(f.note)) return ops; continue; }
     if (!f.found) {
       // 前の試合の結果がまだ start.gg に無い (SPSP の外で報告待ち等)。運営の画面に出す
@@ -558,6 +573,8 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
       continue;
     }
     await linkManual(store, ev.code, m, f.found, now);
+    taken.add(f.found.id);
+    waiting.delete(pair);
   }
   return ops;
 }
@@ -566,14 +583,21 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
  * 選手・運営の画面が読みに来たときの後始末 (定時の処理は無い): 取り込み待ちを送り直し、ブラケットの写しを進める。
  * 何もすることが無ければ D1 に書かない。障害中は試す番 (PROBE_GAP_MS ごと) まで何もしない。同時に 2 つは動かさない (report_snapshots.lock_ms)
  */
-async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, p: Provider, health: Health, now: number):
-  Promise<{ snap: Snapshot | null; syncedMs: number }> {
+interface Kept { snap: Snapshot | null; syncedMs: number; full: boolean; sets: number; manual: number }
+/** 写しの中身 (要るときだけ読む。kept.snap に置く) */
+async function keptSnap(store: Store, code: string, kept: Kept): Promise<Snapshot | null> {
+  if (!kept.snap && kept.syncedMs) kept.snap = (await loadSnap(store, code)).snap;
+  return kept.snap;
+}
+async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, p: Provider, health: Health, now: number): Promise<Kept> {
   const ev = o.ev;
-  const loaded = ev.kind === 'startgg' ? await loadSnap(store, ev.code) : { snap: null, syncedMs: 0 };
+  // 写しは中身を読まずに時刻だけ見る (15 秒ごとに全員が読みに来るので)。中身は写すとき・障害中・指定した試合があるときだけ
+  const meta = ev.kind === 'startgg' ? await store.getReportSnapshotMeta(ev.code).catch(() => null) : null;
   const rows = await store.listReportSets(ev.code);
   const manualOpen = ev.kind === 'startgg' ? (await store.listReportManual(ev.code)).filter((m) => m.status === 'open') : [];
+  const loaded: Kept = { snap: null, syncedMs: meta ? meta.synced_ms : 0, full: !!(meta && meta.full), sets: meta ? meta.sets : 0, manual: manualOpen.length };
   const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS);
-  const snapDue = ev.kind === 'startgg' && now - loaded.syncedMs >= (loaded.snap && loaded.snap.full ? SNAP_MIN_MS : SNAP_FIRST_MIN_MS);
+  const snapDue = ev.kind === 'startgg' && now - loaded.syncedMs >= (loaded.full ? SNAP_MIN_MS : SNAP_FIRST_MIN_MS);
   if (!queued && !snapDue) return loaded;
   if (health.down() && now - health.row.last_fail_ms < PROBE_GAP_MS) return loaded;
   if (!(await store.claimReportSnapshot(ev.code, now, 25 * 1000).catch(() => false))) return loaded;
@@ -582,14 +606,14 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   try {
     if (queued) await flushQueued(store, p, ev, now, rows, manualOpen);
     if (snapDue) {
-      const snap = loaded.snap || emptySnapshot();
+      const snap = (await keptSnap(store, ev.code, loaded)) || emptySnapshot();
       const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
       if (e && e !== 'outage_skip' && isOutageNote(e)) await health.fail(e, now);
       else if (!e) await health.ok(now);
       const js = snapshotJson(snap);
       // 繋がらなかったときは写した時刻を進めない (次に試せる番ですぐ続きを読む)。それ以外の失敗は進める (毎回呼ばない)
       const synced = e && isOutageNote(e) ? loaded.syncedMs : now;
-      if (js) { await store.putReportSnapshot(ev.code, js, synced); wrote = true; out = { snap, syncedMs: synced }; }
+      if (js) { await store.putReportSnapshot(ev.code, js, synced); wrote = true; out = { ...loaded, snap, syncedMs: synced, full: snap.full, sets: Object.keys(snap.sets).length }; }
     }
   } finally {
     if (!wrote) await store.releaseReportSnapshot(ev.code).catch(() => undefined);
@@ -614,7 +638,7 @@ async function heldList(store: Store, code: string, snap: Snapshot, manual: Repo
     if (!loser || loser.id === undefined) continue;
     const m = byId.get(r.set_id);
     const s = snap.sets[r.set_id];
-    const side = m ? (m.side === 'l' ? 'l' : m.side === 'w' ? 'w' : null) : s && s.r !== null ? (s.r > 0 ? 'w' : s.r < 0 ? 'l' : null) : null;
+    const side = m ? (m.side === 'l' ? 'l' : m.side === 'w' || m.side === 'g' ? 'w' : null) : s && s.r !== null ? (s.r > 0 ? 'w' : s.r < 0 ? 'l' : null) : null;
     out.push({ group: m ? m.group_id : s ? s.g : '', side, loser: String(loser.id), winner: winner && winner.id !== undefined ? String(winner.id) : undefined });
   }
   return out;
@@ -656,7 +680,10 @@ async function setForReport(store: Store, p: Provider, ev: ReportEventRow, setId
   if (rs.code === 'not_found') return { res: err('not_found', 'この大会にその試合はありません。', rs.note) };
   if (!isOutageNote(rs.note)) return { res: err('provider_error', providerMessage(ev.kind, rs.note), rs.note) };
   const { snap } = ev.kind === 'startgg' ? await loadSnap(store, ev.code) : { snap: null };
-  const alt = (snap && snapNSet(snap, setId, ev.name)) || (before && rowNSet(before));
+  // 写しが古くて枠が空のことがある (写すのは 45 秒ごと) → D1 の行に両者がいればそちら
+  const fromSnap = snap ? snapNSet(snap, setId, ev.name) : null;
+  const fromRow = before ? rowNSet(before) : null;
+  const alt = fromSnap && fromSnap.slots[0] && fromSnap.slots[1] ? fromSnap : fromRow || fromSnap;
   if (!alt) return { res: err('provider_error', MSG_OUTAGE_NOSET, 'outage_no_snapshot') };
   return { set: alt, offline: true, manual: false, before };
 }
@@ -796,7 +823,8 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const health = await Health.load(store, o.ev.kind);
   const p = guardProvider(providerOf(fetchFn, o), health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
-  const kept = await maintain(store, fetchFn, o, p, health, now).catch(() => ({ snap: null, syncedMs: 0 }));
+  const none: Kept = { snap: null, syncedMs: 0, full: false, sets: 0, manual: 0 };
+  const kept = await maintain(store, fetchFn, o, p, health, now).catch(() => none);
   const rows = await store.listReportSetsForUser(sess.id, [o.ev.code]);
   const sets = [];
   for (const r of rows) sets.push(await setView(store, r, sess.id));
@@ -804,11 +832,15 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
     outage: health.view() };
   if (o.ev.kind === 'startgg') {
     // 運営が指定した試合 (障害中)・ブラケットの写しの自分の試合 (障害中か、画面が start.gg を読めなかったとき fallback: true)
-    out.manual = (await store.listReportManualForUser(sess.id, o.ev.code)).map((m) => manualView(m, kept.snap));
-    if (req.fallback === true || health.down()) out.snap = kept.snap ? { ...snapMine(kept.snap, sess.id), synced_ms: kept.syncedMs } : null;
+    const mine = await store.listReportManualForUser(sess.id, o.ev.code);
+    // 写しの中身を読むのは、障害中・画面が start.gg を読めなかった・指定した試合がある・総当たりで相手を選んでいる (rr) ときだけ
+    const want = req.fallback === true || health.down() || mine.length > 0 || req.rr === true;
+    const snap = want ? await keptSnap(store, o.ev.code, kept) : null;
+    out.manual = mine.map((m) => manualView(m, snap));
+    if (req.fallback === true || health.down()) out.snap = snap ? { ...snapMine(snap, sess.id), synced_ms: kept.syncedMs } : null;
     // 総当たり: ほかの選手が選んだ相手 (30 分以内) と、start.gg で試合中の人 (写し)。選手の画面で空いている相手を先に出す
     out.picks = (await store.listReportPicks(o.ev.code, now - PICK_TTL_MS)).map((x) => ({ u: x.user_id, s: x.set_id }));
-    out.playing = kept.snap ? Array.from(new Set(Object.values(kept.snap.sets).filter((s) => s.s === 2).flatMap((s) => s.sl.map((x) => x.e).filter((e): e is string => !!e)))) : [];
+    out.playing = snap ? Array.from(new Set(Object.values(snap.sets).filter((s) => s.s === 2).flatMap((s) => s.sl.map((x) => x.e).filter((e): e is string => !!e)))) : [];
   }
   if (o.ev.kind === 'challonge') {
     const d = await challongeData(fetchFn, o.token, o.ev.target_id);
@@ -868,14 +900,18 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   const health = await Health.load(store, o.ev.kind);
   const p = guardProvider(providerOf(fetchFn, o), health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
-  const kept = await maintain(store, fetchFn, o, p, health, now).catch(() => ({ snap: null, syncedMs: 0 }));
+  const kept = await maintain(store, fetchFn, o, p, health, now).catch((): Kept => ({ snap: null, syncedMs: 0, full: false, sets: 0, manual: 0 }));
   const sets = [];
   for (const r of await store.listReportSets(o.ev.code)) sets.push(await setView(store, r, null));
   // 指定した試合: 受付中のものと、6 時間以内に start.gg の試合が見つかった・取り消したもの
   const manual = o.ev.kind === 'startgg' ? (await store.listReportManual(o.ev.code)).filter((m) => m.status === 'open' || now - m.updated_ms < 6 * 3600 * 1000)
-    .map((m) => manualView(m, kept.snap)) : [];
+    .map((m) => manualView(m, null)) : [];
+  if (manual.length && kept.syncedMs) {   // ブロックの名前は写しから
+    const snap = await keptSnap(store, o.ev.code, kept);
+    for (const v of manual) v.group_name = groupName(snap, v.group);
+  }
   return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual,
-    snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.snap ? Object.keys(kept.snap.sets).length : 0, full: !!(kept.snap && kept.snap.full) } : null });
+    snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
 }
 
 /** action: "report_phases" — 何先の設定に使うフェーズとラウンド。受付の前 (受付を始める画面) は { token, event } で、運営のログインのトークンで読む */
@@ -1017,7 +1053,7 @@ export async function handleReportHeldExport(cfg: Config, store: Store, fetchFn:
     const nm = (k: number) => String((slots[k] && slots[k]!.name) || '?');
     const m = manual.get(r.set_id);
     const s = snap ? snap.sets[r.set_id] : undefined;
-    const sideLabel = m ? (m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : '勝者側') : '';
+    const sideLabel = m ? (m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : m.side === 'g' ? 'グランドファイナル' : '勝者側') : '';
     const [a, b] = res ? [res.g.filter((g) => g.w === res.w).length, res.g.filter((g) => g.w !== res.w).length] : [0, 0];
     items.push({
       set_id: r.set_id, startgg_set: m ? (m.set_id || null) : r.set_id, group: m ? groupName(snap, m.group_id) : s ? groupName(snap, s.g) : '',
@@ -1033,7 +1069,7 @@ export async function handleReportManualCreate(cfg: Config, store: Store, fetchF
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
   if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
-  const side = req.side === 'w' || req.side === 'l' || req.side === 'r' ? req.side : null;
+  const side = req.side === 'w' || req.side === 'l' || req.side === 'r' || req.side === 'g' ? req.side : null;
   const gid = typeof req.group === 'string' && /^\d{1,15}$/.test(req.group) ? req.group : null;
   const ids = Array.isArray(req.entrants) ? req.entrants.map((x) => String(x)) : [];
   if (!side || !gid || ids.length !== 2 || !ids.every((x) => /^\d{1,15}$/.test(x)) || ids[0] === ids[1]) return err('bad_request', '入力の形式が正しくありません。', 'bad:manual');

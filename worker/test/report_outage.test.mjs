@@ -353,6 +353,9 @@ test('総当たり: 「この人とやる」を記録して両者の画面に返
   e.fake.sets[1].state = 2;   // 101 (P3 vs P4) が start.gg で開始
   e.tick(50 * 1000);
   v = await e.view(12);
+  assert.deepStrictEqual(v.playing, [], '総当たりで相手を選んでいないときは写しを読まない');
+  e.tick(1000);
+  v = await e.view(12, { rr: true });
   assert.deepStrictEqual(v.playing.sort(), ['3', '4']);
   e.tick(4000);
   await e.submit(12, '100', W2(0));

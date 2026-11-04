@@ -371,7 +371,7 @@ function fromManual(x) {
   if (mySide === null) return null;
   return {
     id: String(x.set_id), kind: 'startgg', manual: true, state: 'open', started: false,
-    round: i18n(x.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'), pool: x.group_name || '', phase: '',
+    round: sideLabel(x.side), pool: x.group_name || '', phase: '',
     groupId: x.group || null, roundNum: null, phaseKey: x.phase || null, station: x.station || null, stream: null,
     slots, mySide, winner: null, score: null, games: [], totalGames: null, lPlacement: null,
     isClass: LOWER_CLASS_NAME_PAT.test(x.group_name || '') || LOWER_CLASS_NAME_PAT.test((INFO && INFO.name) || ''),
@@ -1124,7 +1124,8 @@ async function poll(force) {
   if (!force && document.visibilityState === 'hidden') { pollTimer = setTimeout(poll, POLL_MS); return; }
   const st = $('rp-status');
   try {
-    const v = await api({ action: 'report_view', token: tok(), code: CODE, ...(FALLBACK ? { fallback: true } : {}) });
+    // rr = 総当たりで相手を選んでいる (Worker が写しから「start.gg で試合中」の人を返す)
+    const v = await api({ action: 'report_view', token: tok(), code: CODE, ...(FALLBACK ? { fallback: true } : {}), ...(openMatches().length > 1 ? { rr: true } : {}) });
     if (!v || !v.ok) {
       setStatus(st, errText(v), 'err');
       if (v && v.error && (v.error.code === 'report_closed' || v.error.code === 'auth_failed')) return;
@@ -1700,15 +1701,15 @@ const MAN = { built: false, groups: null, gid: '', side: 'w', pick: [null, null]
 /** 名前の絞り込み用 (全角半角・大小・カタカナ → ひらがな をそろえる) */
 const manNorm = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
 /** Worker の candidateFor と同じきまり (r = 総当たり: 負けても残る) */
-const manCandOk = (e, side) => !e.manual && (side === 'r' ? true : side === 'w' ? !(e.wl || e.ll || e.hw || e.hl) : !(e.ll || e.hl));
+const manCandOk = (e, side) => !e.manual && (side === 'r' ? true : side === 'w' ? !(e.wl || e.ll || e.hw || e.hl) : !(e.ll || e.hl));   // l・g (グランドファイナル) は敗者側で負けていない人
 const pairKey = (a, b) => [a, b].sort().join('|');
-const sideLabel = (side) => (side === 'l' ? i18n('report.manual.side_l') : side === 'r' ? i18n('report.manual.side_r') : i18n('report.manual.side_w'));
+const sideLabel = (side) => (side === 'l' ? i18n('report.manual.side_l') : side === 'r' ? i18n('report.manual.side_r') : side === 'g' ? i18n('report.manual.side_g') : i18n('report.manual.side_w'));
 function manTag(e) {
   const t = [];
   if (MAN.side !== 'r') {
     if (e.wl) t.push(i18n('report.manual.tag_wl'));
     else if (e.hw) t.push(i18n('report.manual.tag_hw'));
-    else if (MAN.side === 'l') t.push(i18n('report.manual.tag_noloss'));
+    else if (MAN.side === 'l' || MAN.side === 'g') t.push(i18n('report.manual.tag_noloss'));
   }
   if (e.playing) t.push(i18n('report.manual.tag_playing'));
   return t.join(' · ');
@@ -1724,6 +1725,7 @@ function manCands(k, q) {
   const list = g.entrants.filter((e) => manCandOk(e, MAN.side) && (!other || other.id !== e.id) && (!nq || manNorm(e.name).includes(nq))
     && !(MAN.side === 'r' && other && done.has(pairKey(other.id, e.id))));
   if (MAN.side === 'l') list.sort((a, b) => Number(!!(b.wl || b.hw)) - Number(!!(a.wl || a.hw)));
+  if (MAN.side === 'g') list.sort((a, b) => Number(!!(a.wl || a.hw)) - Number(!!(b.wl || b.hw)));   // 勝者側を勝ち上がった人が先
   return list.slice(0, 8);
 }
 function manPickHtml(k) {
@@ -1756,12 +1758,13 @@ function manDrawForm(sec) {
   else if (MAN.side === 'r') MAN.side = 'w';
   const [a, b] = MAN.pick;
   const openPair = !!(g && a && b && (g.open_pairs || []).includes(pairKey(a.id, b.id)));
-  const help = MAN.side === 'r' ? i18n('report.manual.help_r') : MAN.side === 'l' ? i18n('report.manual.help_l') : i18n('report.manual.help_w');
+  const help = MAN.side === 'r' ? i18n('report.manual.help_r') : MAN.side === 'l' ? i18n('report.manual.help_l') : MAN.side === 'g' ? i18n('report.manual.help_g') : i18n('report.manual.help_w');
   box.innerHTML = MAN.err ? `<p class="rp-err">${escapeHtml(MAN.err)}</p>` : !MAN.groups ? `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>` : `
     ${gs.length > 1 ? `<label class="rp-mrow">${escapeHtml(i18n('report.manual.group'))} <select data-mgroup>${gs.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === MAN.gid ? ' selected' : ''}>${escapeHtml(x.name || x.id)}${x.rr ? ' ' + escapeHtml(i18n('report.manual.group_rr')) : ''}${x.open ? '' : ' ' + escapeHtml(i18n('report.manual.group_done'))}</option>`).join('')}</select></label>` : ''}
     ${MAN.side === 'r' ? `<div class="rp-mrow"><span class="rp-tag">${escapeHtml(i18n('report.manual.side_r'))}</span></div>` : `<div class="rp-mrow rp-mside">
       <label><input type="radio" name="rp-mside" value="w"${MAN.side === 'w' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_w'))}</label>
       <label><input type="radio" name="rp-mside" value="l"${MAN.side === 'l' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_l'))}</label>
+      <label><input type="radio" name="rp-mside" value="g"${MAN.side === 'g' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_g'))}</label>
     </div>`}
     <p class="rp-muted rp-mhelp">${escapeHtml(help)}</p>
     <div class="rp-mpicks"><div class="rp-mpick">${manPickHtml(0)}</div><div class="rp-mvs">vs</div><div class="rp-mpick">${manPickHtml(1)}</div></div>
@@ -1773,7 +1776,7 @@ function manDrawForm(sec) {
   if (sel) sel.addEventListener('change', () => { MAN.gid = sel.value; MAN.pick = [null, null]; manDrawForm(sec); });
   for (const rb of box.querySelectorAll('input[name="rp-mside"]')) {
     rb.addEventListener('change', () => {
-      MAN.side = rb.value === 'l' ? 'l' : 'w';
+      MAN.side = rb.value === 'l' ? 'l' : rb.value === 'g' ? 'g' : 'w';
       MAN.pick = MAN.pick.map((p) => (p && manCandOk(p, MAN.side) ? p : null));   // 勝者側に変えたら負けている人は外す
       manDrawForm(sec);
     });

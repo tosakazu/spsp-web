@@ -2209,6 +2209,8 @@ window.SPSP_I18N.ja = {
   'report.manual.group_done': '(試合なし)',
   'report.manual.side_w': '勝者側',
   'report.manual.side_l': '敗者側',
+  'report.manual.side_g': 'グランドファイナル',
+  'report.manual.help_g': '敗者側で負けていない人から選べます (敗者側から上がった人は勝者側で 1 回負けていても出ます)。勝者側を勝ち上がった人が先に出ます。',
   'report.manual.help_w': '負けていない人 (start.gg と、SPSP に未反映の結果の両方で) から選べます。',
   'report.manual.help_l': '敗者側で負けていない人から選べます。勝者側の負けが start.gg に未反映でも敗者側をすることがあるので、負けの記録が無い人も出ます。未反映でも敗者側で負けた人は出ません。',
   'report.manual.ph': '{n} 人目の名前',

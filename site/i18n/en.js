@@ -2156,6 +2156,8 @@ window.SPSP_I18N.en = {
   'report.manual.group_done': '(no matches)',
   'report.manual.side_w': 'Winners',
   'report.manual.side_l': 'Losers',
+  'report.manual.side_g': 'Grand Final',
+  'report.manual.help_g': 'Players with no losers-side loss (the losers bracket winner is listed even with a winners-side loss). The winners bracket winner is listed first.',
   'report.manual.help_w': 'Players with no loss (in start.gg or in results not applied yet).',
   'report.manual.help_l': 'Players with no losers-side loss. Players with no recorded loss are listed too, since a winners-side loss may not be in start.gg yet. Players who lost on the losers side are not listed, even if that is not applied yet.',
   'report.manual.ph': 'Player {n} name',
