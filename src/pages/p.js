@@ -414,7 +414,21 @@ function loadUpcoming() {
 // 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
 // bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(同じプールの人を
 // シード順に、メインキャラの絵文字付き。24 人ずつページ送り) も
-const POOL_PAGE = 24;   // プールのプレイヤーのページ送りの 1 ページの人数
+const POOL_PAGE = 24;
+/** 予定の開始時刻を過ぎてもまだ参加予定の欄に出す長さ (start.gg で始まって速報に出るまでのつなぎ) */
+const STARTED_GRACE_MS = 3 * 3600 * 1000;
+/** 速報 (live/<地域>/index.json) でこの人が出ている部門の id。読めなければ空 @returns {Promise<Set<string>>} */
+async function loadLiveIds() {
+  const root = SpspLive.liveRoot();
+  if (!root) return new Set();
+  try {
+    const r = await fetch(root + 'index.json', { cache: 'no-cache' });
+    const ix = r.ok ? await r.json() : null;
+    return new Set((((ix && ix.players) || {})[String(UID)] || []).map(String));
+  } catch (e) {
+    return new Set();
+  }
+}   // プールのプレイヤーのページ送りの 1 ページの人数
 async function buildUpcomingSection() {
   if (!UID || !META) return;
   const sec = document.getElementById('yosou-section');
@@ -434,8 +448,11 @@ async function buildUpcomingSection() {
     return true;
   };
   const now = Date.now();
+  // 予定の時刻を過ぎても start.gg で始まるまでは速報 (参加中の大会) に出ないので、STARTED_GRACE_MS のあいだは
+  // ここに残す (遅れて始まる大会がどちらの欄からも消えていた、11-04)。速報に出たらここからは外す
+  const live = await loadLiveIds();
   const items = ((up.by_uid || {})[String(UID)] || []).map(String)
-    .filter((/** @type {string} */ eid) => up.events[eid] && up.events[eid].start_at * 1000 > now)
+    .filter((/** @type {string} */ eid) => up.events[eid] && up.events[eid].start_at * 1000 > now - STARTED_GRACE_MS && !live.has(eid))
     .map((/** @type {string} */ eid) => ({ eid, ev: up.events[eid], counted: passes(up.events[eid]) }))
     .sort((/** @type {any} */ a, /** @type {any} */ b) => a.ev.start_at - b.ev.start_at);
   if (!items.length) return;
