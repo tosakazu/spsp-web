@@ -96,12 +96,20 @@ export interface HeldDq { entrant: string; scope: string; set_id?: string }
  * 計算で埋めた写し。extra = SPSP にある (start.gg に未反映の) 結果 試合 → 勝った出場者。
  * 信用しないブロックは埋めない。もとの写しは変えない。
  */
-export function projectSnap(snap: Snapshot, extra: Record<string, string>, dqs: HeldDq[] = []): Snapshot {
+export function projectSnap(snap: Snapshot, extra: Record<string, string>, dqs: HeldDq[] = [], confirmed: Set<string> = new Set()): Snapshot {
+  return projectFull(snap, extra, dqs, confirmed).snap;
+}
+
+/** projectSnap と、運営の確認待ちの通過順 (同じ順位が 2 人以上で、まだ確かめていないブロック) */
+export function projectFull(snap: Snapshot, extra: Record<string, string>, dqs: HeldDq[] = [], confirmed: Set<string> = new Set()):
+  { snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]> } {
   const trusted = trustedGroups(snap);
-  if (!trusted.size) return snap;
+  if (!trusted.size) return { snap, ties: {} };
   const b = bracketOfSnap(snap);
   const winners: Record<string, string> = { ...snapWinners(snap), ...extra };
-  let r = resolve(b, winners, { fromSources: true });
+  // 前のフェーズからの通過: 同じ順位が 2 人以上の並べ方は start.gg が API で返さないので、運営が確かめたブロックだけ (それ以外は未定のまま)
+  const opts = { fromSources: true, confirmed: (g: string) => confirmed.has(g) };
+  let r = resolve(b, winners, opts);
   // DQ: その人の (側の合う) 結果の無い試合を相手の勝ちにする。前の試合が決まると次の試合が出てくるので、変わらなくなるまで
   for (let round = 0; round < 64 && dqs.length; round++) {
     let changed = false;
@@ -117,7 +125,7 @@ export function projectSnap(snap: Snapshot, extra: Record<string, string>, dqs: 
       }
     }
     if (!changed) break;
-    r = resolve(b, winners, { fromSources: true });
+    r = resolve(b, winners, opts);
   }
   const sets: Record<string, SnapSet> = {};
   for (const [id, s] of Object.entries(snap.sets)) {
@@ -127,5 +135,12 @@ export function projectSnap(snap: Snapshot, extra: Record<string, string>, dqs: 
     const sl: SnapSlot[] = s.sl.map((x, k) => (x.e || !real(st.occ[k]) ? x : { ...x, e: st.occ[k], pd: 1 as const }));
     sets[id] = { ...s, sl };
   }
-  return { ...snap, sets };
+  // start.gg がまだ次のフェーズを埋めていない (= 計算が要る) ブロックの並びだけ返す
+  const ties: Record<string, { pl: number; list: string[] }[]> = {};
+  for (const [g, t] of Object.entries(r.ties)) {
+    if (!trusted.has(g)) continue;
+    const waiting = Object.values(snap.seeds || {}).some((sd) => sd.src && sd.src.g === g && !sd.e);
+    if (waiting) ties[g] = t;
+  }
+  return { snap: { ...snap, sets }, ties };
 }

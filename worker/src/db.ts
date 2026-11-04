@@ -322,6 +322,16 @@ export class D1Store implements Store {
     await this.db.prepare('UPDATE report_events SET managers = ? WHERE code = ?').bind(managers, code).run();
   }
 
+  async listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]> {
+    const r = await this.db.prepare('SELECT group_id, list FROM report_prog_ok WHERE code = ?').bind(code).all<{ group_id: string; list: string }>();
+    return r.results || [];
+  }
+
+  async putReportProgOk(code: string, groupId: string, list: string, userId: string, ms: number): Promise<void> {
+    await this.db.prepare('INSERT INTO report_prog_ok (code, group_id, list, user_id, ms) VALUES (?, ?, ?, ?, ?) ON CONFLICT (code, group_id) DO UPDATE SET list = excluded.list, user_id = excluded.user_id, ms = excluded.ms')
+      .bind(code, groupId, list, userId, ms).run();
+  }
+
   async updateReportEventSggAdmins(code: string, ids: string | null, ms: number): Promise<void> {
     if (ids === null) await this.db.prepare('UPDATE report_events SET sgg_admins_ms = ? WHERE code = ?').bind(ms, code).run();
     else await this.db.prepare('UPDATE report_events SET sgg_admins = ?, sgg_admins_ms = ? WHERE code = ?').bind(ids, ms, code).run();

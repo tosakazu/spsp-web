@@ -211,6 +211,8 @@ export class MemStore {
 
   async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
+  async listReportProgOk(code) { this._rep(); return (this.reportProgOk || []).filter((x) => x.code === code).map((x) => ({ group_id: x.group_id, list: x.list })); }
+  async putReportProgOk(code, groupId, list, userId, ms) { this._rep(); this.reportProgOk = (this.reportProgOk || []).filter((x) => !(x.code === code && x.group_id === groupId)); this.reportProgOk.push({ code, group_id: groupId, list, user_id: userId, ms }); }
   async updateReportEventSggAdmins(code, ids, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { if (ids !== null) x.sgg_admins = ids; x.sgg_admins_ms = ms; } }
   async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
 

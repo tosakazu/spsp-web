@@ -8,11 +8,11 @@
  *
  * きまり:
  *   - 片方が空き (bye) の試合は、もう片方の勝ち・敗者は空き。両方空きなら勝者も敗者も空き。
- *   - グランドファイナルのやり直し (両方の枠が同じ試合の 1 と 2) は、グランドファイナルの勝者がこのブロックで 1 回負けている人のときだけ行う。
+ *   - グランドファイナルのやり直し (両方の枠が同じ試合の 1 と 2) は、グランドファイナルの勝者が敗者側の試合 (round < 0) から来た枠の人のときだけ行う。
  *     行わないときは void (その試合は無い)。
  *   - 順位 = 出場者が最後にいる「どの試合にも使われない出口」の順位 (勝者なら wPlacement・敗者なら lPlacement)。
- *   - 前のフェーズからのシード = 元のブロックで originPlacement の人たちを、元のブロックのシード順 (groupSeedNum) に並べた originOrder 番目。
- *     同じ順位の出口が全部決まるまでは決まらない。
+ *   - 前のフェーズからのシード = 元のブロックで originPlacement の出口を下の順に並べた originOrder 番目。同じ順位の出口が全部決まるまでは決まらない。
+ *     並び = 上位シード (groupSeedNum の小さい方) が全部勝ったとしたときにその出口に来るシード番号の順。敗者側の試合で負けて抜ける出口だけは、その試合の勝者に来るシード番号の順。
  * 総当たり (ROUND_ROBIN) は全部の試合がシード同士なので対戦者は決まるが、順位 (同率の決め方) はここでは計算しない (rr = true)。
  */
 
@@ -43,6 +43,8 @@ export interface Resolved {
   place: Record<string, Record<string, number>>;
   /** シード → 出場者 (前のフェーズから来るシードは決まったときだけ) */
   seed: Record<string, Occ>;
+  /** 同じ順位の出口が 2 つ以上あり、並べ方 (start.gg が API で返さない) を推定で決めるブロック → 順位ごとの並び (決まったものだけ) */
+  ties: Record<string, { pl: number; list: string[] }[]>;
 }
 
 /** start.gg の phaseGroup の sets・seeds から Bracket に足す */
@@ -82,8 +84,9 @@ export const emptyBracket = (): Bracket => ({ groups: {}, sets: {}, seeds: {} })
  * 計算する。winners = 試合 → 勝った出場者 ID。
  * opts.fromSources = 前のフェーズから来るシードを元のブロックの順位から計算する (false なら seeds の e をそのまま使う)
  */
-export function resolve(b: Bracket, winners: Record<string, string | null | undefined>, opts: { fromSources?: boolean } = {}): Resolved {
-  const out: Resolved = { sets: {}, place: {}, seed: {} };
+export function resolve(b: Bracket, winners: Record<string, string | null | undefined>,
+  opts: { fromSources?: boolean; confirmed?: (g: string) => boolean } = {}): Resolved {
+  const out: Resolved = { sets: {}, place: {}, seed: {}, ties: {} };
   // 使われる側: (試合, 1|2) → それを枠に持つ試合
   const consumers = new Map<string, string[]>();
   for (const s of Object.values(b.sets)) for (const sl of s.sl) if (sl.k === 'set' && sl.id) {
@@ -114,6 +117,8 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     if (!pl) return PENDING;
     const tied = pl.byPlace.get(src.pl);
     if (!tied || !tied.done) return PENDING;
+    // 同じ順位が 2 人以上 = 並べ方を推定で決める。確かめた (confirmed) ブロックだけ埋める
+    if (tied.list.length > 1 && opts.confirmed && !opts.confirmed(src.g)) return PENDING;
     const e = tied.list[src.ord - 1];
     return e === undefined ? BYE : e;
   };
@@ -139,7 +144,7 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     if (reset) {
       const gf = stateOf(s.sl[0].id!);
       if (gf.w === PENDING) st = { occ: [PENDING, PENDING], w: PENDING, l: PENDING, void: false };
-      else if (gf.w === BYE || gf.w === VOID || !lostBefore(s.g, gf.w, s.sl[0].id!)) st = { occ: [VOID, VOID], w: VOID, l: VOID, void: true };
+      else if (gf.w === BYE || gf.w === VOID || !fromLosers(s.sl[0].id!, gf)) st = { occ: [VOID, VOID], w: VOID, l: VOID, void: true };
     }
     if (!st.void && st.occ[0] !== PENDING && st.occ[1] !== PENDING) {
       const [a, c] = st.occ;
@@ -157,13 +162,13 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     return st;
   };
 
-  /** このブロックで、グランドファイナル gf とそれを使う試合 (やり直し) 以外で負けたことがあるか */
-  const lostBefore = (g: string, e: string, gf: string): boolean => {
-    for (const s of Object.values(b.sets)) {
-      if (s.g !== g || s.id === gf || s.sl.some((sl) => sl.k === 'set' && sl.id === gf)) continue;
-      if (stateOf(s.id).l === e) return true;
-    }
-    return false;
+  /** グランドファイナルの勝者が敗者側から来た枠の人か (その枠の前の試合が敗者側 = round < 0)。
+   *  前のフェーズから敗者側に直接入る人もいるので「このブロックで負けたか」ではなく枠で見る */
+  const fromLosers = (gfId: string, gf: SetState): boolean => {
+    const g = b.sets[gfId];
+    const k = gf.occ[0] === gf.w ? 0 : 1;
+    const sl = g.sl[k];
+    return sl.k === 'set' && !!sl.id && !!b.sets[sl.id] && b.sets[sl.id].r < 0;
   };
 
   type Places = { byPlace: Map<number, { list: string[]; done: boolean }>; of: Record<string, number> };
@@ -186,7 +191,11 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
         if (users.length) continue;
         const pl = p === 1 ? s.wp : s.lp;
         if (pl === null) continue;
-        exits.push({ pl, occ: p === 1 ? st.w : st.l, rank: proj.get(s.id + '#' + p) ?? 1e9 });
+        // 同じ順位の出口の並び (start.gg の originOrder、2026-11-05 に 245 件で確かめた): 上位シードが全部勝ったときにその出口に来るシード番号の順。
+        // ただし敗者側の試合で負けて抜ける出口は、その試合の勝者に来るシード番号の順
+        const own = proj.get(s.id + '#' + p) ?? 1e9;
+        const key = p === 2 && s.r < 0 ? (proj.get(s.id + '#1') ?? 1e9) : own;
+        exits.push({ pl, occ: p === 1 ? st.w : st.l, rank: key * 1e4 + Math.min(own, 1e4 - 1) });
       }
     }
     const byPlace = new Map<number, { list: string[]; done: boolean }>();
@@ -227,6 +236,13 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
 
   for (const id of Object.keys(b.sets)) stateOf(id);
   for (const g of Object.keys(b.groups)) { const p = placeOf(g); if (p) out.place[g] = p.of; }
+  const fed = new Set(Object.values(b.seeds).filter((x) => x.src).map((x) => x.src!.g));
+  for (const g of fed) {
+    const p = placeOf(g);
+    if (!p) continue;
+    const t = [...p.byPlace.entries()].filter(([, v]) => v.done && v.list.length > 1).map(([pl, v]) => ({ pl, list: v.list.slice() })).sort((x, y) => x.pl - y.pl);
+    if (t.length) out.ties[g] = t;
+  }
   for (const id of Object.keys(b.seeds)) seedOcc(id);
   return out;
 }

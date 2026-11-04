@@ -22,6 +22,7 @@ import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
 import { placementToW2W } from '../../site/js/match.js';
 import SPSPLinks from '../../site/js/links.js';
 import { showVictory, WIN_ANIMS } from './report_win.js';
+import { mountBracketView } from './report_bracket_view.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
@@ -1082,9 +1083,18 @@ function wireMatchActions(root) {
   }
 }
 
+/** トーナメント表 (start.gg の受付だけ。選手・運営の画面の下に 1 つ。2026-11-05) */
+let BRACKET_VIEW = null;
+function ensureBracketView() {
+  if (BRACKET_VIEW || DEMO || !INFO || INFO.kind !== 'startgg' || !CODE) return;
+  const el = $('rp-bracket');
+  if (!el) return;
+  BRACKET_VIEW = mountBracketView(el, { api, tok, code: CODE, t: i18n, hhmm });
+}
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
+  ensureBracketView();
   const cur = currentMatch();
   const waiting = MATCHES.find((m) => m.state === 'waiting');
   const done = MATCHES.filter((m) => m.state === 'complete');
@@ -1726,6 +1736,7 @@ async function renderAdmin() {
     } else r = j && !j.ok ? j : r;
   }
   if (!r || !r.ok) { root.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
+  ensureBracketView();
   const ev = r.report;
   const url = pageUrl(CODE, false);
   if (r.role === 'manager') {
@@ -2083,6 +2094,7 @@ function manualUpdate(r) {
     MAN.built = true;
     sec.innerHTML = `<div data-moutage></div>
       <p class="rp-muted rp-msnap" data-msnap></p>
+      <div data-mprog></div>
       <details class="rp-manual" data-mdet>
         <summary>${escapeHtml(i18n('report.manual.title'))}</summary>
         <p class="rp-muted">${escapeHtml(i18n('report.manual.help'))}</p>
@@ -2108,11 +2120,48 @@ function manualUpdate(r) {
   sec.querySelector('[data-msnap]').textContent = snap && snap.sets
     ? i18n('report.snap.status', { n: snap.sets, t: hhmm(snap.synced_ms) }) + (snap.full ? '' : ' ' + i18n('report.snap.partial'))
     : i18n('report.snap.none');
+  // 前のフェーズからの通過順の確認 (障害中・復旧待ちのあいだだけ読む)
+  if (outage || held) progLoad(sec);
+  else sec.querySelector('[data-mprog]').innerHTML = '';
   // 結果を入れている途中は一覧を描き直さない
   if (!(MAN.fixOpen && sec.querySelector('[data-mfixbox]'))) manDrawList(sec);
   // 障害になったら一度だけ開く (候補を読む)
   const det = sec.querySelector('[data-mdet]');
   if (outage && !MAN.opened) { MAN.opened = true; det.open = true; }
+}
+
+/**
+ * 前のフェーズからの通過順 (2026-11-05)。同じ順位で抜ける人が 2 人以上のとき、次のフェーズのどのシードに入るかを start.gg は API で返さないので、
+ * 障害中に SPSP が次のフェーズを計算で埋めるのは、運営がこの並びを確かめたブロックだけ。
+ */
+const PROG = { busy: false, key: '' };
+async function progLoad(sec) {
+  if (PROG.busy || DEMO) return;
+  PROG.busy = true;
+  try {
+    const r = await api({ action: 'report_progression', token: tok(), code: CODE });
+    const box = sec.querySelector('[data-mprog]');
+    if (!box || !r || !r.ok) return;
+    const key = JSON.stringify(r.groups);
+    if (key === PROG.key) return;
+    PROG.key = key;
+    box.innerHTML = r.groups.length ? `<div class="rp-banner rp-prog"><b>${escapeHtml(i18n('report.prog.title'))}</b>
+      <p class="rp-muted">${escapeHtml(i18n('report.prog.help'))}</p>
+      ${r.groups.map((g) => `<div class="rp-prog-g"><h4>${escapeHtml(g.group_name)}</h4>
+        ${g.places.map((p) => `<div>${escapeHtml(i18n('report.prog.place', { pl: p.pl }))}: ${p.entrants.map((e, i) => `${i + 1}. ${escapeHtml(e.name)}`).join(' / ')}</div>`).join('')}
+        ${g.confirmed ? `<p class="rp-ok">✓ ${escapeHtml(i18n('report.prog.confirmed'))}</p>`
+          : `<button type="button" class="rp-btn" data-prog-ok="${escapeHtml(g.group)}" data-prog-key="${escapeHtml(g.key)}">${escapeHtml(i18n('report.prog.btn'))}</button>`}
+        <span class="rp-status" data-prog-st="${escapeHtml(g.group)}"></span></div>`).join('')}</div>` : '';
+    box.querySelectorAll('[data-prog-ok]').forEach((b) => b.addEventListener('click', async () => {
+      const gid = b.getAttribute('data-prog-ok');
+      if (!confirm(i18n('report.prog.confirm'))) return;
+      const x = await api({ action: 'report_progression_ok', token: tok(), code: CODE, group: gid, key: b.getAttribute('data-prog-key') });
+      const st = box.querySelector(`[data-prog-st="${gid}"]`);
+      if (st) setStatus(st, x && x.ok ? i18n('report.prog.confirmed') : errText(x), x && x.ok ? 'ok' : 'err');
+      PROG.key = '';
+      setTimeout(() => progLoad(sec), 300);
+    }));
+  } finally { PROG.busy = false; }
 }
 
 // ── 運営: 対戦相手が見つからない・参加者の試合 (対戦開始・DQ) (2026-11-04、docs §12) ─────────────

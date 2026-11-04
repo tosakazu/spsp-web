@@ -34,7 +34,7 @@ import { checkStartggAdmin, startggCurrentUser, startggGql } from './class_brack
 import { challongeApi } from './challonge.ts';
 import { handleManagerBegin, logLogin } from './login.ts';
 import type { FetchFn } from './oauth.ts';
-import { checkSnap, projectSnap, snapHasStructure } from './report_bracket.ts';
+import { checkSnap, projectFull, snapHasStructure } from './report_bracket.ts';
 import type { HeldDq } from './report_bracket.ts';
 import { exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
 import { openJson, sealJson } from './report_crypto.ts';
@@ -572,6 +572,18 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
       continue;
     }
     ops++;
+    // 計算で埋めた試合: SPSP が受け付けたときの 2 人 (枠の順) と start.gg の 2 人が違えば送らない (勝者を枠の番号で持っているので、
+    // 取り違えると違う人の勝ちになる)。運営の確認にする (2026-11-05)
+    {
+      let rsl: ({ id?: unknown } | null)[] = [];
+      try { rsl = JSON.parse(row.slots); } catch (_) { rsl = []; }
+      const want = [rsl[0] && rsl[0].id != null ? String(rsl[0].id) : null, rsl[1] && rsl[1].id != null ? String(rsl[1].id) : null];
+      const have = [rs.set.slots[0] ? rs.set.slots[0].id : null, rs.set.slots[1] ? rs.set.slots[1].id : null];
+      if (want[0] && want[1] && have[0] && have[1] && (want[0] !== have[0] || want[1] !== have[1])) {
+        await markRow(store, row, 'review', 'slot_mismatch', now);
+        continue;
+      }
+    }
     // start.gg でまだ相手が空き (計算で埋めた試合で、前の試合をまだ送っていない) → 前の試合を送ってから (次の回)
     if (!rs.set.complete && (!rs.set.slots[0] || !rs.set.slots[1])) continue;
     let adminRes: Result | null = null;
@@ -687,8 +699,14 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
  * 構造が揃っていない (古い写し) か、信用できるブロックが無ければ写しのまま
  */
 async function projectedSnap(store: Store, code: string, snap: Snapshot): Promise<Snapshot> {
-  if (!snapHasStructure(snap) || !snap.chk) return snap;
+  return (await projectedFull(store, code, snap)).snap;
+}
+
+/** 計算で埋めた写しと、通過順 (同じ順位が 2 人以上) のブロックごとの並び・運営が確かめたか */
+async function projectedFull(store: Store, code: string, snap: Snapshot):
+  Promise<{ snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string> }> {
   const extra: Record<string, string> = {};
+  const none = { snap, ties: {}, confirmed: new Set<string>(), extra };
   for (const r of await store.listReportSets(code)) {
     if (isManualId(r.set_id) || !snap.sets[r.set_id] || snap.sets[r.set_id].s === 3) continue;
     const sent = !!r.applied && ['reported', 'agreed', 'fixed'].includes(r.state);
@@ -700,8 +718,21 @@ async function projectedSnap(store: Store, code: string, snap: Snapshot): Promis
     const w = slots[res.w];
     if (w && w.id !== undefined && w.id !== null) extra[r.set_id] = String(w.id);
   }
+  if (!snapHasStructure(snap) || !snap.chk) return none;
   const dqs: HeldDq[] = (await store.listReportDqs(code)).filter((d) => d.status === 'open').map((d) => ({ entrant: d.entrant_id, scope: d.scope, set_id: d.set_id || undefined }));
-  try { return projectSnap(snap, extra, dqs); } catch (_) { return snap; }
+  // 運営が確かめた通過順: 確かめた並びと今の計算の並びが同じブロックだけ使う (前のフェーズが確かめられると次が出てくるので数回)
+  const ok = new Map((await store.listReportProgOk(code).catch(() => [])).map((x) => [x.group_id, x.list]));
+  try {
+    let confirmed = new Set<string>();
+    let r = projectFull(snap, extra, dqs, confirmed);
+    for (let i = 0; i < 4; i++) {
+      const next = new Set(Object.entries(r.ties).filter(([g, t]) => ok.get(g) === JSON.stringify(t)).map(([g]) => g));
+      if (next.size === confirmed.size && [...next].every((g) => confirmed.has(g))) break;
+      confirmed = next;
+      r = projectFull(snap, extra, dqs, confirmed);
+    }
+    return { snap: r.snap, ties: r.ties, confirmed, extra };
+  } catch (_) { return none; }
 }
 
 async function heldList(store: Store, code: string, snap: Snapshot, manual: ReportManualRow[]): Promise<Held[]> {
@@ -1193,6 +1224,68 @@ async function busyEntrants(store: Store, code: string, manualOpen: ReportManual
     for (const s of manualSlots(m)) if (s) busy.add(s.id);
   }
   return busy;
+}
+
+/** action: "report_bracket_view" — { token, code, group? } トーナメント表 (選手・運営。2026-11-05)。D1 の写しを読むだけで start.gg は読まない。
+ *  group なし = ブロックの一覧、あり = そのブロックの試合 (計算で埋めた枠 pd・SPSP にある未反映の結果 hw も) */
+export async function handleReportBracketView(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const o = await openEvent(cfg, store, fetchFn, req.code, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
+  const { snap, syncedMs } = await loadSnap(store, o.ev.code);
+  if (!snap || !Object.keys(snap.sets).length) return err('not_ready', MSG_NO_SNAP, 'no_snapshot');
+  const health = await Health.load(store, o.ev.kind);
+  const base = { synced_ms: syncedMs, outage: health.view(), checked: !!snap.chk, me: Object.entries(snap.ents).filter(([, e]) => e.u.includes(sess.id)).map(([id]) => id) };
+  const gid = typeof req.group === 'string' && /^\d{1,15}$/.test(req.group) ? req.group : null;
+  if (!gid) {
+    const count = new Map<string, number>();
+    for (const x of Object.values(snap.sets)) count.set(x.g, (count.get(x.g) || 0) + 1);
+    const groups = Object.entries(snap.groups).map(([id, g]) => ({ id, name: groupName(snap, id), phase: g.p, d: g.d, b: g.b || null, sets: count.get(id) || 0 }))
+      .filter((g) => g.sets > 0)
+      .sort((a, b) => Number(a.phase) - Number(b.phase) || a.d.localeCompare(b.d, 'en', { numeric: true }));
+    return ok({ ...base, groups });
+  }
+  if (!snap.groups[gid]) return err('bad_request', 'そのブロックはありません。', 'bad:group');
+  const pj = await projectedFull(store, o.ev.code, snap);
+  const trusted = !!(snap.chk && !snap.chk.bad[gid]);
+  const ents: Record<string, string> = {};
+  const sets = Object.values(pj.snap.sets).filter((x) => x.g === gid).map((x) => ({
+    i: x.i, r: x.r, t: x.t, x: x.x || '', s: x.s, w: x.w, st: x.st, hw: x.s !== 3 && pj.extra[x.i] ? pj.extra[x.i] : null,
+    sl: x.sl.map((y) => { if (y.e) ents[y.e] = snap.ents[y.e] ? snap.ents[y.e].n : ''; return { e: y.e, sc: y.sc, pd: y.pd || 0, pt: y.pt, pi: y.pi, pp: y.pp }; }),
+  }));
+  return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, trusted }, sets, ents });
+}
+
+/** action: "report_progression" — { token, code } 前のフェーズからの通過順 (同じ順位が 2 人以上・start.gg がまだ次のフェーズを埋めていないブロック)。
+ *  障害中に SPSP が次のフェーズを計算で埋めるのは、運営が並びを確かめたブロックだけ (2026-11-05) */
+export async function handleReportProgression(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return ok({ groups: [] });
+  const { snap } = await loadSnap(store, o.ev.code);
+  if (!snap) return ok({ groups: [] });
+  const pj = await projectedFull(store, o.ev.code, snap);
+  const name = (e: string) => (snap.ents[e] ? snap.ents[e].n : '');
+  return ok({ groups: Object.entries(pj.ties).map(([g, t]) => ({
+    group: g, group_name: groupName(snap, g), confirmed: pj.confirmed.has(g), key: JSON.stringify(t),
+    places: t.map((x) => ({ pl: x.pl, entrants: x.list.map((e) => ({ id: e, name: name(e) })) })),
+  })) });
+}
+
+/** action: "report_progression_ok" — { token, code, group, key } 運営が通過順を確かめた (key = report_progression で見た並び。今の計算と同じときだけ) */
+export async function handleReportProgressionOk(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  const gid = typeof req.group === 'string' && /^\d{1,15}$/.test(req.group) ? req.group : null;
+  if (!gid || typeof req.key !== 'string') return err('bad_request', '入力の形式が正しくありません。', 'bad:progression');
+  const { snap } = await loadSnap(store, o.ev.code);
+  const pj = snap ? await projectedFull(store, o.ev.code, snap) : null;
+  const t = pj ? pj.ties[gid] : undefined;
+  if (!t || JSON.stringify(t) !== req.key) return err('bad_request', '通過順が変わりました。もう一度確かめてください。', 'progression_changed');
+  await store.putReportProgOk(o.ev.code, gid, req.key, o.uid || '', now);
+  return ok({ group: gid, confirmed: true });
 }
 
 /** action: "report_bracket" — { token, code } 次の試合を指定する候補 (ブロックごとの出場者と、負けの数え。start.gg の受付だけ) */
