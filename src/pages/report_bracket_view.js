@@ -108,7 +108,7 @@ export function renderGroup(r, t) {
       const col = list.filter((s) => s.r === rd).sort((a, b) => (order.get(a.i) ?? 1e9) - (order.get(b.i) ?? 1e9));
       return `<div class="bk-col"><div class="bk-rt">${escapeHtml(col[0].t || '')}</div><div class="bk-sets">${col.map((s) => setHtml(s, byId, r.ents, me, t)).join('')}</div></div>`;
     }).join('');
-    return `<h3 class="bk-side">${escapeHtml(t(want > 0 ? 'report.bk.winners' : 'report.bk.losers'))}</h3><div class="bk-scroll"><div class="bk-cols">${cols}</div></div>`;
+    return `<h3 class="bk-side">${escapeHtml(want > 0 ? t('report.bk.winners') : t('report.bk.losers'))}</h3><div class="bk-scroll"><div class="bk-cols">${cols}</div></div>`;
   };
   return h + side(1) + side(-1);
 }
@@ -118,7 +118,7 @@ function slotLabel(x, byId, ents, t) {
   if (x.pt === 'set') {
     const p = byId.get(x.pi);
     const id = p ? p.x || p.i : '';
-    return t(x.pp === 2 ? 'report.bk.loser_of' : 'report.bk.winner_of', { x: id });
+    return x.pp === 2 ? t('report.bk.loser_of', { x: id }) : t('report.bk.winner_of', { x: id });
   }
   return t('report.bk.tbd');
 }
