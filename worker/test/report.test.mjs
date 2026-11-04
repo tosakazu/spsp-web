@@ -888,6 +888,7 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
   const fake = fakeStartgg();
   const base = fake.fetch;
   let currentUser = 4242;
+  let listAdmins = false;
   fake.fetch = async (url, init) => {
     const b = init && init.body ? String(init.body) : '';
     if (String(url).includes('/gql/') && /SpspReportUser/.test(b)) {
@@ -896,6 +897,8 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
     }
     // 2 人目の運営 (start.gg の大会の管理者 7777) のログイン
     if (String(url).includes('/gql/') && /SpspClassAdmin\b/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } }), { status: 200 });
+    // 受付のトークンで読む大会の管理者一覧 (2026-11-04)。listAdmins が false なら読めない (権限が無い等) とする
+    if (String(url).includes('/gql/') && /SpspReportAdmins\b/.test(b)) return new Response(JSON.stringify(listAdmins ? { data: { event: { tournament: { owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } } : { errors: [{ message: 'denied' }] }), { status: 200 });
     if (String(url).includes('/gql/') && /currentUser/.test(b) && !/tournaments/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser, slug: 'user/x', player: { gamerTag: 'TO' + currentUser } } } }), { status: 200 });
     return base(url, init);
   };
@@ -926,6 +929,21 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
   const en = await e.call({ action: 'report_enable', token: l2.token, event: 'https://www.start.gg/tournament/t/event/singles', settings: { top_cut: null, classes_only: false } });
   assert.deepStrictEqual([en.ok, en.joined, en.report.code], [true, true, e.code]);
   assert.strictEqual(parseSettings((await e.store.getReportEvent(e.code)).settings).top_cut, 8);
+  // 3 人目の start.gg の運営 (一覧に入っている 7777 の別セッションの代わりに、一覧を読める状態で 4242 以外を試す):
+  // 受付のトークンで管理者一覧が読めれば、普段のログインだけでもお知らせに運営の画面が出て、開くと運営のログインなしで加わる
+  listAdmins = true;
+  await e.store.updateReportEventAdmins(e.code, (await e.store.getReportEvent(e.code)).admins.split(',').filter((x) => x !== '7777').join(','));
+  const S2 = await e.tok(7777);
+  const n2 = await e.call({ action: 'report_notices', token: S2 });
+  assert.deepStrictEqual(n2.admin.map((x) => [x.code, x.role]), [[e.code, 'admin']], '一覧に入っていれば導線が出る');
+  const j2 = await e.call({ action: 'report_join', token: S2, code: e.code });
+  assert.deepStrictEqual([j2.ok, j2.joined], [true, true], JSON.stringify(j2));
+  assert.strictEqual((await e.call({ action: 'report_admin', token: S2, code: e.code })).role, 'admin');
+  // 一覧に入っていない人には出ない・運営のログインが無ければ加われない
+  const N = await e.tok(9999);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: N })).admin, []);
+  assert.strictEqual((await e.call({ action: 'report_join', token: N, code: e.code })).error.code, 'no_grant');
+  listAdmins = false;
   // start.gg の管理者でない人は加われない
   currentUser = 8888;
   e.tick(1000);
