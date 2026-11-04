@@ -14,10 +14,12 @@ export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z]
 
 export type ProviderResult = { ok: true } | { ok: false; note: string };
 /** 何先の設定に使うフェーズとラウンド (n = 勝者側 1, 2, …・敗者側 -1, -2, …、label = start.gg の名前。無ければ null) */
-export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null; bestOf?: number | null }[] }
+/** started = ブロックのどれかが開始済み (start.gg の phaseGroup.state が CREATED 以外。読めなければ undefined) */
+export interface PhaseInfo { key: string; name: string; rounds: { n: number; label: string | null; bestOf?: number | null }[]; started?: boolean }
 export interface Provider {
   /** entrants = 参加人数 (分からなければ null。トップ N の候補を絞るのに使う) */
-  phases(): Promise<{ ok: true; phases: PhaseInfo[]; entrants?: number | null } | { ok: false; note: string }>;
+  /** light = フェーズと開始済みかだけ (ラウンドの名前を読まない。1 回で済む。運営の画面の「未開始」の読み直し用) */
+  phases(light?: boolean): Promise<{ ok: true; phases: PhaseInfo[]; entrants?: number | null } | { ok: false; note: string }>;
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
@@ -70,7 +72,7 @@ const RESET_MUTATION = `mutation SpspResetSet($setId: ID!) { resetSet(setId: $se
  * そのブロックの試合の fullRoundText (ラウンドの名前、Winners Semi-Final 等)。rounds が読めなければ試合の round だけで作る。
  */
 const PHASES_QUERY = (withRounds: boolean) => `query SpspReportPhases($id: ID!) {
-  event(id: $id) { numEntrants phases { id name phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id ${withRounds ? 'rounds { number bestOf }' : ''} } } } }
+  event(id: $id) { numEntrants phases { id name phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id state ${withRounds ? 'rounds { number bestOf }' : ''} } } } }
 }`;
 const GROUP_SETS_QUERY = `query SpspReportGroupSets($id: ID!, $page: Int!) {
   phaseGroup(id: $id) { sets(page: $page, perPage: 80, sortType: STANDARD) { pageInfo { totalPages } nodes { round fullRoundText } } }
@@ -79,9 +81,9 @@ const PHASES_MAX = 12;
 const GROUP_PAGES_MAX = 4;
 const PHASE_CALLS_MAX = 30;
 
-type RawGroup = { id?: unknown; rounds?: unknown };
+type RawGroup = { id?: unknown; rounds?: unknown; state?: unknown };
 /** フェーズの一覧と、名前を読むブロック (ラウンドがいちばん多いもの) */
-export function parsePhaseList(data: unknown): { key: string; name: string; group: string | null; rounds: Map<number, number | null> }[] {
+export function parsePhaseList(data: unknown): { key: string; name: string; group: string | null; rounds: Map<number, number | null>; started?: boolean }[] {
   const ev = data ? (data as { event?: { phases?: unknown } | null }).event : null;
   const phases = ev && Array.isArray(ev.phases) ? ev.phases.slice(0, PHASES_MAX) : [];
   const out = [];
@@ -102,7 +104,10 @@ export function parsePhaseList(data: unknown): { key: string; name: string; grou
         if (Number.isInteger(n) && n !== 0) rounds.set(n, Number.isInteger(bo) && bo > 0 ? bo : null);
       }
     }
-    out.push({ key: String(ph.id), name: typeof ph.name === 'string' ? ph.name.slice(0, 80) : '', group: best ? String(best.id) : null, rounds });
+    // 開始済みか: start.gg の phaseGroup.state は 1 = CREATED (未開始) / 2 = ACTIVE / 3 = COMPLETED (数か名前)。読めなければ undefined
+    const states = groups.map((g) => (g ? g.state : undefined)).filter((x) => x !== undefined && x !== null);
+    const started = states.length ? states.some((x) => !(Number(x) === 1 || x === 'CREATED')) : undefined;
+    out.push({ key: String(ph.id), name: typeof ph.name === 'string' ? ph.name.slice(0, 80) : '', group: best ? String(best.id) : null, rounds, started });
   }
   return out;
 }
@@ -113,7 +118,7 @@ export function sortRounds<T extends { n: number }>(xs: T[]): T[] {
 }
 
 /** 1 つのフェーズ: 試合の round と名前を足して PhaseInfo に */
-export function phaseInfoOf(ph: { key: string; name: string; rounds: Map<number, number | null> }, sets: unknown[]): PhaseInfo {
+export function phaseInfoOf(ph: { key: string; name: string; rounds: Map<number, number | null>; started?: boolean }, sets: unknown[]): PhaseInfo {
   const labels = new Map<number, string | null>();
   for (const n of ph.rounds.keys()) labels.set(n, null);
   for (const s of sets) {
@@ -123,7 +128,7 @@ export function phaseInfoOf(ph: { key: string; name: string; rounds: Map<number,
     if (!labels.get(n)) labels.set(n, typeof x.fullRoundText === 'string' && x.fullRoundText ? x.fullRoundText.slice(0, 60) : null);
   }
   const rounds = sortRounds([...labels.entries()].map(([n, label]) => ({ n, label, bestOf: ph.rounds.get(n) ?? null })));
-  return { key: ph.key, name: ph.name, rounds };
+  return ph.started === undefined ? { key: ph.key, name: ph.name, rounds } : { key: ph.key, name: ph.name, rounds, started: ph.started };
 }
 
 export const EVENT_QUERY = `query SpspReportEvent($slug: String, $id: ID) {
@@ -214,7 +219,7 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
     return { ok: true };
   };
   return {
-    async phases() {
+    async phases(light) {
       let r = await startggGql(fetchFn, token, PHASES_QUERY(true), { id: eventId });
       if (r.ok && Array.isArray(r.json.errors) && r.json.errors.length) r = await startggGql(fetchFn, token, PHASES_QUERY(false), { id: eventId });
       if (!r.ok) return { ok: false, note: r.note };
@@ -224,7 +229,7 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
       let calls = 0;
       for (const ph of list) {
         const sets: unknown[] = [];
-        for (let page = 1; ph.group && page <= GROUP_PAGES_MAX && calls < PHASE_CALLS_MAX; page++) {
+        for (let page = 1; !light && ph.group && page <= GROUP_PAGES_MAX && calls < PHASE_CALLS_MAX; page++) {
           calls++;
           const g = await startggGql(fetchFn, token, GROUP_SETS_QUERY, { id: ph.group, page });
           const pg = g.ok && g.json.data ? g.json.data.phaseGroup as { sets?: { pageInfo?: { totalPages?: unknown }; nodes?: unknown } } | null : null;
@@ -298,4 +303,62 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
       return findStartggSet(fetchFn, token, eventId, ids, side, exclude, skip);
     },
   };
+}
+
+// ── ブラケットの開始 (テスト用、2026-11-04) ────────────────────────────────
+// start.gg の API には「ブラケットを開始する」操作が無い。開始前の試合 (preview_…) を試合中にすると start.gg がそのブロックを
+// 始めて本物の ID を振るか、を試す: 最初のフェーズの未開始のブロックごとに、2 人そろった仮の試合を 1 つ markSetInProgress →
+// 本物の ID が返れば resetSet で試合中を取り消す → ブロックの状態を読み直す。動くかは分からない (結果をそのまま画面に出す)
+const PROBE_PHASES_QUERY = `query SpspProbePhases($id: ID!) {
+  event(id: $id) { phases { id name phaseOrder isExhibition phaseGroups(query: { page: 1, perPage: 64 }) { nodes { id displayIdentifier state } } } }
+}`;
+const PROBE_SETS_QUERY = `query SpspProbeSets($id: ID!) {
+  phaseGroup(id: $id) { id state sets(page: 1, perPage: 30, sortType: STANDARD) { nodes { id state slots { entrant { id } } } } }
+}`;
+const PROBE_GROUPS_MAX = 12;
+export interface ProbeStep { phase: string; group: string; ident: string; set?: string; result: 'started' | 'not_started' | 'skipped' | 'error'; note: string; state_after?: unknown }
+
+export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId: string): Promise<{ ok: true; steps: ProbeStep[]; more: number } | { ok: false; note: string }> {
+  const r = await startggGql(fetchFn, token, PROBE_PHASES_QUERY, { id: eventId });
+  if (!r.ok) return { ok: false, note: r.note };
+  const ev = r.json.data ? r.json.data.event as { phases?: unknown } | null : null;
+  if (!ev || !Array.isArray(ev.phases)) return { ok: false, note: gqlNote(r.json) };
+  type P = { id?: unknown; name?: unknown; phaseOrder?: unknown; isExhibition?: unknown; phaseGroups?: { nodes?: unknown } | null };
+  const phases = (ev.phases as P[]).filter((p) => p && !p.isExhibition)
+    .sort((a, b) => (Number(a.phaseOrder) || 0) - (Number(b.phaseOrder) || 0));
+  const first = phases[0];
+  if (!first) return { ok: false, note: 'no_phase' };
+  type G = { id?: unknown; displayIdentifier?: unknown; state?: unknown };
+  const groups = ((first.phaseGroups && Array.isArray(first.phaseGroups.nodes) ? first.phaseGroups.nodes : []) as G[])
+    .filter((g) => g && g.id != null && (Number(g.state) === 1 || g.state === 'CREATED'));
+  const steps: ProbeStep[] = [];
+  const phaseName = typeof first.name === 'string' ? first.name : '';
+  for (const g of groups.slice(0, PROBE_GROUPS_MAX)) {
+    const step: ProbeStep = { phase: phaseName, group: String(g.id), ident: String(g.displayIdentifier ?? ''), result: 'skipped', note: '' };
+    steps.push(step);
+    const q = await startggGql(fetchFn, token, PROBE_SETS_QUERY, { id: String(g.id) });
+    const pg = q.ok && q.json.data ? q.json.data.phaseGroup as { sets?: { nodes?: unknown } | null } | null : null;
+    if (!pg) { step.result = 'error'; step.note = 'read: ' + (q.ok ? gqlNote(q.json) : q.note); continue; }
+    type S = { id?: unknown; slots?: { entrant?: { id?: unknown } | null }[] | null };
+    const sets = (pg.sets && Array.isArray(pg.sets.nodes) ? pg.sets.nodes : []) as S[];
+    const pick = sets.find((x) => x && String(x.id).startsWith('preview') && Array.isArray(x.slots) && x.slots.length === 2 && x.slots.every((sl) => sl && sl.entrant && sl.entrant.id != null));
+    if (!pick) { step.note = 'no_preview_set_with_two_entrants'; continue; }
+    step.set = String(pick.id);
+    const m = await startggGql(fetchFn, token, START_MUTATION, { setId: String(pick.id) });
+    if (!m.ok) { step.result = 'error'; step.note = 'markSetInProgress: ' + m.note; continue; }
+    if (Array.isArray(m.json.errors) && m.json.errors.length) { step.result = 'error'; step.note = 'markSetInProgress: ' + gqlNote(m.json); continue; }
+    const got = m.json.data ? m.json.data.markSetInProgress as { id?: unknown; state?: unknown } | null : null;
+    const realId = got && got.id != null && /^\d+$/.test(String(got.id)) ? String(got.id) : null;
+    step.note = 'markSetInProgress -> id=' + String(got && got.id) + ' state=' + String(got && got.state);
+    if (realId) {
+      const z = await startggGql(fetchFn, token, RESET_MUTATION, { setId: realId });
+      const zerr = !z.ok ? z.note : Array.isArray(z.json.errors) && z.json.errors.length ? gqlNote(z.json) : '';
+      step.note += zerr ? '; resetSet: ' + zerr : '; resetSet ok';
+    }
+    const a = await startggGql(fetchFn, token, PROBE_SETS_QUERY, { id: String(g.id) });
+    const after = a.ok && a.json.data ? a.json.data.phaseGroup as { state?: unknown } | null : null;
+    step.state_after = after ? after.state : null;
+    step.result = after && !(Number(after.state) === 1 || after.state === 'CREATED') ? 'started' : 'not_started';
+  }
+  return { ok: true, steps, more: Math.max(0, groups.length - PROBE_GROUPS_MAX) };
 }

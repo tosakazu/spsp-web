@@ -28,7 +28,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportBracket, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -132,6 +132,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleReportNotices(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ。記録しない
       case 'report_submit':
         res = await handleReportSubmit(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_start_bracket':
+        res = await handleReportStartBracket(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_phases':
         return (await handleReportPhases(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_admin':
@@ -228,7 +230,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
   const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
-    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve'];
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
