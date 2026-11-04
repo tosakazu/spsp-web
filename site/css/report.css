@@ -609,3 +609,8 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-rr-picked_me { border-color: #b91c1c; background: #fef2f2; }
 .rp-rr-busy { opacity: .65; }
 .rp-rr-cur { font-size: 13px; margin-bottom: 8px; }
+/* 対戦開始・対戦相手が見つからない (docs §12) */
+.rp-match-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.rp-start-done { margin: 8px 0; font-size: 13px; font-weight: 600; color: #166534; }
+.rp-ns-resolved { opacity: .6; }
+.rp-danger-link { color: #b91c1c; }

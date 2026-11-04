@@ -170,6 +170,16 @@ export interface ReportManualRow {
   status: string; created_by: string; created_ms: number; updated_ms: number;
 }
 
+/** report_dqs の 1 行 (運営の DQ、0018) */
+export interface ReportDqRow {
+  id?: number; code: string; entrant_id: string; name: string; scope: string; set_id?: string; status: string; done_sets: string; note: string;
+  created_by: string; created_ms: number; updated_ms: number;
+}
+/** report_noshows の 1 行 (選手の「対戦相手が見つからない」、0018) */
+export interface ReportNoshowRow {
+  code: string; set_id: string; user_id: string; users: string; info: string; first_ms: number; last_ms: number; count: number; notified_ms: number; status: string; note: string;
+}
+
 export interface Store {
   /** ログインの記録を 1 行足す。 */
   insertLogin(row: LoginRow): Promise<void>;
@@ -297,6 +307,22 @@ export interface Store {
   putReportPick(code: string, userId: string, setId: string, nowMs: number): Promise<void>;
   deleteReportPicksForSet(code: string, setId: string): Promise<void>;
   listReportPicks(code: string, sinceMs: number): Promise<{ user_id: string; set_id: string; ts_ms: number }[]>;
+  insertReportDq(row: ReportDqRow): Promise<number>;
+  /** その受付の DQ (新しい順) */
+  listReportDqs(code: string): Promise<ReportDqRow[]>;
+  updateReportDq(code: string, id: number, status: string, doneSets: string, note: string, nowMs: number): Promise<void>;
+  getReportNoshow(code: string, setId: string, userId: string): Promise<ReportNoshowRow | null>;
+  /** 無ければ足す・あれば last_ms と count を進める (notifiedMs が null なら通知の時刻は変えない) */
+  upsertReportNoshow(row: ReportNoshowRow, notifiedMs: number | null): Promise<void>;
+  listReportNoshows(code: string, sinceMs: number): Promise<ReportNoshowRow[]>;
+  /** その試合の記録を全部 resolved に (結果が出た・DQ にした・運営が対応した) */
+  resolveReportNoshows(code: string, setId: string, note: string, userId: string | null): Promise<void>;
+  /** 「対戦開始」(最初の 1 回だけ入る。入ったら true) */
+  insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number): Promise<boolean>;
+  getReportStart(code: string, setId: string): Promise<{ set_id: string; user_id: string; ts_ms: number } | null>;
+  /** その人が選手の「対戦開始」「見つからない」(sinceMs 以降) */
+  listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<{ set_id: string; user_id: string; ts_ms: number }[]>;
+  listReportNoshowsForUser(code: string, userId: string, sinceMs: number): Promise<ReportNoshowRow[]>;
   /** その人が sinceMs 以降に送った数と、最後に送った時刻。 */
   reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }>;
 }

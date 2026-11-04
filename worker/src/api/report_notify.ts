@@ -95,3 +95,26 @@ export async function notifyManual(cfg: Config, store: Store, fetchFn: FetchFn, 
   }
   return n;
 }
+
+/** 「対戦相手が見つからない」(選手の報告) の通知の中身 */
+export interface NoshowInfo { me: string; opp: string; round: string }
+
+/** 運営・報告管理者に知らせる (受付の設定 notify_noshow が false なら送らない。既定は送る) */
+export async function notifyNoshowAdmins(cfg: Config, store: Store, fetchFn: FetchFn, ev: ReportEventRow, setId: string, info: NoshowInfo): Promise<number> {
+  if (!cfg.vapid || parseSettings(ev.settings).notify_noshow === false) return 0;
+  const subs = await store.listReportPushSubs(admins(ev));
+  if (!subs.length) return 0;
+  const payload = JSON.stringify({ title: '対戦相手が見つからない: ' + info.me + ' (vs ' + info.opp + ')', body: [info.round, ev.name].filter(Boolean).join('\n'),
+    url: './?c=' + encodeURIComponent(ev.code) + '&admin=1', tag: 'rp-ns-' + ev.code + '-' + setId });
+  return sendAll(cfg, store, fetchFn, subs, payload, 'high');
+}
+
+/** 相手 (見つからないと言われた側) の端末に知らせる (報告ページで通知を受け取る設定の人だけ) */
+export async function notifyNoshowOpponent(cfg: Config, store: Store, fetchFn: FetchFn, ev: ReportEventRow, setId: string, oppUsers: string[], info: NoshowInfo): Promise<number> {
+  if (!cfg.vapid || !oppUsers.length) return 0;
+  const subs = await store.listReportPushSubs(oppUsers);
+  if (!subs.length) return 0;
+  const payload = JSON.stringify({ title: info.me + ' さんが対戦相手 (あなた) を探しています', body: [info.round, '会えたら報告ページで「対戦開始」を押してください。', ev.name].filter(Boolean).join('\n'),
+    url: './?c=' + encodeURIComponent(ev.code), tag: 'rp-ns-' + ev.code + '-' + setId });
+  return sendAll(cfg, store, fetchFn, subs, payload, 'high');
+}

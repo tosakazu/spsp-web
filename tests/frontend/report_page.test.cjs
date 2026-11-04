@@ -701,3 +701,54 @@ test('見本 admin_outage: 写しの様子・指定した試合に運営が結�
   assert.deepStrictEqual(p.errs, []);
   p.close();
 });
+
+// ── 対戦開始・対戦相手が見つからない・DQ (docs §12) ──
+test('見本 noshow (選手): 相手が探している帯・対戦開始で開始の表示に・見つからないを押すと「伝えました (n 回目)」', { skip }, async () => {
+  const p = await open('?demo=noshow&anim=dark');
+  assert.ok(await until(() => p.d.querySelector('.rp-current [data-start]')));
+  const ov = p.d.querySelector('.rp-match-ov'); if (ov) ov.click();
+  await sleep(50);
+  assert.match(p.d.querySelector('.rp-ns-them').textContent, /あなたを探しています/);
+  p.d.querySelector('[data-noshow]').click();
+  assert.ok(await until(() => p.d.querySelector('.rp-ns-mine')));
+  assert.match(p.d.querySelector('.rp-ns-mine').textContent, /1 回目/);
+  assert.match(p.d.querySelector('[data-noshow]').textContent, /もう一度/);
+  p.d.querySelector('[data-noshow]').click();
+  assert.ok(await until(() => /2 回目/.test((p.d.querySelector('.rp-ns-mine') || {}).textContent || '')), '押し直しは回数だけ');
+  p.d.querySelector('[data-start]').click();
+  assert.ok(await until(() => p.d.querySelector('.rp-start-done')));
+  assert.match(p.d.querySelector('.rp-start-done').textContent, /対戦開始 \d\d:\d\d \(自分が押しました\)/);
+  assert.ok(!p.d.querySelector('[data-noshow]'), '開始したら見つからないは出さない');
+  assert.ok(p.d.querySelector('.rp-current form.rp-form'), '入力欄はそのまま');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
+test('見本 admin (運営): 見つからないの一覧 (対戦開始にする・対応済み・相手を DQ)・参加者の試合から対戦開始と DQ・通知の設定', { skip }, async () => {
+  const p = await open('?demo=admin');
+  assert.ok(await until(() => p.d.querySelector('#rp-adm-ops [data-ops-noshow] li')));
+  const sec = p.d.getElementById('rp-adm-ops');
+  assert.match(sec.querySelector('h2').textContent, /対戦相手が見つからない \(1 件\)/);
+  assert.match(sec.querySelector('li').textContent, /\(3 回\)/);
+  assert.ok(p.d.querySelector('[data-set-noshow]').checked, '見つからないの通知は既定で on');
+  p.w.confirm = () => true;
+  sec.querySelector('[data-ops-nsdq]').click();
+  assert.ok(await until(() => sec.querySelector('[data-ops-dqs] li')), 'DQ の一覧');
+  assert.match(sec.querySelector('[data-ops-dqs] li').textContent, /勝者側のみ/);
+  assert.match(sec.querySelector('[data-ops-noshow] h2').textContent, /\(0 件\)/, 'DQ で解決');
+  const lines = [...sec.querySelectorAll('[data-ops-noshow] li b')].map((b) => b.textContent);
+  assert.ok(lines.some((t) => /を探していましたが、.+ を DQ にしました$/.test(t)), lines.join(' / '));
+  assert.ok(lines.some((t) => /を探していましたが、対戦開始しました$/.test(t)), lines.join(' / '));
+  // 参加者を選んで対戦開始・DQ (両方)
+  const q = sec.querySelector('[data-ops-q]');
+  q.dispatchEvent(new p.w.Event('focus'));
+  assert.ok(await until(() => sec.querySelector('[data-ops-pick]')));
+  sec.querySelector('[data-ops-pick]').click();
+  assert.ok(await until(() => sec.querySelector('[data-ops-player] [data-ops-start]')));
+  sec.querySelector('[data-ops-player] [data-ops-start]').click();
+  assert.ok(await until(() => /対戦開始にしました/.test(sec.querySelector('[data-ops-status]').textContent)));
+  sec.querySelector('[data-ops-dq="a"]').click();
+  assert.ok(await until(() => [...sec.querySelectorAll('[data-ops-dqs] li')].some((li) => /両方/.test(li.textContent))));
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});

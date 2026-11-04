@@ -1019,6 +1019,58 @@ function chooserHtml(cur) {
   </section>`;
 }
 
+// ── 選手: 対戦開始・対戦相手が見つからない (2026-11-04、docs §12) ─────────────
+// 「対戦開始」はどちらかが押せば記録 (start.gg の試合も試合中に)。「見つからない」は運営と相手に知らせる (連打しても記録の時刻と回数だけ)。
+const startOf = (m) => ((VIEW && VIEW.starts) || []).find((x) => x.set_id === m.id) || null;
+const noshowsOf = (m) => ((VIEW && VIEW.noshows) || []).filter((x) => x.set_id === m.id);
+function matchActionsHtml(m) {
+  const st = startOf(m);
+  if (st || m.started) {
+    const who = st ? (st.by_me ? i18n('report.start.by_me') : i18n('report.start.by_other')) : i18n('report.start.by_startgg');
+    return `<div class="rp-start-done">▶ ${escapeHtml(i18n('report.start.done', { t: st ? hhmm(st.ts_ms) : '', who }))}</div>`;
+  }
+  const ns = noshowsOf(m);
+  const mine = ns.find((x) => x.by_me);
+  const theirs = ns.find((x) => !x.by_me);
+  const op = m.slots[1 - m.mySide];
+  let h = '';
+  if (theirs) h += `<div class="rp-banner rp-warn rp-ns-them">⚠ ${escapeHtml(i18n('report.noshow.them', { name: op ? op.name : '', t: hhmm(theirs.first_ms) }))}</div>`;
+  if (mine) h += `<div class="rp-note rp-ns-mine">${escapeHtml(i18n('report.noshow.mine', { t: hhmm(mine.last_ms), n: mine.count }))}</div>`;
+  h += `<div class="rp-match-acts">
+    <button type="button" class="rp-btn rp-primary" data-start="${escapeHtml(m.id)}">${escapeHtml(i18n('report.start.btn'))}</button>
+    <button type="button" class="rp-btn" data-noshow="${escapeHtml(m.id)}">${escapeHtml(mine ? i18n('report.noshow.again') : i18n('report.noshow.btn'))}</button>
+    <span class="rp-status" data-acts-status></span></div>`;
+  return h;
+}
+function wireMatchActions(root) {
+  for (const b of root.querySelectorAll('[data-start]')) {
+    b.addEventListener('click', async () => {
+      const id = b.getAttribute('data-start');
+      const st = b.parentNode.querySelector('[data-acts-status]');
+      b.disabled = true;
+      const x = DEMO ? { ok: true, start: { set_id: id, user_id: myUid(), ts_ms: Date.now() } } : await api({ action: 'report_start', token: tok(), code: CODE, set_id: id });
+      if (!x || !x.ok) { setStatus(st, errText(x), 'err'); b.disabled = false; return; }
+      VIEW.starts = ((VIEW && VIEW.starts) || []).filter((y) => y.set_id !== id).concat([{ set_id: id, ts_ms: x.start.ts_ms, by_me: x.start.user_id === myUid() }]);
+      VIEW.noshows = ((VIEW && VIEW.noshows) || []).filter((y) => y.set_id !== id);
+      renderPlayer();
+      if (!DEMO) setTimeout(() => poll(true), 800);
+    });
+  }
+  for (const b of root.querySelectorAll('[data-noshow]')) {
+    b.addEventListener('click', async () => {
+      const id = b.getAttribute('data-noshow');
+      const st = b.parentNode.querySelector('[data-acts-status]');
+      setStatus(st, i18n('report.sending'), 'busy');
+      const x = DEMO ? { ok: true, noshow: { set_id: id, first_ms: Date.now(), last_ms: Date.now(), count: 1 + (noshowsOf({ id }).find((y) => y.by_me) || { count: 0 }).count }, notified: true }
+        : await api({ action: 'report_noshow', token: tok(), code: CODE, set_id: id });
+      if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
+      const keep = ((VIEW && VIEW.noshows) || []).filter((y) => !(y.set_id === id && y.by_me));
+      VIEW.noshows = keep.concat([{ set_id: id, by_me: true, first_ms: x.noshow.first_ms, last_ms: x.noshow.last_ms, count: x.noshow.count }]);
+      renderPlayer();
+    });
+  }
+}
+
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
@@ -1050,6 +1102,7 @@ function renderPlayer() {
       ${vsHtml(cur)}
       ${roundHtml(cur)}
       ${stationHtml(cur)}
+      ${matchActionsHtml(cur)}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
@@ -1082,6 +1135,7 @@ function renderPlayer() {
     const m = MATCHES.find((x) => x.id === form.getAttribute('data-set'));
     if (m) wireForm(form, m);
   }
+  wireMatchActions(root);
   for (const b of root.querySelectorAll('[data-rr-pick]')) b.addEventListener('click', () => pickMatch(b.getAttribute('data-rr-pick')));
   const chg = root.querySelector('[data-rr-change]');
   if (chg) chg.addEventListener('click', () => pickMatch(null));
@@ -1116,6 +1170,7 @@ function matchesSig() {
   const choosing = openMatches().length > 1 && !currentMatch();
   return (choosing ? openMatches().map((m) => m.id + '=' + opponentState(m)).join(',') + '#' : '') + waitingSig() + '#' + MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
     + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '')
+    + '#' + ((VIEW && VIEW.starts) || []).map((x) => x.set_id).join(',') + '/' + ((VIEW && VIEW.noshows) || []).map((x) => x.set_id + (x.by_me ? 'm' : 't') + x.count).join(',')
     + '#' + (outageNow() ? 'o' + ((VIEW && VIEW.outage && VIEW.outage.since_ms) || 0) + ':' + ((VIEW && VIEW.snap && VIEW.snap.synced_ms) || 0) : '');
 }
 async function poll(force) {
@@ -1195,7 +1250,7 @@ async function loadMains() {
 // ── 画面: 運営 ─────────────────────────────────────────────────────
 
 function noteText(note) {
-  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold', 'outage', 'manual', 'manual_wait', 'outage_admin', 'outage_reset', 'manual_cancel'].includes(note) ? note : 'other';
+  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold', 'outage', 'manual', 'manual_wait', 'outage_admin', 'outage_reset', 'manual_cancel', 'dq'].includes(note) ? note : 'other';
   return i18n('report.note.' + k, { n: delayMin() }) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
 }
 
@@ -1227,6 +1282,7 @@ function settingsFormHtml(s, kind) {
     </fieldset>
     <label>${escapeHtml(i18n('report.set.notify'))}
       <select data-set-notify>${NOTIFY_LEVELS.map((k) => `<option value="${k}"${(s && s.notify ? s.notify : 'off') === k ? ' selected' : ''}>${escapeHtml(i18n('report.set.notify_' + k))}</option>`).join('')}</select></label>
+    <label class="rp-check"><input type="checkbox" data-set-noshow${s && s.notify_noshow === false ? '' : ' checked'}> ${escapeHtml(i18n('report.set.notify_noshow'))}</label>
   </div>`;
 }
 const APPLY_MODES = ['auto', 'delay1', 'delay3', 'delay', 'both', 'approve'];
@@ -1255,6 +1311,8 @@ function readSettings(root) {
   if (ap && ap.value !== 'auto') out.apply = ap.value;
   const nt = root.querySelector('[data-set-notify]');
   if (nt && nt.value !== 'off') out.notify = nt.value;
+  const nsw = root.querySelector('[data-set-noshow]');
+  if (nsw && !nsw.checked) out.notify_noshow = false;
   return out;
 }
 
@@ -1589,6 +1647,7 @@ async function renderAdmin() {
       <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
       ${pushHtml()}
     </section>
+    <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
     wirePush(root);
@@ -1609,7 +1668,8 @@ async function renderAdmin() {
     ${pushHtml()}
   </section>
   ${ev.kind === 'startgg' ? mgrHtml() : ''}
-  <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
+  <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
+    <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
@@ -1686,6 +1746,7 @@ async function adminSetsStart(r) {
     await Promise.race([loadStages(t ? makeGql(t, 1000000) : null), sleepMs(5000)]);
   }
   manualUpdate(r);
+  opsUpdate(r);
   renderAdminSets(r.sets || []);
   if (!DEMO) {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAdminSets(true); });
@@ -1956,6 +2017,175 @@ function manualUpdate(r) {
   if (outage && !MAN.opened) { MAN.opened = true; det.open = true; }
 }
 
+// ── 運営: 対戦相手が見つからない・参加者の試合 (対戦開始・DQ) (2026-11-04、docs §12) ─────────────
+const OPS = { built: false, ents: null, pick: null, sets: null, err: '', last: null };
+const dqScopeLabel = (s) => (s === 'w' ? i18n('report.dq.scope_w') : s === 'l' ? i18n('report.dq.scope_l') : s === 's' ? i18n('report.dq.scope_s') : i18n('report.dq.scope_a'));
+/** 一覧の 1 行の見出し。解決したものは「探していましたが、対戦開始しました」のように何が起きたかまで 1 文で */
+const noshowLine = (x) => {
+  const v = { me: x.me, opp: x.opp };
+  if (x.status === 'open') return i18n('report.noshow.admin_line', v);
+  return x.note === 'started' ? i18n('report.noshow.done_started', v) : x.note === 'reported' ? i18n('report.noshow.done_reported', v)
+    : x.note === 'dq' ? i18n('report.noshow.done_dq', v) : i18n('report.noshow.done_admin', v);
+};
+function opsNoshowHtml(r) {
+  const list = (r.noshows || []).slice().sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open') || b.last_ms - a.last_ms);
+  const open = list.filter((x) => x.status === 'open').length;
+  let h = `<h2>${escapeHtml(i18n('report.noshow.admin_title', { n: open }))}</h2>`;
+  if (!list.length) return h + `<p class="rp-muted">${escapeHtml(i18n('report.noshow.admin_none'))}</p>`;
+  const sgg = INFO && INFO.kind === 'startgg';
+  return h + `<ul class="rp-mlist">` + list.map((x) => {
+    const t = hhmm(x.first_ms) + (x.last_ms !== x.first_ms ? '〜' + hhmm(x.last_ms) : '');
+    const btns = x.status === 'open' ? `
+      <button type="button" class="rp-link" data-ops-start="${escapeHtml(x.set_id)}">${escapeHtml(i18n('report.start.admin_btn'))}</button>
+      <button type="button" class="rp-link" data-ops-resolve="${escapeHtml(x.set_id)}">${escapeHtml(i18n('report.noshow.resolve'))}</button>
+      ${sgg && x.opp_entrant ? `<button type="button" class="rp-link" data-ops-nsdq="${escapeHtml(String(x.opp_entrant))}" data-name="${escapeHtml(x.opp)}" data-scope="${escapeHtml(x.side || 'w')}">${escapeHtml(i18n('report.noshow.dq_opp', { name: x.opp, scope: dqScopeLabel(x.side || 'w') }))}</button>` : ''}` : '';
+    return `<li class="rp-mitem rp-ns-${escapeHtml(x.status)}"><b>${escapeHtml(noshowLine(x))}</b>
+      ${x.round ? `<span class="rp-muted">${escapeHtml(x.round)}</span>` : ''} · ${escapeHtml(t)}${x.count > 1 ? ' ' + escapeHtml(i18n('report.noshow.times', { n: x.count })) : ''}
+      ${btns}</li>`;
+  }).join('') + `</ul>`;
+}
+function opsDqListHtml(r) {
+  const list = r.dqs || [];
+  if (!list.length) return '';
+  return `<h3>${escapeHtml(i18n('report.dq.list'))}</h3><ul class="rp-mlist">` + list.map((d) => {
+    const st = d.status === 'open' ? (d.done_sets.length ? i18n('report.dq.st_some', { n: d.done_sets.length }) : i18n('report.dq.st_wait'))
+      : d.status === 'done' ? i18n('report.dq.st_done') : i18n('report.dq.st_cancelled');
+    return `<li class="rp-mitem rp-m-${escapeHtml(d.status)}"><b>${escapeHtml(d.name)}</b> <span class="rp-tag">${escapeHtml(dqScopeLabel(d.scope))}</span> · ${escapeHtml(st)}
+      ${d.done_sets.length ? `<span class="rp-muted">(#${escapeHtml(d.done_sets.join(', #'))})</span>` : ''}${d.note && /^error/.test(d.note) ? ` <span class="rp-warn">${escapeHtml(d.note)}</span>` : ''}
+      ${d.status === 'open' ? ` <button type="button" class="rp-link" data-ops-dqcancel="${escapeHtml(String(d.id))}">${escapeHtml(i18n('report.dq.cancel'))}</button>` : ''}</li>`;
+  }).join('') + `</ul>`;
+}
+/** 参加者を選ぶ (写しの出場者から名前で) → その人の試合 (対戦開始・DQ) */
+function opsPlayerHtml() {
+  if (OPS.err) return `<p class="rp-err">${escapeHtml(OPS.err)}</p>`;
+  if (!OPS.pick) return `<input type="text" class="rp-minput" data-ops-q autocomplete="off" placeholder="${escapeHtml(i18n('report.ops.ph'))}"><div class="rp-mcands" data-ops-cands></div>`;
+  const p = OPS.pick;
+  let h = `<div class="rp-mchosen"><b>${escapeHtml(p.name)}</b> <button type="button" class="rp-link" data-ops-clear>${escapeHtml(i18n('report.manual.change'))}</button></div>`;
+  if (!OPS.sets) return h + `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>`;
+  h += OPS.sets.length ? `<ul class="rp-mlist">` + OPS.sets.map((s) => `<li class="rp-mitem">vs <b>${escapeHtml(s.opp_name || '?')}</b> ${s.label ? `<span class="rp-muted">${escapeHtml(s.label)}</span>` : ''}
+      · ${escapeHtml(s.started ? i18n('report.start.done_at', { t: s.start_ms ? hhmm(s.start_ms) : '' }) : i18n('report.start.not_yet'))}
+      ${s.started ? '' : ` <button type="button" class="rp-link" data-ops-start="${escapeHtml(s.set_id)}">${escapeHtml(i18n('report.start.admin_btn'))}</button>`}
+      ${INFO && INFO.kind === 'startgg' ? ` <button type="button" class="rp-link rp-danger-link" data-ops-dqset="${escapeHtml(s.set_id)}">${escapeHtml(i18n('report.dq.this_set'))}</button>` : ''}</li>`).join('') + `</ul>`
+    : `<p class="rp-muted">${escapeHtml(i18n('report.ops.no_sets'))}</p>`;
+  if (INFO && INFO.kind === 'startgg') {
+    h += `<div class="rp-mrow"><span>${escapeHtml(i18n('report.dq.make', { name: p.name }))}</span>
+      ${['w', 'l', 'a'].map((sc) => `<button type="button" class="rp-btn rp-danger" data-ops-dq="${sc}">${escapeHtml(dqScopeLabel(sc))}</button>`).join('')}</div>
+      <p class="rp-muted">${escapeHtml(i18n('report.dq.help'))}</p>`;
+  }
+  return h;
+}
+async function opsLoadEnts() {
+  if (OPS.ents) return OPS.ents;
+  const r = await api({ action: 'report_bracket', token: tok(), code: CODE });
+  if (!r || !r.ok) { OPS.err = errText(r); return []; }
+  const m = new Map();
+  for (const g of r.groups || []) for (const e of g.entrants) if (!m.has(e.id)) m.set(e.id, { id: e.id, name: e.name, seed: e.seed });
+  OPS.ents = [...m.values()].sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+  return OPS.ents;
+}
+async function opsPick(sec, ent) {
+  OPS.pick = ent; OPS.sets = null;
+  opsDrawPlayer(sec);
+  if (!ent) return;
+  const r = await api({ action: 'report_player_sets', token: tok(), code: CODE, entrant: ent.id });
+  if (OPS.pick !== ent) return;
+  OPS.sets = r && r.ok ? r.sets : [];
+  if (!(r && r.ok)) OPS.err = errText(r);
+  opsDrawPlayer(sec);
+}
+function opsDrawPlayer(sec) {
+  const box = sec.querySelector('[data-ops-player]');
+  if (!box) return;
+  box.innerHTML = opsPlayerHtml();
+  const q = box.querySelector('[data-ops-q]');
+  if (q) {
+    const draw = async () => {
+      const ents = await opsLoadEnts();
+      const cb = box.querySelector('[data-ops-cands]');
+      if (!cb) return;
+      if (OPS.err) { opsDrawPlayer(sec); return; }
+      const nq = manNorm(q.value);
+      const list = ents.filter((e) => !nq || manNorm(e.name).includes(nq)).slice(0, 8);
+      cb.innerHTML = list.map((e) => `<button type="button" class="rp-mcand" data-ops-pick="${escapeHtml(e.id)}"><b>${escapeHtml(e.name)}</b></button>`).join('')
+        || `<p class="rp-muted">${escapeHtml(i18n('report.manual.no_cands'))}</p>`;
+      for (const b of cb.querySelectorAll('[data-ops-pick]')) b.addEventListener('click', () => opsPick(sec, ents.find((e) => e.id === b.getAttribute('data-ops-pick'))));
+    };
+    q.addEventListener('input', draw);
+    q.addEventListener('focus', draw, { once: true });
+  }
+  const clr = box.querySelector('[data-ops-clear]');
+  if (clr) clr.addEventListener('click', () => { OPS.err = ''; opsPick(sec, null); });
+  for (const b of box.querySelectorAll('[data-ops-dq]')) {
+    b.addEventListener('click', () => opsDq(sec, OPS.pick, b.getAttribute('data-ops-dq')));
+  }
+  for (const b of box.querySelectorAll('[data-ops-dqset]')) {
+    b.addEventListener('click', () => opsDq(sec, OPS.pick, 's', b.getAttribute('data-ops-dqset')));
+  }
+  opsWireStart(sec, box);
+}
+async function opsDq(sec, ent, scope, setId) {
+  if (!ent || !confirm(i18n('report.dq.confirm', { name: ent.name, scope: dqScopeLabel(scope) }))) return;
+  const x = await api({ action: 'report_dq', token: tok(), code: CODE, entrant: String(ent.id), scope, ...(setId ? { set_id: setId } : {}) });
+  setStatus(sec.querySelector('[data-ops-status]'), x && x.ok ? i18n('report.dq.made', { name: ent.name }) : errText(x), x && x.ok ? 'ok' : 'err');
+  if (x && x.ok) { OPS.ents = null; if (OPS.pick && OPS.pick.id === ent.id) opsPick(sec, OPS.pick); opsRefresh(); }
+}
+function opsWireStart(sec, root) {
+  for (const b of root.querySelectorAll('[data-ops-start]')) {
+    b.addEventListener('click', async () => {
+      if (!confirm(i18n('report.start.admin_confirm'))) return;
+      const x = await api({ action: 'report_start', token: tok(), code: CODE, set_id: b.getAttribute('data-ops-start') });
+      setStatus(sec.querySelector('[data-ops-status]'), x && x.ok ? i18n('report.start.admin_done') : errText(x), x && x.ok ? 'ok' : 'err');
+      if (x && x.ok) { if (OPS.pick) opsPick(sec, OPS.pick); opsRefresh(); }
+    });
+  }
+}
+async function opsRefresh() {
+  if (!DEMO) { refreshAdminSets(true); return; }
+  const r = await api({ action: 'report_admin', token: '', code: CODE });
+  if (r && r.ok) opsUpdate(r);
+}
+/** 運営の画面の「対戦相手が見つからない」と「参加者の試合・DQ」。一覧だけ毎回描き直し、選んだ参加者は残す */
+function opsUpdate(r) {
+  const sec = $('rp-adm-ops');
+  if (!sec || !INFO) return;
+  sec.hidden = false;
+  OPS.last = r;
+  if (!OPS.built) {
+    OPS.built = true;
+    sec.innerHTML = `<div data-ops-noshow></div>
+      ${INFO.kind === 'startgg' ? `<details class="rp-manual" data-ops-det><summary>${escapeHtml(i18n('report.ops.title'))}</summary>
+        <p class="rp-muted">${escapeHtml(i18n('report.ops.help'))}</p>
+        <div data-ops-player></div><div data-ops-dqs></div></details>` : ''}
+      <span class="rp-status" data-ops-status></span>`;
+    opsDrawPlayer(sec);
+  }
+  const ns = sec.querySelector('[data-ops-noshow]');
+  ns.innerHTML = opsNoshowHtml(r);
+  opsWireStart(sec, ns);
+  for (const b of ns.querySelectorAll('[data-ops-resolve]')) {
+    b.addEventListener('click', async () => {
+      const x = await api({ action: 'report_noshow_resolve', token: tok(), code: CODE, set_id: b.getAttribute('data-ops-resolve') });
+      if (!x || !x.ok) { alert(errText(x)); return; }
+      opsRefresh();
+    });
+  }
+  for (const b of ns.querySelectorAll('[data-ops-nsdq]')) {
+    b.addEventListener('click', () => opsDq(sec, { id: b.getAttribute('data-ops-nsdq'), name: b.getAttribute('data-name') }, b.getAttribute('data-scope')));
+  }
+  const dq = sec.querySelector('[data-ops-dqs]');
+  if (dq) {
+    dq.innerHTML = opsDqListHtml(r);
+    for (const b of dq.querySelectorAll('[data-ops-dqcancel]')) {
+      b.addEventListener('click', async () => {
+        if (!confirm(i18n('report.dq.cancel_confirm'))) return;
+        const x = await api({ action: 'report_dq_cancel', token: tok(), code: CODE, id: Number(b.getAttribute('data-ops-dqcancel')) });
+        if (!x || !x.ok) { alert(errText(x)); return; }
+        opsRefresh();
+      });
+    }
+  }
+}
+
 // ── 報告管理者 (運営だけが足す・外す)。名前・discriminator で SPSP の選手から探す。SPSP にデータが無い人は discriminator で ──
 let MGR_CANDS_P = null;
 /** 候補 (SPSP の選手。名前は players_index、discriminator は discriminators.json)。最初に打ったときに 1 回だけ読む */
@@ -2104,6 +2334,7 @@ function fillSettings(root, s) {
   const op = root.querySelector('[data-set-open]'); if (op) op.value = toLocalInput(s && s.opens_ms);
   const ap = root.querySelector(`[data-set-apply][value="${(s && s.apply) || 'auto'}"]`); if (ap) ap.checked = true;
   const nt = root.querySelector('[data-set-notify]'); if (nt) nt.value = (s && s.notify) || 'off';
+  const nsw = root.querySelector('[data-set-noshow]'); if (nsw) nsw.checked = !(s && s.notify_noshow === false);
 }
 async function refreshAdminSets(force) {
   clearTimeout(adminTimer);
@@ -2111,7 +2342,7 @@ async function refreshAdminSets(force) {
   const busy = !!box && (box.contains(document.activeElement) || !!ADMIN_FORM_OPEN);
   if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
     const r = await api({ action: 'report_admin', token: tok(), code: CODE });
-    if (r && r.ok) { manualUpdate(r); renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
+    if (r && r.ok) { manualUpdate(r); opsUpdate(r); renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
   }
   adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
 }
@@ -2365,7 +2596,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'noshow', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -2488,6 +2719,18 @@ let DEMO_P = [];
 /** 見本の指定した試合 (admin_outage) */
 let DEMO_MANUAL = [];
 let DEMO_MANUAL_ROWS = {};
+/** 見本の「見つからない」・DQ (運営の画面) */
+let DEMO_NOSHOWS = null;
+let DEMO_DQS = [];
+function demoOps(P) {
+  if (!DEMO_NOSHOWS) {
+    DEMO_NOSHOWS = [
+      { set_id: '201', user_id: '1', me: P[2].name, opp: P[3].name, opp_entrant: 'e3', round: 'Pools B3 Winners Round 2', side: 'w', first_ms: Date.now() - 6 * 60000, last_ms: Date.now() - 60000, count: 3, status: 'open', note: '' },
+      { set_id: '202', user_id: '2', me: P[4].name, opp: P[5].name, opp_entrant: 'e5', round: 'Pools B3 Losers Round 1', side: 'l', first_ms: Date.now() - 30 * 60000, last_ms: Date.now() - 28 * 60000, count: 1, status: 'resolved', note: 'started' },
+    ];
+  }
+  return { noshows: DEMO_NOSHOWS, dqs: DEMO_DQS };
+}
 /** 見本の何先: 予選 (p1) は 2 先・本戦 (p2) は勝者側 3 回戦・敗者側 4 回戦から 3 先・Challonge は全部 1 先 */
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
@@ -2545,6 +2788,28 @@ async function demoApi(body) {
       ] };
     }
   }
+  // 見本: 対戦開始・見つからない・DQ (運営の画面)
+  if (body.action === 'report_player_sets') {
+    const i = Number(String(body.entrant).replace(/^e/, '')) || 0;
+    const op = P[(i + 1) % P.length];
+    return { ok: true, entrant: body.entrant, name: P[i] ? P[i].name : '', sets: [{ set_id: '301', round: 2, label: 'Pools B3 Winners Round 2', opp: 'e' + ((i + 1) % P.length), opp_name: op.name, started: false, start_ms: null }] };
+  }
+  if (body.action === 'report_dq') {
+    const i = Number(String(body.entrant).replace(/^e/, '')) || 0;
+    const d = { id: DEMO_DQS.length + 1, entrant: body.entrant, name: P[i] ? P[i].name : String(body.entrant), scope: body.scope, status: body.scope === 'a' ? 'open' : 'done', done_sets: ['301'], note: '', created_ms: Date.now(), updated_ms: Date.now() };
+    DEMO_DQS.unshift(d);
+    for (const n of DEMO_NOSHOWS || []) if (n.opp_entrant === body.entrant && n.status === 'open') Object.assign(n, { status: 'resolved', note: 'dq' });
+    return { ok: true, dq: d };
+  }
+  if (body.action === 'report_dq_cancel') { const d = DEMO_DQS.find((x) => x.id === body.id); if (d) d.status = 'cancelled'; return { ok: true, id: body.id }; }
+  if (body.action === 'report_noshow_resolve') { for (const n of DEMO_NOSHOWS || []) if (n.set_id === body.set_id) Object.assign(n, { status: 'resolved', note: 'admin' }); return { ok: true }; }
+  if (body.action === 'report_start' && (DEMO === 'admin' || DEMO === 'admin_outage')) {
+    for (const n of DEMO_NOSHOWS || []) if (n.set_id === body.set_id) Object.assign(n, { status: 'resolved', note: 'started' });
+    return { ok: true, start: { set_id: body.set_id, user_id: '4242', ts_ms: Date.now() }, first: true, startgg: true };
+  }
+  if (body.action === 'report_bracket' && DEMO === 'admin') {
+    return { ok: true, groups: [{ id: '901', name: 'Pools B3', phase: 'p1', open: 3, rr: false, entrants: P.slice(0, 8).map((p, i) => ({ id: 'e' + i, name: p.name, uid: p.uid || null, seed: i + 1, wl: false, ll: false, hw: false, hl: false, playing: false, manual: false })), open_pairs: [], done_pairs: [] }], synced_ms: Date.now() };
+  }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
     if (DEMO === 'admin_outage') {
@@ -2552,11 +2817,11 @@ async function demoApi(body) {
         sets: [Object.assign(row('101', 'queued', R20, R20, 0), { note: 'outage' }), Object.assign(row('102', 'queued', R21, null, 2), { note: 'outage' }),
           Object.assign(row('103', 'conflict', R21, L12, 4), { note: 'outage' }), row('104', 'agreed', R20, R20, 6), ...Object.values(DEMO_MANUAL_ROWS)],
         role: 'admin', managers: DEMO_MGRS, outage: { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' },
-        manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true } };
+        manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true }, ...demoOps(P) };
     }
     return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)],
-      role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS };
+      role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS, ...demoOps(P) };
   }
   if (body.action === 'report_tournaments') {
     // 見本: 開催中 1 つ (イベント 2 つ、片方は受付中) とこれから 1 つ
@@ -2639,6 +2904,12 @@ async function runDemo() {
       demoMatch(P, { id: '90003', state: 'complete', round: 'Winners Round 2', slots: [demoSlot(P[0], 5, 0), demoSlot(P[6], 12, 1)], winner: 1, score: [1, 2] }),
       demoMatch(P, { id: '90004', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
     VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), demoRow('90003', 'review', null, L12, P), demoRow('90004', 'reported', R21, null, P)];
+  }
+  if (DEMO === 'noshow') {
+    // 試合が決まったが会えない: 相手が「見つからない」を押した (自分の画面に出る)。対戦開始のボタン
+    MATCHES = [demoMatch(P, { started: false }), done0];
+    VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P)];
+    VIEW.noshows = [{ set_id: '90001', by_me: false, first_ms: Date.now() - 4 * 60000, last_ms: Date.now() - 60000, count: 2 }];
   }
   if (DEMO === 'rr') {
     // 総当たり: 4 人と試合が開いている。1 人は自分を選んでいる・1 人はほかの人と対戦中

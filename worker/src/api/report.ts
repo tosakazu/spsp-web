@@ -29,7 +29,7 @@ import {
   REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_CHALLONGE_CACHE_S, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
   REPORT_GRANT_MS, REPORT_MIN_OPEN_MS,
 } from '../config.ts';
-import type { ReportEventRow, ReportManualRow, ReportSetRow, Store } from '../store.ts';
+import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, Store } from '../store.ts';
 import { checkStartggAdmin, startggCurrentUser, startggGql } from './class_bracket.ts';
 import { challongeApi } from './challonge.ts';
 import { handleManagerBegin, logLogin } from './login.ts';
@@ -44,7 +44,7 @@ import type { ManagerRole, ReportManager } from './report_logic.ts';
 import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
-import { notifyManual, notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
+import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
 import type { Held, Snapshot } from './report_outage.ts';
 import {
   advanceSnapshot, bracketCandidates, candidateFor, emptySnapshot, flipResult, groupName, guardProvider, Health, heldResult, isManualId, isOutageNote, isQueuedRow,
@@ -552,6 +552,9 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
     ...(await store.listReportManual(ev.code)).filter((m) => m.status === 'matched' && m.set_id).map((m) => m.set_id),
     ...(await store.listReportSets(ev.code)).filter((r) => !isManualId(r.set_id) && (isQueuedRow(r) || r.state === 'pending')).map((r) => r.set_id),
   ]);
+  // 先に出した DQ (まだ start.gg に入っていない) が当てはまる試合は、後から作った指定に選ばせない (DQ の試合のあとのグランドファイナルなど)
+  const dqOpen = (await store.listReportDqs(ev.code)).filter((x) => x.status === 'open');
+  const dqFits = (x: ReportDqRow, s: { id: string; round: number | null }) => x.scope === 'a' || (x.scope === 's' ? s.id === x.set_id : x.scope === 'w' ? (s.round ?? 1) > 0 : (s.round ?? 0) < 0);
   // 同じ 2 人の指定は作った順にだけ移す (先の指定が移るまで後の指定は待つ。勝者側決勝とグランドファイナルなど)
   const waiting = new Set<string>();
   for (const m of manualOpen.slice().sort((a, b) => (a.id || 0) - (b.id || 0))) {
@@ -563,7 +566,8 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
     if (ops >= FLUSH_OPS) continue;
     if (now - m.updated_ms < MANUAL_RECHECK_MS && m.updated_ms !== m.created_ms) continue;
     ops++;
-    const f = await p.findSet([sl[0].id, sl[1].id], m.side === 'l' ? 'l' : m.side === 'r' ? 'r' : m.side === 'g' ? 'g' : 'w', taken);
+    const f = await p.findSet([sl[0].id, sl[1].id], m.side === 'l' ? 'l' : m.side === 'r' ? 'r' : m.side === 'g' ? 'g' : 'w', taken,
+      (s) => dqOpen.some((x) => x.created_ms <= m.created_ms && s.entrants.includes(x.entrant_id) && dqFits(x, s)));
     if (!f.ok) { if (isOutageNote(f.note)) return ops; continue; }
     if (!f.found) {
       // 前の試合の結果がまだ start.gg に無い (SPSP の外で報告待ち等)。運営の画面に出す
@@ -596,7 +600,9 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   const rows = await store.listReportSets(ev.code);
   const manualOpen = ev.kind === 'startgg' ? (await store.listReportManual(ev.code)).filter((m) => m.status === 'open') : [];
   const loaded: Kept = { snap: null, syncedMs: meta ? meta.synced_ms : 0, full: !!(meta && meta.full), sets: meta ? meta.sets : 0, manual: manualOpen.length };
-  const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS);
+  const dqOpen = ev.kind === 'startgg' ? (await store.listReportDqs(ev.code)).filter((d) => d.status === 'open') : [];
+  const dqDue = dqOpen.some((d) => d.updated_ms === d.created_ms || now - d.updated_ms >= DQ_RECHECK_MS);
+  const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS) || dqDue;
   const snapDue = ev.kind === 'startgg' && now - loaded.syncedMs >= (loaded.full ? SNAP_MIN_MS : SNAP_FIRST_MIN_MS);
   if (!queued && !snapDue) return loaded;
   if (health.down() && now - health.row.last_fail_ms < PROBE_GAP_MS) return loaded;
@@ -605,6 +611,7 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   let out = loaded;
   try {
     if (queued) await flushQueued(store, p, ev, now, rows, manualOpen);
+    if (dqDue) await applyDqs(store, p, ev, now, dqOpen);
     if (snapDue) {
       const snap = (await keptSnap(store, ev.code, loaded)) || emptySnapshot();
       const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
@@ -640,6 +647,17 @@ async function heldList(store: Store, code: string, snap: Snapshot, manual: Repo
     const s = snap.sets[r.set_id];
     const side = m ? (m.side === 'l' ? 'l' : m.side === 'w' || m.side === 'g' ? 'w' : null) : s && s.r !== null ? (s.r > 0 ? 'w' : s.r < 0 ? 'l' : null) : null;
     out.push({ group: m ? m.group_id : s ? s.g : '', side, loser: String(loser.id), winner: winner && winner.id !== undefined ? String(winner.id) : undefined });
+  }
+  // 運営の DQ (まだ start.gg に入れていないもの): その側で負けた扱い (残り全部なら両方)。その人が出るブロックごとに
+  for (const d of (await store.listReportDqs(code)).filter((x) => x.status === 'open')) {
+    const groups = new Set(Object.values(snap.sets).filter((s) => s.sl.some((x) => x.e === d.entrant_id)).map((s) => s.g));
+    if (d.scope === 's') {   // この試合だけ: その試合の側で負け (総当たりなら負けの数には関係ない)
+      const s = snap.sets[d.set_id || ''];
+      const opp = s ? s.sl.map((x) => x.e).find((e) => e && e !== d.entrant_id) : undefined;
+      if (s) out.push({ group: s.g, side: s.r !== null && s.r < 0 ? 'l' : 'w', loser: d.entrant_id, winner: opp || undefined });
+      continue;
+    }
+    for (const g of groups) for (const side of d.scope === 'a' ? ['w', 'l'] as const : [d.scope === 'l' ? 'l' as const : 'w' as const]) out.push({ group: g, side, loser: d.entrant_id });
   }
   return out;
 }
@@ -724,6 +742,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
 
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(pr.result), outcome: 'pending' });
   await store.deleteReportPicksForSet(o.ev.code, setId).catch(() => undefined);   // 総当たりの「この人とやる」は報告したら消す
+  await store.resolveReportNoshows(o.ev.code, setId, 'reported', null).catch(() => undefined);   // 「見つからない」は結果が来たら解決
   // start.gg に繋がらない (か、運営が指定した試合): D1 に残して、復旧後に送る
   const queue = async (): Promise<HandlerResult> => {
     const q = await queueOffline(store, o.ev.code, set, now, { manual });
@@ -829,7 +848,11 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const sets = [];
   for (const r of rows) sets.push(await setView(store, r, sess.id));
   const out: Record<string, unknown> = { report: publicOf(o.ev, now), me: { id: sess.id }, admin: !!roleOf(o.ev, sess.id), role: roleOf(o.ev, sess.id), sets,
-    outage: health.view() };
+    outage: health.view(),
+    // 自分の試合の「対戦開始」と「見つからない」(自分が押した・相手が押した)
+    starts: (await store.listReportStartsForUser(o.ev.code, sess.id, now - NOSHOW_VIEW_MS)).map((x) => ({ set_id: x.set_id, ts_ms: x.ts_ms, by_me: x.user_id === sess.id })),
+    noshows: (await store.listReportNoshowsForUser(o.ev.code, sess.id, now - NOSHOW_VIEW_MS)).filter((x) => x.status === 'open')
+      .map((x) => ({ set_id: x.set_id, by_me: x.user_id === sess.id, first_ms: x.first_ms, last_ms: x.last_ms, count: x.count })) };
   if (o.ev.kind === 'startgg') {
     // 運営が指定した試合 (障害中)・ブラケットの写しの自分の試合 (障害中か、画面が start.gg を読めなかったとき fallback: true)
     const mine = await store.listReportManualForUser(sess.id, o.ev.code);
@@ -910,7 +933,15 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
     const snap = await keptSnap(store, o.ev.code, kept);
     for (const v of manual) v.group_name = groupName(snap, v.group);
   }
-  return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual,
+  const noshows = (await store.listReportNoshows(o.ev.code, now - NOSHOW_VIEW_MS)).map((x) => {
+    let info: Record<string, unknown> = {};
+    try { info = JSON.parse(x.info); } catch (_) { info = {}; }
+    return { set_id: x.set_id, user_id: x.user_id, me: info.me || '', opp: info.opp || '', opp_entrant: info.opp_entrant || null, round: info.round || '', side: info.side || null,
+      first_ms: x.first_ms, last_ms: x.last_ms, count: x.count, status: x.status, note: x.note };
+  });
+  const dqs = o.ev.kind === 'startgg' ? (await store.listReportDqs(o.ev.code)).filter((d) => d.status === 'open' || now - d.updated_ms < NOSHOW_VIEW_MS)
+    .map((d) => ({ id: d.id, entrant: d.entrant_id, name: d.name, scope: d.scope, set_id: d.set_id || null, status: d.status, done_sets: d.done_sets.split(',').filter(Boolean), note: d.note, created_ms: d.created_ms, updated_ms: d.updated_ms })) : [];
+  return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual, noshows, dqs,
     snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
 }
 
@@ -1115,6 +1146,264 @@ export async function handleReportManualCancel(cfg: Config, store: Store, fetchF
   const row = await store.getReportSet(o.ev.code, 'm' + id);
   if (row) await markRow(store, row, 'reset', 'manual_cancel', now);
   return ok({ id });
+}
+
+// ── 対戦開始・対戦相手が見つからない・DQ (2026-11-04、docs §12) ─────────────────
+
+/** 「見つからない」の通知をもう一度送るまでの間 (押し直しは記録の時刻と回数を進めるだけ) */
+const NOSHOW_RENOTIFY_MS = 10 * 60 * 1000;
+/** 押し直しをこれより短い間隔で受けても D1 に書かない (連打) */
+const NOSHOW_MIN_GAP_MS = 3 * 1000;
+/** 画面に出す「見つからない」「対戦開始」の古さ */
+const NOSHOW_VIEW_MS = 12 * 3600 * 1000;
+/** DQ の対象を start.gg で探し直す間隔 */
+const DQ_RECHECK_MS = 30 * 1000;
+
+/** その試合のラウンドの名前 (写しの fullRoundText、運営が指定した試合は勝者側 / 敗者側 …) */
+async function roundLabel(store: Store, ev: ReportEventRow, setId: string): Promise<{ label: string; side: 'w' | 'l' | null }> {
+  if (isManualId(setId)) {
+    const m = await store.getReportManual(ev.code, Number(setId.slice(1)));
+    const side = m && (m.side === 'l' ? 'l' : m.side === 'w' || m.side === 'g' ? 'w' : null);
+    return { label: m ? (m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : m.side === 'g' ? 'グランドファイナル' : '勝者側') : '', side: side || null };
+  }
+  if (ev.kind !== 'startgg') return { label: '', side: null };
+  const { snap } = await loadSnap(store, ev.code);
+  const s = snap ? snap.sets[setId] : undefined;
+  return { label: s ? [groupName(snap, s.g), s.t].filter(Boolean).join(' ') : '', side: s && s.r !== null ? (s.r > 0 ? 'w' : s.r < 0 ? 'l' : null) : null };
+}
+
+/** action: "report_noshow" — { token, code, set_id } 選手が「対戦相手が見つからない」を押した。運営と相手に知らせる (最初と、10 分ごとまで) */
+export async function handleReportNoshow(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const setId0 = typeof req.set_id === 'string' || typeof req.set_id === 'number' ? String(req.set_id) : '';
+  if (!anySetId(setId0)) return err('bad_request', '試合の指定が正しくありません。', 'bad:set_id');
+  const o = await openEvent(cfg, store, fetchFn, req.code, now);
+  if (!o.ok) return o.res;
+  const health = await Health.load(store, o.ev.kind);
+  const got = await setForReport(store, guardProvider(providerOf(fetchFn, o), health, now), o.ev, setId0);
+  if ('res' in got) return got.res;
+  const set = got.set;
+  if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
+  const side: Side | null = set.slots[0].users.includes(sess.id) ? 0 : set.slots[1].users.includes(sess.id) ? 1 : null;
+  if (side === null) return err('not_player', 'この試合の選手だけが使えます。', 'not_player');
+  if (set.complete) return err('bad_request', 'この試合にはもう結果が入っています。', 'complete');
+  const old = await store.getReportNoshow(o.ev.code, set.id, sess.id);
+  const view = (r: { first_ms: number; last_ms: number; count: number; notified_ms: number }) => ({ set_id: set.id, first_ms: r.first_ms, last_ms: r.last_ms, count: r.count, notified_ms: r.notified_ms });
+  // 連打: 書かずに今の記録を返す
+  if (old && old.status === 'open' && now - old.last_ms < NOSHOW_MIN_GAP_MS) return ok({ noshow: view(old), notified: false });
+  const me = set.slots[side]!; const op = set.slots[1 - side]!;
+  const rl = await roundLabel(store, o.ev, set.id);
+  const info = { me: me.name, opp: op.name, opp_entrant: op.id, round: rl.label, side: rl.side };
+  const due = !old || old.status !== 'open' || now - old.notified_ms >= NOSHOW_RENOTIFY_MS;
+  await store.upsertReportNoshow({ code: o.ev.code, set_id: set.id, user_id: sess.id, users: usersKey(set), info: JSON.stringify(info), first_ms: now, last_ms: now,
+    count: 1, notified_ms: 0, status: 'open', note: '' }, due ? now : null);
+  if (due) {
+    const n = { me: me.name, opp: op.name, round: rl.label };
+    await notifyNoshowAdmins(cfg, store, fetchFn, o.ev, set.id, n).catch(() => 0);
+    await notifyNoshowOpponent(cfg, store, fetchFn, o.ev, set.id, op.users, n).catch(() => 0);
+  }
+  const row = await store.getReportNoshow(o.ev.code, set.id, sess.id);
+  return ok({ noshow: row ? view(row) : null, notified: due });
+}
+
+/** action: "report_start" — { token, code, set_id } 対戦開始 (両者のどちらか、運営・報告管理者も)。最初の 1 回だけ記録し、
+ *  「見つからない」を解決にして、start.gg の試合を試合中にする (繋がらなければ SPSP の記録だけ) */
+export async function handleReportStart(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const sess = await sessionOf(cfg, req, now);
+  if (!sess) return err('auth_failed', MSG_LOGIN, 'session');
+  const setId0 = typeof req.set_id === 'string' || typeof req.set_id === 'number' ? String(req.set_id) : '';
+  if (!anySetId(setId0)) return err('bad_request', '試合の指定が正しくありません。', 'bad:set_id');
+  const o = await openEvent(cfg, store, fetchFn, req.code, now);
+  if (!o.ok) return o.res;
+  const health = await Health.load(store, o.ev.kind);
+  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const got = await setForReport(store, p, o.ev, setId0);
+  if ('res' in got) return got.res;
+  const set = got.set;
+  if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
+  const player = set.slots.some((s) => s && s.users.includes(sess.id));
+  if (!player && !roleOf(o.ev, sess.id)) return err('not_player', 'この試合の選手か運営だけが使えます。', 'not_player');
+  if (set.complete) return err('bad_request', 'この試合にはもう結果が入っています。', 'complete');
+  const first = await store.insertReportStart(o.ev.code, set.id, usersKey(set), sess.id, now);
+  await store.resolveReportNoshows(o.ev.code, set.id, 'started', null).catch(() => undefined);
+  let startgg = false;
+  if (first) {
+    if (player) await store.putReportPick(o.ev.code, sess.id, set.id, now).catch(() => undefined);   // 総当たりの「この人とやる」も
+    if (!got.offline && !isManualId(set.id) && p.start) startgg = (await p.start(set.id).catch(() => ({ ok: false as const, note: 'throw' }))).ok;
+  }
+  const st = await store.getReportStart(o.ev.code, set.id);
+  return ok({ start: st, first, startgg });
+}
+
+/** action: "report_noshow_resolve" — { token, code, set_id } 運営が「見つからない」を対応済みにする */
+export async function handleReportNoshowResolve(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  const setId = typeof req.set_id === 'string' || typeof req.set_id === 'number' ? String(req.set_id) : '';
+  if (!anySetId(setId)) return err('bad_request', '試合の指定が正しくありません。', 'bad:set_id');
+  await store.resolveReportNoshows(o.ev.code, setId, 'admin', null);
+  return ok({ set_id: setId });
+}
+
+/** action: "report_player_sets" — { token, code, entrant } 運営: その参加者の結果の無い試合 (対戦開始・DQ を押す)。start.gg から、繋がらなければ写しから */
+export async function handleReportPlayerSets(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
+  const eid = typeof req.entrant === 'string' && /^\d{1,15}$/.test(req.entrant) ? req.entrant : null;
+  if (!eid) return err('bad_request', '参加者の指定が正しくありません。', 'bad:entrant');
+  const { snap } = await loadSnap(store, o.ev.code);
+  const name = (id: string | null) => (id && snap && snap.ents[id] ? snap.ents[id].n : '');
+  const p = guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now);
+  let list: { id: string; state: number; round: number | null; entrants: (string | null)[] }[] = [];
+  let fromSnap = false;
+  const live = p.setsOf ? await p.setsOf(eid) : { ok: false as const, note: 'none' };
+  if (live.ok) list = live.sets;
+  else if (snap) {
+    fromSnap = true;
+    list = Object.values(snap.sets).filter((s) => s.sl.some((x) => x.e === eid)).map((s) => ({ id: s.i, state: s.s, round: s.r, entrants: s.sl.map((x) => x.e) }));
+  } else return err('provider_error', providerMessage(o.ev.kind, live.note), live.note);
+  const starts = new Map((await Promise.all(list.map(async (s) => [s.id, await store.getReportStart(o.ev.code, s.id)] as const))).filter(([, v]) => v));
+  const sets = list.filter((s) => s.state !== 3 && s.entrants[0] && s.entrants[1]).map((s) => {
+    const opp = s.entrants[0] === eid ? s.entrants[1] : s.entrants[0];
+    const ss = snap ? snap.sets[s.id] : undefined;
+    return { set_id: s.id, round: s.round, label: ss ? [groupName(snap, ss.g), ss.t].filter(Boolean).join(' ') : '', opp: opp, opp_name: name(opp),
+      started: s.state === 2 || starts.has(s.id), start_ms: starts.get(s.id) ? starts.get(s.id)!.ts_ms : null };
+  });
+  return ok({ entrant: eid, name: name(eid), sets, from_snapshot: fromSnap });
+}
+
+/** action: "report_dq" — { token, code, entrant, scope: 'w' | 'l' | 'a' } 参加者を DQ にする (勝者側の次の試合だけ / 敗者側の次の試合だけ / 残り全部)。
+ *  start.gg の試合は Worker が読み直しのたびに DQ にしていく (相手が決まっていない試合は決まってから。繋がらないあいだは待つ) */
+export async function handleReportDq(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
+  const eid = typeof req.entrant === 'string' && /^\d{1,15}$/.test(req.entrant) ? req.entrant : null;
+  const scope = req.scope === 'w' || req.scope === 'l' || req.scope === 'a' || req.scope === 's' ? req.scope : null;
+  const target = scope === 's' && typeof req.set_id === 'string' && SET_ID_RE.test(req.set_id) ? req.set_id : '';
+  if (!eid || !scope || (scope === 's' && !target)) return err('bad_request', '入力の形式が正しくありません。', 'bad:dq');
+  const { snap } = await loadSnap(store, o.ev.code);
+  if (!snap || !snap.ents[eid]) return err('not_ready', MSG_NO_SNAP, 'no_snapshot');
+  const open = (await store.listReportDqs(o.ev.code)).filter((d) => d.status === 'open');
+  if (open.length >= 100) return err('rate_limited', 'DQ が多すぎます。', 'dq_max');
+  // 同じ DQ (同じ範囲・同じ試合) がもうあればそれ。「残り全部」があれば何もしない。勝者側のみ・敗者側のみは別々に効く。
+  // 「残り全部」を出したら、まだ効いていない勝者側のみ・敗者側のみは置き換える
+  const mine = open.filter((d) => d.entrant_id === eid);
+  const same = mine.find((d) => d.scope === 'a' || (d.scope === scope && (scope !== 's' || d.set_id === target)));
+  if (same) return ok({ dq: same, existed: true });
+  if (scope === 'a') for (const d of mine.filter((x) => x.scope === 'w' || x.scope === 'l')) await store.updateReportDq(o.ev.code, d.id as number, 'cancelled', d.done_sets, 'replaced', now);
+  const row: ReportDqRow = { code: o.ev.code, entrant_id: eid, name: snap.ents[eid].n, scope, set_id: target, status: 'open', done_sets: '', note: '', created_by: o.uid as string, created_ms: now, updated_ms: now };
+  row.id = await store.insertReportDq(row);
+  // すぐ試す (相手が決まっている試合があればその場で DQ に)
+  if (o.ev.kind === 'startgg') await applyDqs(store, guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now), o.ev, now, [row]).catch(() => 0);
+  const saved = (await store.listReportDqs(o.ev.code)).find((d) => d.id === row.id) || row;
+  return ok({ dq: saved });
+}
+
+/** action: "report_dq_cancel" — { token, code, id } DQ を外す (もう DQ にした試合はそのまま。start.gg で直す) */
+export async function handleReportDqCancel(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  const id = Number(req.id);
+  const d = (await store.listReportDqs(o.ev.code)).find((x) => x.id === id);
+  if (!d) return err('not_found', 'その DQ はありません。', 'no_dq');
+  if (d.status !== 'open') return err('bad_request', 'もう終わっているか、外してあります。', 'bad:status');
+  await store.updateReportDq(o.ev.code, id, 'cancelled', d.done_sets, d.note, now);
+  return ok({ id });
+}
+
+/**
+ * DQ を start.gg に入れる: その参加者の、両者がそろって結果の無い試合 (範囲の側だけ) を DQ にする (相手の勝ち)。
+ * 試合中 (state 2) のものを先に、ラウンドの浅い順。w / l は 1 試合で終わり、a は運営が外すまで続ける。
+ * DQ にした試合は運営が確定した扱い (fixed / note dq) で、その試合の「見つからない」は解決、同じ 2 人の指定した試合は取り消す。
+ */
+/** DQ にした試合の後始末: 運営が確定した扱い (fixed / dq)・「見つからない」は解決・同じ 2 人の指定した試合は取り消し */
+async function recordDq(store: Store, ev: ReportEventRow, set: NSet, loserEntrant: string, now: number, dqCreatedMs: number): Promise<void> {
+  const loser: Side = set.slots[0] && set.slots[0].id === loserEntrant ? 0 : 1;
+  const row = await store.getReportSet(ev.code, set.id);
+  const applied: Result = { w: (1 - loser) as Side, g: [] };
+  await store.casReportSet({ code: ev.code, set_id: set.id, state: 'fixed', users: usersKey(set), slots: slotsJson(set), applied: JSON.stringify(applied), note: 'dq',
+    floor_id: row ? row.floor_id : 0, version: (row ? row.version : 0) + 1, updated_ms: now }, row ? row.version : null).catch(() => false);
+  await store.resolveReportNoshows(ev.code, set.id, 'dq', null).catch(() => undefined);
+  if (!set.slots[0] || !set.slots[1]) return;
+  const pair = [set.slots[0].id, set.slots[1].id].sort().join('|');
+  // DQ より前に作った同じ 2 人の指定 (= この試合のつもりの指定) だけ取り消す。後から作った指定は別の試合 (グランドファイナルで再戦など)
+  for (const m of (await store.listReportManual(ev.code)).filter((x) => x.status === 'open' && x.created_ms <= dqCreatedMs)) {
+    const sl = manualSlots(m);
+    if (sl[0] && sl[1] && [sl[0].id, sl[1].id].sort().join('|') === pair) await store.updateReportManual(ev.code, m.id as number, 'cancelled', set.id, now);
+  }
+}
+
+async function applyDqs(store: Store, p: Provider, ev: ReportEventRow, now: number, dqs: ReportDqRow[]): Promise<number> {
+  if (!p.setsOf || !p.dq) return 0;
+  let n = 0;
+  // start.gg の試合に送り待ちの結果がある人は、それが入るまで DQ しない (start.gg の古い試合を「次の試合」と取り違えないように)。
+  // 送り待ちの結果がある試合と、運営が指定した試合 (まだ移っていない) と同じ 2 人の試合も選ばない (その指定が移る先)。
+  // 指定した試合のほうでは止めない (指定した試合は DQ が入ってから start.gg に出ることがあるので、止めると行き詰まる)
+  const rows = await store.listReportSets(ev.code);
+  const waitingRows = rows.filter((r) => !isManualId(r.set_id) && (isQueuedRow(r) || r.state === 'pending'));
+  const busy = new Set<string>(waitingRows.flatMap((r) => { try { return (JSON.parse(r.slots) as ({ id?: unknown } | null)[]).map((x) => (x && x.id !== undefined ? String(x.id) : '')); } catch (_) { return []; } }));
+  const heldSets = new Set(waitingRows.map((r) => r.set_id));
+  const manualOpen = (await store.listReportManual(ev.code)).filter((x) => x.status === 'open');
+  // 運営が指定した試合 (まだ移っていない) が移る先になりうる試合: 同じ 2 人・側が合う・DQ より前に作った指定
+  const manualTarget = (s: { round: number | null; entrants: (string | null)[] }, d: ReportDqRow) => manualOpen.some((m) => {
+    const sl = manualSlots(m);
+    if (!sl[0] || !sl[1] || m.created_ms > d.created_ms) return false;
+    if ([sl[0].id, sl[1].id].sort().join('|') !== [s.entrants[0], s.entrants[1]].sort().join('|')) return false;
+    return m.side === 'r' || s.round === null || (m.side === 'l' ? s.round < 0 : s.round > 0);
+  });
+  // 試合がどの DQ に当てはまるか (範囲の側・この試合だけ)
+  const fits = (x: ReportDqRow, s: { id: string; round: number | null }) => x.scope === 'a' || (x.scope === 's' ? s.id === x.set_id : x.scope === 'w' ? (s.round ?? 1) > 0 : (s.round ?? 0) < 0);
+  // DQ は出した順に。相手に先に出した DQ が当てはまる試合はそちらのもの (障害中に「P6 を DQ」→「次の試合で P5 を DQ」と続けたとき、
+  // P5 の DQ が P6 との試合に入らないように)
+  const allOpen = (await store.listReportDqs(ev.code)).filter((x) => x.status === 'open');
+  for (const d of dqs.slice().sort((a, b) => (a.id || 0) - (b.id || 0))) {
+    if (d.status !== 'open') continue;
+    if (d.scope !== 's' && busy.has(d.entrant_id)) continue;
+    let doneSets = d.done_sets;
+    // 前回 DQ を送って応答が届かなかった試合 (note try:<id>): もう相手の勝ちで終わっていれば DQ は入っていた
+    if (/^try:\d+$/.test(d.note)) {
+      const tried = d.note.slice(4);
+      const rs = await p.readSet(tried);
+      if (!rs.ok) { if (isOutageNote(rs.note)) return n; }
+      else if (rs.set.complete && rs.set.remote && rs.set.slots[rs.set.remote.w] && rs.set.slots[rs.set.remote.w]!.id !== d.entrant_id) {
+        await recordDq(store, ev, rs.set, d.entrant_id, now, d.created_ms);
+        doneSets = [doneSets, tried].filter(Boolean).join(',');
+        if (d.scope !== 'a') { await store.updateReportDq(ev.code, d.id as number, 'done', doneSets, '', now); continue; }
+      }
+    }
+    if (now - d.updated_ms < DQ_RECHECK_MS && d.updated_ms !== d.created_ms) continue;
+    const r = await p.setsOf(d.entrant_id);
+    if (!r.ok) { if (isOutageNote(r.note)) return n; await store.updateReportDq(ev.code, d.id as number, 'open', d.done_sets, 'error:' + r.note.slice(0, 60), now); continue; }
+    const done = new Set(doneSets.split(',').filter(Boolean));
+    const cands = r.sets.filter((s) => s.state !== 3 && !done.has(s.id) && !heldSets.has(s.id)
+      && !(d.scope !== 's' && s.entrants[0] && s.entrants[1] && manualTarget(s, d)) && s.entrants[0] && s.entrants[1] && s.entrants.includes(d.entrant_id)
+      && fits(d, s)
+      && !allOpen.some((x) => (x.id || 0) < (d.id || 0) && x.entrant_id !== d.entrant_id && s.entrants.includes(x.entrant_id) && fits(x, s)))
+      .sort((a, b) => Number(b.state === 2) - Number(a.state === 2) || Math.abs(a.round || 0) - Math.abs(b.round || 0));
+    let status = 'open'; let note = '';
+    for (const c of cands.slice(0, d.scope === 'a' ? 3 : 1)) {
+      const rs = await p.readSet(c.id);
+      if (!rs.ok) { if (isOutageNote(rs.note)) return n; note = 'error:' + rs.note.slice(0, 60); continue; }
+      const set = rs.set;
+      if (set.complete || !set.slots[0] || !set.slots[1]) continue;
+      const loser: Side = set.slots[0].id === d.entrant_id ? 0 : 1;
+      const res = await p.dq(set, (1 - loser) as Side);
+      if (!res.ok) {
+        // 繋がらない: 書けたかもしれないので試合を覚えて、次に確かめる
+        if (isOutageNote(res.note)) { await store.updateReportDq(ev.code, d.id as number, 'open', doneSets, 'try:' + set.id, now); return n; }
+        note = 'error:' + res.note.slice(0, 60); continue;
+      }
+      n++;
+      await recordDq(store, ev, set, d.entrant_id, now, d.created_ms);
+      doneSets = [doneSets, set.id].filter(Boolean).join(',');
+      if (d.scope !== 'a') { status = 'done'; break; }
+    }
+    await store.updateReportDq(ev.code, d.id as number, status, doneSets, note, now);
+  }
+  return n;
 }
 
 /** action: "report_stop" — 受付を止めてトークンを消す */
