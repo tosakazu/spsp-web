@@ -56,7 +56,7 @@ for (const g of groups) {
     return { i: String(s.id), r: s.round, t: roundText(g, s), x: s.identifier, s: isDone ? 3 : s === live ? 2 : 1, w: isDone ? String(s.winnerId) : null,
       st: s === live ? 7 : null, hw: s === held ? String(held.winnerId) : null, sl };
   });
-  view[g.gid] = { group: { id: g.gid, name: g === top ? 'TOP24' : 'Pools ' + (pools.indexOf(g) + 1), b: g.bracketType, trusted: true }, sets, ents };
+  view[g.gid] = { group: { id: g.gid, name: g === top ? 'TOP24' : 'Pools ' + (pools.indexOf(g) + 1), b: g.bracketType, bad: false }, sets, ents };
 }
 const me = String(held.winnerId);
 const out = {

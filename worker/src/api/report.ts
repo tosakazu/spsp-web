@@ -50,7 +50,7 @@ import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, n
 import type { Held, Snapshot } from './report_outage.ts';
 import {
   absorbLiveStructs, advanceSnapshot, bracketCandidates, candidateFor, emptySnapshot, flipResult, groupName, guardProvider, Health, heldResult, isManualId, isOutageNote, isQueuedRow,
-  manualNSet, manualSlots, manualView, offlineDecision, parseSnapshot, PROBE_GAP_MS, SNAP_FIRST_MIN_MS, SNAP_MIN_MS, snapMine, snapNSet, snapshotJson,
+  manualNSet, manualSlots, manualView, offlineDecision, decodeSnapshot, encodeSnapshot, PROBE_GAP_MS, SNAP_FIRST_MIN_MS, SNAP_MIN_MS, snapMine, snapNSet,
 } from './report_outage.ts';
 import { validSub } from './webpush.ts';
 import type { HandlerResult } from './respond.ts';
@@ -506,7 +506,7 @@ function rowNSet(row: ReportSetRow): NSet | null {
 
 async function loadSnap(store: Store, code: string): Promise<{ snap: Snapshot | null; syncedMs: number }> {
   const r = await store.getReportSnapshot(code).catch(() => null);
-  return r ? { snap: parseSnapshot(r.data), syncedMs: r.synced_ms } : { snap: null, syncedMs: 0 };
+  return r ? { snap: await decodeSnapshot(r.data), syncedMs: r.synced_ms } : { snap: null, syncedMs: 0 };
 }
 
 /** 指定した試合を見つけた start.gg の試合に移す (報告は側を合わせて付け替え、行は start.gg の試合の行に) */
@@ -694,10 +694,10 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
       if (!e) { try { checkSnap(snap, now); } catch (_) { /* 照合できなくても写しは残す */ } }
       if (e && e !== 'outage_skip' && isOutageNote(e)) await health.fail(e, now);
       else if (!e) await health.ok(now);
-      const js = snapshotJson(snap);
+      const js = await encodeSnapshot(snap);
       // 繋がらなかったときは写した時刻を進めない (次に試せる番ですぐ続きを読む)。それ以外の失敗は進める (毎回呼ばない)
       const synced = e && isOutageNote(e) ? loaded.syncedMs : now;
-      if (js) { await store.putReportSnapshot(ev.code, js, synced); wrote = true; out = { ...loaded, snap, syncedMs: synced, full: snap.full, sets: Object.keys(snap.sets).length }; }
+      if (js) { await store.putReportSnapshot(ev.code, js, synced, { full: snap.full, sets: Object.keys(snap.sets).length }); wrote = true; out = { ...loaded, snap, syncedMs: synced, full: snap.full, sets: Object.keys(snap.sets).length }; }
     }
   } finally {
     if (!wrote) await store.releaseReportSnapshot(ev.code).catch(() => undefined);
@@ -714,12 +714,22 @@ async function projectedSnap(store: Store, code: string, snap: Snapshot): Promis
   return (await projectedFull(store, code, snap)).snap;
 }
 
+const PROJECT_CACHE_MS = 10 * 1000;
+const PROJECT_CACHE = new Map<string, { key: string; at: number; v: { snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string> } }>();
 /** 計算で埋めた写しと、通過順 (同じ順位が 2 人以上) のブロックごとの並び・運営が確かめたか */
 async function projectedFull(store: Store, code: string, snap: Snapshot):
   Promise<{ snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string> }> {
   const extra: Record<string, string> = {};
   const none = { snap, ties: {}, confirmed: new Set<string>(), extra };
-  for (const r of await store.listReportSets(code)) {
+  const rows = await store.listReportSets(code);
+  const dqRows = (await store.listReportDqs(code)).filter((d) => d.status === 'open');
+  const okRows = await store.listReportProgOk(code).catch(() => []);
+  // 同じ写し (照合した時刻・試合の数)・同じ報告の状態なら、計算は使い回す (障害中は全員が 15 秒ごとに読みに来る。3000 人規模で 1 回 0.2 秒)
+  const key = [snap.chk ? snap.chk.ms : 0, Object.keys(snap.sets).length, snap.pass, snap.cur,
+    rows.map((r) => r.set_id + ':' + r.version + ':' + r.state).join(','), dqRows.map((d) => d.id + ':' + d.updated_ms).join(','), okRows.map((x) => x.group_id + x.list.length).join(',')].join('|');
+  const hit = PROJECT_CACHE.get(code);
+  if (hit && hit.key === key && Date.now() - hit.at < PROJECT_CACHE_MS) return hit.v;
+  for (const r of rows) {
     if (isManualId(r.set_id) || !snap.sets[r.set_id] || snap.sets[r.set_id].s === 3) continue;
     const sent = !!r.applied && ['reported', 'agreed', 'fixed'].includes(r.state);
     if (!(isQueuedRow(r) || r.state === 'pending' || sent)) continue;
@@ -731,9 +741,9 @@ async function projectedFull(store: Store, code: string, snap: Snapshot):
     if (w && w.id !== undefined && w.id !== null) extra[r.set_id] = String(w.id);
   }
   if (!snapHasStructure(snap) || !snap.chk) return none;
-  const dqs: HeldDq[] = (await store.listReportDqs(code)).filter((d) => d.status === 'open').map((d) => ({ entrant: d.entrant_id, scope: d.scope, set_id: d.set_id || undefined }));
+  const dqs: HeldDq[] = dqRows.map((d) => ({ entrant: d.entrant_id, scope: d.scope, set_id: d.set_id || undefined }));
   // 運営が確かめた通過順: 確かめた並びと今の計算の並びが同じブロックだけ使う (前のフェーズが確かめられると次が出てくるので数回)
-  const ok = new Map((await store.listReportProgOk(code).catch(() => [])).map((x) => [x.group_id, x.list]));
+  const ok = new Map(okRows.map((x) => [x.group_id, x.list]));
   try {
     let confirmed = new Set<string>();
     let r = projectFull(snap, extra, dqs, confirmed);
@@ -743,7 +753,10 @@ async function projectedFull(store: Store, code: string, snap: Snapshot):
       confirmed = next;
       r = projectFull(snap, extra, dqs, confirmed);
     }
-    return { snap: r.snap, ties: r.ties, confirmed, extra };
+    const v = { snap: r.snap, ties: r.ties, confirmed, extra };
+    PROJECT_CACHE.set(code, { key, at: Date.now(), v });
+    if (PROJECT_CACHE.size > 50) PROJECT_CACHE.delete(PROJECT_CACHE.keys().next().value as string);
+    return v;
   } catch (_) { return none; }
 }
 
@@ -1279,13 +1292,14 @@ export async function handleReportBracketView(cfg: Config, store: Store, fetchFn
   }
   if (!snap.groups[gid]) return err('bad_request', 'そのブロックはありません。', 'bad:group');
   const pj = await projectedFull(store, o.ev.code, snap);
-  const trusted = !!(snap.chk && !snap.chk.bad[gid]);
+  // bad = 照合して食い違った (計算では埋めない)。まだ照合していない (構造を読んでいる途中・古い写し) は食い違いではない
+  const bad = !!(snap.chk && snap.chk.bad[gid]);
   const ents: Record<string, string> = {};
   const sets = Object.values(pj.snap.sets).filter((x) => x.g === gid).map((x) => ({
     i: x.i, r: x.r, t: x.t, x: x.x || '', s: x.s, w: x.w, st: x.st, hw: x.s !== 3 && pj.extra[x.i] ? pj.extra[x.i] : null,
     sl: x.sl.map((y) => { if (y.e) ents[y.e] = snap.ents[y.e] ? snap.ents[y.e].n : ''; return { e: y.e, sc: y.sc, pd: y.pd || 0, pt: y.pt, pi: y.pi, pp: y.pp }; }),
   }));
-  return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, trusted }, sets, ents });
+  return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, bad }, sets, ents });
 }
 
 /** action: "report_progression" — { token, code } 前のフェーズからの通過順 (同じ順位が 2 人以上・start.gg がまだ次のフェーズを埋めていないブロック)。

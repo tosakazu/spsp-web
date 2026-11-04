@@ -297,11 +297,12 @@ export class MemStore {
   async getReportSnapshotMeta(code) {
     this._rep(); const r = this.reportSnaps.find((x) => x.code === code);
     if (!r) return null;
+    if (String(r.data).startsWith('z1:')) return { synced_ms: r.synced_ms, full: !!r.m_full, sets: r.m_sets || 0 };
     let d = {}; try { d = JSON.parse(r.data); } catch (_) { d = {}; }
     return { synced_ms: r.synced_ms, full: d.full === true, sets: d.sets ? Object.keys(d.sets).length : 0 };
   }
-  async putReportSnapshot(code, data, syncedMs) {
-    this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0 }]);
+  async putReportSnapshot(code, data, syncedMs, meta) {
+    this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0, m_full: meta && meta.full ? 1 : 0, m_sets: meta ? meta.sets : 0 }]);
   }
   async claimReportSnapshot(code, nowMs, holdMs) {
     this._rep(); let r = this.reportSnaps.find((x) => x.code === code);

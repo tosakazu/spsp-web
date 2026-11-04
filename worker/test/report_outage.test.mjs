@@ -6,7 +6,7 @@ import { dispatch } from '../src/api/router.ts';
 import { SESSION_TTL_MS_DEFAULT, STATE_TTL_MS_DEFAULT } from '../src/config.ts';
 import { issueSessionToken } from '../src/api/session.ts';
 import {
-  absorbSet, bracketCandidates, candidateFor, emptySnapshot, flipResult, heldResult, isOutageNote, offlineDecision, pickFound, snapMine, snapNSet,
+  decodeSnapshot, absorbSet, bracketCandidates, candidateFor, emptySnapshot, flipResult, heldResult, isOutageNote, offlineDecision, pickFound, snapMine, snapNSet,
 } from '../src/api/report_outage.ts';
 import { MemStore } from './_mem_store.mjs';
 
@@ -193,7 +193,7 @@ test('障害中の報告: D1 に残して (queued) 選手・運営に未反映�
   let v = await e.view(11);
   assert.strictEqual(v.ok, true);
   assert.strictEqual(v.outage, null);
-  assert.ok(Object.keys(JSON.parse(e.store.reportSnaps[0].data).sets).length === 4, '写しを作る');
+  assert.ok(Object.keys((await decodeSnapshot(e.store.reportSnaps[0].data)).sets).length === 4, '写しを作る');
   e.tick(4000);
   e.fake.down = true;
   // 1 人目: start.gg に繋がらない → 写しで確かめて D1 に残す

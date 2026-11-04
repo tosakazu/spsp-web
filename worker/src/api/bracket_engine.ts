@@ -101,6 +101,9 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
   // 次のフェーズのシード → それに入る (試合, 1 = 勝者 | 2 = 敗者)。start.gg が試合ごとに返す (winnerProgressionSeed / loserProgressionSeed)
   const seedFrom = new Map<string, { set: string; p: 1 | 2 }>();
   for (const s of Object.values(b.sets)) { if (s.wn) seedFrom.set(s.wn, { set: s.id, p: 1 }); if (s.ln) seedFrom.set(s.ln, { set: s.id, p: 2 }); }
+  // ブロック → 試合 (ブロックごとに全試合をなめないように。3000 人規模で 2 乗にならない)
+  const setsOfGroup = new Map<string, BSet[]>();
+  for (const s of Object.values(b.sets)) { const a = setsOfGroup.get(s.g); if (a) a.push(s); else setsOfGroup.set(s.g, [s]); }
   const seedsOfGroup = new Map<string, BSeed[]>();
   for (const s of Object.values(b.seeds)) { const a = seedsOfGroup.get(s.g); if (a) a.push(s); else seedsOfGroup.set(s.g, [s]); }
 
@@ -194,8 +197,7 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
     // 出口 = どの (行う) 試合にも使われない (試合, 1|2)
     const exits: { pl: number; occ: Occ; rank: number }[] = [];
     const proj = projected(g);
-    for (const s of Object.values(b.sets)) {
-      if (s.g !== g) continue;
+    for (const s of setsOfGroup.get(g) || []) {
       const st = stateOf(s.id);
       if (st.void) continue;
       for (const p of [1, 2] as const) {
@@ -242,7 +244,7 @@ export function resolve(b: Bracket, winners: Record<string, string | null | unde
       memo.set(id, r);
       return r;
     };
-    for (const s of Object.values(b.sets)) if (s.g === g) { const m = run(s.id); res.set(s.id + '#1', m[0]); res.set(s.id + '#2', m[1]); }
+    for (const s of setsOfGroup.get(g) || []) { const m = run(s.id); res.set(s.id + '#1', m[0]); res.set(s.id + '#2', m[1]); }
     return res;
   };
 

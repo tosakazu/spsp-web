@@ -489,15 +489,19 @@ export class D1Store implements Store {
 
   async getReportSnapshotMeta(code: string): Promise<{ synced_ms: number; full: boolean; sets: number } | null> {
     const r = await this.db.prepare(
-      `SELECT synced_ms, json_extract(data, '$.full') AS full, (SELECT COUNT(*) FROM json_each(report_snapshots.data, '$.sets')) AS n
+      // 圧縮した写し ('z1:'、0022) は列から。古い行 (JSON) は中身から
+      `SELECT synced_ms,
+         CASE WHEN substr(data, 1, 3) = 'z1:' THEN m_full ELSE json_extract(data, '$.full') END AS full,
+         CASE WHEN substr(data, 1, 3) = 'z1:' THEN m_sets ELSE (SELECT COUNT(*) FROM json_each(report_snapshots.data, '$.sets')) END AS n
        FROM report_snapshots WHERE code = ?`).bind(code).first<{ synced_ms: number; full: number | null; n: number }>();
     return r ? { synced_ms: Number(r.synced_ms), full: Number(r.full) === 1, sets: Number(r.n) || 0 } : null;
   }
 
-  async putReportSnapshot(code: string, data: string, syncedMs: number): Promise<void> {
+  async putReportSnapshot(code: string, data: string, syncedMs: number, meta?: { full: boolean; sets: number }): Promise<void> {
+    const full = meta && meta.full ? 1 : 0; const sets = meta ? meta.sets : 0;
     await this.db.prepare(
-      `INSERT INTO report_snapshots (code, data, synced_ms, lock_ms) VALUES (?1, ?2, ?3, 0)
-       ON CONFLICT (code) DO UPDATE SET data = ?2, synced_ms = ?3, lock_ms = 0`).bind(code, data, syncedMs).run();
+      `INSERT INTO report_snapshots (code, data, synced_ms, lock_ms, m_full, m_sets) VALUES (?1, ?2, ?3, 0, ?4, ?5)
+       ON CONFLICT (code) DO UPDATE SET data = ?2, synced_ms = ?3, lock_ms = 0, m_full = ?4, m_sets = ?5`).bind(code, data, syncedMs, full, sets).run();
   }
 
   async claimReportSnapshot(code: string, nowMs: number, holdMs: number): Promise<boolean> {

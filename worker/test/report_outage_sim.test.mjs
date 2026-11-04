@@ -12,7 +12,7 @@ import { dispatch } from '../src/api/router.ts';
 import { D1Store } from '../src/db.ts';
 import { SESSION_TTL_MS_DEFAULT, STATE_TTL_MS_DEFAULT } from '../src/config.ts';
 import { issueSessionToken } from '../src/api/session.ts';
-import { candidateFor } from '../src/api/report_outage.ts';
+import { candidateFor, decodeSnapshot } from '../src/api/report_outage.ts';
 
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch (_) { /* skip */ }
@@ -186,8 +186,8 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8, struct = false, s
   assert.ok((await store.getReportSnapshotMeta(code)).full, '写しができた');
   // 構造があるとき: 照合 (計算と start.gg の突き合わせ) まで済んでから障害が起きる前提 (受付を始めてから試合が始まるまでに済む)
   if (struct) {
-    for (let i = 0; i < 30; i++) { const d = JSON.parse((await store.getReportSnapshot(code)).data); if (d.chk) break; tick(46000); await view(1); }
-    assert.ok(JSON.parse((await store.getReportSnapshot(code)).data).chk, '照合が済んだ');
+    for (let i = 0; i < 30; i++) { const d = await decodeSnapshot((await store.getReportSnapshot(code)).data); if (d.chk) break; tick(46000); await view(1); }
+    assert.ok((await decodeSnapshot((await store.getReportSnapshot(code)).data)).chk, '照合が済んだ');
   }
 
   const truth = truthBracket(rand, STRUCT);
