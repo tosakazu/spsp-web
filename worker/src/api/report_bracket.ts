@@ -77,8 +77,9 @@ export function checkSnap(snap: Snapshot, now: number): void {
         continue;
       }
       if (pred === null) continue;
-      if (pred !== actual) bad[s.g] = bad[s.g] || `set ${s.i} slot ${k}: pred ${pred} actual ${actual}`;
-      else ok++;
+      // start.gg は 2 人を枠の前の試合の順と逆に入れることがある (2026-11-05 に 4 万試合で 1 件)。2 人が合っていれば一致とする
+      if (pred === actual || st.occ[1 - k] === actual) ok++;
+      else bad[s.g] = bad[s.g] || `set ${s.i} slot ${k}: pred ${pred} actual ${actual}`;
     }
   }
   snap.chk = { ms: now, ok, bad };
@@ -136,7 +137,13 @@ export function projectFull(snap: Snapshot, extra: Record<string, string>, dqs: 
     const st = r.sets[id];
     if (!trusted.has(s.g) || !st) { sets[id] = s; continue; }
     if (st.void) continue;   // 行わないやり直しのグランドファイナル
-    const sl: SnapSlot[] = s.sl.map((x, k) => (x.e || !real(st.occ[k]) ? x : { ...x, e: st.occ[k], pd: 1 as const }));
+    // 片方の枠だけ start.gg に人がいるとき、その人が計算のもう片方の枠の人なら (逆の順に入っている)、空いている枠にはもう 1 人を入れる
+    const sl: SnapSlot[] = s.sl.map((x, k) => {
+      if (x.e) return x;
+      const other = s.sl[1 - k] ? s.sl[1 - k].e : null;
+      const want = other && other === st.occ[k] ? st.occ[1 - k] : st.occ[k];
+      return real(want) && want !== other ? { ...x, e: want, pd: 1 as const } : x;
+    });
     sets[id] = { ...s, sl };
   }
   // start.gg がまだ次のフェーズを埋めていない (= 計算が要る) ブロックの並びだけ返す

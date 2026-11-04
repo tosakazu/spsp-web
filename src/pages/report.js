@@ -790,7 +790,8 @@ function wireForm(form, m) {
     const st = form.querySelector('[data-form-status]');
     setStatus(st, i18n('report.sending'), 'busy');
     submit.disabled = true;
-    const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
+    // ents = この画面が見ている 2 人の並び (Worker が自分の並びと合わせる。逆なら入れ替え、違えば読み直し)
+    const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result, ents: entsOf(m.slots) });
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
     // offline = start.gg に送れず SPSP に保存した (障害中・運営が指定した試合)
     const sentKind = r.offline ? (r.state === 'conflict' ? 'conflict_offline' : /^manual/.test(r.note || '') && !outageNow() ? 'queued_manual'
@@ -1083,6 +1084,8 @@ function wireMatchActions(root) {
   }
 }
 
+/** 試合の 2 人の並び (出場者 ID)。結果を送るときに付ける (枠の番号の取り違え防止、2026-11-05) */
+const entsOf = (slots) => (Array.isArray(slots) && slots.length === 2 ? slots.map((x) => (x && x.id != null ? String(x.id) : null)) : undefined);
 /** トーナメント表 (start.gg の受付だけ。選手・運営の画面の下に 1 つ。2026-11-05) */
 let BRACKET_VIEW = null;
 function ensureBracketView() {
@@ -2077,7 +2080,7 @@ function manDrawList(sec) {
       const wn = m.slots && m.slots[result.w] ? m.slots[result.w].name : '';
       if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
       setStatus(fst, i18n('report.sending'), 'busy');
-      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: m.set_id, result });
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: m.set_id, result, ents: entsOf(m.slots) });
       setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
       if (x && x.ok) { MAN.fixOpen = null; setTimeout(() => { if (MAN.groups) manLoad(sec, true); manRefresh(); }, 600); }
     },
@@ -2612,7 +2615,7 @@ function renderAdminSets(sets, force) {
           const wn = s.slots && s.slots[result.w] ? s.slots[result.w].name : '';
           if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
           setStatus(fst, i18n('report.sending'), 'busy');
-          const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result });
+          const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: setId, result, ents: entsOf(s.slots) });
           setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
           if (x && x.ok) { ADMIN_FORM_OPEN = null; if (!DEMO) setTimeout(() => refreshAdminSets(true), 800); else setTimeout(() => renderAdminSets(LAST_ADMIN_SETS, true), 800); }
         },

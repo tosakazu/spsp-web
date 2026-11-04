@@ -62,7 +62,8 @@ const DE8 = [
 /** 偽の start.gg: 試合 1000+n、entrant = 選手番号、user = 10+選手番号 */
 /** flaky = 繋がっているときに 503 を返す割合、lost = 書き込みは通ったのに応答が 503 になる割合 */
 /** struct = シード・ブロックの形式も返す (bracket_engine で次の試合を計算できる。2026-11-05) */
-function fakeStartgg(rand = Math.random, flaky = 0, lost = 0, STRUCT = DE8, struct = false) {
+/** swap = 次の試合の 2 人を枠の前の試合の順と逆に入れる割合 (start.gg の実例、2026-11-05) */
+function fakeStartgg(rand = Math.random, flaky = 0, lost = 0, STRUCT = DE8, struct = false, swap = 0) {
   const ent = (i) => ({ id: i, name: 'P' + i, initialSeedNum: i, participants: [{ user: { id: 10 + i } }] });
   const pg = { id: 700, displayIdentifier: '1', phase: { id: 77, name: 'Main', groupCount: 1 }, ...(struct ? { bracketType: STRUCT === DE8 ? 'DOUBLE_ELIMINATION' : 'ROUND_ROBIN' } : {}) };
   const players = Array.from(new Set(STRUCT.flatMap(([, , a, b]) => [a, b]).filter((x) => !Array.isArray(x)))).sort((x, y) => x - y);
@@ -74,12 +75,23 @@ function fakeStartgg(rand = Math.random, flaky = 0, lost = 0, STRUCT = DE8, stru
   }
   const byId = (id) => st.sets.find((s) => String(s.id) === String(id));
   const touch = (s) => { s.updatedAt = ++st.tick; };
+  // 次の試合の枠を前の試合から作り直す。swap の試合は 2 人を逆の順に入れる (枠の前の試合の指定はそのまま)
+  const outOf = (x) => {
+    if (x.prereqType !== 'set') return x.entrant;
+    const pv = byId(x.prereqId);
+    if (!pv || pv.state !== 3) return null;
+    const w = pv.slots.find((y) => y.entrant && y.entrant.id === pv.winnerId);
+    const l = pv.slots.find((y) => y.entrant && y.entrant.id !== pv.winnerId);
+    return x.prereqPlacement === 1 ? (w ? w.entrant : null) : (l ? l.entrant : null);
+  };
   const fill = (s) => {
-    const w = s.slots.find((x) => x.entrant && x.entrant.id === s.winnerId);
-    const l = s.slots.find((x) => x.entrant && x.entrant.id !== s.winnerId);
-    for (const n of st.sets) for (const x of n.slots) {
-      if (x.prereqType !== 'set' || String(x.prereqId) !== String(s.id)) continue;
-      x.entrant = s.state === 3 ? (x.prereqPlacement === 1 ? w.entrant : l.entrant) : null;
+    for (const n of st.sets) {
+      if (!n.slots.some((x) => x.prereqType === 'set' && String(x.prereqId) === String(s.id))) continue;
+      if (n.swap === undefined && swap) n.swap = rand() < swap;
+      const logical = n.slots.map((x) => (x.prereqType === 'set' ? outOf(x) : x.seedEntrant || x.entrant));
+      const both = logical[0] && logical[1];
+      n.slots[0].entrant = n.swap && both ? logical[1] : logical[0];
+      n.slots[1].entrant = n.swap && both ? logical[0] : logical[1];
       touch(n);
     }
   };
@@ -147,9 +159,9 @@ function truthBracket(rand, STRUCT = DE8) {
 
 const R2 = (w) => ({ w, g: [{ w, c: [null, null], s: null }, { w, c: [null, null], s: null }] });
 
-async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8, struct = false) {
+async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8, struct = false, swap = 0) {
   const rand = rng(seed);
-  const fake = fakeStartgg(rng(seed * 7919), flaky, lost, STRUCT, struct);
+  const fake = fakeStartgg(rng(seed * 7919), flaky, lost, STRUCT, struct, swap);
   const store = DatabaseSync ? sqliteStore() : null;
   const cfg = { clientId: 'cid', redirectUri: 'https://x/callback.html', clientSecret: 'CS', sessionSecret: 'sess-' + seed,
     sessionTtlMs: SESSION_TTL_MS_DEFAULT, stateTtlMs: STATE_TTL_MS_DEFAULT, tsOffsetMin: 540 };
@@ -186,7 +198,7 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8, struct = false) {
   const report = async (setId, sides, res) => {
     // sides = [選手番号 (側 0), 選手番号 (側 1)]、res.w = 本当の勝者の側
     const r = rand();
-    const send = async (p, result) => { tick(4000); const x = await call({ action: 'report_submit', token: await tok(10 + p), code, set_id: setId, result }); log.push([setId, p, result.w, x.ok ? x.state : x.error.code]); return x; };
+    const send = async (p, result) => { tick(4000); const x = await call({ action: 'report_submit', token: await tok(10 + p), code, set_id: setId, result, ents: sides.map(String) /* 画面が見ている 2 人の並び */ }); log.push([setId, p, result.w, x.ok ? x.state : x.error.code]); return x; };
     if (r < 0.15) {   // 負けた側が間違えて送る → 勝った側が正しく送る → 負けた側が出し直す
       const loser = sides[1 - res.w];
       await send(loser, R2(1 - res.w));
@@ -339,4 +351,12 @@ test('構造 (シード・不戦勝・順位) があれば、障害中も運営�
     }
     assert.strictEqual(manual, 0, '運営の指定は要らない');
     assert.ok(dqs > 10, 'DQ も通った (' + dqs + ')');
+  });
+
+test('構造あり + start.gg が 2 人を逆の順に入れることがある (30%): 照合は通り、復旧後は側を入れ替えて正しい勝者を送る',
+  { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+    const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
+    let manual = 0;
+    for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) manual += (await runOne(8000 + seed, seed % 2 ? 0.1 : 0, seed % 2 ? 0.2 : 0, DE8, true, 0.3)).manual;
+    assert.strictEqual(manual, 0, '運営の指定は要らない');
   });

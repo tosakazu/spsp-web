@@ -580,6 +580,16 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
       const want = [rsl[0] && rsl[0].id != null ? String(rsl[0].id) : null, rsl[1] && rsl[1].id != null ? String(rsl[1].id) : null];
       const have = [rs.set.slots[0] ? rs.set.slots[0].id : null, rs.set.slots[1] ? rs.set.slots[1].id : null];
       if (want[0] && want[1] && have[0] && have[1] && (want[0] !== have[0] || want[1] !== have[1])) {
+        // 同じ 2 人で並びだけ逆 (start.gg が枠の前の試合の順と逆に入れることがある、2026-11-05 に実例): 報告の側と結果を入れ替えて次の回に送る
+        if (want[0] === have[1] && want[1] === have[0]) {
+          for (const sub of await store.listReportSubmissions(ev.code, row.set_id)) {
+            const r0 = parseApplied(sub.result);
+            await store.updateReportSubmission(sub.id as number, row.set_id, sub.side < 0 ? sub.side : 1 - sub.side, r0 ? JSON.stringify(flipResult(r0)) : sub.result);
+          }
+          const ap = parseApplied(row.applied);
+          await store.casReportSet({ ...row, slots: JSON.stringify([rsl[1], rsl[0]]), applied: ap ? JSON.stringify(flipResult(ap)) : row.applied, version: row.version + 1, updated_ms: now }, row.version);
+          continue;
+        }
         await markRow(store, row, 'review', 'slot_mismatch', now);
         continue;
       }
@@ -821,6 +831,20 @@ async function setForReport(store: Store, p: Provider, ev: ReportEventRow, setId
   return { set: alt, offline: true, manual: false, before };
 }
 
+/**
+ * 画面が見ていた 2 人の並び (ents = [枠 0 の出場者 ID, 枠 1 の出場者 ID]) と、確かめに使う試合の並びを合わせる (2026-11-05)。
+ * 結果は枠の番号で来るので、並びが違うと勝者が入れ替わる (start.gg は 2 人を枠の前の試合の順と逆に入れることがあり、
+ * 障害中は SPSP の計算の並びと start.gg の並びが違うことがある)。逆なら結果を入れ替え、違う 2 人なら断る。ents が無ければそのまま (古い画面)
+ */
+function alignToSet(set: NSet, ents: unknown, result: Result): { result: Result } | { res: HandlerResult } {
+  if (!Array.isArray(ents) || ents.length !== 2) return { result };
+  const e = ents.map((x) => (x === null || x === undefined ? '' : String(x)));
+  const have = [set.slots[0] ? set.slots[0].id : '', set.slots[1] ? set.slots[1].id : ''];
+  if (e[0] === have[0] && e[1] === have[1]) return { result };
+  if (e[0] === have[1] && e[1] === have[0]) return { result: flipResult(result) };
+  return { res: err('bad_request', '対戦の組み合わせが変わりました。画面を読み直してから送ってください。', 'stale_slots') };
+}
+
 /** action: "report_submit" — 選手が自分の試合の結果を送る */
 export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const sess = await sessionOf(cfg, req, now);
@@ -854,8 +878,10 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
     if (pr.bad === 'score_ft') return err('bad_request', 'この試合は ' + ft + ' 先です。スコアを確かめてください。', 'bad:score_ft');
     return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
   }
+  const al = alignToSet(set, req.ents, pr.result);
+  if ('res' in al) return al.res;
 
-  const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(pr.result), outcome: 'pending' });
+  const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: sess.id, side, ts_ms: now, result: JSON.stringify(al.result), outcome: 'pending' });
   await store.deleteReportPicksForSet(o.ev.code, setId).catch(() => undefined);   // 総当たりの「この人とやる」は報告したら消す
   await store.resolveReportNoshows(o.ev.code, setId, 'reported', null).catch(() => undefined);   // 「見つからない」は結果が来たら解決
   // start.gg に繋がらない (か、運営が指定した試合): D1 に残して、復旧後に送る
@@ -863,7 +889,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
     const q = await queueOffline(store, o.ev.code, set, now, { manual });
     if (!q) { await store.setReportSubmissionOutcome(subId, 'error:busy'); return err('busy', 'ほかの報告と重なりました。もう一度送ってください。', 'busy'); }
     await store.setReportSubmissionOutcome(subId, 'queued:' + q.note);
-    await notifyReport(cfg, store, fetchFn, o.ev, set, { state: q.state as ReportState, note: q.note }, pr.result).catch(() => 0);
+    await notifyReport(cfg, store, fetchFn, o.ev, set, { state: q.state as ReportState, note: q.note }, al.result).catch(() => 0);
     return ok({ set_id: setId, state: q.state, op: 'none', note: q.note, offline: true });
   };
   if (offline) return queue();
@@ -876,7 +902,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
     return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   }
   await store.setReportSubmissionOutcome(subId, r.d.op + (r.d.note ? ':' + r.d.note : ''));
-  await notifyReport(cfg, store, fetchFn, o.ev, set, r.d, pr.result).catch(() => 0);   // 運営への通知 (送れなくても報告は済んでいる)
+  await notifyReport(cfg, store, fetchFn, o.ev, set, r.d, al.result).catch(() => 0);   // 運営への通知 (送れなくても報告は済んでいる)
   return ok({ set_id: setId, state: r.d.state, op: r.d.op, note: r.d.note });
 }
 
@@ -1182,7 +1208,9 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   } else if (kind === 'fix') {
     const pr = parseResult(req.result);
     if ('bad' in pr) return err('bad_request', '結果の形式が正しくありません (' + pr.bad + ')。', 'bad:' + pr.bad);
-    result = pr.result;
+    const al = alignToSet(set, req.ents, pr.result);
+    if ('res' in al) return al.res;
+    result = al.result;
   }
   const label = 'admin_' + (kind === 'fix' && (req.adopt === 0 || req.adopt === 1) ? 'adopt' + req.adopt : kind);
   const subId = await store.insertReportSubmission({ code: o.ev.code, set_id: setId, user_id: uid, side: -1, ts_ms: now, result: result ? JSON.stringify(result) : '', outcome: 'pending' });
