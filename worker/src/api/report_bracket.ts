@@ -45,6 +45,8 @@ export function snapWinners(snap: Snapshot): Record<string, string> {
   return w;
 }
 
+export const VERIFIED_TYPES = new Set(['DOUBLE_ELIMINATION', 'SINGLE_ELIMINATION', 'ROUND_ROBIN']);
+
 const real = (v: string | null): v is string => !!v && v !== BYE && v !== VOID;
 
 /**
@@ -85,7 +87,8 @@ export function checkSnap(snap: Snapshot, now: number): void {
 export function trustedGroups(snap: Snapshot): Set<string> {
   const out = new Set<string>();
   if (!snap.chk || !snapHasStructure(snap)) return out;
-  for (const g of Object.keys(snap.groups)) if (!snap.chk.bad[g]) out.add(g);
+  // 検証した形式だけ (2026-11-05 に終わった大会で確かめた)。スイス等は試合がその場で作られるので計算しない
+  for (const [g, x] of Object.entries(snap.groups)) if (!snap.chk.bad[g] && x.b && VERIFIED_TYPES.has(x.b)) out.add(g);
   return out;
 }
 

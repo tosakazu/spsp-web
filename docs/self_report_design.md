@@ -184,3 +184,20 @@ D1 = migration 0018 (`report_dqs` / `report_noshows` / `report_starts`)。コー
 - 模擬の最後に `unsynced` が空になることを確かめる (各 1000 通り)。
 - 本番に入れるとき: 本番 D1 に `migrations/0019_report_start_sync.sql` を execute --file (ALTER TABLE なので 1 回だけ)。
 - start.gg の大会の管理者一覧 (migration 0020、report_events.sgg_admins / sgg_admins_ms、2026-11-05)。受付を始めたとき・report_join で読み、受付が使われている間 (openEvent) は 10 分に 1 回読み直す。お知らせ (report_notices) は D1 を見るだけで start.gg を読まない。一覧に入っている人は普段のログインだけで運営の画面の導線が出て、開くと運営に加わる。本番に入れるとき: 0020 を execute --file (deploy より先に)。
+
+## 14. ブラケットの構造を計算して進める・トーナメント表 (2026-11-05)
+
+start.gg が止まっていても、運営が次の試合を指定しなくても大会を進められるようにする。コード = worker/src/api/bracket_engine.ts (計算)・report_bracket.ts (写しとのつなぎ)・report.ts (流れ)、画面 = src/pages/report_bracket_view.js (トーナメント表)。
+
+- **何が保証できて、何が保証できないか**
+  - 1 つのブロックの中 (勝者側・敗者側・どの試合で負けたらどこへ落ちるか・不戦勝・グランドファイナルのやり直し) は、start.gg が試合ごとに「どの試合の何位 (1 = 勝者 / 2 = 敗者) が入るか」(slots.prereqType / prereqId / prereqPlacement、不戦勝は `showByes: true` で bye の試合も返る) を返すので、計算で完全に決まる。やり直しは「グランドファイナルの勝者が敗者側の試合 (round < 0) から来た枠の人」のときだけ (前のフェーズから敗者側に直接入る人がいるので「このブロックで負けたか」では決めない)。
+  - 前のフェーズからの通過 (seeds.progressionSource = 元のブロック・順位・同じ順位の中の順番 originOrder) のうち、**同じ順位の人の並べ方は start.gg が API で返さない**。終わった大会で確かめたきまり (上位シードが全部勝ったときにその出口に来るシード番号の順、敗者側の試合で負けて抜ける出口だけはその試合の勝者に来るシード番号の順) で計算はするが、**障害中に使うのは運営が並びを確かめたブロックだけ** (運営の画面「前のフェーズからの通過順の確認」、D1 `report_prog_ok` = migration 0021。確かめた並びと計算が違えば確かめ直し)。同じ順位が 1 人だけの通過 (1 位通過など) は確かめなくても埋める。
+  - 総当たりの順位 (同率の決め方は大会の設定による) は計算しない。総当たりから次のフェーズへは今までどおり運営の「次の試合を指定」。
+  - スイスなど試合がその場で作られる形式は計算しない (信用するのは DOUBLE_ELIMINATION / SINGLE_ELIMINATION / ROUND_ROBIN だけ)。
+- **検証**: tools/bracket_verify/verify.mjs = 終わった大会の sets / seeds から「最初のフェーズのシードと各試合の勝者だけ」で全試合の対戦者・各ブロックの順位・次のフェーズのシードを計算して start.gg と比べる。2026-11-05 時点の結果は下の表。worker/test/bracket_engine.test.mjs = 実例 3 つ (fixtures/startgg_brackets.json、出場者は ID だけ) と、やり直し・確かめ待ち・写しの照合のテスト。report_outage_sim.test.mjs に「構造あり」(シード・形式を返す偽の start.gg) を足し、障害を挟んで運営の指定 0 回で全試合が正しく入ることを 300 通りで確かめた。
+- **写しに足したもの**: 不戦勝の試合 (`showByes: true`)・勝ったときの順位 (wp)・試合の記号 (x)・ブロックの形式 (groups.b)・シード (seeds = フェーズごとに 1 周に 1 回、`SpspReportSeeds`)。読めなかったシードのページは次の回に読み直す (試合の写しの成否には数えない)。
+- **照合** (`checkSnap`、写すたび): 計算した対戦者と start.gg の対戦者を比べ、start.gg に人がいる枠が計算と違えば、そのブロックは信用しない (`snap.chk.bad`)。障害中もそのブロックは計算で埋めない。start.gg が遅れているだけ (計算でいる・start.gg に未だいない) は食い違いにしない。
+- **障害中** (`projectedSnap`): start.gg の結果 + SPSP にある未反映の結果 + まだ入れていない DQ を勝者として計算し、start.gg にまだ出ていない対戦者を埋めた写し (pd = 1) を、選手の画面 (今の試合) と報告の確かめに使う。報告は start.gg の本物の試合 ID に残す (`queued`)。繋がっていても、start.gg では相手が空き (前の試合が SPSP にだけある) で計算では決まっている試合は受け付ける。
+- **復旧後** (`flushQueued`): 前の試合から先に送る (写しの前の試合をたどった段数の順)。start.gg でまだ相手が空きの試合は次の回。**SPSP が受け付けたときの 2 人 (枠の順) と start.gg の 2 人が違えば送らない** (結果は枠の番号で持っているので、取り違えると違う人の勝ちになる) → 運営の確認 (`slot_mismatch`)。
+- **トーナメント表** (`report_bracket_view`、選手・運営): D1 の写しを読むだけ (start.gg は読まない)。開いたときだけ読み、開いているあいだは 30 秒ごと。勝者側・敗者側の列 (前の試合をたどった順)、総当たりは表。札 = 対戦中 / SPSP に保存 / 計算。照合が合わなかったブロックはその旨を出す。
+- 本番に入れるとき: 本番 D1 に `migrations/0021_report_prog_ok.sql` を execute --file (deploy より先に)。
