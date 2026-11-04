@@ -339,6 +339,10 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .my-notice .my-notice-item { color:#065f46; }
       .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
+      /* 参加中・結果報告の帯 (赤)。トップと自分のプレイヤーページで同じ色 (2026-11-04 に index.html から移した) */
+      .my-notice.live-notice { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+      .my-notice.live-notice .label { background:#dc2626; color:#fff; }
+      .my-notice.live-notice a.my-notice-item, .my-notice.live-notice .my-notice-item { color:#991b1b; }
       /* 二つ名を N 件入手 ▼ (帯とベルで共通)。押すと新しく入手した二つ名が下に並ぶ */
       .my-notice-titles-toggle { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-align:left; }
       .my-notice-titles-toggle:hover { text-decoration:underline; }
