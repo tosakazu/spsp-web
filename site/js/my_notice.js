@@ -205,6 +205,13 @@ export function render(el, uid, opts) {
         : `<a class="my-notice-item ${it.kind}" href="${page('p/index.html') + '?uid=' + id}">${text(it)}</a>`).join('')}</div>` +
     `<button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}" title="${esc(t('common.close'))}">×</button>`;
   el.style.display = '';
+  // リンク先が 1 つ (順位・Lv だけ、二つ名の一覧が無い) なら帯の中全体を押せる (× と二つ名の開閉は除く。2026-11-04)
+  const one = !o.selfPage && list.every(it => it.kind !== 'titles') ? page('p/index.html') + '?uid=' + id : null;
+  el.style.cursor = one ? 'pointer' : '';
+  el.onclick = one ? (/** @type {MouseEvent} */ e) => {
+    if (/** @type {Element} */ (e.target).closest('a, button')) return;
+    location.href = one;
+  } : null;
   bindTitles(el, uid, editHref);
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', ev => {

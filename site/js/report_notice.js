@@ -88,6 +88,16 @@ async function loadItems() {
   return { events, conflicts };
 }
 
+/** お知らせの帯の中全体を押せるように (大会が 1 つのとき。2 つ以上なら大会名のリンクだけ)。2026-11-04
+ * @param {HTMLElement} el @param {string | null} href */
+function tapWhole(el, href) {
+  el.style.cursor = href ? 'pointer' : '';
+  el.onclick = href ? (e) => {
+    if (/** @type {Element} */ (e.target).closest('a, button')) return;   // リンク・ボタンそのものはふつうに
+    location.href = href;
+  } : null;
+}
+
 /** @param {HTMLElement | null} el @param {Promise<{ events: any[], conflicts: any[] }>} [pre] 読んだもの (無ければ読む) */
 export async function show(el, pre) {
   if (!el) return;
@@ -98,6 +108,7 @@ export async function show(el, pre) {
   const links = events.map((e) => `<a class="my-notice-item" href="${escapeHtml(reportHref(e.code, e.demo))}">${escapeHtml(e.name || '')}`
     + (n.get(e.code) ? ` <span class="d">⚠ ${escapeHtml(t('report.notice_conflict', { n: n.get(e.code) }))}</span>` : '') + `</a>`);
   el.innerHTML = `<span class="label">${escapeHtml(t('report.notice_label'))}</span><span class="my-notice-items">${links.join('')}</span>`;
+  tapWhole(el, events.length === 1 ? reportHref(events[0].code, events[0].demo) : null);
   el.style.display = '';
 }
 
