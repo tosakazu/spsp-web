@@ -4,7 +4,8 @@
 //   normName(s)                 名前の正規化 (NFKC・小文字・カタカナ→ひらがな・記号と空白を除く)
 //   romaji(s)                   ひらがな (normName 済み) → ローマ字 (連携アカウントの名前と比べる用。簡易ヘボン式)
 //   entrantFromNode(node)       start.gg の entrants のノード → Entrant
-//   findCandidates(entrants)    候補の組 [{ a, b, kinds }] (a < b は entrants の添字)
+//   findCandidates(entrants, merges)  候補の組 [{ a, b, kinds }] (a < b は entrants の添字)。merges = data/user_merges.json (旧 uid → 新 uid)
+//   canonUid(uid, merges)       統合後の uid (統合していなければそのまま)
 //   summarize(player, tourPref) SPSP の選手レコード → History (部門ごとの勝敗・期間・地域・対戦相手)
 //   compare(A, B, kinds, now)   組の判定 { verdict, reasons, shared, sameDay }
 //   discordCreated(id)          Discord の ID (snowflake) → 作成日時 (ms)。読めなければ null
@@ -16,7 +17,8 @@
  * @typedef {{ id: string, date: string, name: string, event: string, nent: number | null, place: number | null, w: number, l: number, dq: boolean, played: boolean, pref: string | null }} HistEvent */
 /** @typedef {{ events: Map<string, HistEvent>, count: number, first: string | null, last: string | null, prefs: Record<string, number>, mainPref: string | null, opps: Set<number>, chars: string[] }} History */
 /** 組の種類: same_name 同じ名前 (かなと英字はローマ字で) / similar_name 名前が 1 文字違い / link_id 同じ Discord アカウント (ID) / link_name 連携アカウントの名前が同じ (種類は問わない)
- * @typedef {'same_name' | 'similar_name' | 'link_id' | 'link_name'} Kind */
+ *   / merged SPSP で同じ人として統合済みのアカウント (data/user_merges.json)
+ * @typedef {'same_name' | 'similar_name' | 'link_id' | 'link_name' | 'merged'} Kind */
 /** 判定: same 同一人物 / likely 可能性が高い / unknown 判断できない / prob_diff たぶん別人 / diff 別人
  * @typedef {'same' | 'likely' | 'unknown' | 'prob_diff' | 'diff'} Verdict */
 /** @typedef {{ code: string, params?: Record<string, string | number> }} Reason */
@@ -106,8 +108,16 @@ const LINK_NAME_MIN = 4;
 /** 連携アカウントの名前の正規化 (旧 Discord の #1234 と記号を除く) @param {string} name */
 function linkName(name) { return normName(String(name).replace(/#\d{4}$/, '')); }
 
-/** @param {Entrant[]} entrants @returns {{ a: number, b: number, kinds: Kind[] }[]} */
-export function findCandidates(entrants) {
+/** 統合後の uid (data/user_merges.json は旧 uid → 新 uid、連鎖は解決済み)。統合していなければそのまま
+ * @param {number} uid @param {Record<string, number>} [merges] */
+export function canonUid(uid, merges = {}) {
+  const to = Number(merges[String(uid)]);
+  return to || uid;
+}
+
+/** @param {Entrant[]} entrants @param {Record<string, number>} [merges] data/user_merges.json (旧 uid → 新 uid)
+ * @returns {{ a: number, b: number, kinds: Kind[] }[]} */
+export function findCandidates(entrants, merges = {}) {
   /** @type {Map<string, Set<Kind>>} */
   const pairs = new Map();
   /** @param {number} i @param {number} j @param {Kind} k */
@@ -158,6 +168,17 @@ export function findCandidates(entrants) {
   for (const [k, idx] of linkIdx) {
     if (idx.length < 2) continue;
     for (let x = 0; x < idx.length; x++) for (let y = x + 1; y < idx.length; y++) add(idx[x], idx[y], k.startsWith('id:') ? 'link_id' : 'link_name');
+  }
+  // 3. SPSP で統合済み (旧アカウントと新アカウントの両方で申し込んだ)。名前も連携も違っていても拾う
+  /** @type {Map<number, number[]>} */
+  const byCanon = new Map();
+  entrants.forEach((e, i) => {
+    if (e.userId == null) return;
+    const c = canonUid(e.userId, merges);
+    const l = byCanon.get(c) || []; l.push(i); byCanon.set(c, l);
+  });
+  for (const idx of byCanon.values()) {
+    for (let x = 0; x < idx.length; x++) for (let y = x + 1; y < idx.length; y++) add(idx[x], idx[y], 'merged');
   }
   return [...pairs].map(([k, s]) => {
     const [a, b] = k.split(',').map(Number);
@@ -248,6 +269,8 @@ export function compare(A, B, kinds, now = Date.now()) {
   const shared = [];
   /** @type {{ a: HistEvent, b: HistEvent }[]} */
   const sameDay = [];
+  // 統合済み: 運営が同じ人と確かめたもの。出場記録は統合後の 1 人分 (両方とも同じ) なので、ほかの判定はしない
+  if (kinds.includes('merged')) return { verdict: 'same', reasons: [{ code: 'merged' }], shared, sameDay };
   if (A.hist && B.hist) {
     for (const [id, ea] of A.hist.events) { const eb = B.hist.events.get(id); if (eb) shared.push({ a: ea, b: eb }); }
     /** @type {Map<string, HistEvent[]>} */
@@ -340,7 +363,7 @@ function distinctLinks(a, b) {
 /** 判定の並び (確認が要るものが先) */
 export const VERDICT_ORDER = /** @type {Verdict[]} */ (['same', 'likely', 'unknown', 'prob_diff', 'diff']);
 
-const API = { normName, romaji, entrantFromNode, findCandidates, prefOf, summarize, discordCreated, compare, VERDICT_ORDER };
+const API = { normName, romaji, entrantFromNode, canonUid, findCandidates, prefOf, summarize, discordCreated, compare, VERDICT_ORDER };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspDupeCheck = API;
 export default API;

@@ -137,3 +137,18 @@ test('prefOf: 都道府県名・ローマ字・市の名前', () => {
   assert.strictEqual(D.prefOf(''), null);
   assert.strictEqual(D.prefOf('Grand Rapids'), null);
 });
+
+test('findCandidates / compare: SPSP で統合済みの 2 アカウント → 名前も連携も違っても同一人物', () => {
+  const merges = { 11: 22, 33: 22 };
+  const es = [E(11, 'OldName'), E(22, 'NewName'), E(33, 'Third'), E(44, 'Other')];
+  assert.deepStrictEqual(j(D.findCandidates(es)), []);
+  assert.deepStrictEqual(j(D.findCandidates(es, merges)), [
+    { a: 0, b: 1, kinds: ['merged'] }, { a: 0, b: 2, kinds: ['merged'] }, { a: 1, b: 2, kinds: ['merged'] }]);
+  assert.strictEqual(D.canonUid(11, merges), 22);
+  assert.strictEqual(D.canonUid(44, merges), 44);
+  // 記録は統合後の 1 人分 (両方とも同じ) なので、同じ部門で試合をしていても別人にしない
+  const rows = [[1, '2026-01-01', 2, 1], [2, '2026-02-01', 1, 1]];
+  const r = D.compare(side(es[0], rows), side(es[1], rows), ['merged', 'same_name'], NOW);
+  assert.strictEqual(r.verdict, 'same');
+  assert.deepStrictEqual(j(r.reasons), [{ code: 'merged' }]);
+});
