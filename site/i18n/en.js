@@ -497,6 +497,7 @@ window.SPSP_I18N.en = {
   'live.next': 'Next',
   'live.playing': 'Playing',
   'live.tbd': 'TBD',
+  'live.cand': '{n} possible (by seed):',
   'live.in_class': 'in {name}',
   'live.class_out': 'out of {name}',
   'live.updated': 'Updated {time}',

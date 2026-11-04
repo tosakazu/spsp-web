@@ -49,6 +49,9 @@ const lastPreds = new Map();
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
 
+/** 次の相手の候補をさかのぼる段数 (3 段 = 最大 8 人。結果報告の画面と同じ) */
+const CAND_DEPTH = 3;
+
 /** @param {string} url */
 async function getJson(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -152,6 +155,18 @@ function setsHtml(doc, myId, opts, hasPage, pred) {
   const ents = doc.entrants || {};
   const me = ents[myId] || {};
   const pSeed = me.seed;
+  /** @type {Map<string, any>} */
+  const setById = new Map((doc.sets || []).map((/** @type {any} */ x) => [String(x.id), x]));
+  /** 相手の枠 (s の k 番目) に来うる人: 枠の前の試合の 2 人、決まっていなければさらに前へ (CAND_DEPTH 段まで。結果報告の候補と同じ)
+   * @param {any} s @param {number} k @param {number} depth @param {Set<string>} out */
+  const candOf = (s, k, depth, out) => {
+    const pre = s.pre && s.pre[k];
+    const ps = pre ? setById.get(String(pre[0])) : null;
+    if (!ps || depth <= 0) return;
+    (ps.e || [null, null]).forEach((/** @type {any} */ id, /** @type {number} */ j) => {
+      if (id != null) { if (String(id) !== myId) out.add(String(id)); } else candOf(ps, j, depth - 1, out);
+    });
+  };
   const row = (/** @type {any} */ s) => {
     const i = (s.e || []).map(String).indexOf(myId);
     const oppId = s.e[1 - i];
@@ -173,6 +188,23 @@ function setsHtml(doc, myId, opts, hasPage, pred) {
       if (uf > 0) ufHtml = `<div style="font-size:10px;line-height:1.1;margin-top:1px"><span style="color:#16a34a;font-weight:600">+${uf}</span> <span style="color:#9ca3af">UF</span></div>`;
     }
     let oppHtml = `<span class="dim">${t('live.tbd')}</span>`;
+    let candHtml = '';
+    if (!opp && s.winner == null && oppId == null) {
+      // 相手が未定: 候補をシード順に (2026-11-04)
+      /** @type {Set<string>} */
+      const ids = new Set();
+      candOf(s, 1 - i, CAND_DEPTH, ids);
+      const cands = [...ids].map((id) => ents[id]).filter(Boolean).sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+      if (cands.length) {
+        const chips = cands.map((/** @type {any} */ c) => {
+          const name = escapeHtml(shortName(c.tag || c.name || ''));
+          const emoji = c.uid != null && opts.emojiOf ? opts.emojiOf(c.uid) : '';
+          const link = c.uid != null && hasPage && hasPage(c.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, c.uid, name) : name;
+          return `<span class="live-cand-p">${emoji ? emoji + ' ' : ''}${link}${c.seed != null ? ` <span class="m-seed">#${c.seed}</span>` : ''}</span>`;
+        });
+        candHtml = `<div class="live-cand"><span class="dim">${escapeHtml(t('live.cand', { n: cands.length }))}</span> ${chips.join('<span class="dim"> · </span>')}</div>`;
+      }
+    }
     if (opp) {
       const name = escapeHtml(shortName(opp.tag || opp.name || ''));
       const emoji = opp.uid != null && opts.emojiOf ? opts.emojiOf(opp.uid) : '';
@@ -185,7 +217,7 @@ function setsHtml(doc, myId, opts, hasPage, pred) {
         `<span class="m-player"><div>${escapeHtml(opts.name || '')}</div>${pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : ''}</span>` +
         `<span class="m-score" style="color:${color};display:inline-block;text-align:center"><div>${score}</div>${ufHtml}</span>` +
         `<span class="m-opp"><div>${oppHtml}</div>${opp && opp.seed != null ? `<div class="m-seed">#${opp.seed}</div>` : ''}</span>` +
-      `</span>${s.winner == null ? ifWinHtml(ifWin[String(s.id)]) : deltaHtml(perSet[String(s.id)], String(s.winner) === myId)}</div>`;
+      `</span>${s.winner == null ? ifWinHtml(ifWin[String(s.id)]) : deltaHtml(perSet[String(s.id)], String(s.winner) === myId)}</div>` + candHtml;
   };
   // フェーズが 2 つ以上なら境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」
   // (下位クラスに回ったときは「Bクラス」のように名前だけ)
