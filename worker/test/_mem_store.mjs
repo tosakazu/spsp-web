@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; this.reportPicks = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -281,6 +281,47 @@ export class MemStore {
   async listReportSubmissions(code, setId) {
     this._rep(); return this.reportSubs.filter((x) => x.code === code && x.set_id === setId).map((x) => ({ ...x }));
   }
+
+  async updateReportSubmission(id, setId, side, result) { this._rep(); const r = this.reportSubs.find((x) => x.id === id); if (r) Object.assign(r, { set_id: setId, side, result }); }
+  async deleteReportSet(code, setId) { this._rep(); this.reportSets = this.reportSets.filter((x) => !(x.code === code && x.set_id === setId)); }
+  async getReportHealth(kind) { this._rep(); const r = this.reportHealth.find((x) => x.kind === kind); return r ? { ...r } : null; }
+  async putReportHealth(row) { this._rep(); this.reportHealth = this.reportHealth.filter((x) => x.kind !== row.kind).concat([{ ...row }]); }
+  async claimReportProbe(kind, nowMs, gapMs) {
+    this._rep(); const r = this.reportHealth.find((x) => x.kind === kind);
+    if (!r || !(r.probe_ms < nowMs - gapMs)) return false; r.probe_ms = nowMs; return true;
+  }
+  async getReportSnapshot(code) { this._rep(); const r = this.reportSnaps.find((x) => x.code === code); return r ? { ...r } : null; }
+  async getReportSnapshotMeta(code) {
+    this._rep(); const r = this.reportSnaps.find((x) => x.code === code);
+    if (!r) return null;
+    let d = {}; try { d = JSON.parse(r.data); } catch (_) { d = {}; }
+    return { synced_ms: r.synced_ms, full: d.full === true, sets: d.sets ? Object.keys(d.sets).length : 0 };
+  }
+  async putReportSnapshot(code, data, syncedMs) {
+    this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0 }]);
+  }
+  async claimReportSnapshot(code, nowMs, holdMs) {
+    this._rep(); let r = this.reportSnaps.find((x) => x.code === code);
+    if (!r) { r = { code, data: '{}', synced_ms: 0, lock_ms: 0 }; this.reportSnaps.push(r); }
+    if (!(r.lock_ms < nowMs - holdMs)) return false; r.lock_ms = nowMs; return true;
+  }
+  async releaseReportSnapshot(code) { this._rep(); for (const x of this.reportSnaps) if (x.code === code) x.lock_ms = 0; }
+  async insertReportManual(row) { this._rep(); const id = this.reportManual.length + 1; this.reportManual.push({ ...row, id }); return id; }
+  async getReportManual(code, id) { this._rep(); const r = this.reportManual.find((x) => x.code === code && x.id === id); return r ? { ...r } : null; }
+  async listReportManual(code) { this._rep(); return this.reportManual.filter((x) => x.code === code).sort((a, b) => b.id - a.id).map((x) => ({ ...x })); }
+  async updateReportManual(code, id, status, setId, nowMs) {
+    this._rep(); for (const x of this.reportManual) if (x.code === code && x.id === id) Object.assign(x, { status, set_id: setId, updated_ms: nowMs });
+  }
+  async listReportManualForUser(userId, code) {
+    this._rep(); return this.reportManual.filter((x) => x.code === code && x.status === 'open' && x.users.includes('|' + userId + '|')).sort((a, b) => b.id - a.id).map((x) => ({ ...x }));
+  }
+
+  async putReportPick(code, userId, setId, nowMs) {
+    this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.user_id === userId));
+    if (setId) this.reportPicks.push({ code, user_id: userId, set_id: setId, ts_ms: nowMs });
+  }
+  async deleteReportPicksForSet(code, setId) { this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.set_id === setId)); }
+  async listReportPicks(code, sinceMs) { this._rep(); return this.reportPicks.filter((x) => x.code === code && x.ts_ms >= sinceMs).map(({ user_id, set_id, ts_ms }) => ({ user_id, set_id, ts_ms })); }
 
   async reportSubmissionActivity(userId, sinceMs) {
     this._rep();

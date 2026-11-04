@@ -6,6 +6,7 @@
 import type { FetchFn } from './oauth.ts';
 import { startggGql } from './class_bracket.ts';
 import type { NSet, NSlot, Result, Side } from './report_logic.ts';
+import { findStartggSet } from './report_outage.ts';
 
 /** 下位クラスのフェーズ・イベントの名前 (site/js/live_fetch.js の LOWER_CLASS_NAME_PAT と同じ) */
 export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z])[BCDE][\s_\-]*class(?![A-Za-z])/i;
@@ -19,6 +20,8 @@ export interface Provider {
   readSet(setId: string): Promise<{ ok: true; set: NSet } | { ok: false; code: 'not_found' | 'provider_error'; note: string }>;
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
+  /** 運営が指定した 2 人の、まだ結果の無い試合を探す (start.gg だけ。report_outage.ts) */
+  findSet?(ids: [string, string], side: 'w' | 'l' | 'r' | 'g', exclude?: Set<string>): Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }>;
 }
 
 const SET_QUERY = `query SpspReportSet($id: ID!) {
@@ -248,6 +251,9 @@ export function startggProvider(fetchFn: FetchFn, token: string, eventId: string
     },
     reset(set) {
       return mutate(RESET_MUTATION, { setId: set.id });
+    },
+    findSet(ids, side, exclude) {
+      return findStartggSet(fetchFn, token, eventId, ids, side, exclude);
     },
   };
 }

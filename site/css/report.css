@@ -577,3 +577,35 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-apply-help dt { font-weight: 700; color: #374151; margin-top: 4px; }
 .rp-apply-help dd { margin: 0; }
 .rp-settings .rp-apply label.rp-radio { padding: 6px 10px; align-items: center; }
+
+/* start.gg に繋がらないとき (docs/self_report_design.md §11): 未反映の帯・状態、運営の「次の試合を指定」 */
+.rp-state-queued, .rp-tag.rp-state-queued { background: #fefce8; border-color: #fde047; }
+.rp-adm-row.rp-state-queued { border-color: #fde047; background: #fefce8; }
+.rp-outage-sub { font-weight: 400; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+.rp-note { color: #854d0e; font-size: 12px; margin-top: 4px; }
+.rp-manual > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.rp-mrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.rp-mrow select, .rp-mrow input[type="text"] { font: inherit; padding: 4px 6px; }
+.rp-mside label { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; }
+.rp-mhelp { margin: 0 0 6px; }
+.rp-mpicks { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: start; }
+.rp-mvs { font-weight: 700; padding-top: 8px; color: #b91c1c; }
+.rp-minput { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; }
+.rp-mcands { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 260px; overflow-y: auto; }
+.rp-mcand { text-align: left; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer; }
+.rp-mcand:hover, .rp-mcand:focus { border-color: #b91c1c; }
+.rp-mchosen { padding: 6px 8px; border: 1px solid #b91c1c; border-radius: 8px; background: #fef2f2; }
+.rp-mlist { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.rp-mitem.rp-m-cancelled { opacity: .6; }
+@media (max-width: 560px) { .rp-mpicks { grid-template-columns: 1fr; } .rp-mvs { padding: 0; text-align: center; } }
+.rp-msnap { margin: 0 0 6px; }
+.rp-mfix { margin-top: 8px; }
+.rp-mexport-text { width: 100%; box-sizing: border-box; font: 12px/1.5 ui-monospace, monospace; margin-top: 6px; }
+/* 総当たり: 対戦相手を選ぶ */
+.rp-rr-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.rp-rr-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; text-align: left; font: inherit; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; cursor: pointer; }
+.rp-rr-item:hover, .rp-rr-item:focus { border-color: #b91c1c; }
+.rp-rr-tag { margin-left: auto; }
+.rp-rr-picked_me { border-color: #b91c1c; background: #fef2f2; }
+.rp-rr-busy { opacity: .65; }
+.rp-rr-cur { font-size: 13px; margin-bottom: 8px; }

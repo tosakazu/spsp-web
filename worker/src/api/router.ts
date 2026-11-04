@@ -28,7 +28,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportBracket, handleReportHeldExport, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -164,6 +164,17 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleReportManagerRemove(ctx.cfg, ctx.store, r, now); break;
       case 'report_stop':
         res = await handleReportStop(ctx.cfg, ctx.store, r, now); break;
+      // start.gg に繋がらないあいだに運営が次の試合を指定する (report.ts、docs/self_report_design.md §11)
+      case 'report_bracket':
+        return (await handleReportBracket(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_held_export':
+        return (await handleReportHeldExport(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_pick':
+        return (await handleReportPick(ctx.cfg, ctx.store, r, now)).body;   // 総当たりの「この人とやる」。記録しない
+      case 'report_manual_create':
+        res = await handleReportManualCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manual_cancel':
+        res = await handleReportManualCancel(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_waitlist':
         return (await handleClassWaitlist(ctx.store)).body;   // 読むだけ (だれでも)。記録しない
       case 'class_done':
@@ -204,7 +215,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
   const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
-    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join'];
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
