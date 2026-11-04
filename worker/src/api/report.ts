@@ -104,17 +104,18 @@ export function roleOf(ev: ReportEventRow, uid: string): 'admin' | 'manager' | n
 }
 // ── start.gg の大会の管理者 (受付を始めた運営のトークンで読む。2026-11-04) ─────────────
 // 普段のログイン (user.identity) だけのほかの管理者にも、人型のメニュー・ホームの帯から運営の画面を出し、開いたら運営に加える。
-// 読むのは受付ごとに 10 分に 1 回まで (この Worker のメモリに置く)。お知らせの 1 回の読みで新しく start.gg を読むのは 3 受付まで
-const SGG_ADMINS_TTL_MS = 10 * 60 * 1000;
-const SGG_ADMINS_FRESH_MAX = 3;
+// お知らせはページを開くたびに呼ばれ、受付のトークンは結果の送信と start.gg の回数制限を分け合うので、受付ごとに 1 分はこの Worker のメモリの結果を使う。
+// お知らせの 1 回の読みで新しく start.gg を読むのは 10 受付まで。運営の画面を開いて加わるとき (report_join) は毎回読み直す (2026-11-05)
+const SGG_ADMINS_TTL_MS = 60 * 1000;
+const SGG_ADMINS_FRESH_MAX = 10;
 const SGG_ADMINS_QUERY = `query SpspReportAdmins($id: ID!) { event(id: $id) { tournament { owner { id } admins { id } } } }`;
 const sggAdminsCache = new Map<string, { ids: string[]; at: number }>();
-/** 受付の大会の管理者 (owner と admins) の start.gg ユーザー ID。読めなければ null。fresh = start.gg を読んでよいか。
+/** 受付の大会の管理者 (owner と admins) の start.gg ユーザー ID。読めなければ null。fresh = start.gg を読んでよいか ('force' = 覚えた結果があっても読む)。
  * token = 開いた受付のトークン (無ければ受付の行から復号する) */
-async function sggAdminsOf(cfg: Config, fetchFn: FetchFn, ev: ReportEventRow, now: number, fresh: boolean, token?: string): Promise<string[] | null> {
+async function sggAdminsOf(cfg: Config, fetchFn: FetchFn, ev: ReportEventRow, now: number, fresh: boolean | 'force', token?: string): Promise<string[] | null> {
   if (ev.kind !== 'startgg' || ev.event_id === null || !ev.token_enc) return null;
   const c = sggAdminsCache.get(ev.code);
-  if (c && now - c.at < SGG_ADMINS_TTL_MS) return c.ids;
+  if (c && fresh !== 'force' && now - c.at < SGG_ADMINS_TTL_MS) return c.ids;
   if (!fresh) return c ? c.ids : null;
   let at = token || '';
   if (!at) {
@@ -1704,7 +1705,7 @@ export async function handleReportJoin(cfg: Config, store: Store, fetchFn: Fetch
   if (o.ev.kind !== 'startgg' || o.ev.event_id === null) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_startgg');
   if (roleOf(o.ev, sess.id) === 'admin') return ok({ joined: false, role: 'admin' });
   // 受付を始めた運営のトークンで大会の管理者一覧を読み、入っていれば運営のログインなしで加える (2026-11-04)
-  const listed = await sggAdminsOf(cfg, fetchFn, o.ev, now, true, o.token);
+  const listed = await sggAdminsOf(cfg, fetchFn, o.ev, now, 'force', o.token);
   if (listed && listed.includes(sess.id)) return ok(await joinAsAdmin(store, o.ev, sess.id));
   const g = await grantOf(cfg, store, fetchFn, sess.id, now);
   if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
