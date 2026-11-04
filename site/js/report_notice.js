@@ -7,7 +7,8 @@
 import { escapeHtml } from './html.js';
 import SPSPI18n from './i18n.js';
 import SpspLogin from './login.js';
-import SpspLive from './live.js';
+import SpspLiveRoot from './live_root.js';
+const liveRoot = () => SpspLiveRoot.liveRoot();
 import SpspStartggIdentity from './startgg_identity.js';
 import { makeGql } from './live_fetch.js';
 'use strict';
@@ -29,7 +30,7 @@ export function isDemo() {
 
 /** 本人の開催中の大会のイベント ID (速報の一覧) @param {string} uid */
 async function liveEventIds(uid) {
-  const root = SpspLive.liveRoot();
+  const root = liveRoot();
   if (!root) return new Set();
   try {
     const r = await fetch(root + 'index.json', { cache: 'no-cache' });
@@ -49,8 +50,22 @@ async function myStartggEvents() {
   } catch (e) { return new Set(); }
 }
 
+/** 同じページで 1 回だけ読む (トップの帯・人型のメニューで共有)。ログインし直したら読み直す
+ * @type {{ key: string, p: Promise<{ events: any[], conflicts: any[] }> } | null} */
+let MEMO = null;
 /** @returns {Promise<{ events: any[], conflicts: any[] }>} */
-export async function items() {
+export function items() {
+  const s = SpspLogin.session();
+  const key = (isDemo() ? 'demo:' : '') + (s ? s.token : '');
+  if (!MEMO || MEMO.key !== key) MEMO = { key, p: loadItems() };
+  return MEMO.p;
+}
+
+/** 報告ページへのリンク @param {any} e items().events の 1 つ */
+export function hrefOf(e) { return reportHref(e.code, e.demo); }
+
+/** @returns {Promise<{ events: any[], conflicts: any[] }>} */
+async function loadItems() {
   if (isDemo()) {
     // 見本: 受付中の大会 2 つ (片方は自分の試合で報告が食い違っている)
     return { events: [{ code: 'demo1', name: t('report.demo.tour1'), demo: 'match' }, { code: 'demo2', name: t('report.demo.tour2'), demo: 'conflict' }],
@@ -73,10 +88,10 @@ export async function items() {
   return { events, conflicts };
 }
 
-/** @param {HTMLElement | null} el */
-export async function show(el) {
+/** @param {HTMLElement | null} el @param {Promise<{ events: any[], conflicts: any[] }>} [pre] 読んだもの (無ければ読む) */
+export async function show(el, pre) {
   if (!el) return;
-  const { events, conflicts } = await items();
+  const { events, conflicts } = await (pre || items());
   if (!events.length && !conflicts.length) { el.style.display = 'none'; return; }
   const n = new Map();
   for (const c of conflicts) n.set(c.code, (n.get(c.code) || 0) + 1);
@@ -86,6 +101,6 @@ export async function show(el) {
   el.style.display = '';
 }
 
-const SpspReportNotice = { items, show, isDemo };
+const SpspReportNotice = { items, show, hrefOf, isDemo };
 W.SpspReportNotice = SpspReportNotice;
 export default SpspReportNotice;

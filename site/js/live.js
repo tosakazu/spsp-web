@@ -23,6 +23,8 @@ import SPSPMatch from './match.js';
 import SPSPFormat from './format.js';
 import SpspLogin from './login.js';
 import SPSPLinks from './links.js';
+import SpspLiveRoot from './live_root.js';
+const { liveRoot, myEvents } = SpspLiveRoot;
 
 const REFRESH_MS = 30 * 1000;
 const BROWSER_MS = 15 * 1000;   // ブラウザが start.gg から読み直す間隔 (何も起きていなければ 1 回の問い合わせ)
@@ -46,16 +48,6 @@ const lastPreds = new Map();
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
 const W = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis);
-
-/** 速報の置き場 (末尾 /)。プレビュー (spsp.games 以外) では ?live=sample で見本 (live/sample/) を読む */
-export function liveRoot() {
-  const root = (W.SPSP && W.SPSP.site && W.SPSP.site.live) || '';
-  if (!root) return '';
-  const host = (W.location && W.location.hostname) || '';
-  const sample = /[?&]live=sample(&|$)/.test((W.location && W.location.search) || '');
-  if (sample && host !== 'spsp.games') return root.replace(/live\/[^/]+\/$/, 'live/sample/');
-  return root;
-}
 
 /** @param {string} url */
 async function getJson(url) {
@@ -413,8 +405,9 @@ function previewUid() {
   return m ? m[1] : null;
 }
 
-/** @param {HTMLElement | null} el */
-export async function showNotice(el) {
+/** @param {HTMLElement | null} el @param {{ skip?: Promise<Set<string>> | Set<string> }} [opts]
+ *  skip = 出さない部門 (結果報告を受付中の大会は結果報告の帯だけにする) */
+export async function showNotice(el, opts = {}) {
   if (!el || !liveRoot()) return;
   let uid = previewUid();
   if (!uid) {
@@ -422,9 +415,10 @@ export async function showNotice(el) {
     if (!sess) return;
     uid = String(sess.user.id);
   }
-  const items = await load(uid);
+  const [items, skip] = await Promise.all([load(uid), Promise.resolve(opts.skip).catch(() => null)]);
   const links = [];
-  for (const { doc } of items) {
+  for (const { summary, doc } of items) {
+    if (skip && skip.has(String((summary && summary.event_id) ?? doc.event_id))) continue;
     const e = entrantOf(doc, uid)[1];
     if (!e) continue;
     const href = SPSPLinks.playerHref((W.SPSP && W.SPSP.langRoot) || '', uid) + '#live-section';
@@ -435,6 +429,6 @@ export async function showNotice(el) {
   el.style.display = '';
 }
 
-const api = { liveRoot, load, render, start, showNotice, isOut };
+const api = { liveRoot, load, render, start, showNotice, myEvents, isOut };
 export default api;
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLive = api;

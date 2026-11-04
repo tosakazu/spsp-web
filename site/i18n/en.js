@@ -41,6 +41,8 @@ window.SPSP_I18N.en = {
   'nav.user.vote': 'Character vote',
   'nav.user.login': 'Log in with start.gg',
   'nav.user.mypage': 'My page',
+  'nav.user.report_ev': 'Report: {name}',
+  'nav.user.live_ev': '🔴 Playing: {name}',
   'nav.user.card_edit': 'Edit card',
   'nav.user.new_titles': '🏷️ New titles ({n})',
   'nav.user.logout': 'Log out',

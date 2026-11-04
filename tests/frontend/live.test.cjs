@@ -16,7 +16,7 @@ function load(search = '', hostname = 'spsp.games', extra = {}) {
   };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
-  for (const m of ['js/match.js', 'js/format.js', 'js/links.js', 'js/live.js']) vm.runInContext(built(m), ctx);
+  for (const m of ['js/match.js', 'js/format.js', 'js/links.js', 'js/live_root.js', 'js/live.js']) vm.runInContext(built(m), ctx);
   return ctx.SpspLive;
 }
 
