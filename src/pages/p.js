@@ -417,6 +417,8 @@ function loadUpcoming() {
 const POOL_PAGE = 24;
 /** 予定の開始時刻を過ぎてもまだ参加予定の欄に出す長さ (start.gg で始まって速報に出るまでのつなぎ) */
 const STARTED_GRACE_MS = 3 * 3600 * 1000;
+/** シード (プール) が出る前でも参加者全員を出す大会の人数の上限 */
+const ENTRANTS_LIST_MAX = 32;
 /** 速報 (live/<地域>/index.json) でこの人が出ている部門の id。読めなければ空 @returns {Promise<Set<string>>} */
 async function loadLiveIds() {
   const root = SpspLive.liveRoot();
@@ -456,11 +458,14 @@ async function buildUpcomingSection() {
     .map((/** @type {string} */ eid) => ({ eid, ev: up.events[eid], counted: passes(up.events[eid]) }))
     .sort((/** @type {any} */ a, /** @type {any} */ b) => a.ev.start_at - b.ev.start_at);
   if (!items.length) return;
-  const [upList, hasPage, I] = await Promise.all([
+  const [upList, CUR, I] = await Promise.all([
     fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null),   // 大会の start.gg の slug
-    SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)).catch(() => null),
+    SPSPPlayerData.loadRanks(SPSP.data).catch(() => null),
     SPSPViews.index().catch(() => null),
   ]);
+  const hasPage = CUR ? (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(CUR, id) : null;
+  /** 全国順位 (無ければ null)。シードが出る前の参加者一覧の並び @param {number} id */
+  const rankOf = (id) => { const r = CUR ? SPSPPlayerData.currentRank(CUR, id) : null; return typeof r === 'number' ? r : null; };
   /** @type {Map<number, string>} */
   const slugOf = new Map(((upList && upList.tournaments) || []).map((/** @type {any} */ x) => [x.tournament_id, x.tournament_slug]));
   // キャラの絵文字: charEmojiOf は全国順位のある人だけ (character_index の main_by_char)。計測中の人は players_index の char 列から
@@ -470,6 +475,21 @@ async function buildUpcomingSection() {
     const r = I && I.get(u);
     const c = r && r.char != null && CHAR_EMOJI ? CHAR_EMOJI[String(r.char)] : null;
     return (c && c.emoji) || '';
+  };
+  /** プレイヤーの一覧 (プールのプレイヤー / 参加者)。POOL_PAGE 人ずつページ送り、見出しの右にページ送り
+   * (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない) @param {any[]} members @param {string} title */
+  const memberList = (members, title) => {
+    const pages = Math.ceil(members.length / POOL_PAGE);
+    const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
+      const em = x.uid != null ? emojiOf(x.uid) : '';
+      const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
+      const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
+      const pg = Math.floor(k / POOL_PAGE);
+      return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+    }).join('');
+    const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
+      `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
+    return `<div class="pe-pool"><div class="pe-pool-h"><span>${escapeHtml(title)}</span>${pager}</div><div class="pe-list">${chips}</div></div>`;
   };
   /** @param {{ eid: string, ev: any, counted: boolean }} it */
   const SEP = '<span class="pe-sep">|</span>';   // 区切り (細く。全角の「・」は幅を取る)
@@ -492,18 +512,12 @@ async function buildUpcomingSection() {
       if (me.seed != null) parts.push(i18n('player.pool.seed', { n: me.seed }));
       const members = (ev.entrants || []).filter((/** @type {any} */ x) => x.pg === me.pg)
         .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
-      const pages = Math.ceil(members.length / POOL_PAGE);
-      const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
-        const em = x.uid != null ? emojiOf(x.uid) : '';
-        const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
-        const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
-        const pg = Math.floor(k / POOL_PAGE);
-        return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
-      }).join('');
-      const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
-        `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
-      // 見出しの右にページ送り (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない)
-      list = `<div class="pe-pool"><div class="pe-pool-h"><span>${escapeHtml(i18n('player.pool.list', { n: members.length }))}</span>${pager}</div><div class="pe-list">${chips}</div></div>`;
+      list = memberList(members, i18n('player.pool.list', { n: members.length }));
+    } else if (ev.entrants && ev.entrants.length && ev.entrants.length <= ENTRANTS_LIST_MAX) {
+      // シードが出る前: 小さい大会は参加者全員 (全国順位の順、順位の無い人は start.gg の順で後ろ)
+      const members = ev.entrants.map((/** @type {any} */ x, /** @type {number} */ k) => ({ x, k, r: x.uid != null ? rankOf(x.uid) : null }))
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.r ?? 1e9) - (b.r ?? 1e9) || a.k - b.k).map((/** @type {any} */ o) => o.x);
+      list = memberList(members, i18n('player.upcoming.entrant_list', { n: members.length }));
     }
     // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
     const slug = slugOf.get(ev.tournament_id) || '';

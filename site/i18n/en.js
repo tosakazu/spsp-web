@@ -506,6 +506,7 @@ window.SPSP_I18N.en = {
   'player.pool.seed': 'Seed #{n}',
   'player.pool.view': 'Bracket',
   'player.pool.list': 'Players in the pool ({n})',
+  'player.upcoming.entrant_list': 'Entrants ({n})',
   'player.upcoming.view_tournament': 'Tournament page',
   'player.simulate': '🔮 Score forecast',
   'player.sec.rivals': '👥 Rivals',
