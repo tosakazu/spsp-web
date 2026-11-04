@@ -202,7 +202,7 @@ export class MemStore {
     const i = this.reportEvents.findIndex((x) => x.kind === row.kind && x.target_id === row.target_id);
     if (i < 0) { this.reportEvents.push({ managers: '[]', ...row }); return; }
     const old = this.reportEvents[i];
-    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms, managers: old.managers || '[]' };
+    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms, managers: old.managers || '[]', sgg_admins: old.sgg_admins || '', sgg_admins_ms: old.sgg_admins_ms || 0 };
   }
 
   async updateReportEventToken(code, tokenEnc, tokenExpMs) {
@@ -211,6 +211,7 @@ export class MemStore {
 
   async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
+  async updateReportEventSggAdmins(code, ids, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { if (ids !== null) x.sgg_admins = ids; x.sgg_admins_ms = ms; } }
   async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
 
   async listReportPresets(userId) {

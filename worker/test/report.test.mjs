@@ -889,6 +889,7 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
   const base = fake.fetch;
   let currentUser = 4242;
   let listAdmins = false;
+  let adminReads = 0;
   fake.fetch = async (url, init) => {
     const b = init && init.body ? String(init.body) : '';
     if (String(url).includes('/gql/') && /SpspReportUser/.test(b)) {
@@ -898,7 +899,7 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
     // 2 人目の運営 (start.gg の大会の管理者 7777) のログイン
     if (String(url).includes('/gql/') && /SpspClassAdmin\b/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser }, event: { id: 9, tournament: { id: 5, owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } }), { status: 200 });
     // 受付のトークンで読む大会の管理者一覧 (2026-11-04)。listAdmins が false なら読めない (権限が無い等) とする
-    if (String(url).includes('/gql/') && /SpspReportAdmins\b/.test(b)) return new Response(JSON.stringify(listAdmins ? { data: { event: { tournament: { owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } } : { errors: [{ message: 'denied' }] }), { status: 200 });
+    if (String(url).includes('/gql/') && /SpspReportAdmins\b/.test(b) && ++adminReads) return new Response(JSON.stringify(listAdmins ? { data: { event: { tournament: { owner: { id: 1 }, admins: [{ id: 4242 }, { id: 7777 }] } } } } : { errors: [{ message: 'denied' }] }), { status: 200 });
     if (String(url).includes('/gql/') && /currentUser/.test(b) && !/tournaments/.test(b)) return new Response(JSON.stringify({ data: { currentUser: { id: currentUser, slug: 'user/x', player: { gamerTag: 'TO' + currentUser } } } }), { status: 200 });
     return base(url, init);
   };
@@ -934,8 +935,20 @@ test('管理者 (報告と設定): 設定・停止以外に管理者の追加も
   listAdmins = true;
   await e.store.updateReportEventAdmins(e.code, (await e.store.getReportEvent(e.code)).admins.split(',').filter((x) => x !== '7777').join(','));
   const S2 = await e.tok(7777);
+  // 一覧は受付の行にある (受付を始めたときは読めなかった)。お知らせは start.gg を読まない
+  let before = adminReads;
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: S2 })).admin, [], 'まだ一覧に無い');
+  assert.strictEqual(adminReads, before, 'お知らせは start.gg を読まない');
+  // 受付が使われると 10 分に 1 回読み直す
+  await e.call({ action: 'report_admin', token: TO, code: e.code });
+  assert.strictEqual(adminReads, before, '10 分たつまでは読まない');
+  e.tick(10 * 60e3 + 1);
+  await e.call({ action: 'report_admin', token: TO, code: e.code });
+  assert.strictEqual(adminReads, before + 1, '10 分たったら読む');
+  before = adminReads;
   const n2 = await e.call({ action: 'report_notices', token: S2 });
   assert.deepStrictEqual(n2.admin.map((x) => [x.code, x.role]), [[e.code, 'admin']], '一覧に入っていれば導線が出る');
+  assert.strictEqual(adminReads, before, 'お知らせは start.gg を読まない');
   const j2 = await e.call({ action: 'report_join', token: S2, code: e.code });
   assert.deepStrictEqual([j2.ok, j2.joined], [true, true], JSON.stringify(j2));
   assert.strictEqual((await e.call({ action: 'report_admin', token: S2, code: e.code })).role, 'admin');

@@ -104,33 +104,26 @@ export function roleOf(ev: ReportEventRow, uid: string): 'admin' | 'manager' | n
 }
 // ── start.gg の大会の管理者 (受付を始めた運営のトークンで読む。2026-11-04) ─────────────
 // 普段のログイン (user.identity) だけのほかの管理者にも、人型のメニュー・ホームの帯から運営の画面を出し、開いたら運営に加える。
-// お知らせはページを開くたびに呼ばれ、受付のトークンは結果の送信と start.gg の回数制限を分け合うので、受付ごとに 1 分はこの Worker のメモリの結果を使う。
-// お知らせの 1 回の読みで新しく start.gg を読むのは 10 受付まで。運営の画面を開いて加わるとき (report_join) は毎回読み直す (2026-11-05)
-const SGG_ADMINS_TTL_MS = 60 * 1000;
-const SGG_ADMINS_FRESH_MAX = 10;
+// 一覧は受付の行 (report_events.sgg_admins、0020) に置く。読むのは受付を始めたとき・運営が加わるとき (report_join) と、
+// 受付が使われている間 (openEvent) の 10 分に 1 回だけ。お知らせ (report_notices) は D1 を見るだけで start.gg は読まない (2026-11-05)
+const SGG_ADMINS_REFRESH_MS = 10 * 60 * 1000;
 const SGG_ADMINS_QUERY = `query SpspReportAdmins($id: ID!) { event(id: $id) { tournament { owner { id } admins { id } } } }`;
-const sggAdminsCache = new Map<string, { ids: string[]; at: number }>();
-/** 受付の大会の管理者 (owner と admins) の start.gg ユーザー ID。読めなければ null。fresh = start.gg を読んでよいか ('force' = 覚えた結果があっても読む)。
- * token = 開いた受付のトークン (無ければ受付の行から復号する) */
-async function sggAdminsOf(cfg: Config, fetchFn: FetchFn, ev: ReportEventRow, now: number, fresh: boolean | 'force', token?: string): Promise<string[] | null> {
-  if (ev.kind !== 'startgg' || ev.event_id === null || !ev.token_enc) return null;
-  const c = sggAdminsCache.get(ev.code);
-  if (c && fresh !== 'force' && now - c.at < SGG_ADMINS_TTL_MS) return c.ids;
-  if (!fresh) return c ? c.ids : null;
-  let at = token || '';
-  if (!at) {
-    const sealed = await openJson<Sealed>(cfg, ev.token_enc);
-    if (!sealed || !sealed.at || sealed.exp < now) return c ? c.ids : null;   // 期限切れの延長は運営の画面を開いたとき (openEvent) に任せる
-    at = sealed.at;
-  }
-  const r = await startggGql(fetchFn, at, SGG_ADMINS_QUERY, { id: String(ev.event_id) });
+const sggAdminsList = (ev: ReportEventRow): string[] => (ev.sgg_admins || '').split(',').filter(Boolean);
+/** 受付のトークンで大会の管理者 (owner と admins) を読み、受付の行に書く。force でなければ前に読もうとしてから 10 分たったときだけ。
+ *  返り値 = 今の一覧 (読めなければ前の一覧のまま)。失敗しても時刻は進める (start.gg を読みすぎない) */
+async function refreshSggAdmins(store: Store, fetchFn: FetchFn, ev: ReportEventRow, token: string, now: number, force: boolean): Promise<string[]> {
+  if (ev.kind !== 'startgg' || ev.event_id === null || !token) return sggAdminsList(ev);
+  if (!force && now - (ev.sgg_admins_ms || 0) < SGG_ADMINS_REFRESH_MS) return sggAdminsList(ev);
+  const r = await startggGql(fetchFn, token, SGG_ADMINS_QUERY, { id: String(ev.event_id) });
   const t = r.ok && r.json.data ? (r.json.data.event as { tournament?: { owner?: { id?: unknown } | null; admins?: unknown } | null } | null) : null;
-  if (!t || !t.tournament) return c ? c.ids : null;
+  if (!t || !t.tournament) { await store.updateReportEventSggAdmins(ev.code, null, now); ev.sgg_admins_ms = now; return sggAdminsList(ev); }
   const ids: string[] = [];
   if (t.tournament.owner && t.tournament.owner.id != null) ids.push(String(t.tournament.owner.id));
   if (Array.isArray(t.tournament.admins)) for (const a of t.tournament.admins) if (a && (a as { id?: unknown }).id != null) ids.push(String((a as { id: unknown }).id));
-  sggAdminsCache.set(ev.code, { ids, at: now });
-  return ids;
+  const joined = Array.from(new Set(ids)).join(',');
+  await store.updateReportEventSggAdmins(ev.code, joined, now);
+  ev.sgg_admins = joined; ev.sgg_admins_ms = now;
+  return sggAdminsList(ev);
 }
 
 const addAdmin = (list: string, uid: string): string => Array.from(new Set([...list.split(',').filter(Boolean), uid])).slice(-20).join(',');
@@ -279,6 +272,7 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
   const joined = !!(old && old.status === 'active' && old.token_enc && old.expires_ms >= now);
   await store.upsertReportEvent(row);
   const saved = (await store.getReportEventByTarget('startgg', String(eventId))) || row;
+  await refreshSggAdmins(store, fetchFn, saved, g.at, now, true).catch(() => null);   // ほかの管理者の導線用 (読めなくても受付は始める)
   return ok({ report: publicOf(saved, now), joined });
 }
 
@@ -339,9 +333,11 @@ async function openEvent(cfg: Config, store: Store, fetchFn: FetchFn, code: unkn
     if (!r.token) return { ok: false, res: err('report_closed', MSG_CLOSED, 'refresh:' + (r.reason || '')) };
     const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY) };
     await store.updateReportEventToken(ev.code, await sealJson(cfg, next), next.exp);
+    await refreshSggAdmins(store, fetchFn, ev, next.at, now, false).catch(() => null);
     return { ok: true, ev, token: next.at };
   }
   if (ev.kind === 'challonge' && s.exp < now) return { ok: false, res: err('report_closed', MSG_CLOSED, 'token_expired') };
+  if (ev.kind === 'startgg') await refreshSggAdmins(store, fetchFn, ev, s.at, now, false).catch(() => null);
   return { ok: true, ev, token: s.at };
 }
 
@@ -934,18 +930,13 @@ export async function handleReportNotices(cfg: Config, store: Store, fetchFn: Fe
     for (const r of await store.listReportSetsForUser(sess.id, events.map((e) => e.code))) {
       if (r.state === 'conflict' || r.state === 'review') mine.push(await setView(store, r, sess.id));
     }
-    let fresh = 0;
     for (const e of active.slice(0, 50)) {
       const row = await store.getReportEvent(e.code);
       if (!row) continue;
       const role = roleOf(row, sess.id);
       if (role) { admin.push({ code: e.code, name: e.name, kind: e.kind, role }); continue; }
       // start.gg でこの大会の管理者なら、まだ加わっていなくても運営の画面へ (開くと report_join で加わる)
-      const can = row.kind === 'startgg' && fresh < SGG_ADMINS_FRESH_MAX;
-      const cached = sggAdminsCache.get(row.code);
-      if (can && !(cached && now - cached.at < SGG_ADMINS_TTL_MS)) fresh++;
-      const ids = await sggAdminsOf(cfg, fetchFn, row, now, can);
-      if (ids && ids.includes(sess.id)) admin.push({ code: e.code, name: e.name, kind: e.kind, role: 'admin' });
+      if (row.kind === 'startgg' && sggAdminsList(row).includes(sess.id)) admin.push({ code: e.code, name: e.name, kind: e.kind, role: 'admin' });
     }
   }
   return ok({ events, mine, admin });
@@ -1705,8 +1696,8 @@ export async function handleReportJoin(cfg: Config, store: Store, fetchFn: Fetch
   if (o.ev.kind !== 'startgg' || o.ev.event_id === null) return err('not_admin', 'この受付を始めた運営だけが使えます。', 'not_startgg');
   if (roleOf(o.ev, sess.id) === 'admin') return ok({ joined: false, role: 'admin' });
   // 受付を始めた運営のトークンで大会の管理者一覧を読み、入っていれば運営のログインなしで加える (2026-11-04)
-  const listed = await sggAdminsOf(cfg, fetchFn, o.ev, now, 'force', o.token);
-  if (listed && listed.includes(sess.id)) return ok(await joinAsAdmin(store, o.ev, sess.id));
+  const listed = await refreshSggAdmins(store, fetchFn, o.ev, o.token, now, true).catch(() => sggAdminsList(o.ev));
+  if (listed.includes(sess.id)) return ok(await joinAsAdmin(store, o.ev, sess.id));
   const g = await grantOf(cfg, store, fetchFn, sess.id, now);
   if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
   const adm = await checkStartggAdmin(fetchFn, g.at, o.ev.event_id);
