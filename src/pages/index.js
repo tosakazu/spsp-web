@@ -183,7 +183,7 @@ async function loadData() {
       (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
     // ログイン中の本人が出ている開催中の大会 (js/live.js) と、そのうち結果報告を受付中のもの・報告の食い違い (js/report_notice.js)。
     // 結果報告を受付中の大会は結果報告の帯だけに出す (参加中の帯と二重にしない、2026-11-04)
-    const rep = SpspReportNotice.items().catch(() => ({ events: [], conflicts: [] }));
+    const rep = SpspReportNotice.items().catch(() => ({ events: [], conflicts: [], admin: [] }));
     SpspLive.showNotice(document.getElementById('live-notice'), {
       skip: rep.then((r) => new Set(r.events.filter((e) => e.event_id != null).map((e) => String(e.event_id)))),
     }).catch(() => {});
