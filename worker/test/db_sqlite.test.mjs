@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql', '0022_report_snapshot_meta.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -295,7 +295,11 @@ test('報告の障害時 (0017): 様子の upsert と試す役、写しの役 (�
   assert.strictEqual(await store.claimReportSnapshot('c1', 1000, 25), true, '行が無ければ作って取る');
   assert.strictEqual(await store.claimReportSnapshot('c1', 1010, 25), false);
   await store.putReportSnapshot('c1', '{"v":1}', 1010);
-  assert.deepStrictEqual({ ...(await store.getReportSnapshot('c1')) }, { code: 'c1', data: '{"v":1}', synced_ms: 1010, lock_ms: 0 });
+  assert.deepStrictEqual({ ...(await store.getReportSnapshot('c1')) }, { code: 'c1', data: '{"v":1}', synced_ms: 1010, lock_ms: 0, m_full: 0, m_sets: 0 });
+  assert.deepStrictEqual(await store.getReportSnapshotMeta('c1'), { synced_ms: 1010, full: false, sets: 0 }, '古い形 (JSON) は中身から');
+  // 圧縮した写し (0022): 中身を開かずに列から
+  await store.putReportSnapshot('c2', 'z1:AAAA', 1020, { full: true, sets: 7 });
+  assert.deepStrictEqual(await store.getReportSnapshotMeta('c2'), { synced_ms: 1020, full: true, sets: 7 });
   assert.strictEqual(await store.claimReportSnapshot('c1', 1011, 25), true, '書いたら役を外す');
   await store.releaseReportSnapshot('c1');
   assert.strictEqual((await store.getReportSnapshot('c1')).lock_ms, 0);

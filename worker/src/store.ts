@@ -301,8 +301,8 @@ export interface Store {
   getReportSnapshot(code: string): Promise<ReportSnapshotRow | null>;
   /** 写しの中身を読まずに、写した時刻・1 周目が終わったか・試合の数だけ (選手の画面の 15 秒ごとの読みで毎回 0.5 MB を読まないように) */
   getReportSnapshotMeta(code: string): Promise<{ synced_ms: number; full: boolean; sets: number } | null>;
-  /** 写しを書く (data と synced_ms。lock は外す)。 */
-  putReportSnapshot(code: string, data: string, syncedMs: number): Promise<void>;
+  /** 写しを書く (data と synced_ms。lock は外す)。meta = 中身を開かずに読む値 (圧縮した写し、0022) */
+  putReportSnapshot(code: string, data: string, syncedMs: number, meta?: { full: boolean; sets: number }): Promise<void>;
   /** 写す・取り込む役を取る (lock_ms が holdMs より前なら now にして true、行が無ければ作る)。 */
   claimReportSnapshot(code: string, nowMs: number, holdMs: number): Promise<boolean>;
   releaseReportSnapshot(code: string): Promise<void>;

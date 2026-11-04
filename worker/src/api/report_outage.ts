@@ -415,9 +415,35 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
   return e;
 }
 
-export function snapshotJson(snap: Snapshot): string | null {
-  const s = JSON.stringify(snap);
+/** 写しを D1 に置く形に: JSON を gzip して base64 ('z1:' を頭に。3000 人規模で 3 MB を超える JSON が 0.3〜0.5 MB になる、2026-11-05)。上限を超えたら null */
+export async function encodeSnapshot(snap: Snapshot): Promise<string | null> {
+  const bytes = await gzipBytes(new TextEncoder().encode(JSON.stringify(snap)));
+  const s = 'z1:' + b64(bytes);
   return s.length <= SNAP_MAX_BYTES ? s : null;
+}
+/** D1 の写し → Snapshot ('z1:' なら gzip、古い行は JSON のまま) */
+export async function decodeSnapshot(data: string | null | undefined): Promise<Snapshot> {
+  if (data && data.startsWith('z1:')) {
+    try { return parseSnapshot(new TextDecoder().decode(await gunzipBytes(unb64(data.slice(3))))); } catch (_) { return emptySnapshot(); }
+  }
+  return parseSnapshot(data);
+}
+async function pipeBytes(input: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  const out = new Response(new Blob([input]).stream().pipeThrough(stream));
+  return new Uint8Array(await out.arrayBuffer());
+}
+const gzipBytes = (b: Uint8Array) => pipeBytes(b, new CompressionStream('gzip'));
+const gunzipBytes = (b: Uint8Array) => pipeBytes(b, new DecompressionStream('gzip'));
+function b64(b: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function unb64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 /** 写しの試合を start.gg の GraphQL の形に (選手の画面の fromStartgg にそのまま渡す) */
