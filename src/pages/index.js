@@ -461,6 +461,7 @@ SPSPShare.setup(document.getElementById('share-icon-btn'), () => ({
         const target = ev.target instanceof Element ? ev.target : null;
         if (target && target.closest('.ticker-close')) return;
         if (target && target.closest('a')) return;  // 内部リンクはデフォルト動作
+        if (SpspMyNotice.nearClose(ev, row)) return;   // × のすぐ左は押しても何もしない (押し間違い防止)
         location.href = `news/?filter=${filter}`;
       });
       // × ボタン: hide + 現在時刻 (ms) を localStorage に保存. 後で新しい news が来たら自動再表示.
