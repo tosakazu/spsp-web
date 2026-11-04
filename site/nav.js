@@ -266,9 +266,12 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .nav-news-bell, .nav-user-icon { position:relative; display:inline-flex; line-height:0; }
       /* お知らせの印: ベル (ニュースの未読・本人へのお知らせ) と人型 (新しい二つ名) で同じ位置・色 (アイコンの右上) */
       .nav-news-bell.has-unread::before, .nav-news-bell.has-me::before,
-      .nav-user-trigger.has-new .nav-user-icon::before, .nav-user-trigger.has-report .nav-user-icon::before { content:''; position:absolute; top:-2px; right:-3px;
+      .nav-user-trigger.has-new .nav-user-icon::before { content:''; position:absolute; top:-2px; right:-3px;
                                             width:7px; height:7px; background:#dc2626;
                                             border-radius:50%; box-shadow:0 0 0 2px #fff; }
+      /* 結果報告を受付中の大会があるとき: 人型の左上に赤い星 (右上の点より目立つように、2026-11-04)。文字の ★ は端末のフォント次第なので SVG */
+      .nav-user-trigger.has-report .nav-user-icon::after { content:''; position:absolute; top:-6px; left:-7px; width:13px; height:13px;
+                                            background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z' fill='%23dc2626' stroke='%23fff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain; }
       /* User dropdown (= 選手本人が使う操作をまとめる). ベルと同じ見た目に揃える. */
       .nav-user .nav-user-trigger { color:#6b7280; display:inline-flex; align-items:center;
                                     line-height:0; padding:4px 8px; }
@@ -476,7 +479,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
         .concat(live.filter((/** @type {any} */ e) => !repIds.has(e.event_id))
           .map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(e.href)}" role="menuitem">${escHTML(t('nav.user.live_ev', { name: e.name }))}</a>`));
       if (!links.length) return;
-      // 結果報告を受付中の大会があれば人型にも赤い点 (二つ名の点と同じ。別の印にして二つ名の処理と消し合わない)
+      // 結果報告を受付中の大会があれば人型の左上に赤い星 (二つ名の右上の点とは別の印)
       if (rep.events.length) { const tr = document.querySelector('.nav-user-trigger'); if (tr) tr.classList.add('has-report'); }
       const mypage = menu.querySelector('a[href$="' + pageHref('me.html') + '"]');
       if (mypage) mypage.insertAdjacentHTML('beforebegin', links.join(''));
