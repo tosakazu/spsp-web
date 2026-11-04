@@ -22,6 +22,8 @@ export interface CMatch {
   winner: string | null;
   points: Record<string, number>;
   completedAt: string;
+  /** 始まった (underway_at がある) */
+  underway?: boolean;
 }
 export interface CData { participants: Map<string, CParticipant>; matches: CMatch[] }
 
@@ -58,13 +60,15 @@ export function parseMatch(m: unknown): CMatch | null {
     p, prereq: [str(a.player1_prereq_match_id), str(a.player2_prereq_match_id)],
     prereqLoser: [a.player1_is_prereq_match_loser === true, a.player2_is_prereq_match_loser === true],
     winner: str(a.winner_id), points, completedAt: typeof ts.completed_at === 'string' ? ts.completed_at : '',
+    underway: !!(ts.underway_at || a.underway_at),
   };
 }
 
 /** 次の試合 (この試合を前提にする試合) に結果が入っているか。前提の項目が無い形なら、両者の後の試合で見る (分からなければ true) */
 export function cDownstreamDone(d: CData, m: CMatch): boolean {
   const hasPrereq = d.matches.some((x) => x.prereq[0] || x.prereq[1]);
-  if (hasPrereq) return d.matches.some((x) => x.id !== m.id && x.state === 'complete' && (x.prereq[0] === m.id || x.prereq[1] === m.id));
+  // 次の試合が始まった (underway) か結果が入った
+  if (hasPrereq) return d.matches.some((x) => x.id !== m.id && (x.state === 'complete' || !!x.underway) && (x.prereq[0] === m.id || x.prereq[1] === m.id));
   const mine = new Set([m.p[0], m.p[1]].filter(Boolean));
   return d.matches.some((x) => x.id !== m.id && x.state === 'complete' && (mine.has(x.p[0]) || mine.has(x.p[1]))
     && (!x.completedAt || !m.completedAt || x.completedAt > m.completedAt));

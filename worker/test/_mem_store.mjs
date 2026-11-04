@@ -211,6 +211,7 @@ export class MemStore {
 
   async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
+  async setReportEventEnded(code, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code && (ms === 0 || !x.ended_ms)) x.ended_ms = ms; }
   async listReportProgOk(code) { this._rep(); return (this.reportProgOk || []).filter((x) => x.code === code).map((x) => ({ group_id: x.group_id, list: x.list })); }
   async putReportProgOk(code, groupId, list, userId, ms) { this._rep(); this.reportProgOk = (this.reportProgOk || []).filter((x) => !(x.code === code && x.group_id === groupId)); this.reportProgOk.push({ code, group_id: groupId, list, user_id: userId, ms }); }
   async updateReportEventSggAdmins(code, ids, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { if (ids !== null) x.sgg_admins = ids; x.sgg_admins_ms = ms; } }
@@ -252,7 +253,7 @@ export class MemStore {
   async listActiveReportEvents(nowMs) {
     this._rep();
     return this.reportEvents.filter((x) => x.status === 'active' && x.expires_ms >= nowMs).sort((a, b) => a.created_ms - b.created_ms)
-      .map(({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings }) => ({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings }));
+      .map(({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings, ended_ms }) => ({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings, ended_ms: ended_ms || 0 }));
   }
 
   async getReportSet(code, setId) { this._rep(); const r = this.reportSets.find((x) => x.code === code && x.set_id === setId); return r ? { ...r } : null; }

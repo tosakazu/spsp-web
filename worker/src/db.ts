@@ -322,6 +322,11 @@ export class D1Store implements Store {
     await this.db.prepare('UPDATE report_events SET managers = ? WHERE code = ?').bind(managers, code).run();
   }
 
+  async setReportEventEnded(code: string, ms: number): Promise<void> {
+    if (ms === 0) await this.db.prepare('UPDATE report_events SET ended_ms = 0 WHERE code = ?').bind(code).run();
+    else await this.db.prepare('UPDATE report_events SET ended_ms = ? WHERE code = ? AND ended_ms = 0').bind(ms, code).run();
+  }
+
   async listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]> {
     const r = await this.db.prepare('SELECT group_id, list FROM report_prog_ok WHERE code = ?').bind(code).all<{ group_id: string; list: string }>();
     return r.results || [];
@@ -409,7 +414,7 @@ export class D1Store implements Store {
 
   async listActiveReportEvents(nowMs: number): Promise<ReportEventPublic[]> {
     const r = await this.db.prepare(
-      "SELECT code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings FROM report_events WHERE status = 'active' AND expires_ms >= ? ORDER BY created_ms")
+      "SELECT code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings, ended_ms FROM report_events WHERE status = 'active' AND expires_ms >= ? ORDER BY created_ms")
       .bind(nowMs).all<ReportEventPublic>();
     return r.results || [];
   }

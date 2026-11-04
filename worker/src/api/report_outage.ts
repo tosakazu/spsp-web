@@ -171,6 +171,8 @@ export interface Snapshot {
   /** 速報の Worker の構造 (live/jp/struct/) を取り込んだブロック → その構造を取った時刻。lc = 一覧を見た時刻 (ms) */
   ls?: Record<string, number>;
   lc?: number;
+  /** start.gg の部門の state (ACTIVE / COMPLETED …、2026-11-05) */
+  es?: string;
   /** 構造の照合 (bracket_engine で計算した対戦者と start.gg の対戦者)。bad = 食い違ったブロック → 理由 */
   chk?: { ms: number; ok: number; bad: Record<string, string> };
 }
@@ -193,7 +195,7 @@ export const SNAP_FIRST_MIN_MS = 5 * 1000;
 /** D1 の 1 行の上限 (2 MB) より手前 */
 const SNAP_MAX_BYTES = 1_800_000;
 
-const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!, $perPage: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) {
+const SNAP_QUERY = (extra: boolean, inc: boolean) => `query SpspReportSnap($id: ID!, $page: Int!, $perPage: Int!${inc ? ', $after: Timestamp' : ''}) { event(id: $id) { state
   sets(page: $page, perPage: $perPage, sortType: ${inc ? 'RECENT' : 'STANDARD'}, filters: { hideEmpty: false, showByes: true${inc ? ', updatedAfter: $after' : ''} }) {
     pageInfo { totalPages }
     nodes { id state round identifier fullRoundText winnerId wPlacement lPlacement updatedAt winnerProgressionSeed { id } loserProgressionSeed { id } ${extra ? 'station { number }' : ''}
@@ -364,7 +366,8 @@ async function snapPage(fetchFn: FetchFn, token: string, eventId: string, snap: 
     if (r2.ok && !(Array.isArray(r2.json.errors) && r2.json.errors.length)) { snap.extra = false; r = r2; }
   }
   if (!r.ok) return { ok: false, note: r.note, gql: false };
-  const ev = r.json.data ? r.json.data.event as { sets?: { nodes?: unknown; pageInfo?: { totalPages?: unknown } } | null } | null : null;
+  const ev = r.json.data ? r.json.data.event as { state?: unknown; sets?: { nodes?: unknown; pageInfo?: { totalPages?: unknown } } | null } | null : null;
+  if (ev && typeof ev.state === 'string') snap.es = ev.state;
   if (!ev || !ev.sets || !Array.isArray(ev.sets.nodes)) {
     const e = Array.isArray(r.json.errors) && r.json.errors[0] as { message?: unknown } | undefined;
     return { ok: false, note: 'gql:' + (e && typeof e.message === 'string' ? e.message.replace(/[^\x20-\x7e]/g, '').slice(0, 60) : ''), gql: true };
@@ -499,7 +502,8 @@ export function snapNSet(snap: Snapshot, setId: string, eventName = ''): NSet | 
   const w = complete && s.w ? (slots[0] && slots[0].id === s.w ? 0 : slots[1] && slots[1].id === s.w ? 1 : null) : null;
   const g = snap.groups[s.g];
   const phaseName = g && snap.phases[g.p] ? snap.phases[g.p].n : '';
-  const downstreamDone = Object.values(snap.sets).some((x) => x.s === 3 && x.sl.some((y) => y.pt === 'set' && y.pi === setId));
+  // 次の試合が始まった (2) か結果が入った (3)
+  const downstreamDone = Object.values(snap.sets).some((x) => (x.s === 2 || x.s === 3) && x.sl.some((y) => y.pt === 'set' && y.pi === setId));
   return {
     id: setId, complete, slots, remote: w === null ? null : { w, g: [] }, totalGames: null, downstreamDone, lPlacement: s.lp,
     isClass: LOWER_CLASS_NAME_PAT.test(phaseName) || LOWER_CLASS_NAME_PAT.test(eventName), round: s.r, phaseKey: g ? g.p : undefined,

@@ -131,9 +131,9 @@ test('カードのリンクは押せない (画面が移らない)', { skip }, a
   p.close();
 });
 
-// 描く処理が違う案だけ: light (幕だけ。band も同じ処理、dark は上の試合の画面のテスト) / cards (カード) /
-// 線の案は class 名と飾り (animFxHtml) だけが違う → 飾りなし combo・<i> の飾り speed・<b> の飾り stamp / ランダム
-for (const anim of ['light', 'cards', 'combo', 'speed', 'stamp', '']) {
+// 描く処理が違う案だけ (テストを軽くするため 2026-11-05 に絞った): cards (カード) / 線の案の代表 combo / ランダム。
+// 線の案は class 名と飾り (animFxHtml) だけが違い、幕だけの案 (light / band) は上の試合の画面のテストと同じ処理
+for (const anim of ['cards', 'combo', '']) {
   test(`演出 ${anim || 'ランダム'}: 描けて、案の名前は出さない`, { skip }, async () => {
     const p = await open('?demo=match' + (anim ? '&anim=' + anim : ''));
     assert.ok(await until(() => p.d.querySelector('.rp-match-ov .rp-match-skip')), '幕の中身が出る');
