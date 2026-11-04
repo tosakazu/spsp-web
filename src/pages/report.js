@@ -1089,10 +1089,10 @@ const entsOf = (slots) => (Array.isArray(slots) && slots.length === 2 ? slots.ma
 /** トーナメント表 (start.gg の受付だけ。選手・運営の画面の下に 1 つ。2026-11-05) */
 let BRACKET_VIEW = null;
 function ensureBracketView() {
-  if (BRACKET_VIEW || DEMO || !INFO || INFO.kind !== 'startgg' || !CODE) return;
+  if (BRACKET_VIEW || (DEMO && DEMO !== 'bracket') || !INFO || INFO.kind !== 'startgg' || (!CODE && !DEMO)) return;
   const el = $('rp-bracket');
   if (!el) return;
-  BRACKET_VIEW = mountBracketView(el, { api, tok, code: CODE, t: i18n, hhmm });
+  BRACKET_VIEW = mountBracketView(el, { api, tok, code: CODE || 'demo', t: i18n, hhmm });
 }
 function renderPlayer() {
   const root = $('rp-player');
@@ -2797,7 +2797,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'noshow', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'noshow', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'bracket', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -2962,8 +2962,17 @@ const DEMO_PHASES = [
 ];
 let DEMO_MGRS = [];
 const DEMO_SEEN = {};   // 見本: 確認した start.gg のユーザー
+/** 見本のトーナメント表 (site/report/demo_bracket.json = tools/report_demo/make_bracket_demo.mjs で作る。終わった大会を途中で切ったもの) */
+let DEMO_BRACKET = null;
 async function demoApi(body) {
   const P = DEMO_P;
+  if (body.action === 'report_bracket_view') {
+    if (!DEMO_BRACKET) DEMO_BRACKET = await (await fetch('./demo_bracket.json')).json();
+    const base = { ok: true, synced_ms: Date.now() - 40000, outage: null, checked: true, me: DEMO_BRACKET.me };
+    if (!body.group) return { ...base, groups: DEMO_BRACKET.groups };
+    const v = DEMO_BRACKET.view[body.group];
+    return v ? { ...base, ...v } : { ok: false, error: { code: 'bad_request', message: 'no group' } };
+  }
   if (body.action === 'report_submit') {
     const state = DEMO === 'conflict' ? 'agreed' : 'reported';
     const row = demoRow(body.set_id, state, body.result, DEMO === 'conflict' ? body.result : null, P);
@@ -3080,6 +3089,7 @@ async function runDemo() {
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
   if (DEMO === 'admin' || DEMO === 'admin_outage') { await renderAdmin(); return; }
+  if (DEMO === 'bracket') { ensureBracketView(); if (BRACKET_VIEW) BRACKET_VIEW.open(); return; }   // トーナメント表 (選手・運営の画面の下に出るもの)
   if (DEMO === 'login') { $('rp-login').hidden = false; return; }   // ログインしていない人が報告ページを開いた
   if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }
   if (DEMO === 'win') {   // 勝った側が報告した直後 (勝利の演出 → 勝利画面)。下の画面は報告した後の形

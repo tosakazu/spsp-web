@@ -2553,6 +2553,7 @@ window.SPSP_I18N.ja = {
   'report.demo.rr': '総当たり (相手を選ぶ)',
   'report.demo.noshow': '相手が見つからない・対戦開始',
   'report.demo.admin_outage': '運営の画面 (start.gg が止まっている)',
+  'report.demo.bracket': 'トーナメント表',
   'report.demo.setup': '受付を始める',
   'report.demo.login': 'ログイン前',
   'report.demo.not_entrant': '出場していない人',

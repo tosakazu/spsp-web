@@ -2500,6 +2500,7 @@ window.SPSP_I18N.en = {
   'report.demo.rr': 'Round robin (choose opponent)',
   'report.demo.noshow': 'Cannot find opponent / start match',
   'report.demo.admin_outage': 'Organizer view (start.gg down)',
+  'report.demo.bracket': 'Bracket',
   'report.demo.setup': 'Start accepting',
   'report.demo.login': 'Not logged in',
   'report.demo.not_entrant': 'Not an entrant',
