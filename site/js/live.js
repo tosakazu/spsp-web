@@ -437,6 +437,16 @@ function previewUid() {
   return m ? m[1] : null;
 }
 
+/** お知らせの帯の中全体を押せるように (大会が 1 つのとき。2 つ以上なら大会名のリンクだけ)。2026-11-04
+ * @param {HTMLElement} el @param {string | null} href */
+function tapWhole(el, href) {
+  el.style.cursor = href ? 'pointer' : '';
+  el.onclick = href ? (e) => {
+    if (/** @type {Element} */ (e.target).closest('a, button')) return;   // リンク・ボタンそのものはふつうに
+    location.href = href;
+  } : null;
+}
+
 /** @param {HTMLElement | null} el @param {{ skip?: Promise<Set<string>> | Set<string> }} [opts]
  *  skip = 出さない部門 (結果報告を受付中の大会は結果報告の帯だけにする) */
 export async function showNotice(el, opts = {}) {
@@ -449,15 +459,19 @@ export async function showNotice(el, opts = {}) {
   }
   const [items, skip] = await Promise.all([load(uid), Promise.resolve(opts.skip).catch(() => null)]);
   const links = [];
+  /** @type {string[]} */
+  const hrefs = [];
   for (const { summary, doc } of items) {
     if (skip && skip.has(String((summary && summary.event_id) ?? doc.event_id))) continue;
     const e = entrantOf(doc, uid)[1];
     if (!e) continue;
     const href = SPSPLinks.playerHref((W.SPSP && W.SPSP.langRoot) || '', uid) + '#live-section';
+    hrefs.push(href);
     links.push(`<a class="my-notice-item" href="${escapeHtml(href)}">${escapeHtml(doc.tournament_name || '')} <span class="d">${placeText(e)}</span></a>`);
   }
   if (!links.length) { el.style.display = 'none'; return; }
   el.innerHTML = `<span class="label">${t('live.notice_label')}</span><span class="my-notice-items">${links.join('')}</span>`;
+  tapWhole(el, hrefs.length === 1 ? hrefs[0] : null);
   el.style.display = '';
 }
 
