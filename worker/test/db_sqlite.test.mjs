@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -273,4 +273,40 @@ test('試合結果の報告: 受付の upsert (code は変えない)・期限切
   assert.deepStrictEqual(await store.reportSubmissionActivity('11', 55), { count: 1, latestMs: 60 });
   assert.deepStrictEqual(await store.reportSubmissionActivity('99', 0), { count: 0, latestMs: null });
   await store.stopReportEvent('abcdefghjk');
+});
+
+test('報告の障害時 (0017): 様子の upsert と試す役、写しの役 (同時に 1 つ)、指定した試合、報告の付け替え・行の削除', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store } = fresh();
+  assert.strictEqual(await store.getReportHealth('startgg'), null);
+  const h = { kind: 'startgg', down_since_ms: 100, last_fail_ms: 100, last_ok_ms: 0, fails: 2, probe_ms: 100, note: 'timeout' };
+  await store.putReportHealth(h);
+  await store.putReportHealth({ ...h, fails: 3 });
+  assert.strictEqual((await store.getReportHealth('startgg')).fails, 3);
+  assert.strictEqual(await store.claimReportProbe('startgg', 120, 30), false, '30 より前に試したばかり');
+  assert.strictEqual(await store.claimReportProbe('startgg', 200, 30), true);
+  assert.strictEqual(await store.claimReportProbe('startgg', 201, 30), false, '同時に 2 つは試さない');
+  // 写し
+  assert.strictEqual(await store.claimReportSnapshot('c1', 1000, 25), true, '行が無ければ作って取る');
+  assert.strictEqual(await store.claimReportSnapshot('c1', 1010, 25), false);
+  await store.putReportSnapshot('c1', '{"v":1}', 1010);
+  assert.deepStrictEqual({ ...(await store.getReportSnapshot('c1')) }, { code: 'c1', data: '{"v":1}', synced_ms: 1010, lock_ms: 0 });
+  assert.strictEqual(await store.claimReportSnapshot('c1', 1011, 25), true, '書いたら役を外す');
+  await store.releaseReportSnapshot('c1');
+  assert.strictEqual((await store.getReportSnapshot('c1')).lock_ms, 0);
+  // 指定した試合
+  const m = { code: 'c1', side: 'l', group_id: '700', slots: '[]', users: '|11|22|', station: '3', set_id: '', status: 'open', created_by: '4242', created_ms: 5, updated_ms: 5 };
+  const id = await store.insertReportManual(m);
+  await store.insertReportManual({ ...m, users: '|33|44|' });
+  assert.strictEqual((await store.getReportManual('c1', id)).station, '3');
+  assert.deepStrictEqual((await store.listReportManualForUser('22', 'c1')).map((x) => x.id), [id]);
+  await store.updateReportManual('c1', id, 'matched', '103', 9);
+  assert.deepStrictEqual((await store.listReportManualForUser('22', 'c1')), [], 'open だけ');
+  assert.deepStrictEqual((await store.listReportManual('c1')).map((x) => [x.id, x.status, x.set_id]), [[id + 1, 'open', ''], [id, 'matched', '103']]);
+  // 報告の付け替え・行の削除
+  const sid = await store.insertReportSubmission({ code: 'c1', set_id: 'm' + id, user_id: '22', side: 1, ts_ms: 5, result: '{"w":1}', outcome: '' });
+  await store.updateReportSubmission(sid, '103', 0, '{"w":0}');
+  assert.deepStrictEqual((await store.listReportSubmissions('c1', '103')).map((x) => [x.side, x.result]), [[0, '{"w":0}']]);
+  await store.casReportSet({ code: 'c1', set_id: 'm1', state: 'queued', users: '', slots: '[]', applied: '', note: 'manual', floor_id: 0, version: 1, updated_ms: 5 }, null);
+  await store.deleteReportSet('c1', 'm1');
+  assert.strictEqual(await store.getReportSet('c1', 'm1'), null);
 });

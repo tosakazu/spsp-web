@@ -173,7 +173,8 @@ export function playerGate(set: NSet, s: ReportSettings): 'top_cut' | 'classes_o
 
 /** pending = 取り込み待ち (note: wait_delay = 1・3・5 分待ち / wait_both = 相手の報告待ち / wait_admin = 運営の承認待ち)。
  *  review の note が hold = 運営が止めた (選手の報告では動かさない) */
-export type ReportState = 'reported' | 'agreed' | 'conflict' | 'review' | 'fixed' | 'reset' | 'pending';
+/** queued = start.gg (Challonge) に繋がらず D1 に残している (復旧後に送る、2026-11-04。report_outage.ts) */
+export type ReportState = 'reported' | 'agreed' | 'conflict' | 'review' | 'fixed' | 'reset' | 'pending' | 'queued';
 export type Op = 'none' | 'report' | 'update' | 'reset' | 'rereport';
 export interface Decision { op: Op; state: ReportState; result: Result | null; note: string }
 

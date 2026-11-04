@@ -31,7 +31,7 @@ const W = /** @type {any} */ (window);
 const SPSP = W.SPSP || {};
 const Q = new URLSearchParams(location.search);
 const CODE = (Q.get('c') || '').toLowerCase();
-const WANT_ADMIN = Q.get('admin') === '1' || Q.get('demo') === 'admin';
+const WANT_ADMIN = Q.get('admin') === '1' || Q.get('demo') === 'admin' || Q.get('demo') === 'admin_outage';
 /** 見本の画面 (?demo=list|match|conflict|waiting|done|gate|challonge|admin|setup)。見本のデータで描くだけで、API にも start.gg にも送らない */
 const DEMO = Q.get('demo') || '';
 /** マッチングの演出 (?anim=… で固定。無ければ LINE_ANIMS から毎回ランダム、dark = 最初の暗い演出)。案を比べるための切り替え。
@@ -63,6 +63,11 @@ let PRED = null;      // live_predict の予想 (start.gg の大会だけ)
 let PRED_AT = 0;
 let pollTimer = 0;
 let FORM_OPEN = null; // 入力中の試合 (読み直しで消さない)
+/** start.gg を読めなかった (障害中)。読み直しでは Worker の写し (report_view の snap) と運営が指定した試合を使う (docs §11) */
+let FALLBACK = false;
+/** ブラウザから start.gg を読むのを待つ上限 (応答が無いまま止まらないように) */
+const LIVE_TIMEOUT_MS = 12000;
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── 共通 ──────────────────────────────────────────────────────────
 
@@ -77,7 +82,7 @@ function pageUrl(code, admin) {
   return location.origin + location.pathname + '?c=' + encodeURIComponent(code) + (admin ? '&admin=1' : '');
 }
 
-const STATE_LABEL = (s) => { const k = ['reported', 'agreed', 'conflict', 'review', 'fixed', 'reset', 'pending'].includes(s) ? s : 'none'; return i18n('report.state.' + k); };
+const STATE_LABEL = (s) => { const k = ['reported', 'agreed', 'conflict', 'review', 'fixed', 'reset', 'pending', 'queued'].includes(s) ? s : 'none'; return i18n('report.state.' + k); };
 
 /** 結果 {w, g} → "2-1" (側 0 から見た数) */
 function scoreText(r, mySide) {
@@ -336,6 +341,71 @@ function fromChallonge(c) {
   }).filter(Boolean);
 }
 
+// ── start.gg に繋がらないとき (Worker の写し・運営が指定した試合、docs/self_report_design.md §11) ──────────
+
+/** 写しの前の試合 (次の相手の候補)。prereqOf と同じ形。pre = report_view の snap.pre (試合 ID → start.gg の形) */
+function prereqFromSnap(pre, slot, depth) {
+  if (!slot || slot.prereqType !== 'set' || !slot.prereqId || depth <= 0) return null;
+  const s = pre[String(slot.prereqId)];
+  if (!s) return null;
+  const raw = s.slots || [];
+  const slots = [slotFromStartgg(raw[0]), slotFromStartgg(raw[1])];
+  return { id: String(s.id), state: Number(s.state) === 3 ? 'complete' : Number(s.state) === 2 ? 'playing' : 'pending', round: s.fullRoundText || '',
+    station: s.station && s.station.number ? s.station.number : null, loser: Number(slot.prereqPlacement) === 2, slots,
+    deeper: depth > 1 ? raw.map((r, i) => (slots[i] ? null : prereqFromSnap(pre, r, depth - 1))) : [null, null] };
+}
+/** 写しの自分の試合 (start.gg の形なので fromStartgg がそのまま使える) */
+function snapMatches(snap) {
+  if (!snap) return [];
+  if (snap.entrant === true || snap.entrant === false) ENTRANT = snap.entrant;
+  const out = (snap.sets || []).map(fromStartgg).filter(Boolean);
+  for (const m of out) if (m.state === 'waiting') m.prereq = m.rawSlots.map((s, i) => (m.slots[i] ? null : prereqFromSnap(snap.pre || {}, s, CAND_DEPTH)));
+  return out;
+}
+/** 運営が指定した試合 (report_view の manual) を同じ形に。id = m<番号> */
+function fromManual(x) {
+  const slots = (x.slots || []).map((s) => (s ? { id: String(s.id), name: String(s.name || ''), uid: s.users && s.users[0] ? String(s.users[0]) : null, seed: s.seed || null, score: null } : null));
+  while (slots.length < 2) slots.push(null);
+  const uid = myUid();
+  const mySide = slots[0] && slots[0].uid === uid ? 0 : slots[1] && slots[1].uid === uid ? 1 : null;
+  if (mySide === null) return null;
+  return {
+    id: String(x.set_id), kind: 'startgg', manual: true, state: 'open', started: false,
+    round: i18n(x.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'), pool: x.group_name || '', phase: '',
+    groupId: x.group || null, roundNum: null, phaseKey: x.phase || null, station: x.station || null, stream: null,
+    slots, mySide, winner: null, score: null, games: [], totalGames: null, lPlacement: null,
+    isClass: LOWER_CLASS_NAME_PAT.test(x.group_name || '') || LOWER_CLASS_NAME_PAT.test((INFO && INFO.name) || ''),
+    rawSlots: [], prereq: [null, null],
+  };
+}
+/** SPSP に保存してまだ start.gg に無い結果 (queued) の試合は、終わった試合として出す (start.gg は止まっているので次の試合は運営が指定する) */
+function overlayHeld(list) {
+  for (const m of list) {
+    const row = rowOf(m.id);
+    if (!row || row.state !== 'queued' || m.state === 'complete') continue;
+    const reps = Object.values(row.reports || {});
+    const mine = reps.find((x) => x.mine && x.result);
+    const any = reps.find((x) => x.result);
+    const r = mine ? mine.result : any ? any.result : null;
+    if (!r) continue;
+    const a = r.g.filter((g) => g.w === 0).length;
+    Object.assign(m, { state: 'complete', winner: r.w, score: [a, r.g.length - a], held: true });
+  }
+  return list;
+}
+const outageNow = () => !!((VIEW && VIEW.outage) || FALLBACK);
+const hhmm = (ms) => { if (!ms) return ''; const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+/** 障害中の帯 (選手の画面)。いつから・未反映の数・試合の情報がいつの時点か */
+function outageBannerHtml() {
+  if (!outageNow()) return '';
+  const o = VIEW && VIEW.outage;
+  const held = (VIEW && VIEW.sets ? VIEW.sets : []).filter((r) => r.state === 'queued').length;
+  const snapAt = VIEW && VIEW.snap && VIEW.snap.synced_ms ? hhmm(VIEW.snap.synced_ms) : '';
+  const head = o && o.since_ms ? i18n('report.outage.banner_since', { t: hhmm(o.since_ms) }) : i18n('report.outage.banner');
+  const sub = [i18n('report.outage.player_help'), held ? i18n('report.outage.held', { n: held }) : '', snapAt ? i18n('report.outage.snap_at', { t: snapAt }) : ''].filter(Boolean).join(' ');
+  return `<div class="rp-banner rp-warn rp-outage">⚠ ${escapeHtml(head)}<div class="rp-outage-sub">${escapeHtml(sub)}</div></div>`;
+}
+
 // ── 予想 (勝ったら・負けたら・ここまでの変化。start.gg の大会で速報に載っているときだけ) ──
 
 async function loadPrediction(force) {
@@ -451,8 +521,12 @@ function reportStateHtml(m) {
   const theirs = Object.values(row.reports || {}).find((x) => !x.mine);
   if (mine && mine.result) h += ` · ${escapeHtml(i18n('report.yours', { s: scoreText(mine.result, m.mySide), r: mine.result.w === m.mySide ? i18n('report.win') : i18n('report.lose') }))}`;
   if (theirs && theirs.result) h += ` · ${escapeHtml(i18n('report.theirs', { s: scoreText(theirs.result, m.mySide), r: theirs.result.w === m.mySide ? i18n('report.win') : i18n('report.lose') }))}`;
-  if (row.state === 'conflict') h += `<div class="rp-warn">${escapeHtml(i18n('report.conflict_help'))}</div>`;
+  if (row.state === 'conflict') h += `<div class="rp-warn">${escapeHtml(/^(outage|manual)/.test(row.note || '') ? i18n('report.conflict_help_offline') : i18n('report.conflict_help'))}</div>`;
   if (row.state === 'review') h += `<div class="rp-warn">${escapeHtml(i18n('report.review_help'))}</div>`;
+  if (row.state === 'queued') {
+const text = row.note === 'manual_wait' ? i18n('report.queued_help_wait') : /^manual/.test(row.note || '') ? i18n('report.queued_help_manual') : i18n('report.queued_help');
+    h += `<div class="rp-note">${escapeHtml(text)}</div>`;
+  }
   return h + '</div>';
 }
 
@@ -717,12 +791,15 @@ function wireForm(form, m) {
     submit.disabled = true;
     const r = await api({ action: 'report_submit', token: tok(), code: CODE, set_id: m.id, result });
     if (!r || !r.ok) { setStatus(st, errText(r), 'err'); submit.disabled = false; return; }
-    const sentKind = r.state === 'pending' && ['wait_delay', 'wait_both', 'wait_admin'].includes(r.note) ? r.note
+    // offline = start.gg に送れず SPSP に保存した (障害中・運営が指定した試合)
+    const sentKind = r.offline ? (r.state === 'conflict' ? 'conflict_offline' : /^manual/.test(r.note || '') && !outageNow() ? 'queued_manual'
+      : r.state === 'fixed' || r.state === 'review' ? r.state : 'queued')
+      : r.state === 'pending' && ['wait_delay', 'wait_both', 'wait_admin'].includes(r.note) ? r.note
       : ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
-    setStatus(st, i18n('report.sent.' + sentKind, { n: delayMin() }), r.state === 'conflict' || r.state === 'review' ? 'warn' : 'ok');
+    setStatus(st, i18n('report.sent.' + sentKind, { n: delayMin() }), r.state === 'conflict' || r.state === 'review' || r.offline ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
-    if (won && ['reported', 'agreed', 'fixed', 'pending'].includes(r.state)) await showVictory(await victoryOf(m, result), advanceAfter(m));
+    if (won && ['reported', 'agreed', 'fixed', 'pending', 'queued'].includes(r.state)) await showVictory(await victoryOf(m, result), r.offline ? Promise.resolve(null) : advanceAfter(m));
     setTimeout(() => poll(true), 800);
   });
 }
@@ -888,6 +965,7 @@ function renderPlayer() {
     return;
   }
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
+  h += outageBannerHtml();
   if (cur) {
     const gate = gateOf(cur);
     // スマホで探さずに報告できるよう、カード → (相手のカードを画面の上に) → ラウンド・台 → 入力欄 の順 (2026-10-30)
@@ -895,6 +973,7 @@ function renderPlayer() {
       ${vsHtml(cur)}
       ${roundHtml(cur)}
       ${stationHtml(cur)}
+      ${cur.manual ? `<p class="rp-manual-note">${escapeHtml(i18n('report.manual.player_note'))}</p>` : ''}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
@@ -908,7 +987,8 @@ function renderPlayer() {
       ${candidatesHtml(waiting)}
     </section>`;
   } else {
-    h += `<section class="rp-card-sec"><p>${escapeHtml(MATCHES.length ? i18n('report.no_current') : i18n('report.no_sets'))}</p>${matchLinks(done[0] || null)}</section>`;
+    const idle = outageNow() && ENTRANT !== false ? i18n('report.outage.wait_admin') : MATCHES.length ? i18n('report.no_current') : i18n('report.no_sets');
+    h += `<section class="rp-card-sec"><p>${escapeHtml(idle)}</p>${matchLinks(done[0] || null)}</section>`;
   }
   if (done.length) {
     h += `<section class="rp-card-sec"><h2>${escapeHtml(i18n('report.done'))}</h2><ul class="rp-done">` + done.map((m) => {
@@ -954,7 +1034,8 @@ function waitingSig() {
 }
 function matchesSig() {
   return waitingSig() + '#' + MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
-    + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '');
+    + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '')
+    + '#' + (outageNow() ? 'o' + ((VIEW && VIEW.outage && VIEW.outage.since_ms) || 0) + ':' + ((VIEW && VIEW.snap && VIEW.snap.synced_ms) || 0) : '');
 }
 async function poll(force) {
   if (DEMO) { renderPlayer(); return; }
@@ -962,7 +1043,7 @@ async function poll(force) {
   if (!force && document.visibilityState === 'hidden') { pollTimer = setTimeout(poll, POLL_MS); return; }
   const st = $('rp-status');
   try {
-    const v = await api({ action: 'report_view', token: tok(), code: CODE });
+    const v = await api({ action: 'report_view', token: tok(), code: CODE, ...(FALLBACK ? { fallback: true } : {}) });
     if (!v || !v.ok) {
       setStatus(st, errText(v), 'err');
       if (v && v.error && (v.error.code === 'report_closed' || v.error.code === 'auth_failed')) return;
@@ -974,12 +1055,27 @@ async function poll(force) {
         if (v.challonge && !v.challonge.error) ENTRANT = !!v.challonge.participant;
       }
       else {
-        const tok = await SpspStartggIdentity.token();
-        if (!tok) { setStatus(st, i18n('report.need_relogin'), 'warn'); $('rp-relogin').hidden = false; return; }
-        if (!GQL) GQL = makeGql(tok, 1000000);
-        if (!CHARS) await loadChars();
-        if (!STAGES) await loadStages(GQL);
-        MATCHES = await startggSets(GQL);
+        // start.gg が止まっている (Worker が障害中と判定・ブラウザから読めない) ときは、Worker の写しと運営が指定した試合で描く
+        let live = false;
+        if (!v.outage) {
+          const stok = await SpspStartggIdentity.token().catch(() => null);
+          if (!stok) { setStatus(st, i18n('report.need_relogin'), 'warn'); $('rp-relogin').hidden = false; return; }
+          if (!GQL) GQL = makeGql(stok, 1000000);
+          if (!CHARS) await loadChars();
+          try {
+            const read = async () => { if (!STAGES) await loadStages(GQL); return startggSets(GQL); };
+            MATCHES = await Promise.race([read(), sleepMs(LIVE_TIMEOUT_MS).then(() => { throw new Error('timeout'); })]);
+            live = true;
+          } catch (e) {
+            if (e && e.auth) throw e;
+          }
+        }
+        FALLBACK = !live;
+        if (!live) {
+          if (!VIEW.snap) { const v2 = await api({ action: 'report_view', token: tok(), code: CODE, fallback: true }); if (v2 && v2.ok) VIEW = v2; }
+          MATCHES = snapMatches(VIEW.snap);
+        }
+        MATCHES = overlayHeld([...(VIEW.manual || []).map(fromManual).filter(Boolean), ...MATCHES]);
       }
       const cur = MATCHES.find((m) => m.state === 'open');
       if (cur) warmCards(cur.slots.map((x) => x && x.uid), cur.slots.map((x) => (x ? x.name : '')));
@@ -991,7 +1087,8 @@ async function poll(force) {
       if (!LAST_SIG || sig !== LAST_SIG) renderPlayer();
       LAST_SIG = sig;
       if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
-      setStatus(st, i18n('report.updated', { t: new Date().toLocaleTimeString() }), '');
+      const t = new Date().toLocaleTimeString();
+      setStatus(st, outageNow() ? i18n('report.updated_outage', { t }) : i18n('report.updated', { t }), outageNow() ? 'warn' : '');
     }
   } catch (e) {
     if (e && e.auth) { SpspStartggIdentity.clear(); GQL = null; }
@@ -1015,7 +1112,7 @@ async function loadMains() {
 // ── 画面: 運営 ─────────────────────────────────────────────────────
 
 function noteText(note) {
-  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold'].includes(note) ? note : 'other';
+  const k = /^error:/.test(note) ? 'error' : ['locked_conflict', 'locked_change', 'external_mismatch', 'admin', 'wait_delay', 'wait_both', 'wait_admin', 'hold', 'outage', 'manual', 'manual_wait', 'outage_admin', 'outage_reset', 'manual_cancel'].includes(note) ? note : 'other';
   return i18n('report.note.' + k, { n: delayMin() }) + (k === 'error' ? ' (' + note.slice(6, 80) + ')' : '');
 }
 
@@ -1407,6 +1504,7 @@ async function renderAdmin() {
       <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
       ${pushHtml()}
     </section>
+    <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
     wirePush(root);
     await adminSetsStart(r);
@@ -1426,6 +1524,7 @@ async function renderAdmin() {
     ${pushHtml()}
   </section>
   ${ev.kind === 'startgg' ? mgrHtml() : ''}
+  <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
@@ -1496,15 +1595,189 @@ async function renderAdmin() {
 async function adminSetsStart(r) {
   // 直しの欄のキャラ・ステージ (ステージは start.gg の一覧。普段のログインのトークンが無ければステージは出さない)
   await loadChars();
-  if (INFO && INFO.kind === 'startgg' && !STAGES) {
-    const t = DEMO ? null : await SpspStartggIdentity.token().catch(() => null);
-    await loadStages(t ? makeGql(t, 1000000) : null);
+  if (INFO && INFO.kind === 'startgg' && !STAGES && !r.outage) {
+    // start.gg が応答しないときに画面が止まらないよう、待つのは 5 秒まで (ステージは無くても直せる)
+    const t = DEMO ? null : await Promise.race([SpspStartggIdentity.token().catch(() => null), sleepMs(5000).then(() => null)]);
+    await Promise.race([loadStages(t ? makeGql(t, 1000000) : null), sleepMs(5000)]);
   }
+  manualUpdate(r);
   renderAdminSets(r.sets || []);
   if (!DEMO) {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAdminSets(true); });
     adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
   }
+}
+
+// ── 運営: start.gg が止まっているあいだに次の試合を指定する (docs §11) ─────────────
+// ブロック → 勝者側 / 敗者側 → 残っている人から 2 人 (名前で絞り込む)。候補は Worker の report_bracket (ブラケットの写し + SPSP に未反映の結果):
+//   勝者側 = 負けていない人 / 敗者側 = 敗者側で負けていない人 (勝者側の負けが未反映でも敗者側をすることがあるので、負けの記録が無い人も出す。
+//   未反映でも敗者側で負けた人は出さない)。結果の出ていない指定済みの試合がある人は出さない。
+const MAN = { built: false, groups: null, gid: '', side: 'w', pick: [null, null], opened: false, err: '' };
+/** 名前の絞り込み用 (全角半角・大小・カタカナ → ひらがな をそろえる) */
+const manNorm = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
+/** Worker の candidateFor と同じきまり */
+const manCandOk = (e, side) => !e.manual && (side === 'w' ? !(e.wl || e.ll || e.hw || e.hl) : !(e.ll || e.hl));
+function manTag(e) {
+  const t = [];
+  if (e.wl) t.push(i18n('report.manual.tag_wl'));
+  else if (e.hw) t.push(i18n('report.manual.tag_hw'));
+  else if (MAN.side === 'l') t.push(i18n('report.manual.tag_noloss'));
+  if (e.playing) t.push(i18n('report.manual.tag_playing'));
+  return t.join(' · ');
+}
+function manGroup() { return MAN.groups ? MAN.groups.find((g) => g.id === MAN.gid) || null : null; }
+/** k 人目の候補 (入力で絞る。敗者側は勝者側で負けた人を先に) */
+function manCands(k, q) {
+  const g = manGroup();
+  if (!g) return [];
+  const other = MAN.pick[1 - k];
+  const nq = manNorm(q);
+  const list = g.entrants.filter((e) => manCandOk(e, MAN.side) && (!other || other.id !== e.id) && (!nq || manNorm(e.name).includes(nq)));
+  if (MAN.side === 'l') list.sort((a, b) => Number(!!(b.wl || b.hw)) - Number(!!(a.wl || a.hw)));
+  return list.slice(0, 8);
+}
+function manPickHtml(k) {
+  const p = MAN.pick[k];
+  if (p) return `<div class="rp-mchosen"><b>${escapeHtml(p.name)}</b> <span class="rp-muted">${escapeHtml(manTag(p))}</span> <button type="button" class="rp-link" data-mclear="${k}">${escapeHtml(i18n('report.manual.change'))}</button></div>`;
+  return `<input type="text" class="rp-minput" data-mq="${k}" autocomplete="off" placeholder="${escapeHtml(i18n('report.manual.ph', { n: k + 1 }))}"><div class="rp-mcands" data-mcands="${k}"></div>`;
+}
+function manDrawCands(sec, k) {
+  const box = sec.querySelector(`[data-mcands="${k}"]`);
+  const inp = sec.querySelector(`[data-mq="${k}"]`);
+  if (!box || !inp) return;
+  const list = manCands(k, inp.value);
+  box.innerHTML = list.length ? list.map((e) => `<button type="button" class="rp-mcand" data-mpick="${k}" data-eid="${escapeHtml(e.id)}"><b>${escapeHtml(e.name)}</b>${manTag(e) ? ` <span class="rp-muted">${escapeHtml(manTag(e))}</span>` : ''}</button>`).join('')
+    : `<p class="rp-muted">${escapeHtml(MAN.groups ? i18n('report.manual.no_cands') : i18n('report.loading'))}</p>`;
+  for (const b of box.querySelectorAll('[data-mpick]')) {
+    b.addEventListener('click', () => {
+      const g = manGroup();
+      MAN.pick[k] = g ? g.entrants.find((e) => e.id === b.getAttribute('data-eid')) || null : null;
+      manDrawForm(sec);
+    });
+  }
+}
+function manDrawForm(sec) {
+  const box = sec.querySelector('[data-mform]');
+  if (!box) return;
+  const gs = MAN.groups || [];
+  box.innerHTML = MAN.err ? `<p class="rp-err">${escapeHtml(MAN.err)}</p>` : !MAN.groups ? `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>` : `
+    ${gs.length > 1 ? `<label class="rp-mrow">${escapeHtml(i18n('report.manual.group'))} <select data-mgroup>${gs.map((g) => `<option value="${escapeHtml(g.id)}"${g.id === MAN.gid ? ' selected' : ''}>${escapeHtml(g.name || g.id)}${g.open ? '' : ' ' + escapeHtml(i18n('report.manual.group_done'))}</option>`).join('')}</select></label>` : ''}
+    <div class="rp-mrow rp-mside">
+      <label><input type="radio" name="rp-mside" value="w"${MAN.side === 'w' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_w'))}</label>
+      <label><input type="radio" name="rp-mside" value="l"${MAN.side === 'l' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_l'))}</label>
+    </div>
+    <p class="rp-muted rp-mhelp">${escapeHtml(MAN.side === 'l' ? i18n('report.manual.help_l') : i18n('report.manual.help_w'))}</p>
+    <div class="rp-mpicks"><div class="rp-mpick">${manPickHtml(0)}</div><div class="rp-mvs">vs</div><div class="rp-mpick">${manPickHtml(1)}</div></div>
+    <label class="rp-mrow">${escapeHtml(i18n('report.manual.station'))} <input type="text" data-mstation maxlength="12" size="6"></label>
+    <div class="rp-mrow"><button type="button" class="rp-btn rp-primary" data-mcreate${MAN.pick[0] && MAN.pick[1] ? '' : ' disabled'}>${escapeHtml(i18n('report.manual.create'))}</button>
+      <button type="button" class="rp-btn" data-mreload>${escapeHtml(i18n('report.manual.reload'))}</button> <span class="rp-status" data-mstatus></span></div>`;
+  const sel = box.querySelector('[data-mgroup]');
+  if (sel) sel.addEventListener('change', () => { MAN.gid = sel.value; MAN.pick = [null, null]; manDrawForm(sec); });
+  for (const rb of box.querySelectorAll('input[name="rp-mside"]')) {
+    rb.addEventListener('change', () => {
+      MAN.side = rb.value === 'l' ? 'l' : 'w';
+      MAN.pick = MAN.pick.map((p) => (p && manCandOk(p, MAN.side) ? p : null));   // 勝者側に変えたら負けている人は外す
+      manDrawForm(sec);
+    });
+  }
+  for (const k of [0, 1]) {
+    const inp = box.querySelector(`[data-mq="${k}"]`);
+    if (inp) { inp.addEventListener('input', () => manDrawCands(sec, k)); manDrawCands(sec, k); }
+  }
+  for (const b of box.querySelectorAll('[data-mclear]')) b.addEventListener('click', () => { MAN.pick[Number(b.getAttribute('data-mclear'))] = null; manDrawForm(sec); });
+  const rl = box.querySelector('[data-mreload]');
+  if (rl) rl.addEventListener('click', () => manLoad(sec, true));
+  const cr = box.querySelector('[data-mcreate]');
+  if (cr) cr.addEventListener('click', async () => {
+    const [a, b] = MAN.pick;
+    if (!a || !b) return;
+    const station = (box.querySelector('[data-mstation]') || {}).value || '';
+    const g = manGroup();
+    if (!confirm(i18n('report.manual.confirm', { side: i18n(MAN.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'), group: g ? g.name : '', a: a.name, b: b.name }))) return;
+    const st = box.querySelector('[data-mstatus]');
+    setStatus(st, i18n('report.sending'), 'busy');
+    const x = await api({ action: 'report_manual_create', token: tok(), code: CODE, group: MAN.gid, side: MAN.side, entrants: [a.id, b.id], station });
+    if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
+    MAN.pick = [null, null];
+    await manLoad(sec, true);
+    setStatus(sec.querySelector('[data-mstatus]'), i18n('report.manual.created', { a: a.name, b: b.name }), 'ok');
+    manRefresh();
+  });
+}
+/** 指定・取り消しの後に一覧を読み直す (見本は report_admin の見本をそのまま) */
+async function manRefresh() {
+  if (!DEMO) { refreshAdminSets(true); return; }
+  const r = await api({ action: 'report_admin', token: '', code: CODE });
+  if (r && r.ok) manualUpdate(r);
+}
+/** 候補を読む (開いたとき・指定した後・「候補を読み直す」) */
+async function manLoad(sec, force) {
+  if (MAN.groups && !force) { manDrawForm(sec); return; }
+  const r = await api({ action: 'report_bracket', token: tok(), code: CODE });
+  MAN.err = r && r.ok ? '' : errText(r);
+  if (r && r.ok) {
+    MAN.groups = r.groups || [];
+    if (!MAN.groups.some((g) => g.id === MAN.gid)) MAN.gid = MAN.groups.length ? MAN.groups[0].id : '';
+    // 選んであった人は新しい候補の情報に差し替える (指定済み・負けが増えたら外す)
+    const g = manGroup();
+    MAN.pick = MAN.pick.map((p) => { const n = p && g ? g.entrants.find((e) => e.id === p.id) : null; return n && manCandOk(n, MAN.side) ? n : null; });
+  }
+  manDrawForm(sec);
+}
+/** 指定した試合の一覧 (状態つき) */
+function manListHtml(r) {
+  const list = r.manual || [];
+  if (!list.length) return `<p class="rp-muted">${escapeHtml(i18n('report.manual.none'))}</p>`;
+  return `<ul class="rp-mlist">` + list.map((m) => {
+    const row = (r.sets || []).find((s) => s.set_id === m.set_id);
+    const names = (m.slots || []).map((s) => (s ? s.name : '?')).join(' vs ');
+    const st = m.status === 'matched' ? i18n('report.manual.st_matched', { id: m.real_set_id || '' })
+      : m.status === 'cancelled' ? i18n('report.manual.st_cancelled')
+      : row ? STATE_LABEL(row.state) + (row.note ? ' · ' + noteText(row.note) : '') : i18n('report.manual.st_open');
+    return `<li class="rp-mitem rp-m-${escapeHtml(m.status)}"><span class="rp-tag">${escapeHtml(i18n(m.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'))}</span>
+      ${m.group_name ? `<span class="rp-muted">${escapeHtml(m.group_name)}</span>` : ''} <b>${escapeHtml(names)}</b>${m.station ? ' · ' + escapeHtml(i18n('report.station', { n: m.station })) : ''}
+      · <span>${escapeHtml(st)}</span>
+      ${m.status === 'open' ? ` <button type="button" class="rp-link" data-mcancel="${escapeHtml(String(m.id))}">${escapeHtml(i18n('report.manual.cancel'))}</button>` : ''}</li>`;
+  }).join('') + `</ul>`;
+}
+/** 運営の画面の「障害中」の帯と、次の試合の指定 (start.gg の受付だけ)。一覧と帯だけ毎回描き直し、入力欄は消さない */
+function manualUpdate(r) {
+  const sec = $('rp-adm-manual');
+  if (!sec || !INFO || INFO.kind !== 'startgg') return;
+  sec.hidden = false;
+  const outage = !!r.outage;
+  if (!MAN.built) {
+    MAN.built = true;
+    sec.innerHTML = `<div data-moutage></div>
+      <details class="rp-manual" data-mdet>
+        <summary>${escapeHtml(i18n('report.manual.title'))}</summary>
+        <p class="rp-muted">${escapeHtml(i18n('report.manual.help'))}</p>
+        <div data-mform></div>
+        <h3>${escapeHtml(i18n('report.manual.list'))}</h3>
+        <div data-mlist></div>
+      </details>`;
+    const det = sec.querySelector('[data-mdet]');
+    det.addEventListener('toggle', () => { if (det.open) manLoad(sec, false); });
+  }
+  const held = (r.sets || []).filter((s) => s.state === 'queued').length;
+  const snap = r.snapshot;
+  sec.querySelector('[data-moutage]').innerHTML = outage
+    ? `<div class="rp-banner rp-warn rp-outage">⚠ ${escapeHtml(r.outage.since_ms ? i18n('report.outage.banner_since', { t: hhmm(r.outage.since_ms) }) : i18n('report.outage.banner'))}
+        <div class="rp-outage-sub">${escapeHtml(i18n('report.outage.admin_help', { n: held }))}${snap && snap.synced_ms ? ' ' + escapeHtml(i18n('report.outage.snap_at', { t: hhmm(snap.synced_ms) })) : ''}</div></div>`
+    : held ? `<div class="rp-banner">${escapeHtml(i18n('report.outage.recovering', { n: held }))}</div>` : '';
+  sec.querySelector('[data-mlist]').innerHTML = manListHtml(r);
+  for (const b of sec.querySelectorAll('[data-mcancel]')) {
+    b.addEventListener('click', async () => {
+      if (!confirm(i18n('report.manual.cancel_confirm'))) return;
+      const x = await api({ action: 'report_manual_cancel', token: tok(), code: CODE, id: Number(b.getAttribute('data-mcancel')) });
+      if (!x || !x.ok) { alert(errText(x)); return; }
+      if (MAN.groups) manLoad(sec, true);
+      manRefresh();
+    });
+  }
+  // 障害になったら一度だけ開く (候補を読む)
+  const det = sec.querySelector('[data-mdet]');
+  if (outage && !MAN.opened) { MAN.opened = true; det.open = true; }
 }
 
 // ── 報告管理者 (運営だけが足す・外す)。名前・discriminator で SPSP の選手から探す。SPSP にデータが無い人は discriminator で ──
@@ -1662,7 +1935,7 @@ async function refreshAdminSets(force) {
   const busy = !!box && (box.contains(document.activeElement) || !!ADMIN_FORM_OPEN);
   if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
     const r = await api({ action: 'report_admin', token: tok(), code: CODE });
-    if (r && r.ok) { renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
+    if (r && r.ok) { manualUpdate(r); renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
   }
   adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
 }
@@ -1686,7 +1959,7 @@ function renderAdminSets(sets, force) {
   if (!force && sig === ADMIN_SIG && box.childElementCount) return;
   if (!force && ADMIN_FORM_OPEN && box.childElementCount) return;   // 直している途中は描き直さない
   ADMIN_SIG = sig;
-  const order = { review: 0, conflict: 1, pending: 2, reported: 3, reset: 4, agreed: 5, fixed: 6 };
+  const order = { review: 0, conflict: 1, queued: 2, pending: 3, reported: 4, reset: 5, agreed: 6, fixed: 7 };
   sets.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || b.updated_ms - a.updated_ms);
   let h = `<h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}</h2>`;
   if (!sets.length) h += `<p class="rp-muted">${escapeHtml(i18n('report.admin.empty'))}</p>`;
@@ -1708,7 +1981,7 @@ function renderAdminSets(sets, force) {
       ${s.note ? `<div class="rp-adm-note">${escapeHtml(noteText(s.note))}</div>` : ''}
       <div class="rp-adm-fix">
         ${adoptable(s).map((k) => `<button type="button" class="rp-btn rp-primary" data-adopt="${k}">${escapeHtml(s.state === 'pending' ? i18n('report.admin.approve', { name: names[k] }) : i18n('report.admin.adopt', { name: names[k] }))}</button>`).join('')}
-        ${s.state === 'pending' ? `<button type="button" class="rp-btn" data-hold>${escapeHtml(i18n('report.admin.hold'))}</button>` : ''}
+        ${s.state === 'pending' || s.state === 'queued' ? `<button type="button" class="rp-btn" data-hold>${escapeHtml(i18n('report.admin.hold'))}</button>` : ''}
         <button type="button" class="rp-btn" data-fix-open>${escapeHtml(ADMIN_FORM_OPEN === s.set_id ? i18n('report.admin.fix_close') : adoptable(s).length ? i18n('report.admin.fix_manual') : i18n('report.admin.fix_open'))}</button>
         <button type="button" class="rp-btn" data-reset>${escapeHtml(i18n('report.admin.reset'))}</button>
         <span class="rp-status" data-fix-status></span>
@@ -1916,7 +2189,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -2036,6 +2309,8 @@ const R21 = { w: 0, g: [{ w: 0, c: [null, null], s: null }, { w: 1, c: [null, nu
 const L12 = { w: 1, g: [{ w: 1, c: [null, null], s: null }, { w: 0, c: [null, null], s: null }, { w: 1, c: [null, null], s: null }] };
 
 let DEMO_P = [];
+/** 見本の指定した試合 (admin_outage) */
+let DEMO_MANUAL = [];
 /** 見本の何先: 予選 (p1) は 2 先・本戦 (p2) は勝者側 3 回戦・敗者側 4 回戦から 3 先・Challonge は全部 1 先 */
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
@@ -2063,8 +2338,33 @@ async function demoApi(body) {
     VIEW.sets = (VIEW.sets || []).filter((x) => x.set_id !== body.set_id).concat([row]);
     return { ok: true, set_id: body.set_id, state, op: 'report' };
   }
+  if (DEMO === 'admin_outage') {
+    // 見本 (start.gg に繋がらない運営の画面): 未反映の報告・指定した試合・次の試合の候補
+    const ent = (i, o) => Object.assign({ id: 'e' + i, name: P[i].name, uid: P[i].uid || null, seed: i + 1, wl: false, ll: false, hw: false, hl: false, playing: false, manual: false }, o || {});
+    if (body.action === 'report_bracket') {
+      const busy = new Set(DEMO_MANUAL.filter((m) => m.status === 'open').flatMap((m) => m.slots.map((x) => x.id)));
+      const es = [ent(0), ent(1, { hw: true }), ent(2, { wl: true }), ent(3), ent(4, { wl: true, hl: true }), ent(5, { playing: true }), ent(6, { hw: true }), ent(7, { wl: true, ll: true })]
+        .map((e) => Object.assign(e, { manual: busy.has(e.id) }));
+      return { ok: true, groups: [{ id: '901', name: 'Pools B3', phase: 'p1', open: 3, entrants: es }, { id: '902', name: 'Pools B4', phase: 'p1', open: 0, entrants: [ent(8), ent(9)] }], synced_ms: Date.now() - 26 * 60000 };
+    }
+    if (body.action === 'report_manual_create') {
+      const id = DEMO_MANUAL.length + 1;
+      const sl = body.entrants.map((eid) => { const i = Number(String(eid).slice(1)); return { id: eid, name: P[i].name, users: P[i].uid ? [P[i].uid] : [], seed: i + 1 }; });
+      const m = { set_id: 'm' + id, id, side: body.side, group: body.group, group_name: 'Pools B3', phase: 'p1', station: body.station || null, slots: sl, status: 'open', real_set_id: null, created_ms: Date.now(), updated_ms: Date.now() };
+      DEMO_MANUAL.unshift(m);
+      return { ok: true, manual: m };
+    }
+    if (body.action === 'report_manual_cancel') { const m = DEMO_MANUAL.find((x) => x.id === body.id); if (m) m.status = 'cancelled'; return { ok: true, id: body.id }; }
+  }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
+    if (DEMO === 'admin_outage') {
+      return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT } },
+        sets: [Object.assign(row('101', 'queued', R20, R20, 0), { note: 'outage' }), Object.assign(row('102', 'queued', R21, null, 2), { note: 'outage' }),
+          Object.assign(row('103', 'conflict', R21, L12, 4), { note: 'outage' }), row('104', 'agreed', R20, R20, 6)],
+        role: 'admin', managers: DEMO_MGRS, outage: { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' },
+        manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true } };
+    }
     return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)],
       role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS };
@@ -2113,7 +2413,7 @@ async function runDemo() {
   $('rp-title').textContent = INFO.name;
   if (DEMO === 'challonge') $('rp-sub').textContent = i18n('report.kind.challonge');
   VIEW = { ok: true, admin: true, sets: [] };
-  if (DEMO === 'admin') { await renderAdmin(); return; }
+  if (DEMO === 'admin' || DEMO === 'admin_outage') { await renderAdmin(); return; }
   if (DEMO === 'login') { $('rp-login').hidden = false; return; }   // ログインしていない人が報告ページを開いた
   if (DEMO === 'not_entrant') { ENTRANT = false; MATCHES = []; renderPlayer(); return; }
   if (DEMO === 'win') {   // 勝った側が報告した直後 (勝利の演出 → 勝利画面)。下の画面は報告した後の形
@@ -2150,6 +2450,18 @@ async function runDemo() {
       demoMatch(P, { id: '90003', state: 'complete', round: 'Winners Round 2', slots: [demoSlot(P[0], 5, 0), demoSlot(P[6], 12, 1)], winner: 1, score: [1, 2] }),
       demoMatch(P, { id: '90004', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
     VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), demoRow('90003', 'review', null, L12, P), demoRow('90004', 'reported', R21, null, P)];
+  }
+  if (DEMO === 'outage') {
+    // start.gg が止まっている: 前の試合は SPSP に保存 (未反映)、次の試合は運営が指定した試合
+    VIEW.outage = { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' };
+    VIEW.snap = { sets: [], pre: {}, entrant: true, synced_ms: Date.now() - 26 * 60000 };
+    if (!DEMO_ME) DEMO_ME = 'demo-me';   // 選手のデータが読めない見本でも「自分」の試合にする
+    VIEW.manual = [{ set_id: 'm1', id: 1, side: 'l', group: '901', group_name: 'Pools B3', phase: 'p1', station: '5',
+      slots: [{ id: 'e0', name: P[0].name, users: [DEMO_ME], seed: 5 }, { id: 'e2', name: P[2].name, users: P[2].uid ? [P[2].uid] : [], seed: 12 }], status: 'open' }];
+    const held = demoMatch(P, { id: '90005', started: false, round: 'Winners Round 2' });
+    MATCHES = [...VIEW.manual.map(fromManual).filter(Boolean), held, done0];
+    VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), Object.assign(demoRow('90005', 'queued', L12, null, P), { note: 'outage', applied: null })];
+    MATCHES = overlayHeld(MATCHES);
   }
   const cur = MATCHES.find((m) => m.state === 'open');
   renderPlayer();

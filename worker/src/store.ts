@@ -160,6 +160,16 @@ export interface ReportSubmissionRow {
   id?: number; code: string; set_id: string; user_id: string; side: number; ts_ms: number; result: string; outcome: string;
 }
 
+/** report_health の 1 行 (start.gg / Challonge の様子、0017) */
+export interface ReportHealthRow { kind: string; down_since_ms: number; last_fail_ms: number; last_ok_ms: number; fails: number; probe_ms: number; note: string }
+/** report_snapshots の 1 行 (ブラケットの写し、0017) */
+export interface ReportSnapshotRow { code: string; data: string; synced_ms: number; lock_ms: number }
+/** report_manual_sets の 1 行 (障害中に運営が指定した試合、0017) */
+export interface ReportManualRow {
+  id?: number; code: string; side: string; group_id: string; slots: string; users: string; station: string; set_id: string;
+  status: string; created_by: string; created_ms: number; updated_ms: number;
+}
+
 export interface Store {
   /** ログインの記録を 1 行足す。 */
   insertLogin(row: LoginRow): Promise<void>;
@@ -261,6 +271,26 @@ export interface Store {
   setReportSubmissionOutcome(id: number, outcome: string): Promise<void>;
   /** その試合の報告 (id 順)。 */
   listReportSubmissions(code: string, setId: string): Promise<ReportSubmissionRow[]>;
+  /** 報告を別の試合に移す (運営が指定した試合 m<id> → 見つかった start.gg の試合、側の入れ替えつき)。 */
+  updateReportSubmission(id: number, setId: string, side: number, result: string): Promise<void>;
+  deleteReportSet(code: string, setId: string): Promise<void>;
+  getReportHealth(kind: string): Promise<ReportHealthRow | null>;
+  putReportHealth(row: ReportHealthRow): Promise<void>;
+  /** 障害中に試す役を取る (probe_ms が gapMs より前なら now にして true)。 */
+  claimReportProbe(kind: string, nowMs: number, gapMs: number): Promise<boolean>;
+  getReportSnapshot(code: string): Promise<ReportSnapshotRow | null>;
+  /** 写しを書く (data と synced_ms。lock は外す)。 */
+  putReportSnapshot(code: string, data: string, syncedMs: number): Promise<void>;
+  /** 写す・取り込む役を取る (lock_ms が holdMs より前なら now にして true、行が無ければ作る)。 */
+  claimReportSnapshot(code: string, nowMs: number, holdMs: number): Promise<boolean>;
+  releaseReportSnapshot(code: string): Promise<void>;
+  insertReportManual(row: ReportManualRow): Promise<number>;
+  getReportManual(code: string, id: number): Promise<ReportManualRow | null>;
+  /** その受付の指定した試合 (新しい順、取り消したものも)。 */
+  listReportManual(code: string): Promise<ReportManualRow[]>;
+  updateReportManual(code: string, id: number, status: string, setId: string, nowMs: number): Promise<void>;
+  /** その人が選手の、指定した試合 (open だけ)。 */
+  listReportManualForUser(userId: string, code: string): Promise<ReportManualRow[]>;
   /** その人が sinceMs 以降に送った数と、最後に送った時刻。 */
   reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }>;
 }
