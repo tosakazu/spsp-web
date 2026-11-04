@@ -2020,7 +2020,13 @@ function manualUpdate(r) {
 // ── 運営: 対戦相手が見つからない・参加者の試合 (対戦開始・DQ) (2026-11-04、docs §12) ─────────────
 const OPS = { built: false, ents: null, pick: null, sets: null, err: '', last: null };
 const dqScopeLabel = (s) => (s === 'w' ? i18n('report.dq.scope_w') : s === 'l' ? i18n('report.dq.scope_l') : s === 's' ? i18n('report.dq.scope_s') : i18n('report.dq.scope_a'));
-const noshowNote = (n) => (n === 'started' ? i18n('report.noshow.res_started') : n === 'reported' ? i18n('report.noshow.res_reported') : n === 'dq' ? i18n('report.noshow.res_dq') : i18n('report.noshow.res_admin'));
+/** 一覧の 1 行の見出し。解決したものは「探していましたが、対戦開始しました」のように何が起きたかまで 1 文で */
+const noshowLine = (x) => {
+  const v = { me: x.me, opp: x.opp };
+  if (x.status === 'open') return i18n('report.noshow.admin_line', v);
+  return x.note === 'started' ? i18n('report.noshow.done_started', v) : x.note === 'reported' ? i18n('report.noshow.done_reported', v)
+    : x.note === 'dq' ? i18n('report.noshow.done_dq', v) : i18n('report.noshow.done_admin', v);
+};
 function opsNoshowHtml(r) {
   const list = (r.noshows || []).slice().sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open') || b.last_ms - a.last_ms);
   const open = list.filter((x) => x.status === 'open').length;
@@ -2033,9 +2039,9 @@ function opsNoshowHtml(r) {
       <button type="button" class="rp-link" data-ops-start="${escapeHtml(x.set_id)}">${escapeHtml(i18n('report.start.admin_btn'))}</button>
       <button type="button" class="rp-link" data-ops-resolve="${escapeHtml(x.set_id)}">${escapeHtml(i18n('report.noshow.resolve'))}</button>
       ${sgg && x.opp_entrant ? `<button type="button" class="rp-link" data-ops-nsdq="${escapeHtml(String(x.opp_entrant))}" data-name="${escapeHtml(x.opp)}" data-scope="${escapeHtml(x.side || 'w')}">${escapeHtml(i18n('report.noshow.dq_opp', { name: x.opp, scope: dqScopeLabel(x.side || 'w') }))}</button>` : ''}` : '';
-    return `<li class="rp-mitem rp-ns-${escapeHtml(x.status)}"><b>${escapeHtml(i18n('report.noshow.admin_line', { me: x.me, opp: x.opp }))}</b>
+    return `<li class="rp-mitem rp-ns-${escapeHtml(x.status)}"><b>${escapeHtml(noshowLine(x))}</b>
       ${x.round ? `<span class="rp-muted">${escapeHtml(x.round)}</span>` : ''} · ${escapeHtml(t)}${x.count > 1 ? ' ' + escapeHtml(i18n('report.noshow.times', { n: x.count })) : ''}
-      ${x.status === 'open' ? '' : ` · <span class="rp-muted">${escapeHtml(noshowNote(x.note))}</span>`}${btns}</li>`;
+      ${btns}</li>`;
   }).join('') + `</ul>`;
 }
 function opsDqListHtml(r) {

@@ -736,6 +736,9 @@ test('見本 admin (運営): 見つからないの一覧 (対戦開始にする�
   assert.ok(await until(() => sec.querySelector('[data-ops-dqs] li')), 'DQ の一覧');
   assert.match(sec.querySelector('[data-ops-dqs] li').textContent, /勝者側のみ/);
   assert.match(sec.querySelector('[data-ops-noshow] h2').textContent, /\(0 件\)/, 'DQ で解決');
+  const lines = [...sec.querySelectorAll('[data-ops-noshow] li b')].map((b) => b.textContent);
+  assert.ok(lines.some((t) => /を探していましたが、.+ を DQ にしました$/.test(t)), lines.join(' / '));
+  assert.ok(lines.some((t) => /を探していましたが、対戦開始しました$/.test(t)), lines.join(' / '));
   // 参加者を選んで対戦開始・DQ (両方)
   const q = sec.querySelector('[data-ops-q]');
   q.dispatchEvent(new p.w.Event('focus'));
