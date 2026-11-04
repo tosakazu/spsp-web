@@ -585,7 +585,7 @@ test('見本 outage (選手): 障害の帯・運営が指定した試合が今�
   assert.match(banner.textContent, /時点のもの/);
   const cur = p.d.querySelector('.rp-current');
   assert.match(cur.querySelector('.rp-round').textContent, /Pools B3 · 敗者側/);
-  assert.match(cur.querySelector('.rp-manual-note').textContent, /運営が指定した試合/);
+  assert.ok(!cur.querySelector('.rp-manual-note'), '指定した試合の説明文は出さない (2026-11-04)');
   assert.ok(cur.querySelector('form.rp-form[data-set="m1"]'), '指定した試合に報告できる');
   const done = [...p.d.querySelectorAll('.rp-done li')].map((li) => li.textContent);
   assert.ok(done.some((t) => /Winners Round 2/.test(t) && /未反映 \(SPSP に保存\)/.test(t)), done.join(' / '));

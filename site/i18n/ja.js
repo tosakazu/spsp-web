@@ -2226,7 +2226,6 @@ window.SPSP_I18N.ja = {
   'report.manual.st_cancelled': '取り消し',
   'report.manual.cancel': '取り消す',
   'report.manual.cancel_confirm': 'この指定を取り消しますか？ この試合の報告は数えなくなります。',
-  'report.manual.player_note': '運営が指定した試合です (start.gg が止まっているため)。結果は SPSP に保存し、復旧したら start.gg に反映します。',
   'report.manual.tag_wl': '勝者側で負け',
   'report.manual.tag_hw': '勝者側で負け (未反映)',
   'report.manual.tag_noloss': '負けの記録なし',

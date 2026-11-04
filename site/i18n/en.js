@@ -2173,7 +2173,6 @@ window.SPSP_I18N.en = {
   'report.manual.st_cancelled': 'cancelled',
   'report.manual.cancel': 'Cancel',
   'report.manual.cancel_confirm': 'Cancel this match? Reports for it will no longer count.',
-  'report.manual.player_note': 'This match was set by the organizer (start.gg is down). The result is saved on SPSP and applied to start.gg once it is back.',
   'report.manual.tag_wl': 'lost in winners',
   'report.manual.tag_hw': 'lost in winners (not applied)',
   'report.manual.tag_noloss': 'no recorded loss',

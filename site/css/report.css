@@ -583,7 +583,6 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-adm-row.rp-state-queued { border-color: #fde047; background: #fefce8; }
 .rp-outage-sub { font-weight: 400; font-size: 12px; margin-top: 4px; line-height: 1.5; }
 .rp-note { color: #854d0e; font-size: 12px; margin-top: 4px; }
-.rp-manual-note { color: #854d0e; font-size: 12px; margin: 6px 0; }
 .rp-manual > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .rp-mrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .rp-mrow select, .rp-mrow input[type="text"] { font: inherit; padding: 4px 6px; }

@@ -1050,7 +1050,6 @@ function renderPlayer() {
       ${vsHtml(cur)}
       ${roundHtml(cur)}
       ${stationHtml(cur)}
-      ${cur.manual ? `<p class="rp-manual-note">${escapeHtml(i18n('report.manual.player_note'))}</p>` : ''}
       ${reportStateHtml(cur)}
       ${gate ? `<p class="rp-gate">${escapeHtml(gate)}</p>` : (FORM_OPEN === cur.id || !rowOf(cur.id) ? formHtml(cur) : `<button type="button" class="rp-btn" data-reopen="${escapeHtml(cur.id)}">${escapeHtml(i18n('report.resend'))}</button>`)}
       <details class="rp-more" data-pred="${escapeHtml(cur.id)}"><summary>${escapeHtml(i18n('report.more'))}</summary><div class="rp-pred">${escapeHtml(i18n('report.loading'))}</div></details>
