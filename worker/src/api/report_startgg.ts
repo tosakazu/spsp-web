@@ -189,12 +189,13 @@ export function parseStartggSet(raw: unknown, eventId: string): NSet | null {
     round: s.round !== null && s.round !== undefined && Number.isInteger(round) ? round : null, phaseKey: phaseId };
 }
 
-/** この set を前提 (prereq) にする set のうち、結果が入ったものがあるか */
+/** この set を前提 (prereq) にする set のうち、始まった (state 2) か結果が入った (state 3) ものがあるか。
+ *  あれば start.gg で自動では取り消さず、運営に回す (2026-11-05 から「始まった」も。取り消すと進行中の試合が消える) */
 export function downstreamDoneOf(nodes: unknown, setId: string): boolean {
   if (!Array.isArray(nodes)) return false;
   return nodes.some((n) => {
     const x = n as { id?: unknown; state?: unknown; slots?: { prereqType?: unknown; prereqId?: unknown }[] } | null;
-    if (!x || String(x.id) === setId || Number(x.state) !== 3 || !Array.isArray(x.slots)) return false;
+    if (!x || String(x.id) === setId || !(Number(x.state) === 2 || Number(x.state) === 3) || !Array.isArray(x.slots)) return false;
     return x.slots.some((sl) => sl && sl.prereqType === 'set' && String(sl.prereqId) === setId);
   });
 }

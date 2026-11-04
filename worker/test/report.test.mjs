@@ -155,7 +155,8 @@ test('start.gg の set の読み取り: 枠・結果・下位クラス・次の�
   assert.strictEqual(s.isClass, true); assert.strictEqual(s.lPlacement, 7);
   assert.strictEqual(parseStartggSet(raw, '8'), null);   // 別のイベントの set
   assert.ok(downstreamDoneOf([{ id: 101, state: 3, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
-  assert.ok(!downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
+  assert.ok(downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'), '始まっただけでも数える (2026-11-05)');
+  assert.ok(!downstreamDoneOf([{ id: 101, state: 1, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
   assert.deepStrictEqual(gameDataOf(s, R(0, G(0, 1293, null, 3))), [{ gameNum: 1, winnerId: '1', stageId: '3', selections: [{ entrantId: '1', characterId: '1293' }] }]);
 });
 
@@ -237,7 +238,7 @@ async function envWith(fake) {
   const cfg = { clientId: 'cid', redirectUri: 'https://x/callback.html', clientSecret: 'CS', sessionSecret: 'sess-' + Math.random(),
     sessionTtlMs: SESSION_TTL_MS_DEFAULT, stateTtlMs: STATE_TTL_MS_DEFAULT, tsOffsetMin: 540 };
   let now = Date.now();
-  const ctx = { cfg, store, fetch: fake.fetch, dataFetch: async () => { throw new Error('no'); }, now: () => now };
+  const ctx = { cfg, store, fetch: (u, i) => fake.fetch(u, i), dataFetch: async () => { throw new Error('no'); }, now: () => now };
   const call = (b) => dispatch(ctx, b);
   const tok = (uid) => issueSessionToken(cfg, { id: String(uid), slug: '', gamerTag: '' }, now);
   return { store, cfg, ctx, call, tok, tick: (ms) => { now += ms; } };
@@ -357,6 +358,33 @@ test('報告の流れ: 1 人目で反映 → 2 人目が違えば取り消し �
   const na = await e.call({ action: 'report_notices', token: e.login.token });
   assert.deepStrictEqual(na.admin.map((x) => [x.code, x.role]), [[e.code, 'admin']]);
   assert.deepStrictEqual((await e.call({ action: 'report_notices' })).admin, []);
+  // 大会が終わった受付は、選手にも運営にもお知らせ・メニューに出さない (運営は結果報告管理から開ける。2026-11-05)
+  await e.store.setReportEventEnded(e.code, 1);
+  const ne = await e.call({ action: 'report_notices', token: B });
+  assert.deepStrictEqual([ne.events.length, ne.mine.length], [0, 0]);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: e.login.token })).admin, []);
+  assert.strictEqual((await e.call({ action: 'report_view', token: A, code: e.code })).ok, true, 'ページは開ける');
+  for (const x of e.store.reportEvents) x.ended_ms = 0;
+  // 参加中の大会 (速報) と同じ: 速報が終わった / 閉じ忘れと出した部門は終わり、開催中と出したら戻す
+  const inner = fake.fetch;
+  let liveIdx = { events: [{ event_id: 9, ended: true }] }; let liveState = { stale: {} };
+  fake.fetch = async (url, init) => (String(url).startsWith('https://data.spsp.games/live/jp/index.json') ? new Response(JSON.stringify(liveIdx))
+    : String(url).startsWith('https://data.spsp.games/live/jp/_state.json') ? new Response(JSON.stringify(liveState)) : inner(url, init));
+  e.tick(61000);
+  assert.strictEqual((await e.call({ action: 'report_notices', token: B })).events.length, 0, '速報で終わった');
+  assert.ok(e.store.reportEvents[0].ended_ms > 0, '受付の行に残す');
+  liveIdx = { events: [{ event_id: 9, ended: false }] };
+  e.tick(61000);
+  assert.strictEqual((await e.call({ action: 'report_notices', token: B })).events.length, 1, '開催中に戻った');
+  liveIdx = { events: [] }; liveState = { stale: { 9: 1 } };
+  e.tick(61000);
+  assert.strictEqual((await e.call({ action: 'report_notices', token: B })).events.length, 0, '閉じ忘れ');
+  // Worker のメモリの値をほかのテストに残さない (速報に何も無い状態を読ませる)
+  liveIdx = { events: [] }; liveState = { stale: {} };
+  e.tick(61000);
+  await e.call({ action: 'report_notices', token: B });
+  fake.fetch = inner;
+  for (const x of e.store.reportEvents) x.ended_ms = 0;
   e.tick(5000);
   r = await e.call({ action: 'report_submit', token: B, code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0, c: [null, 1310] }, { w: 0, c: [null, 1311] }] } });
   assert.deepStrictEqual([r.state, r.op], ['agreed', 'report']);
@@ -628,12 +656,15 @@ test('運営の受付用ログイン (reporter) の state は、普段のログ�
   }
 });
 
-test('次の試合が始まっている (state 2) だけなら、食い違いは巻き戻す (結果が出るまでは)', () => {
+test('次の試合が始まっている (state 2) なら、食い違いでも start.gg では取り消さず運営の確認にする (2026-11-05)', () => {
   const a = { result: R(0, G(0), G(0)), ts: 1 };
   const bad = { result: R(1, G(1), G(1)), ts: 2 };
-  const started = set0({ complete: true, remote: R(0, G(0), G(0)) });   // downstreamDoneOf は state 3 だけを数える
-  assert.ok(!downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
-  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [a, bad], started).op, 'reset');
+  assert.ok(downstreamDoneOf([{ id: 101, state: 2, slots: [{ prereqType: 'set', prereqId: 100 }] }], '100'));
+  const started = set0({ complete: true, remote: R(0, G(0), G(0)), downstreamDone: true });
+  const d = reconcile({ state: 'reported', applied: a.result }, [a, bad], started);
+  assert.deepStrictEqual([d.op, d.state, d.note], ['none', 'review', 'locked_conflict']);
+  const notStarted = set0({ complete: true, remote: R(0, G(0), G(0)) });
+  assert.strictEqual(reconcile({ state: 'reported', applied: a.result }, [a, bad], notStarted).op, 'reset', '次の試合がまだなら巻き戻す');
 });
 
 test('次の試合の探し方: 2 人の試合が 60 件より多くてもページをまたいで見つける', async () => {

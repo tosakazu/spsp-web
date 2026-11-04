@@ -143,6 +143,8 @@ export interface ReportEventRow {
   managers?: string;
   /** start.gg の大会の管理者 (owner と admins の ID、カンマ区切り) と最後に読もうとした時刻 (0020)。古い行・テストの行には無いことがある */
   sgg_admins?: string; sgg_admins_ms?: number;
+  /** 大会が終わった時刻 (start.gg の部門が COMPLETED、0023)。0 = まだ */
+  ended_ms?: number;
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
@@ -151,7 +153,7 @@ export interface ReportPresetRow { name: string; settings: string; updated_ms: n
 /** report_grants の 1 行 (運営のログインのトークン、受付を始めるまで) */
 export interface ReportPushSubRow { endpoint: string; user_id: string; p256dh: string; auth: string; created_ms: number }
 export interface ReportGrantRow { user_id: string; token_enc: string; token_exp_ms: number; expires_ms: number }
-export type ReportEventPublic = Pick<ReportEventRow, 'code' | 'kind' | 'event_id' | 'tournament_id' | 'class_id' | 'name' | 'slug' | 'expires_ms' | 'settings'>;
+export type ReportEventPublic = Pick<ReportEventRow, 'code' | 'kind' | 'event_id' | 'tournament_id' | 'class_id' | 'name' | 'slug' | 'expires_ms' | 'settings' | 'ended_ms'>;
 /** report_sets の 1 行 */
 export interface ReportSetRow {
   code: string; set_id: string; state: string; users: string; slots: string; applied: string; note: string;
@@ -256,6 +258,8 @@ export interface Store {
   updateReportEventAdmins(code: string, admins: string): Promise<void>;
   /** 報告管理者 (JSON) を書き換える。 */
   updateReportEventManagers(code: string, managers: string): Promise<void>;
+  /** 大会が終わった時刻を入れる (まだ入っていなければ、0023)。ms = 0 なら消す (閉じ忘れと判定したあと動き出した) */
+  setReportEventEnded(code: string, ms: number): Promise<void>;
   /** 運営が確かめた通過順 (report_prog_ok、0021) */
   listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]>;
   putReportProgOk(code: string, groupId: string, list: string, userId: string, ms: number): Promise<void>;

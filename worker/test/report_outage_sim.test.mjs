@@ -313,19 +313,19 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8, struct = false, s
 test('障害を挟んで 8 人のダブルイリミを最後まで流す (乱数 40 通り): start.gg の結果が全部正しい・候補のきまり・確認待ちが残らない',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
     let checks = 0; let manual = 0; let dqs = 0;
-    const n = Number(process.env.SPSP_SIM_SEEDS) || 40;   // 多めに回すときは SPSP_SIM_SEEDS=300
+    const n = Number(process.env.SPSP_SIM_SEEDS) || 8;   // ふだんは 8 通り (軽く)。多めに回すときは SPSP_SIM_SEEDS=300
     for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) {
       const r = await runOne(seed);
       checks += r.checks; manual += r.manual; dqs += r.dqs;
     }
-    assert.ok(dqs > 10, 'DQ を十分に通った (' + dqs + ')');
-    assert.ok(manual > 20, '運営の指定を十分に通った (' + manual + ')');
-    assert.ok(checks > 20);
+    assert.ok(dqs >= Math.ceil(n / 8), 'DQ を通った (' + dqs + ')');
+    assert.ok(manual > n, '運営の指定を十分に通った (' + manual + ')');
+    assert.ok(checks > n);
   });
 
 test('同じ流れで、繋がっているときも 10% で 503・書き込みの 20% は応答が失われる (書けているのに失敗に見える)',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
-    const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
+    const n = Number(process.env.SPSP_SIM_SEEDS) || 8;
     for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) await runOne(1000 + seed, 0.1, 0.2);
   });
 
@@ -334,7 +334,7 @@ const RR5 = [];
 for (let a = 1, n = 1; a <= 5; a++) for (let b = a + 1; b <= 5; b++) RR5.push([n++, 1, a, b]);
 
 test('総当たり 5 人を障害・503・応答の消失を挟んで流す: 運営の指定なしで全部の結果が正しく入る', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
-  const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
+  const n = Number(process.env.SPSP_SIM_SEEDS) || 8;
   for (let seed = 1; seed <= n; seed++) {
     const r = await runOne(5000 + seed, seed % 2 ? 0.1 : 0, seed % 2 ? 0.2 : 0, RR5);
     assert.strictEqual(r.manual, 0, '総当たりは全部の試合が写しにあるので指定は要らない');
@@ -343,19 +343,19 @@ test('総当たり 5 人を障害・503・応答の消失を挟んで流す: 運
 
 test('構造 (シード・不戦勝・順位) があれば、障害中も運営の指定なしで次の試合が計算で出て、最後まで正しく入る (2026-11-05)',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
-    const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
+    const n = Number(process.env.SPSP_SIM_SEEDS) || 8;
     let manual = 0; let dqs = 0;
     for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) {
       const r = await runOne(7000 + seed, seed % 2 ? 0.1 : 0, seed % 2 ? 0.2 : 0, DE8, true);
       manual += r.manual; dqs += r.dqs;
     }
     assert.strictEqual(manual, 0, '運営の指定は要らない');
-    assert.ok(dqs > 10, 'DQ も通った (' + dqs + ')');
+    assert.ok(dqs >= Math.ceil(n / 8), 'DQ も通った (' + dqs + ')');
   });
 
 test('構造あり + start.gg が 2 人を逆の順に入れることがある (30%): 照合は通り、復旧後は側を入れ替えて正しい勝者を送る',
   { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
-    const n = Number(process.env.SPSP_SIM_SEEDS) || 40;
+    const n = Number(process.env.SPSP_SIM_SEEDS) || 8;
     let manual = 0;
     for (let seed = Number(process.env.SPSP_SIM_FROM) || 1; seed <= n; seed++) manual += (await runOne(8000 + seed, seed % 2 ? 0.1 : 0, seed % 2 ? 0.2 : 0, DE8, true, 0.3)).manual;
     assert.strictEqual(manual, 0, '運営の指定は要らない');

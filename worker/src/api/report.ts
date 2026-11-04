@@ -692,6 +692,8 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
       await absorbLiveStructs(fetchFn, snap, ev.target_id, now);
       const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
       if (!e) { try { checkSnap(snap, now); } catch (_) { /* 照合できなくても写しは残す */ } }
+      // 大会が終わった: お知らせ・メニュー・ホームの帯から外す (運営は結果報告管理から開ける)
+      if (snap.es === 'COMPLETED' && !ev.ended_ms) await store.setReportEventEnded(ev.code, now).catch(() => undefined);
       if (e && e !== 'outage_skip' && isOutageNote(e)) await health.fail(e, now);
       else if (!e) await health.ok(now);
       const js = await encodeSnapshot(snap);
@@ -1042,10 +1044,43 @@ export async function handleReportPick(cfg: Config, store: Store, req: Record<st
 }
 
 /** action: "report_notices" — 受付中の大会 (だれでも) と、ログイン中なら自分の試合の食い違い・運営確認 */
+/**
+ * 大会が終わったかは参加中の大会 (速報の Worker、live/jp/) と同じに決める (2026-11-05): 速報が終わった (ACTIVE でなくなった) と出した部門と、
+ * 動きの無い ACTIVE (閉じ忘れ、_state.json の stale) は終わり。速報が開催中と出していれば終わりではない (閉じ忘れの判定のあと動き出した)。
+ * 速報は終わってから 1 時間で一覧から消すので、見えたときに受付の行に残す (ended_ms)。1 分は Worker のメモリの値を使う
+ */
+export const LIVE_BASE = 'https://data.spsp.games/live/jp/';
+let LIVE_STATUS: { at: number; active: Set<string>; ended: Set<string> } | null = null;
+async function liveStatus(fetchFn: FetchFn, now: number): Promise<{ active: Set<string>; ended: Set<string> } | null> {
+  const age = LIVE_STATUS ? now - LIVE_STATUS.at : -1;
+  if (LIVE_STATUS && age >= 0 && age < 60 * 1000) return LIVE_STATUS;
+  // 読めなかったときは 10 分までの前の値 (それより古ければ判定しない)
+  const prev = LIVE_STATUS && age >= 0 && age < 10 * 60 * 1000 ? LIVE_STATUS : null;
+  try {
+    const [ri, rs] = await Promise.all([fetchFn(LIVE_BASE + 'index.json', { headers: { Accept: 'application/json' } }), fetchFn(LIVE_BASE + '_state.json', { headers: { Accept: 'application/json' } })]);
+    if (!ri.ok) return prev;
+    const idx = await ri.json() as { events?: { event_id?: unknown; ended?: unknown }[] } | null;
+    const st = rs.ok ? await rs.json() as { stale?: Record<string, unknown> } | null : null;
+    const active = new Set<string>(); const ended = new Set<string>();
+    for (const e of (idx && idx.events) || []) if (e && e.event_id != null) (e.ended ? ended : active).add(String(e.event_id));
+    for (const id of Object.keys((st && st.stale) || {})) if (!active.has(id)) ended.add(id);
+    LIVE_STATUS = { at: now, active, ended };
+  } catch (_) { return prev; }
+  return LIVE_STATUS;
+}
+
 export async function handleReportNotices(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   await store.purgeReportTokens(now);
   const active = await store.listActiveReportEvents(now);
-  const events = active.filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now));   // 受付の開始前はお知らせに出さない
+  const live = active.some((e) => e.kind === 'startgg') ? await liveStatus(fetchFn, now) : null;
+  if (live) for (const e of active) {
+    if (e.kind !== 'startgg' || e.event_id === null) continue;
+    const id = String(e.event_id);
+    if (!e.ended_ms && live.ended.has(id)) { e.ended_ms = now; await store.setReportEventEnded(e.code, now).catch(() => undefined); }
+    else if (e.ended_ms && live.active.has(id)) { e.ended_ms = 0; await store.setReportEventEnded(e.code, 0).catch(() => undefined); }
+  }
+  // 受付の開始前と、大会が終わった受付 (ended_ms) はお知らせに出さない
+  const events = active.filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now) && !e.ended_ms);
   const sess = req.token ? await sessionOf(cfg, req, now) : null;
   const mine = [];
   // admin = この人が運営・報告管理者の受付 (受付の開始前も)。人型のメニューとトップの帯から運営の画面へ (2026-11-04)
@@ -1054,7 +1089,7 @@ export async function handleReportNotices(cfg: Config, store: Store, fetchFn: Fe
     for (const r of await store.listReportSetsForUser(sess.id, events.map((e) => e.code))) {
       if (r.state === 'conflict' || r.state === 'review') mine.push(await setView(store, r, sess.id));
     }
-    for (const e of active.slice(0, 50)) {
+    for (const e of active.filter((x) => !x.ended_ms).slice(0, 50)) {
       const row = await store.getReportEvent(e.code);
       if (!row) continue;
       const role = roleOf(row, sess.id);
@@ -1245,7 +1280,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   if (!r.ok) {
     if (r.why === 'provider' && isOutageNote(r.note)) return queue();
     await store.setReportSubmissionOutcome(subId, 'error:' + r.note.slice(0, 100));
-    if (r.why === 'locked') return err('locked', '次の試合の結果が入っているため、ここでは直せません。start.gg / Challonge で直してください。', 'locked');
+    if (r.why === 'locked') return err('locked', '次の試合が始まっているか結果が入っているため、ここでは直せません。start.gg / Challonge で直してください。', 'locked');
     if (r.why === 'busy') return err('busy', 'ほかの報告と重なりました。もう一度やり直してください。', 'busy');
     return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   }
