@@ -73,3 +73,25 @@ async function sendAll(cfg: Config, store: Store, fetchFn: FetchFn, subs: { endp
   }));
   return rs.reduce((a: number, b: number) => a + b, 0);
 }
+
+/** 運営が次の試合を指定したとき (start.gg が止まっているあいだ、report_manual_create)、両者の端末に知らせる。
+ *  送り先 = その選手が報告ページの「通知を受け取る」で登録した端末 (運営の通知と同じ report_push_subs)。受付の notify の設定には関係なく送る */
+export async function notifyManual(cfg: Config, store: Store, fetchFn: FetchFn, ev: ReportEventRow,
+  m: { id: number; side: string; station: string; group_name: string; slots: [{ name: string; users: string[] } | null, { name: string; users: string[] } | null] }): Promise<number> {
+  if (!cfg.vapid) return 0;
+  let n = 0;
+  const side = m.side === 'l' ? '敗者側' : m.side === 'r' ? '総当たり' : '勝者側';
+  for (const k of [0, 1]) {
+    const me = m.slots[k]; const op = m.slots[1 - k];
+    if (!me || !me.users.length) continue;
+    const subs = await store.listReportPushSubs(me.users);
+    if (!subs.length) continue;
+    const payload = JSON.stringify({
+      title: '次の試合: vs ' + (op ? op.name : '?'),
+      body: [[m.group_name, side, m.station ? '台 ' + m.station : ''].filter(Boolean).join(' · '), ev.name].filter(Boolean).join('\n'),
+      url: './?c=' + encodeURIComponent(ev.code), tag: 'rp-' + ev.code + '-m' + m.id,
+    });
+    n += await sendAll(cfg, store, fetchFn, subs, payload, 'high');
+  }
+  return n;
+}

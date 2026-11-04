@@ -28,7 +28,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportBracket, handleReportManualCancel, handleReportManualCreate, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportAdminFix, handleReportBegin, handleReportBracket, handleReportHeldExport, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -167,6 +167,10 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       // start.gg に繋がらないあいだに運営が次の試合を指定する (report.ts、docs/self_report_design.md §11)
       case 'report_bracket':
         return (await handleReportBracket(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_held_export':
+        return (await handleReportHeldExport(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_pick':
+        return (await handleReportPick(ctx.cfg, ctx.store, r, now)).body;   // 総当たりの「この人とやる」。記録しない
       case 'report_manual_create':
         res = await handleReportManualCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_manual_cancel':

@@ -84,7 +84,7 @@ export function guardProvider(p: Provider, h: Health, now: number): Provider {
     readSet: (id) => wrap(() => p.readSet(id), { ok: false as const, code: 'provider_error' as const, note: 'outage_skip' }),
     apply: (s, r, m) => wrap(() => p.apply(s, r, m), skip),
     reset: (s) => wrap(() => p.reset(s), skip),
-    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l') => wrap(() => p.findSet!(ids, side), { ok: false as const, note: 'outage_skip' }) } : {}),
+    ...(p.findSet ? { findSet: (ids: [string, string], side: 'w' | 'l' | 'r') => wrap(() => p.findSet!(ids, side), { ok: false as const, note: 'outage_skip' }) } : {}),
   };
 }
 
@@ -374,13 +374,16 @@ export function manualView(m: ReportManualRow, snap: Snapshot | null) {
 }
 
 /** SPSP で持っている結果 1 つ (候補の「負けた」に数える) */
-export interface Held { group: string; side: 'w' | 'l' | null; loser: string }
+export interface Held { group: string; side: 'w' | 'l' | null; loser: string; winner?: string }
 
 export interface CandEntrant { id: string; name: string; uid: string | null; seed: number | null;
   /** start.gg で勝者側 / 敗者側の試合に負けた */ wl: boolean; ll: boolean;
   /** SPSP に未反映の結果で勝者側 / 敗者側に負けた */ hw: boolean; hl: boolean;
   /** start.gg で試合中 (state 2) / 運営が指定した試合 (結果なし) に入っている */ playing: boolean; manual: boolean }
-export interface CandGroup { id: string; name: string; phase: string; open: number; entrants: CandEntrant[] }
+/** rr = 総当たりのブロック (前の試合から入る枠が 1 つも無い)。総当たりは勝者側 / 敗者側ではなく、まだ当たっていない 2 人を選ぶ */
+export interface CandGroup { id: string; name: string; phase: string; open: number; rr: boolean; entrants: CandEntrant[];
+  /** 結果の無い試合 / 結果の入った試合がある 2 人 ("e1|e2"、小さい順)。総当たりで同じ組を指定しないように */
+  open_pairs?: string[]; done_pairs?: string[] }
 
 /**
  * 「次の試合を指定」の候補。ブロックごとの出場者と、負けの数え (start.gg の結果 + SPSP に未反映の結果)。
@@ -404,12 +407,14 @@ export function bracketCandidates(snap: Snapshot, held: Held[], manualBusy: Set<
   };
   for (const [gid] of Object.entries(snap.groups)) {
     const p = snap.groups[gid].p;
-    groups.set(gid, { id: gid, name: groupName(snap, gid), phase: p, open: 0, entrants: [] });
+    groups.set(gid, { id: gid, name: groupName(snap, gid), phase: p, open: 0, rr: true, entrants: [], open_pairs: [], done_pairs: [] });
   }
   for (const s of Object.values(snap.sets)) {
     const g = groups.get(s.g);
     if (!g) continue;
-    if (s.s !== 3 && s.sl[0] && s.sl[0].e && s.sl[1] && s.sl[1].e) g.open++;
+    if (s.sl.some((x) => x.pt === 'set')) g.rr = false;
+    if (s.s !== 3 && s.sl[0] && s.sl[0].e && s.sl[1] && s.sl[1].e) { g.open++; g.open_pairs!.push([s.sl[0].e, s.sl[1].e].sort().join('|')); }
+    if (s.s === 3 && s.sl[0] && s.sl[0].e && s.sl[1] && s.sl[1].e) g.done_pairs!.push([s.sl[0].e, s.sl[1].e].sort().join('|'));
     for (const x of s.sl) {
       if (!x.e) continue;
       const f = ent(s.g, x.e);
@@ -419,6 +424,8 @@ export function bracketCandidates(snap: Snapshot, held: Held[], manualBusy: Set<
     }
   }
   for (const h of held) {
+    const g = groups.get(h.group);
+    if (g && h.winner) g.done_pairs!.push([h.winner, h.loser].sort().join('|'));
     const f = flags.get(h.group + '|' + h.loser);
     if (!f) continue;
     if (h.side === 'w') f.hw = true; else if (h.side === 'l') f.hl = true;
@@ -429,8 +436,9 @@ export function bracketCandidates(snap: Snapshot, held: Held[], manualBusy: Set<
 }
 
 /** 候補として出すか (画面と同じきまり。テスト用) */
-export function candidateFor(e: CandEntrant, side: 'w' | 'l'): boolean {
+export function candidateFor(e: CandEntrant, side: 'w' | 'l' | 'r'): boolean {
   if (e.manual) return false;
+  if (side === 'r') return true;   // 総当たり: 負けても残る
   if (side === 'w') return !(e.wl || e.ll || e.hw || e.hl);
   return !(e.ll || e.hl);
 }
@@ -448,7 +456,7 @@ const FIND_QUERY = `query SpspReportFind($eventId: ID!, $entrantIds: [ID], $page
  * 運営が指定した 2 人の、まだ結果の無い start.gg の試合。勝者側 / 敗者側が合うものを先に。
  * 結果が入った試合は選ばない (以前に同じ 2 人が当たった試合を取り違えないように)。flip = 枠の並びが指定と逆
  */
-export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l'): { id: string; flip: boolean } | null {
+export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | 'l' | 'r'): { id: string; flip: boolean } | null {
   const cands: { id: string; flip: boolean; ok: boolean }[] = [];
   for (const n of nodes) {
     const x = n as { id?: unknown; state?: unknown; round?: unknown; slots?: { entrant?: { id?: unknown } | null }[] } | null;
@@ -459,13 +467,13 @@ export function pickFound(nodes: unknown[], ids: [string, string], side: 'w' | '
     const rev = e[0] === ids[1] && e[1] === ids[0];
     if (!same && !rev) continue;
     const r = Number(x.round);
-    cands.push({ id: String(x.id), flip: rev, ok: Number.isFinite(r) && (side === 'w' ? r > 0 : r < 0) });
+    cands.push({ id: String(x.id), flip: rev, ok: side === 'r' || (Number.isFinite(r) && (side === 'w' ? r > 0 : r < 0)) });
   }
   const best = cands.find((c) => c.ok) || cands[0];
   return best ? { id: best.id, flip: best.flip } : null;
 }
 
-export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l'):
+export async function findStartggSet(fetchFn: FetchFn, token: string, eventId: string, ids: [string, string], side: 'w' | 'l' | 'r'):
   Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }> {
   const nodes: unknown[] = [];
   for (let page = 1; page <= 3; page++) {

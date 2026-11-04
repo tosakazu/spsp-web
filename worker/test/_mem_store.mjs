@@ -188,7 +188,7 @@ export class MemStore {
 
   // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
   _rep() {
-    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; }
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; this.reportPicks = []; }
   }
 
   async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
@@ -309,6 +309,13 @@ export class MemStore {
   async listReportManualForUser(userId, code) {
     this._rep(); return this.reportManual.filter((x) => x.code === code && x.status === 'open' && x.users.includes('|' + userId + '|')).sort((a, b) => b.id - a.id).map((x) => ({ ...x }));
   }
+
+  async putReportPick(code, userId, setId, nowMs) {
+    this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.user_id === userId));
+    if (setId) this.reportPicks.push({ code, user_id: userId, set_id: setId, ts_ms: nowMs });
+  }
+  async deleteReportPicksForSet(code, setId) { this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.set_id === setId)); }
+  async listReportPicks(code, sinceMs) { this._rep(); return this.reportPicks.filter((x) => x.code === code && x.ts_ms >= sinceMs).map(({ user_id, set_id, ts_ms }) => ({ user_id, set_id, ts_ms })); }
 
   async reportSubmissionActivity(userId, sinceMs) {
     this._rep();

@@ -122,7 +122,9 @@ function fakeBracket() {
       x.entrant = x.prereqPlacement === 1 ? (w ? w.entrant : null) : (l ? l.entrant : null);
     }
   };
+  st.pushes = [];
   st.fetch = async (url, init) => {
+    if (String(url).startsWith('https://push.example/')) { st.pushes.push(String(url)); return new Response('', { status: 201 }); }
     if (st.down) throw new TypeError('fetch failed');
     if (url.includes('/oauth/')) {
       const b = JSON.parse(init.body);
@@ -156,8 +158,8 @@ function fakeBracket() {
   return st;
 }
 
-async function setup() {
-  const fake = fakeBracket();
+async function setup(fake0) {
+  const fake = fake0 || fakeBracket();
   const store = new MemStore();
   const cfg = { clientId: 'cid', redirectUri: 'https://x/callback.html', clientSecret: 'CS', sessionSecret: 'sess-' + Math.random(),
     sessionTtlMs: SESSION_TTL_MS_DEFAULT, stateTtlMs: STATE_TTL_MS_DEFAULT, tsOffsetMin: 540 };
@@ -169,7 +171,7 @@ async function setup() {
   const l = await call({ action: 'report_login', code: 'C', state: new URL(b.url).searchParams.get('state') });
   const r = await call({ action: 'report_enable', token: l.token, event: '9' });
   assert.strictEqual(r.ok, true, JSON.stringify(r));
-  const e = { fake, store, call, tok, admin: l.token, code: r.report.code, tick: (ms) => { now += ms; } };
+  const e = { fake, store, cfg, call, tok, admin: l.token, code: r.report.code, tick: (ms) => { now += ms; } };
   e.view = async (uid, extra = {}) => call({ action: 'report_view', token: await tok(uid), code: e.code, ...extra });
   e.submit = async (uid, setId, result) => call({ action: 'report_submit', token: await tok(uid), code: e.code, set_id: setId, result });
   return e;
@@ -318,4 +320,90 @@ test('障害中もトークンの延長に失敗しただけでは受付を閉�
   assert.strictEqual(v.ok, true, JSON.stringify(v));
   const r = await e.submit(11, '100', W2(0));
   assert.strictEqual(r.state, 'queued');
+});
+
+async function pushKeys(endpoint) {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const b64u = (buf) => Buffer.from(buf).toString('base64url');
+  const vapid = { publicKey: b64u(await crypto.subtle.exportKey('raw', kp.publicKey)), privateKey: (await crypto.subtle.exportKey('jwk', kp.privateKey)).d, subject: 'https://spsp.games/' };
+  const ua = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const sub = { endpoint, keys: { p256dh: b64u(await crypto.subtle.exportKey('raw', ua.publicKey)), auth: b64u(crypto.getRandomValues(new Uint8Array(16))) } };
+  return { vapid, sub };
+}
+
+test('運営が次の試合を指定したら、通知を受け取る設定の選手の端末に知らせる (受付の notify の設定には関係なく)', async () => {
+  const e = await setup();
+  await e.view(11);
+  const { vapid, sub } = await pushKeys('https://push.example/p4');
+  e.cfg.vapid = vapid;
+  assert.strictEqual((await e.call({ action: 'report_push_subscribe', token: await e.tok(14), sub })).ok, true, '選手も登録できる');
+  const m = await e.call({ action: 'report_manual_create', token: e.admin, code: e.code, group: '700', side: 'w', entrants: ['3', '4'], station: '2' });
+  assert.strictEqual(m.ok, true, JSON.stringify(m));
+  assert.strictEqual(m.notified, 1);
+  assert.deepStrictEqual(e.fake.pushes, ['https://push.example/p4']);
+});
+
+test('総当たり: 「この人とやる」を記録して両者の画面に返す (30 分まで)・報告したら消す。start.gg で試合中の人も返す', async () => {
+  const e = await setup();
+  await e.view(11);
+  assert.strictEqual((await e.call({ action: 'report_pick', token: await e.tok(11), code: e.code, set_id: '100' })).ok, true);
+  assert.strictEqual((await e.call({ action: 'report_pick', token: await e.tok(11), code: e.code, set_id: 'x' })).error.code, 'bad_request');
+  let v = await e.view(12);
+  assert.deepStrictEqual(v.picks, [{ u: '11', s: '100' }]);
+  e.fake.sets[1].state = 2;   // 101 (P3 vs P4) が start.gg で開始
+  e.tick(50 * 1000);
+  v = await e.view(12);
+  assert.deepStrictEqual(v.playing.sort(), ['3', '4']);
+  e.tick(4000);
+  await e.submit(12, '100', W2(0));
+  assert.deepStrictEqual((await e.view(12)).picks, [], '報告したら消す');
+  await e.call({ action: 'report_pick', token: await e.tok(13), code: e.code, set_id: '101' });
+  e.tick(31 * 60 * 1000);
+  assert.deepStrictEqual((await e.view(12)).picks, [], '30 分より古いものは返さない');
+});
+
+test('総当たりのブロック: 候補は rr、指定は総当たり (負けた人も残る)・もう当たった組は指定できない。復旧後は同じ 2 人の試合へ', async () => {
+  const fake = fakeBracket();
+  // 総当たり 3 人: 200 = P1 vs P2 (終わり、P1 の勝ち)、201 = P1 vs P3、202 = P2 vs P3
+  const ent = (i) => ({ id: i, name: 'P' + i, initialSeedNum: i, participants: [{ user: { id: 10 + i } }] });
+  const pg = { id: 800, displayIdentifier: 'A', phase: { id: 88, name: 'RR', groupCount: 2 } };
+  const mk = (id, a, b, st, w) => ({ id, state: st, round: 1, fullRoundText: 'Round 1', winnerId: w || null, totalGames: 5, lPlacement: null, updatedAt: 1, event: { id: 9, name: 'Singles' },
+    phaseGroup: pg, games: null, station: null, slots: [a, b].map((x) => ({ entrant: ent(x), prereqType: 'seed', prereqId: null, prereqPlacement: null })) });
+  fake.sets = [mk(200, 1, 2, 3, 1), mk(201, 1, 3, 1), mk(202, 2, 3, 1)];
+  const e = await setup.call(null, fake);
+  await e.view(11);
+  const b = await e.call({ action: 'report_bracket', token: e.admin, code: e.code });
+  const g = b.groups.find((x) => x.id === '800');
+  assert.strictEqual(g.rr, true);
+  assert.deepStrictEqual(g.done_pairs, ['1|2']);
+  assert.deepStrictEqual(g.entrants.filter((x) => candidateFor(x, 'r')).map((x) => x.name), ['P1', 'P2', 'P3'], '負けた P2 も残る');
+  assert.strictEqual((await e.call({ action: 'report_manual_create', token: e.admin, code: e.code, group: '800', side: 'r', entrants: ['2', '1'] })).error.code, 'bad_request', 'もう当たった');
+  e.fake.down = true;
+  const m = await e.call({ action: 'report_manual_create', token: e.admin, code: e.code, group: '800', side: 'r', entrants: ['3', '2'] });
+  assert.strictEqual(m.ok, true, JSON.stringify(m));
+  e.tick(4000);
+  assert.strictEqual((await e.submit(13, m.manual.set_id, W2(0))).state, 'queued');
+  e.fake.down = false;
+  e.tick(61000);
+  await e.view(11);
+  e.tick(1000);
+  await e.view(11);
+  assert.deepStrictEqual(e.fake.mutations, [['SpspReportBracketSet', '202', 3]], 'P3 の勝ちとして 202 に送る (並びは逆)');
+});
+
+test('未反映の結果の書き出し: SPSP にあって start.gg に無い結果を古い順に (ブロック・ラウンド・勝者・スコア)。食い違いは結果なし', async () => {
+  const e = await setup();
+  await e.view(11);
+  e.tick(4000);
+  e.fake.down = true;
+  await e.submit(11, '100', R(0, G(0), G(1), G(0)));
+  e.tick(4000);
+  await e.submit(13, '101', W2(0));
+  e.tick(4000);
+  await e.submit(14, '101', W2(1));
+  const x = await e.call({ action: 'report_held_export', token: e.admin, code: e.code });
+  assert.strictEqual(x.ok, true, JSON.stringify(x));
+  assert.deepStrictEqual(x.items.map((i) => [i.set_id, i.group, i.round, i.winner, i.score, i.loser, i.state]),
+    [['100', 'Main', 'R1', 'P1', '2-1', 'P2', 'queued'], ['101', 'Main', 'R1', null, null, null, 'conflict']]);
+  assert.strictEqual((await e.call({ action: 'report_held_export', token: await e.tok(11), code: e.code })).error.code, 'not_admin');
 });

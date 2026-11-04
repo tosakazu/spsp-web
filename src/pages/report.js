@@ -945,10 +945,84 @@ function scrollToMatch(m, instant) {
   setTimeout(off, 1500);
 }
 
+/** 選手の通知の欄 (運営が次の試合を指定したら知らせる。start.gg の受付だけ)。読み直しで描き直さないよう、選手の画面の外に 1 回だけ作る */
+let PLAYER_PUSH = false;
+function ensurePlayerPush() {
+  if (PLAYER_PUSH || !INFO || INFO.kind !== 'startgg') return;
+  const root = $('rp-player');
+  if (!root || !root.parentNode) return;
+  PLAYER_PUSH = true;
+  const sec = document.createElement('section');
+  sec.className = 'rp-card-sec rp-player-push';
+  sec.id = 'rp-player-push';
+  sec.innerHTML = pushHtml('player');
+  root.parentNode.insertBefore(sec, root.nextSibling);
+  wirePush(sec, 'player');
+}
+
+// ── 総当たり: 対戦できる相手が複数いるとき (2026-11-04) ──────────────────────
+// 総当たりのプールは全員の試合が最初から開いていて、選手は空いている人と対戦する。選手が「この人とやる」で選ぶと、その試合が今の試合になる。
+// 選んだ相手は Worker にも送り (report_pick)、ほかの選手の画面に「相手もこの試合を選んでいます / ほかの人と対戦中」を出す
+const PICK_KEY = 'spsp_report_pick_v1_' + CODE;
+let PICKED = (() => { try { return sessionStorage.getItem(PICK_KEY) || null; } catch (e) { return null; } })();
+const openMatches = () => MATCHES.filter((m) => m.state === 'open');
+/** 今の試合: 開いている試合が 1 つならそれ、複数なら選手が選んだもの (選んでいなければ null = 相手を選ぶ画面) */
+function currentMatch() {
+  const opens = openMatches();
+  if (opens.length <= 1) return opens[0] || null;
+  return opens.find((m) => m.id === PICKED) || null;
+}
+async function pickMatch(id) {
+  PICKED = id;
+  try { if (id) sessionStorage.setItem(PICK_KEY, id); else sessionStorage.removeItem(PICK_KEY); } catch (e) { /* この画面だけ */ }
+  FORM_OPEN = null;
+  renderPlayer();
+  if (!DEMO) api({ action: 'report_pick', token: tok(), code: CODE, set_id: id || '' }).catch(() => null);
+  const cur = currentMatch();
+  if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
+}
+/** 相手の様子: picked_me = 相手もこの試合を選んでいる / started = この試合は start.gg で開始済み / busy = ほかの人と対戦中 (選んだ・start.gg で試合中) / free */
+function opponentState(m) {
+  const op = m.slots[1 - m.mySide];
+  if (!op) return 'free';
+  const picks = (VIEW && VIEW.picks) || [];
+  const p = op.uid ? picks.find((x) => x.u === op.uid) : null;
+  if (p && p.s === m.id) return 'picked_me';
+  if (m.started) return 'started';
+  if (p) return 'busy';
+  if (((VIEW && VIEW.playing) || []).includes(op.id)) return 'busy';
+  return 'free';
+}
+const OPP_ORDER = { picked_me: 0, started: 1, free: 2, busy: 3 };
+const OPP_LABEL = (st) => (st === 'picked_me' ? i18n('report.rr.st_picked_me') : st === 'started' ? i18n('report.rr.st_started') : st === 'busy' ? i18n('report.rr.st_busy') : i18n('report.rr.st_free'));
+function chooserHtml(cur) {
+  const opens = openMatches();
+  if (opens.length <= 1) return '';
+  if (cur) {
+    // 選んだあと: 相手の名前と「相手を変える」だけ
+    const op = cur.slots[1 - cur.mySide];
+    return `<div class="rp-rr-cur">${escapeHtml(i18n('report.rr.vs', { name: op ? op.name : '?', n: opens.length - 1 }))}
+      <button type="button" class="rp-link" data-rr-change>${escapeHtml(i18n('report.rr.change'))}</button></div>`;
+  }
+  const list = opens.map((m) => ({ m, st: opponentState(m) })).sort((a, b) => OPP_ORDER[a.st] - OPP_ORDER[b.st]);
+  const items = list.map(({ m, st }) => {
+    const op = m.slots[1 - m.mySide];
+    const extra = [m.pool, m.station ? i18n('report.station', { n: m.station }) : ''].filter(Boolean).join(' · ');
+    return `<button type="button" class="rp-rr-item rp-rr-${st}" data-rr-pick="${escapeHtml(m.id)}">
+      <b>${escapeHtml(op ? op.name : '?')}</b>${extra ? ` <span class="rp-muted">${escapeHtml(extra)}</span>` : ''}
+      <span class="rp-tag rp-rr-tag">${escapeHtml(OPP_LABEL(st))}</span></button>`;
+  }).join('');
+  return `<section class="rp-card-sec rp-rr">
+    <h2>${escapeHtml(i18n('report.rr.title', { n: opens.length }))}</h2>
+    <p class="rp-muted">${escapeHtml(i18n('report.rr.help'))}</p>
+    <div class="rp-rr-list">${items}</div>
+  </section>`;
+}
+
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
-  const cur = MATCHES.find((m) => m.state === 'open');
+  const cur = currentMatch();
   const waiting = MATCHES.find((m) => m.state === 'waiting');
   const done = MATCHES.filter((m) => m.state === 'complete');
   const notices = (VIEW && VIEW.sets ? VIEW.sets : []).filter((r) => r.state === 'conflict');
@@ -966,10 +1040,13 @@ function renderPlayer() {
   }
   if (notices.length) h += `<div class="rp-banner rp-warn">⚠ ${escapeHtml(i18n('report.banner_conflict', { n: notices.length }))}</div>`;
   h += outageBannerHtml();
-  if (cur) {
+  const chooser = chooserHtml(cur);
+  if (!cur && chooser) h += chooser;
+  else if (cur) {
     const gate = gateOf(cur);
     // スマホで探さずに報告できるよう、カード → (相手のカードを画面の上に) → ラウンド・台 → 入力欄 の順 (2026-10-30)
     h += `<section class="rp-card-sec rp-current">
+      ${chooser}
       ${vsHtml(cur)}
       ${roundHtml(cur)}
       ${stationHtml(cur)}
@@ -1006,6 +1083,9 @@ function renderPlayer() {
     const m = MATCHES.find((x) => x.id === form.getAttribute('data-set'));
     if (m) wireForm(form, m);
   }
+  for (const b of root.querySelectorAll('[data-rr-pick]')) b.addEventListener('click', () => pickMatch(b.getAttribute('data-rr-pick')));
+  const chg = root.querySelector('[data-rr-change]');
+  if (chg) chg.addEventListener('click', () => pickMatch(null));
   for (const b of root.querySelectorAll('[data-reopen],[data-redo]')) {
     b.addEventListener('click', () => { FORM_OPEN = b.getAttribute('data-reopen') || b.getAttribute('data-redo'); renderPlayer(); });
   }
@@ -1033,7 +1113,9 @@ function waitingSig() {
   return [w.id, w.station || '', w.stream ? w.stream.name : '', (w.prereq || []).map(pre).join(';')].join('~');
 }
 function matchesSig() {
-  return waitingSig() + '#' + MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
+  // 相手を選ぶ画面のあいだは、相手の様子 (選んだ・試合中) が変わったら描き直す (入力欄は無いので消えない)
+  const choosing = openMatches().length > 1 && !currentMatch();
+  return (choosing ? openMatches().map((m) => m.id + '=' + opponentState(m)).join(',') + '#' : '') + waitingSig() + '#' + MATCHES.map((m) => [m.id, m.state, m.winner, m.score ? m.score.join('-') : '', (m.slots || []).map((x) => (x ? x.id : '')).join('/')].join(':')).join('|')
     + '#' + String(ENTRANT) + '#' + (VIEW && VIEW.sets ? VIEW.sets.map((r) => r.set_id + ':' + r.state + ':' + r.updated_ms).join('|') : '')
     + '#' + (outageNow() ? 'o' + ((VIEW && VIEW.outage && VIEW.outage.since_ms) || 0) + ':' + ((VIEW && VIEW.snap && VIEW.snap.synced_ms) || 0) : '');
 }
@@ -1077,7 +1159,7 @@ async function poll(force) {
         }
         MATCHES = overlayHeld([...(VIEW.manual || []).map(fromManual).filter(Boolean), ...MATCHES]);
       }
-      const cur = MATCHES.find((m) => m.state === 'open');
+      const cur = currentMatch();
       if (cur) warmCards(cur.slots.map((x) => x && x.uid), cur.slots.map((x) => (x ? x.name : '')));
       if (!CHARS) await loadChars();
       await loadMains();
@@ -1085,6 +1167,7 @@ async function poll(force) {
       const sig = matchesSig();
       // 入力の途中を消さないよう、start.gg / 報告の状態が変わったときだけ描き直す
       if (!LAST_SIG || sig !== LAST_SIG) renderPlayer();
+      ensurePlayerPush();
       LAST_SIG = sig;
       if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
       const t = new Date().toLocaleTimeString();
@@ -1378,9 +1461,10 @@ document.addEventListener('click', (e) => {
   p.hidden = !p.hidden;
   b.setAttribute('aria-expanded', String(!p.hidden));
 });
-function pushHtml() {
+/** kind = admin (運営の通知) / player (選手: 運営が次の試合を指定したとき) */
+function pushHtml(kind = 'admin') {
   return `<div class="rp-push">
-    ${helpHead(i18n('report.push.title'), i18n('report.push.help'))}
+    ${kind === 'player' ? helpHead(i18n('report.push.player_title'), i18n('report.push.player_help')) : helpHead(i18n('report.push.title'), i18n('report.push.help'))}
     <div class="rp-push-btns">
       <button type="button" class="rp-btn rp-primary" id="rp-push-on">${escapeHtml(i18n('report.push.on'))}</button>
       <button type="button" class="rp-btn" id="rp-push-off" hidden>${escapeHtml(i18n('report.push.off'))}</button>
@@ -1415,11 +1499,12 @@ async function pushReg() {
   if (!pushOk()) return null;
   return (await navigator.serviceWorker.getRegistration(SW_URL)) || null;
 }
-function wirePush(root) {
+function wirePush(root, kind = 'admin') {
   const on = root.querySelector('#rp-push-on'); const off = root.querySelector('#rp-push-off'); const test = root.querySelector('#rp-push-test');
   const st = root.querySelector('#rp-push-status');
   if (!on) return;
-  const show = (subscribed) => { on.hidden = subscribed; off.hidden = !subscribed; test.hidden = !subscribed; };
+  // テスト通知は運営だけ (Worker の report_push_test が運営に限る)
+  const show = (subscribed) => { on.hidden = subscribed; off.hidden = !subscribed; test.hidden = !subscribed || kind === 'player'; };
   // Android: ホーム画面に追加 (通知は追加しなくても受け取れる)。Chrome は確認の画面、ほかは手順
   if (isAndroid() && !isStandalone()) {
     const b = root.querySelector('#rp-push-install'); const guide = root.querySelector('#rp-a2hs-android');
@@ -1612,27 +1697,33 @@ async function adminSetsStart(r) {
 // ブロック → 勝者側 / 敗者側 → 残っている人から 2 人 (名前で絞り込む)。候補は Worker の report_bracket (ブラケットの写し + SPSP に未反映の結果):
 //   勝者側 = 負けていない人 / 敗者側 = 敗者側で負けていない人 (勝者側の負けが未反映でも敗者側をすることがあるので、負けの記録が無い人も出す。
 //   未反映でも敗者側で負けた人は出さない)。結果の出ていない指定済みの試合がある人は出さない。
-const MAN = { built: false, groups: null, gid: '', side: 'w', pick: [null, null], opened: false, err: '' };
+const MAN = { built: false, groups: null, gid: '', side: 'w', pick: [null, null], opened: false, err: '', fixOpen: null, last: null };
 /** 名前の絞り込み用 (全角半角・大小・カタカナ → ひらがな をそろえる) */
 const manNorm = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
-/** Worker の candidateFor と同じきまり */
-const manCandOk = (e, side) => !e.manual && (side === 'w' ? !(e.wl || e.ll || e.hw || e.hl) : !(e.ll || e.hl));
+/** Worker の candidateFor と同じきまり (r = 総当たり: 負けても残る) */
+const manCandOk = (e, side) => !e.manual && (side === 'r' ? true : side === 'w' ? !(e.wl || e.ll || e.hw || e.hl) : !(e.ll || e.hl));
+const pairKey = (a, b) => [a, b].sort().join('|');
+const sideLabel = (side) => (side === 'l' ? i18n('report.manual.side_l') : side === 'r' ? i18n('report.manual.side_r') : i18n('report.manual.side_w'));
 function manTag(e) {
   const t = [];
-  if (e.wl) t.push(i18n('report.manual.tag_wl'));
-  else if (e.hw) t.push(i18n('report.manual.tag_hw'));
-  else if (MAN.side === 'l') t.push(i18n('report.manual.tag_noloss'));
+  if (MAN.side !== 'r') {
+    if (e.wl) t.push(i18n('report.manual.tag_wl'));
+    else if (e.hw) t.push(i18n('report.manual.tag_hw'));
+    else if (MAN.side === 'l') t.push(i18n('report.manual.tag_noloss'));
+  }
   if (e.playing) t.push(i18n('report.manual.tag_playing'));
   return t.join(' · ');
 }
 function manGroup() { return MAN.groups ? MAN.groups.find((g) => g.id === MAN.gid) || null : null; }
-/** k 人目の候補 (入力で絞る。敗者側は勝者側で負けた人を先に) */
+/** k 人目の候補 (入力で絞る。敗者側は勝者側で負けた人を先に。総当たりはもう当たった人を出さない) */
 function manCands(k, q) {
   const g = manGroup();
   if (!g) return [];
   const other = MAN.pick[1 - k];
   const nq = manNorm(q);
-  const list = g.entrants.filter((e) => manCandOk(e, MAN.side) && (!other || other.id !== e.id) && (!nq || manNorm(e.name).includes(nq)));
+  const done = new Set(g.done_pairs || []);
+  const list = g.entrants.filter((e) => manCandOk(e, MAN.side) && (!other || other.id !== e.id) && (!nq || manNorm(e.name).includes(nq))
+    && !(MAN.side === 'r' && other && done.has(pairKey(other.id, e.id))));
   if (MAN.side === 'l') list.sort((a, b) => Number(!!(b.wl || b.hw)) - Number(!!(a.wl || a.hw)));
   return list.slice(0, 8);
 }
@@ -1660,16 +1751,24 @@ function manDrawForm(sec) {
   const box = sec.querySelector('[data-mform]');
   if (!box) return;
   const gs = MAN.groups || [];
+  const g = manGroup();
+  // 総当たりのブロックは勝者側 / 敗者側ではなく「総当たり」(まだ当たっていない 2 人)
+  if (g && g.rr) MAN.side = 'r';
+  else if (MAN.side === 'r') MAN.side = 'w';
+  const [a, b] = MAN.pick;
+  const openPair = !!(g && a && b && (g.open_pairs || []).includes(pairKey(a.id, b.id)));
+  const help = MAN.side === 'r' ? i18n('report.manual.help_r') : MAN.side === 'l' ? i18n('report.manual.help_l') : i18n('report.manual.help_w');
   box.innerHTML = MAN.err ? `<p class="rp-err">${escapeHtml(MAN.err)}</p>` : !MAN.groups ? `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>` : `
-    ${gs.length > 1 ? `<label class="rp-mrow">${escapeHtml(i18n('report.manual.group'))} <select data-mgroup>${gs.map((g) => `<option value="${escapeHtml(g.id)}"${g.id === MAN.gid ? ' selected' : ''}>${escapeHtml(g.name || g.id)}${g.open ? '' : ' ' + escapeHtml(i18n('report.manual.group_done'))}</option>`).join('')}</select></label>` : ''}
-    <div class="rp-mrow rp-mside">
+    ${gs.length > 1 ? `<label class="rp-mrow">${escapeHtml(i18n('report.manual.group'))} <select data-mgroup>${gs.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === MAN.gid ? ' selected' : ''}>${escapeHtml(x.name || x.id)}${x.rr ? ' ' + escapeHtml(i18n('report.manual.group_rr')) : ''}${x.open ? '' : ' ' + escapeHtml(i18n('report.manual.group_done'))}</option>`).join('')}</select></label>` : ''}
+    ${MAN.side === 'r' ? `<div class="rp-mrow"><span class="rp-tag">${escapeHtml(i18n('report.manual.side_r'))}</span></div>` : `<div class="rp-mrow rp-mside">
       <label><input type="radio" name="rp-mside" value="w"${MAN.side === 'w' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_w'))}</label>
       <label><input type="radio" name="rp-mside" value="l"${MAN.side === 'l' ? ' checked' : ''}> ${escapeHtml(i18n('report.manual.side_l'))}</label>
-    </div>
-    <p class="rp-muted rp-mhelp">${escapeHtml(MAN.side === 'l' ? i18n('report.manual.help_l') : i18n('report.manual.help_w'))}</p>
+    </div>`}
+    <p class="rp-muted rp-mhelp">${escapeHtml(help)}</p>
     <div class="rp-mpicks"><div class="rp-mpick">${manPickHtml(0)}</div><div class="rp-mvs">vs</div><div class="rp-mpick">${manPickHtml(1)}</div></div>
+    ${openPair ? `<p class="rp-note">${escapeHtml(i18n('report.manual.open_pair'))}</p>` : ''}
     <label class="rp-mrow">${escapeHtml(i18n('report.manual.station'))} <input type="text" data-mstation maxlength="12" size="6"></label>
-    <div class="rp-mrow"><button type="button" class="rp-btn rp-primary" data-mcreate${MAN.pick[0] && MAN.pick[1] ? '' : ' disabled'}>${escapeHtml(i18n('report.manual.create'))}</button>
+    <div class="rp-mrow"><button type="button" class="rp-btn rp-primary" data-mcreate${a && b ? '' : ' disabled'}>${escapeHtml(i18n('report.manual.create'))}</button>
       <button type="button" class="rp-btn" data-mreload>${escapeHtml(i18n('report.manual.reload'))}</button> <span class="rp-status" data-mstatus></span></div>`;
   const sel = box.querySelector('[data-mgroup]');
   if (sel) sel.addEventListener('change', () => { MAN.gid = sel.value; MAN.pick = [null, null]; manDrawForm(sec); });
@@ -1684,27 +1783,27 @@ function manDrawForm(sec) {
     const inp = box.querySelector(`[data-mq="${k}"]`);
     if (inp) { inp.addEventListener('input', () => manDrawCands(sec, k)); manDrawCands(sec, k); }
   }
-  for (const b of box.querySelectorAll('[data-mclear]')) b.addEventListener('click', () => { MAN.pick[Number(b.getAttribute('data-mclear'))] = null; manDrawForm(sec); });
+  for (const btn of box.querySelectorAll('[data-mclear]')) btn.addEventListener('click', () => { MAN.pick[Number(btn.getAttribute('data-mclear'))] = null; manDrawForm(sec); });
   const rl = box.querySelector('[data-mreload]');
   if (rl) rl.addEventListener('click', () => manLoad(sec, true));
   const cr = box.querySelector('[data-mcreate]');
   if (cr) cr.addEventListener('click', async () => {
-    const [a, b] = MAN.pick;
-    if (!a || !b) return;
+    const [p0, p1] = MAN.pick;
+    if (!p0 || !p1) return;
     const station = (box.querySelector('[data-mstation]') || {}).value || '';
-    const g = manGroup();
-    if (!confirm(i18n('report.manual.confirm', { side: i18n(MAN.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'), group: g ? g.name : '', a: a.name, b: b.name }))) return;
+    const grp = manGroup();
+    if (!confirm(i18n('report.manual.confirm', { side: sideLabel(MAN.side), group: grp ? grp.name : '', a: p0.name, b: p1.name }))) return;
     const st = box.querySelector('[data-mstatus]');
     setStatus(st, i18n('report.sending'), 'busy');
-    const x = await api({ action: 'report_manual_create', token: tok(), code: CODE, group: MAN.gid, side: MAN.side, entrants: [a.id, b.id], station });
+    const x = await api({ action: 'report_manual_create', token: tok(), code: CODE, group: MAN.gid, side: MAN.side, entrants: [p0.id, p1.id], station });
     if (!x || !x.ok) { setStatus(st, errText(x), 'err'); return; }
     MAN.pick = [null, null];
     await manLoad(sec, true);
-    setStatus(sec.querySelector('[data-mstatus]'), i18n('report.manual.created', { a: a.name, b: b.name }), 'ok');
+    setStatus(sec.querySelector('[data-mstatus]'), i18n('report.manual.created', { a: p0.name, b: p1.name }) + (x.notified ? ' ' + i18n('report.manual.notified', { n: x.notified }) : ''), 'ok');
     manRefresh();
   });
 }
-/** 指定・取り消しの後に一覧を読み直す (見本は report_admin の見本をそのまま) */
+/** 指定・取り消し・結果の入力の後に一覧を読み直す (見本は report_admin の見本をそのまま) */
 async function manRefresh() {
   if (!DEMO) { refreshAdminSets(true); return; }
   const r = await api({ action: 'report_admin', token: '', code: CODE });
@@ -1720,11 +1819,11 @@ async function manLoad(sec, force) {
     if (!MAN.groups.some((g) => g.id === MAN.gid)) MAN.gid = MAN.groups.length ? MAN.groups[0].id : '';
     // 選んであった人は新しい候補の情報に差し替える (指定済み・負けが増えたら外す)
     const g = manGroup();
-    MAN.pick = MAN.pick.map((p) => { const n = p && g ? g.entrants.find((e) => e.id === p.id) : null; return n && manCandOk(n, MAN.side) ? n : null; });
+    MAN.pick = MAN.pick.map((p) => { const n = p && g ? g.entrants.find((e) => e.id === p.id) : null; return n && manCandOk(n, g && g.rr ? 'r' : MAN.side) ? n : null; });
   }
   manDrawForm(sec);
 }
-/** 指定した試合の一覧 (状態つき) */
+/** 指定した試合の一覧 (状態つき)。結果の出ていない試合は運営が結果を入れられる (選手がログインできないとき) */
 function manListHtml(r) {
   const list = r.manual || [];
   if (!list.length) return `<p class="rp-muted">${escapeHtml(i18n('report.manual.none'))}</p>`;
@@ -1734,39 +1833,55 @@ function manListHtml(r) {
     const st = m.status === 'matched' ? i18n('report.manual.st_matched', { id: m.real_set_id || '' })
       : m.status === 'cancelled' ? i18n('report.manual.st_cancelled')
       : row ? STATE_LABEL(row.state) + (row.note ? ' · ' + noteText(row.note) : '') : i18n('report.manual.st_open');
-    return `<li class="rp-mitem rp-m-${escapeHtml(m.status)}"><span class="rp-tag">${escapeHtml(i18n(m.side === 'l' ? 'report.manual.side_l' : 'report.manual.side_w'))}</span>
+    const btns = m.status === 'open' ? ` <button type="button" class="rp-link" data-mfix="${escapeHtml(m.set_id)}">${escapeHtml(MAN.fixOpen === m.set_id ? i18n('report.admin.fix_close') : i18n('report.manual.enter'))}</button>`
+      + ` <button type="button" class="rp-link" data-mcancel="${escapeHtml(String(m.id))}">${escapeHtml(i18n('report.manual.cancel'))}</button>` : '';
+    const form = MAN.fixOpen === m.set_id && m.status === 'open' ? `<div class="rp-mfix" data-mfixbox="${escapeHtml(m.set_id)}">${formHtml(adminModel({ set_id: m.set_id, slots: m.slots }))}</div>` : '';
+    return `<li class="rp-mitem rp-m-${escapeHtml(m.status)}"><span class="rp-tag">${escapeHtml(sideLabel(m.side))}</span>
       ${m.group_name ? `<span class="rp-muted">${escapeHtml(m.group_name)}</span>` : ''} <b>${escapeHtml(names)}</b>${m.station ? ' · ' + escapeHtml(i18n('report.station', { n: m.station })) : ''}
-      · <span>${escapeHtml(st)}</span>
-      ${m.status === 'open' ? ` <button type="button" class="rp-link" data-mcancel="${escapeHtml(String(m.id))}">${escapeHtml(i18n('report.manual.cancel'))}</button>` : ''}</li>`;
+      · <span>${escapeHtml(st)}</span>${btns}${form}</li>`;
   }).join('') + `</ul>`;
 }
-/** 運営の画面の「障害中」の帯と、次の試合の指定 (start.gg の受付だけ)。一覧と帯だけ毎回描き直し、入力欄は消さない */
-function manualUpdate(r) {
-  const sec = $('rp-adm-manual');
-  if (!sec || !INFO || INFO.kind !== 'startgg') return;
-  sec.hidden = false;
-  const outage = !!r.outage;
-  if (!MAN.built) {
-    MAN.built = true;
-    sec.innerHTML = `<div data-moutage></div>
-      <details class="rp-manual" data-mdet>
-        <summary>${escapeHtml(i18n('report.manual.title'))}</summary>
-        <p class="rp-muted">${escapeHtml(i18n('report.manual.help'))}</p>
-        <div data-mform></div>
-        <h3>${escapeHtml(i18n('report.manual.list'))}</h3>
-        <div data-mlist></div>
-      </details>`;
-    const det = sec.querySelector('[data-mdet]');
-    det.addEventListener('toggle', () => { if (det.open) manLoad(sec, false); });
-  }
-  const held = (r.sets || []).filter((s) => s.state === 'queued').length;
-  const snap = r.snapshot;
-  sec.querySelector('[data-moutage]').innerHTML = outage
-    ? `<div class="rp-banner rp-warn rp-outage">⚠ ${escapeHtml(r.outage.since_ms ? i18n('report.outage.banner_since', { t: hhmm(r.outage.since_ms) }) : i18n('report.outage.banner'))}
-        <div class="rp-outage-sub">${escapeHtml(i18n('report.outage.admin_help', { n: held }))}${snap && snap.synced_ms ? ' ' + escapeHtml(i18n('report.outage.snap_at', { t: hhmm(snap.synced_ms) })) : ''}</div></div>`
-    : held ? `<div class="rp-banner">${escapeHtml(i18n('report.outage.recovering', { n: held }))}</div>` : '';
-  sec.querySelector('[data-mlist]').innerHTML = manListHtml(r);
-  for (const b of sec.querySelectorAll('[data-mcancel]')) {
+/** 未反映の結果の書き出し (障害が長引いて start.gg に手で入れるとき)。コピー用の文と CSV */
+function heldLine(x) {
+  const where = [x.group, x.round].filter(Boolean).join(' ');
+  const res = x.winner ? i18n('report.export.line', { w: x.winner, s: x.score, l: x.loser }) : i18n('report.export.line_none', { a: x.players[0], b: x.players[1] });
+  const sgg = x.startgg_set && /^\d+$/.test(String(x.startgg_set)) ? ' (start.gg #' + x.startgg_set + ')' : '';
+  return (where ? where + ': ' : '') + res + sgg;
+}
+const csvCell = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+async function manExport(sec) {
+  const box = sec.querySelector('[data-mexport]');
+  box.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.loading'))}</p>`;
+  const r = await api({ action: 'report_held_export', token: tok(), code: CODE });
+  if (!r || !r.ok) { box.innerHTML = `<p class="rp-err">${escapeHtml(errText(r))}</p>`; return; }
+  const items = r.items || [];
+  if (!items.length) { box.innerHTML = `<p class="rp-muted">${escapeHtml(i18n('report.export.none'))}</p>`; return; }
+  const text = items.map(heldLine).join('\n');
+  box.innerHTML = `<textarea class="rp-mexport-text" rows="${Math.min(12, items.length + 1)}" readonly>${escapeHtml(text)}</textarea>
+    <div class="rp-mrow"><button type="button" class="rp-btn" data-mcopy>${escapeHtml(i18n('report.admin.copy'))}</button>
+    <button type="button" class="rp-btn" data-mcsv>${escapeHtml(i18n('report.export.csv'))}</button> <span class="rp-status" data-mexst></span></div>`;
+  box.querySelector('[data-mcopy]').addEventListener('click', () => {
+    const ta = box.querySelector('textarea'); ta.select();
+    try { navigator.clipboard.writeText(ta.value); } catch (e) { document.execCommand('copy'); }
+    setStatus(box.querySelector('[data-mexst]'), i18n('report.export.copied'), 'ok');
+  });
+  box.querySelector('[data-mcsv]').addEventListener('click', () => {
+    const head = ['block', 'round', 'winner', 'score', 'loser', 'startgg_set', 'state', 'reported_at'];
+    const rows = items.map((x) => [x.group, x.round, x.winner || '', x.score || '', x.loser || '', x.startgg_set && /^\d+$/.test(String(x.startgg_set)) ? x.startgg_set : '', x.state, x.ts_ms ? new Date(x.ts_ms).toISOString() : '']);
+    const csv = '﻿' + [head, ...rows].map((r2) => r2.map(csvCell).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'spsp_unreflected_' + CODE + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+}
+/** 指定した試合の一覧を描く (MAN.last = 最後に読んだ report_admin) */
+function manDrawList(sec) {
+  const r = MAN.last || {};
+  const listBox = sec.querySelector('[data-mlist]');
+  if (!listBox) return;
+  listBox.innerHTML = manListHtml(r);
+  for (const b of listBox.querySelectorAll('[data-mcancel]')) {
     b.addEventListener('click', async () => {
       if (!confirm(i18n('report.manual.cancel_confirm'))) return;
       const x = await api({ action: 'report_manual_cancel', token: tok(), code: CODE, id: Number(b.getAttribute('data-mcancel')) });
@@ -1775,6 +1890,65 @@ function manualUpdate(r) {
       manRefresh();
     });
   }
+  for (const b of listBox.querySelectorAll('[data-mfix]')) {
+    b.addEventListener('click', () => { const id = b.getAttribute('data-mfix'); MAN.fixOpen = MAN.fixOpen === id ? null : id; manDrawList(sec); });
+  }
+  const fbox = listBox.querySelector('[data-mfixbox]');
+  if (!fbox) return;
+  const id = fbox.getAttribute('data-mfixbox');
+  const m = (r.manual || []).find((x) => x.set_id === id);
+  const form = fbox.querySelector('form.rp-form');
+  if (!m || !form) return;
+  wireForm(form, Object.assign(adminModel({ set_id: m.set_id, slots: m.slots }), {
+    onSubmit: async (result) => {
+      const fst = form.querySelector('[data-form-status]');
+      const wn = m.slots && m.slots[result.w] ? m.slots[result.w].name : '';
+      if (!confirm(i18n('report.admin.fix_confirm2', { name: wn, s: scoreText(result, result.w) }))) return;
+      setStatus(fst, i18n('report.sending'), 'busy');
+      const x = await api({ action: 'report_admin_fix', token: tok(), code: CODE, set_id: m.set_id, result });
+      setStatus(fst, x && x.ok ? i18n('report.admin.done') : errText(x), x && x.ok ? 'ok' : 'err');
+      if (x && x.ok) { MAN.fixOpen = null; setTimeout(() => { if (MAN.groups) manLoad(sec, true); manRefresh(); }, 600); }
+    },
+  }));
+}
+/** 運営の画面の「障害中」の帯・ブラケットの写しの様子・次の試合の指定 (start.gg の受付だけ)。一覧と帯だけ毎回描き直し、入力欄は消さない */
+function manualUpdate(r) {
+  const sec = $('rp-adm-manual');
+  if (!sec || !INFO || INFO.kind !== 'startgg') return;
+  sec.hidden = false;
+  MAN.last = r;
+  const outage = !!r.outage;
+  if (!MAN.built) {
+    MAN.built = true;
+    sec.innerHTML = `<div data-moutage></div>
+      <p class="rp-muted rp-msnap" data-msnap></p>
+      <details class="rp-manual" data-mdet>
+        <summary>${escapeHtml(i18n('report.manual.title'))}</summary>
+        <p class="rp-muted">${escapeHtml(i18n('report.manual.help'))}</p>
+        <div data-mform></div>
+        <h3>${escapeHtml(i18n('report.manual.list'))}</h3>
+        <div data-mlist></div>
+        <h3>${escapeHtml(i18n('report.export.title'))}</h3>
+        <p class="rp-muted">${escapeHtml(i18n('report.export.help'))}</p>
+        <button type="button" class="rp-btn" data-mexport-btn>${escapeHtml(i18n('report.export.btn'))}</button>
+        <div data-mexport></div>
+      </details>`;
+    const det = sec.querySelector('[data-mdet]');
+    det.addEventListener('toggle', () => { if (det.open) manLoad(sec, false); });
+    sec.querySelector('[data-mexport-btn]').addEventListener('click', () => manExport(sec));
+  }
+  const held = (r.sets || []).filter((s) => s.state === 'queued').length;
+  const snap = r.snapshot;
+  sec.querySelector('[data-moutage]').innerHTML = outage
+    ? `<div class="rp-banner rp-warn rp-outage">⚠ ${escapeHtml(r.outage.since_ms ? i18n('report.outage.banner_since', { t: hhmm(r.outage.since_ms) }) : i18n('report.outage.banner'))}
+        <div class="rp-outage-sub">${escapeHtml(i18n('report.outage.admin_help', { n: held }))}</div></div>`
+    : held ? `<div class="rp-banner">${escapeHtml(i18n('report.outage.recovering', { n: held }))}</div>` : '';
+  // 写しの様子はふだんから出す (障害の前に写しができているか確かめられるように)
+  sec.querySelector('[data-msnap]').textContent = snap && snap.sets
+    ? i18n('report.snap.status', { n: snap.sets, t: hhmm(snap.synced_ms) }) + (snap.full ? '' : ' ' + i18n('report.snap.partial'))
+    : i18n('report.snap.none');
+  // 結果を入れている途中は一覧を描き直さない
+  if (!(MAN.fixOpen && sec.querySelector('[data-mfixbox]'))) manDrawList(sec);
   // 障害になったら一度だけ開く (候補を読む)
   const det = sec.querySelector('[data-mdet]');
   if (outage && !MAN.opened) { MAN.opened = true; det.open = true; }
@@ -2189,7 +2363,7 @@ async function renderSetup() {
 // ── 見本の画面 ─────────────────────────────────────────────────────
 
 let DEMO_ME = '';
-const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
+const DEMO_SCENES = ['match', 'win', 'newcomer', 'conflict', 'waiting', 'done', 'rr', 'outage', 'gate', 'challonge', 'login', 'not_entrant', 'admin', 'admin_outage', 'setup_login', 'setup'];
 
 /** 見本の選手: 公開の選手一覧から (ログイン中なら自分を「自分」に)。
  * 試合の 2 人は URL で選べる (p1 = 自分、p2 = 相手): uid / r<順位> (総合評価の順) / 名前 / random / new (SPSP にデータが無い人) */
@@ -2311,6 +2485,7 @@ const L12 = { w: 1, g: [{ w: 1, c: [null, null], s: null }, { w: 0, c: [null, nu
 let DEMO_P = [];
 /** 見本の指定した試合 (admin_outage) */
 let DEMO_MANUAL = [];
+let DEMO_MANUAL_ROWS = {};
 /** 見本の何先: 予選 (p1) は 2 先・本戦 (p2) は勝者側 3 回戦・敗者側 4 回戦から 3 先・Challonge は全部 1 先 */
 const DEMO_FT = { p1: { w: { a: 2, from: null, b: 2 }, l: { a: 2, from: null, b: 2 } }, p2: { w: { a: 2, from: 3, b: 3 }, l: { a: 2, from: 4, b: 3 } },
   c: { w: { a: 1, from: null, b: 1 }, l: { a: 1, from: null, b: 1 } } };
@@ -2345,7 +2520,8 @@ async function demoApi(body) {
       const busy = new Set(DEMO_MANUAL.filter((m) => m.status === 'open').flatMap((m) => m.slots.map((x) => x.id)));
       const es = [ent(0), ent(1, { hw: true }), ent(2, { wl: true }), ent(3), ent(4, { wl: true, hl: true }), ent(5, { playing: true }), ent(6, { hw: true }), ent(7, { wl: true, ll: true })]
         .map((e) => Object.assign(e, { manual: busy.has(e.id) }));
-      return { ok: true, groups: [{ id: '901', name: 'Pools B3', phase: 'p1', open: 3, entrants: es }, { id: '902', name: 'Pools B4', phase: 'p1', open: 0, entrants: [ent(8), ent(9)] }], synced_ms: Date.now() - 26 * 60000 };
+      return { ok: true, groups: [{ id: '901', name: 'Pools B3', phase: 'p1', open: 3, rr: false, entrants: es, open_pairs: [], done_pairs: [] },
+        { id: '902', name: 'Pools B4', phase: 'p1', open: 2, rr: true, entrants: [ent(8), ent(9), ent(10), ent(11)], open_pairs: ['e10|e8'], done_pairs: ['e8|e9'] }], synced_ms: Date.now() - 26 * 60000 };
     }
     if (body.action === 'report_manual_create') {
       const id = DEMO_MANUAL.length + 1;
@@ -2355,13 +2531,24 @@ async function demoApi(body) {
       return { ok: true, manual: m };
     }
     if (body.action === 'report_manual_cancel') { const m = DEMO_MANUAL.find((x) => x.id === body.id); if (m) m.status = 'cancelled'; return { ok: true, id: body.id }; }
+    if (body.action === 'report_admin_fix') {
+      const m = DEMO_MANUAL.find((x) => x.set_id === body.set_id);
+      if (m) DEMO_MANUAL_ROWS[m.set_id] = { set_id: m.set_id, state: 'queued', note: 'outage_admin', slots: m.slots, reports: {}, updated_ms: Date.now() };
+      return { ok: true, set_id: body.set_id, state: 'queued', op: 'none', note: 'outage_admin', offline: true };
+    }
+    if (body.action === 'report_held_export') {
+      return { ok: true, items: [
+        { set_id: '101', startgg_set: '101', group: 'Pools B3', round: 'Winners Round 2', winner: P[0].name, loser: P[1].name, score: '2-0', players: [P[0].name, P[1].name], state: 'queued', note: 'outage', ts_ms: Date.now() - 20 * 60000 },
+        { set_id: '103', startgg_set: '103', group: 'Pools B3', round: 'Losers Round 1', winner: null, loser: null, score: null, players: [P[4].name, P[5].name], state: 'conflict', note: 'outage', ts_ms: Date.now() - 15 * 60000 },
+      ] };
+    }
   }
   if (body.action === 'report_admin') {
     const row = (id, st, a, b, i) => Object.assign(demoRow(id, st, a, b, P), { slots: [P[i], P[i + 1]].map((p, k) => ({ id: 'e' + k + '_' + i, name: p.name, users: p.uid ? [p.uid] : [] })) });
     if (DEMO === 'admin_outage') {
       return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT } },
         sets: [Object.assign(row('101', 'queued', R20, R20, 0), { note: 'outage' }), Object.assign(row('102', 'queued', R21, null, 2), { note: 'outage' }),
-          Object.assign(row('103', 'conflict', R21, L12, 4), { note: 'outage' }), row('104', 'agreed', R20, R20, 6)],
+          Object.assign(row('103', 'conflict', R21, L12, 4), { note: 'outage' }), row('104', 'agreed', R20, R20, 6), ...Object.values(DEMO_MANUAL_ROWS)],
         role: 'admin', managers: DEMO_MGRS, outage: { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' },
         manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true } };
     }
@@ -2451,6 +2638,15 @@ async function runDemo() {
       demoMatch(P, { id: '90004', state: 'complete', round: 'Losers Round 3', slots: [demoSlot(P[0], 5, 0), demoSlot(P[7], 20, 1)], winner: 0, score: [2, 1] })];
     VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), demoRow('90003', 'review', null, L12, P), demoRow('90004', 'reported', R21, null, P)];
   }
+  if (DEMO === 'rr') {
+    // 総当たり: 4 人と試合が開いている。1 人は自分を選んでいる・1 人はほかの人と対戦中
+    const g = { phase: 'Round Robin', pool: 'A', round: 'Round 1', roundNum: 1, station: null, started: false };
+    MATCHES = [1, 2, 3, 4].map((i) => demoMatch(P, { ...g, id: String(91000 + i), slots: [demoSlot(P[0], 1, 0), demoSlot(P[i], i + 1, 1)] }));
+    MATCHES[3].started = true;
+    VIEW.picks = [{ u: P[2].uid || 'u2', s: '91002' }, { u: P[3].uid || 'u3', s: '99999' }];
+    if (!P[2].uid) MATCHES[1].slots[1].uid = 'u2';
+    if (!P[3].uid) MATCHES[2].slots[1].uid = 'u3';
+  }
   if (DEMO === 'outage') {
     // start.gg が止まっている: 前の試合は SPSP に保存 (未反映)、次の試合は運営が指定した試合
     VIEW.outage = { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' };
@@ -2463,8 +2659,9 @@ async function runDemo() {
     VIEW.sets = [demoRow('90000', 'agreed', R20, R20, P), Object.assign(demoRow('90005', 'queued', L12, null, P), { note: 'outage', applied: null })];
     MATCHES = overlayHeld(MATCHES);
   }
-  const cur = MATCHES.find((m) => m.state === 'open');
+  const cur = currentMatch();
   renderPlayer();
+  if (DEMO === 'outage' || DEMO === 'rr') ensurePlayerPush();
   if (cur) matchAnimation(cur).then((skipped) => scrollToMatch(cur, skipped));
 }
 

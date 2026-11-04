@@ -310,3 +310,15 @@ test('報告の障害時 (0017): 様子の upsert と試す役、写しの役 (�
   await store.deleteReportSet('c1', 'm1');
   assert.strictEqual(await store.getReportSet('c1', 'm1'), null);
 });
+
+test('report_picks (0017): 1 人 1 行 (選び直すと上書き・空で消す)、試合ごとに消す、時刻で絞る', { skip: !DatabaseSync && 'node:sqlite が無い' }, async () => {
+  const { store } = fresh();
+  await store.putReportPick('c1', '11', '100', 10);
+  await store.putReportPick('c1', '11', '101', 20);
+  await store.putReportPick('c1', '12', '101', 30);
+  await store.putReportPick('c1', '13', '102', 5);
+  assert.deepStrictEqual((await store.listReportPicks('c1', 10)).map((x) => [x.user_id, x.set_id]).sort(), [['11', '101'], ['12', '101']]);
+  await store.deleteReportPicksForSet('c1', '101');
+  await store.putReportPick('c1', '13', '', 40);
+  assert.deepStrictEqual(await store.listReportPicks('c1', 0), []);
+});

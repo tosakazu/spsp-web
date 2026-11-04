@@ -516,6 +516,21 @@ export class D1Store implements Store {
     return (r.results || []).map((x) => ({ ...x, id: Number(x.id) }));
   }
 
+  async putReportPick(code: string, userId: string, setId: string, nowMs: number): Promise<void> {
+    if (!setId) { await this.db.prepare('DELETE FROM report_picks WHERE code = ? AND user_id = ?').bind(code, userId).run(); return; }
+    await this.db.prepare('INSERT INTO report_picks (code, user_id, set_id, ts_ms) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (code, user_id) DO UPDATE SET set_id = ?3, ts_ms = ?4')
+      .bind(code, userId, setId, nowMs).run();
+  }
+
+  async deleteReportPicksForSet(code: string, setId: string): Promise<void> {
+    await this.db.prepare('DELETE FROM report_picks WHERE code = ? AND set_id = ?').bind(code, setId).run();
+  }
+
+  async listReportPicks(code: string, sinceMs: number): Promise<{ user_id: string; set_id: string; ts_ms: number }[]> {
+    const r = await this.db.prepare('SELECT user_id, set_id, ts_ms FROM report_picks WHERE code = ? AND ts_ms >= ? LIMIT 2000').bind(code, sinceMs).all<{ user_id: string; set_id: string; ts_ms: number }>();
+    return r.results || [];
+  }
+
   async reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }> {
     const r = await this.db.prepare('SELECT COUNT(*) AS n, MAX(ts_ms) AS t FROM report_submissions WHERE user_id = ? AND ts_ms >= ?')
       .bind(userId, sinceMs).first<{ n: number; t: number | null }>();

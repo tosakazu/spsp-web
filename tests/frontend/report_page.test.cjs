@@ -636,3 +636,68 @@ test('見本 admin_outage (運営): 障害の帯 → 次の試合を指定 (勝�
   assert.deepStrictEqual(p.errs, []);
   p.close();
 });
+
+test('見本 rr (総当たり): 開いている試合が複数なら相手を選ぶ画面 (相手も選んでいる人が先・ほかの人と対戦中は後)。選ぶと今の試合・相手を変えられる', { skip }, async () => {
+  const p = await open('?demo=rr&anim=dark');
+  assert.ok(await until(() => p.d.querySelector('.rp-rr')), '相手を選ぶ画面');
+  assert.ok(!p.d.querySelector('.rp-current'), '選ぶまでは入力欄を出さない');
+  const items = [...p.d.querySelectorAll('[data-rr-pick]')];
+  assert.strictEqual(items.length, 4);
+  assert.match(items[0].textContent, /相手もあなたを選んでいます/);
+  assert.match(items[1].textContent, /start\.gg で開始済み/);
+  assert.match(items[items.length - 1].textContent, /ほかの人と対戦中/);
+  items[2].click();
+  assert.ok(await until(() => p.d.querySelector('.rp-current')), '選んだ試合が今の試合');
+  const ov = p.d.querySelector('.rp-match-ov');
+  if (ov) ov.click();
+  await sleep(50);
+  assert.match(p.d.querySelector('.rp-rr-cur').textContent, /ほかに 3 人/);
+  assert.ok(p.d.querySelector('.rp-current form.rp-form'));
+  p.d.querySelector('[data-rr-change]').click();
+  assert.ok(await until(() => p.d.querySelector('.rp-rr') && !p.d.querySelector('.rp-current')), '相手を変える');
+  assert.ok(p.d.getElementById('rp-player-push'), '選手の通知の欄');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
+test('見本 admin_outage: 写しの様子・指定した試合に運営が結果を入れる・未反映の書き出し・総当たりのブロック', { skip }, async () => {
+  const p = await open('?demo=admin_outage');
+  assert.ok(await until(() => p.d.querySelector('#rp-adm-manual [data-mq="0"]')));
+  const sec = p.d.getElementById('rp-adm-manual');
+  assert.match(sec.querySelector('[data-msnap]').textContent, /ブラケットの写し: 31 試合/);
+  p.w.confirm = () => true;
+  // 指定 → 一覧の「結果を入力」→ 送る
+  sec.querySelector('[data-mcands="0"] [data-mpick]').click();
+  await sleep(10);
+  sec.querySelector('[data-mcands="1"] [data-mpick]').click();
+  await sleep(10);
+  sec.querySelector('[data-mcreate]').click();
+  assert.ok(await until(() => sec.querySelector('[data-mfix]')), '結果を入力のボタン');
+  sec.querySelector('[data-mfix]').click();
+  assert.ok(await until(() => sec.querySelector('[data-mfixbox] form.rp-form')), '入力欄');
+  const form = sec.querySelector('[data-mfixbox] form.rp-form');
+  const score = form.querySelector('[data-sum-score="0"]') || form.querySelector('select, input[type="number"]');
+  assert.ok(score, 'スコアの入力');
+  // 書き出し
+  sec.querySelector('[data-mexport-btn]').click();
+  assert.ok(await until(() => sec.querySelector('.rp-mexport-text')));
+  const text = sec.querySelector('.rp-mexport-text').value;
+  assert.match(text, /Pools B3 Winners Round 2: .+ 2-0 .+ \(start\.gg #101\)/);
+  assert.match(text, /結果未定/);
+  // 総当たりのブロック: 勝者側 / 敗者側ではなく総当たり、もう当たった人は 2 人目に出ない
+  const sel = sec.querySelector('[data-mgroup]');
+  sel.value = '902'; sel.dispatchEvent(new p.w.Event('change'));
+  await sleep(20);
+  assert.ok(!sec.querySelector('input[name="rp-mside"]'), '勝者側 / 敗者側は出さない');
+  assert.match(sec.querySelector('.rp-mhelp').textContent, /総当たり/);
+  const first = [...sec.querySelectorAll('[data-mcands="0"] [data-mpick]')].find((b) => b.getAttribute('data-eid') === 'e8');
+  first.click();
+  await sleep(10);
+  const second = [...sec.querySelectorAll('[data-mcands="1"] [data-mpick]')].map((b) => b.getAttribute('data-eid'));
+  assert.deepStrictEqual(second, ['e10', 'e11'], 'e9 とはもう当たった');
+  [...sec.querySelectorAll('[data-mcands="1"] [data-mpick]')][0].click();
+  await sleep(10);
+  assert.match(sec.querySelector('[data-mform] .rp-note').textContent, /start\.gg/, 'start.gg に試合がある組');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});

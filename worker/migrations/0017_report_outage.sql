@@ -38,3 +38,13 @@ CREATE TABLE IF NOT EXISTS report_manual_sets (
   updated_ms  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS report_manual_sets_code ON report_manual_sets (code, status);
+
+-- 総当たりで選手が選んだ相手 (2026-11-04)。選手の画面で「この人とやる」を押すと 1 人 1 行 (選び直すと上書き、報告したら消す)。
+-- ほかの選手の画面に「相手もこの試合を選んでいます / ほかの人と対戦中」を出す。30 分より古いものは数えない
+CREATE TABLE IF NOT EXISTS report_picks (
+  code     TEXT    NOT NULL,
+  user_id  TEXT    NOT NULL,
+  set_id   TEXT    NOT NULL,
+  ts_ms    INTEGER NOT NULL,
+  PRIMARY KEY (code, user_id)
+);

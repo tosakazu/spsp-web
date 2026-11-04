@@ -291,6 +291,10 @@ export interface Store {
   updateReportManual(code: string, id: number, status: string, setId: string, nowMs: number): Promise<void>;
   /** その人が選手の、指定した試合 (open だけ)。 */
   listReportManualForUser(userId: string, code: string): Promise<ReportManualRow[]>;
+  /** 総当たりで選んだ相手 (report_picks)。setId = '' なら消す */
+  putReportPick(code: string, userId: string, setId: string, nowMs: number): Promise<void>;
+  deleteReportPicksForSet(code: string, setId: string): Promise<void>;
+  listReportPicks(code: string, sinceMs: number): Promise<{ user_id: string; set_id: string; ts_ms: number }[]>;
   /** その人が sinceMs 以降に送った数と、最後に送った時刻。 */
   reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }>;
 }

@@ -21,7 +21,7 @@ export interface Provider {
   apply(set: NSet, r: Result, mode: 'report' | 'update'): Promise<ProviderResult>;
   reset(set: NSet): Promise<ProviderResult>;
   /** 運営が指定した 2 人の、まだ結果の無い試合を探す (start.gg だけ。report_outage.ts) */
-  findSet?(ids: [string, string], side: 'w' | 'l'): Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }>;
+  findSet?(ids: [string, string], side: 'w' | 'l' | 'r'): Promise<{ ok: true; found: { id: string; flip: boolean } | null } | { ok: false; note: string }>;
 }
 
 const SET_QUERY = `query SpspReportSet($id: ID!) {

@@ -599,3 +599,14 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-mlist { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .rp-mitem.rp-m-cancelled { opacity: .6; }
 @media (max-width: 560px) { .rp-mpicks { grid-template-columns: 1fr; } .rp-mvs { padding: 0; text-align: center; } }
+.rp-msnap { margin: 0 0 6px; }
+.rp-mfix { margin-top: 8px; }
+.rp-mexport-text { width: 100%; box-sizing: border-box; font: 12px/1.5 ui-monospace, monospace; margin-top: 6px; }
+/* 総当たり: 対戦相手を選ぶ */
+.rp-rr-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.rp-rr-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; text-align: left; font: inherit; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; cursor: pointer; }
+.rp-rr-item:hover, .rp-rr-item:focus { border-color: #b91c1c; }
+.rp-rr-tag { margin-left: auto; }
+.rp-rr-picked_me { border-color: #b91c1c; background: #fef2f2; }
+.rp-rr-busy { opacity: .65; }
+.rp-rr-cur { font-size: 13px; margin-bottom: 8px; }
