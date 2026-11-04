@@ -655,7 +655,6 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .bk-tag { border-radius: 3px; padding: 0 4px; font-size: 10px; color: #fff; }
 .bk-live { background: #d33; }
 .bk-held { background: #c77700; }
-.bk-calc { background: #777; }
 .bk-rr { border-collapse: collapse; font-size: 12px; }
 .bk-rr th, .bk-rr td { border: 1px solid var(--border, #ddd); padding: 3px 6px; text-align: center; white-space: nowrap; }
 .bk-rr tr.bk-me th { text-decoration: underline; }

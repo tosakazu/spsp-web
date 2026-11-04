@@ -4,7 +4,7 @@
  * 選手の画面・運営の画面の下に「トーナメント表」(開いたときだけ読む。開いているあいだは 30 秒ごとに読み直す)。
  *   - 勝者側・敗者側の列 (ラウンドごと)。並びは前の試合をたどった順 (start.gg の表と同じ上下)。不戦勝の試合は出さない
  *   - 総当たりは表 (行の人から見た勝ち負け)
- *   - 札: 対戦中 (start.gg) / SPSP に保存 (start.gg に未反映) / 計算 (start.gg にまだ出ていない対戦者を SPSP が計算で埋めた)
+ *   - 札: 対戦中 (start.gg) / start.gg 未反映 (SPSP にだけある結果と、start.gg ではまだ空いている枠に SPSP が前の試合の結果から入れた人。名前に *)
  */
 import { escapeHtml } from '../../site/js/html.js';
 
@@ -133,8 +133,8 @@ function setHtml(s, byId, ents, me, t) {
   }).join('');
   const tags = [
     s.s === 2 ? `<span class="bk-tag bk-live">${escapeHtml(t('report.bk.live'))}</span>` : '',
-    s.hw ? `<span class="bk-tag bk-held">${escapeHtml(t('report.bk.held'))}</span>` : '',
-    s.sl.some((x) => x.pd) && !win ? `<span class="bk-tag bk-calc">${escapeHtml(t('report.bk.pd'))}</span>` : '',
+    // start.gg 未反映: この試合の結果が SPSP にだけある (hw) か、start.gg ではまだ空いている枠に SPSP が前の試合の結果から人を入れた (pd)
+    s.hw || (s.sl.some((x) => x.pd) && !win) ? `<span class="bk-tag bk-held">${escapeHtml(t('report.bk.held'))}</span>` : '',
   ].join('');
   const head = [s.x, s.st ? t('report.bk.station', { n: s.st }) : ''].filter(Boolean).join(' · ');
   return `<div class="bk-set${mine ? ' bk-mine' : ''}${s.s === 3 ? ' bk-done' : ''}"><div class="bk-head">${escapeHtml(head)}${tags}</div>${rows}</div>`;
