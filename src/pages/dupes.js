@@ -166,8 +166,8 @@ async function spspJson(path) {
   } catch (e) { return {}; }
 }
 
-/** 候補の人の材料 (SPSP の出場記録、無い人は start.gg の参加大会数) @param {string} token @param {Entrant[]} entrants @param {number[]} idx */
-async function buildSides(token, entrants, idx) {
+/** 候補の人の材料 (SPSP の出場記録、無い人は start.gg の参加大会数) @param {string} token @param {Entrant[]} entrants @param {number[]} idx @param {Record<string, number>} merges data/user_merges.json */
+async function buildSides(token, entrants, idx, merges) {
   const [tourPref, playerPref] = await Promise.all([spspJson('data/tournament_prefectures.json'), spspJson('data/player_prefectures.json')]);
   /** @type {Map<number, Side>} */
   const sides = new Map();
@@ -178,13 +178,15 @@ async function buildSides(token, entrants, idx) {
       const e = entrants[i];
       /** @type {import('../../site/js/dupe_check.js').History | null} */
       let hist = null;
-      if (e.userId != null) {
+      // 統合した旧アカウントは新しい方の記録を読む (旧 uid の古い選手ファイルが R2 に残っていることがある)
+      const uid = e.userId != null ? D.canonUid(e.userId, merges) : null;
+      if (uid != null) {
         try {
-          const rec = await SPSPPlayerData.load(SPSP.data, e.userId, { history: false, current: false });
+          const rec = await SPSPPlayerData.load(SPSP.data, uid, { history: false, current: false });
           if (rec) hist = D.summarize(rec, tourPref);
         } catch (err) { /* 読めなければ記録なしとして扱う */ }
       }
-      const pref = (e.userId != null && playerPref[String(e.userId)]) || (hist && hist.mainPref) || D.prefOf(e.location);
+      const pref = (uid != null && playerPref[String(uid)]) || (hist && hist.mainPref) || D.prefOf(e.location);
       sides.set(i, { e, hist, pref, sgg: null });
       status(i18n('dupes.progress.spsp', { done: ++done, total: idx.length }));
     }
@@ -226,9 +228,10 @@ async function load() {
   const entrants = await fetchEntrants(token, ev.id);
   status(i18n('dupes.step.links'));
   await refillLinks(token, entrants);
-  const cands = D.findCandidates(entrants);
+  const merges = await spspJson('data/user_merges.json');
+  const cands = D.findCandidates(entrants, merges);
   const idx = [...new Set(cands.flatMap((c) => [c.a, c.b]))];
-  const sides = await buildSides(token, entrants, idx);
+  const sides = await buildSides(token, entrants, idx, merges);
   const now = Date.now();
   /** @type {Pair[]} */
   const pairs = cands.map((c) => ({ ...c, res: D.compare(/** @type {Side} */ (sides.get(c.a)), /** @type {Side} */ (sides.get(c.b)), c.kinds, now) }));
