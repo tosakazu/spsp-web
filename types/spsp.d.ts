@@ -247,6 +247,8 @@ declare global {
     poolCount: number | null;
     waves: SpspSeedWaves | null;
     phasesConfig?: SpspSeedPhaseConfig[] | null;
+    /** start.gg のフェーズの id (選んだ phase から通過でつながる順) */
+    phaseChain?: string[];
   }
   /** csv モードの基準順位ソース (app/80_csv_source.js)。rows = seed_uploader.js parseCsv の行 (列名 → 値) */
   interface SpspSeedCsvSource { rows: Record<string, string>[]; label: string }
