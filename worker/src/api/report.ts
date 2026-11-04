@@ -43,7 +43,7 @@ import { managersOf, MANAGERS_MAX } from './report_logic.ts';
 import type { ManagerRole, ReportManager } from './report_logic.ts';
 import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
-import { EVENT_QUERY, startggProvider } from './report_startgg.ts';
+import { EVENT_QUERY, probeStartBracket, startggProvider } from './report_startgg.ts';
 import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
 import type { Held, Snapshot } from './report_outage.ts';
 import {
@@ -983,6 +983,17 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
     snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
 }
 
+/** action: "report_start_bracket" — (テスト用) SPSP からブラケットを開始してみる。運営だけ・start.gg だけ。
+ * 結果 (ブロックごとの手順・start.gg のエラー) をそのまま返し、画面に出す (2026-11-04) */
+export async function handleReportStartBracket(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now, true);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の受付だけで使えます。', 'not_startgg');
+  const r = await probeStartBracket(fetchFn, o.token, o.ev.target_id);
+  if (!r.ok) return err('provider_error', 'start.gg を読めませんでした: ' + r.note, 'probe:' + r.note);
+  return ok({ steps: r.steps, more: r.more });
+}
+
 /** action: "report_phases" — 何先の設定に使うフェーズとラウンド。受付の前 (受付を始める画面) は { token, event } で、運営のログインのトークンで読む */
 export async function handleReportPhases(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   if (req.code === undefined && req.event !== undefined) {
@@ -1003,7 +1014,7 @@ export async function handleReportPhases(cfg: Config, store: Store, fetchFn: Fet
   }
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
-  const r = await guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now).phases();
+  const r = await guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now).phases(req.light === true);
   if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   return ok({ phases: r.phases, entrants: r.entrants ?? null });
 }

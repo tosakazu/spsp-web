@@ -1630,6 +1630,71 @@ function wirePush(root, kind = 'admin') {
   });
 }
 
+/** ブラケットが始まっていない (start.gg のフェーズのブロックがどれも未開始) ときの警告。運営の画面の上に出し、
+ * 出ている間は 1 分ごとに読み直して、始まったら消す (2026-11-04)。見分けられない (状態が読めない) ときは出さない */
+let notStartedTimer = 0;
+async function watchNotStarted() {
+  clearTimeout(notStartedTimer);
+  const box = $('rp-adm-notstarted');
+  if (!box) return;
+  if (!PHASES && !DEMO) {
+    const p = await api({ action: 'report_phases', token: tok(), code: CODE });
+    if (p && p.ok) PHASES = p.phases;
+  }
+  const ph = PHASES || [];
+  const notStarted = ph.length > 0 && ph.every((x) => x.started === false);
+  box.hidden = !notStarted;
+  if (!notStarted) box.innerHTML = '';
+  else if (!box.querySelector('.rp-banner')) {
+    // テスト用の「SPSP からブラケット開始」: 開始前の試合を試合中にして取り消す (start.gg がブロックを始めるか試す)。結果・エラーは下に出す
+    box.innerHTML = `<div class="rp-banner rp-warn rp-outage">⚠ ${escapeHtml(i18n('report.admin.not_started'))}
+      <div class="rp-outage-sub">${escapeHtml(i18n('report.admin.not_started_help'))}</div>
+      <div class="rp-outage-sub"><button type="button" class="rp-btn" id="rp-start-bracket">${escapeHtml(i18n('report.admin.start_bracket'))}</button></div>
+      <div class="rp-outage-sub" id="rp-start-bracket-out"></div></div>`;
+    $('rp-start-bracket').addEventListener('click', startBracketTest);
+  }
+  if (!notStarted || DEMO) return;
+  notStartedTimer = setTimeout(async () => {
+    // 軽い読み (フェーズと開始済みかだけ、start.gg 1 回)。何先の欄に使うラウンドは前に読んだものを残し、started だけ写す
+    const p = await api({ action: 'report_phases', token: tok(), code: CODE, light: true });
+    if (p && p.ok && PHASES) {
+      const st = new Map((p.phases || []).map((x) => [x.key, x.started]));
+      for (const x of PHASES) if (st.has(x.key)) x.started = st.get(x.key);
+    }
+    watchNotStarted();
+  }, 60000);
+}
+
+/** (テスト用) SPSP からブラケット開始。結果 (ブロックごと) とエラーを画面に出す */
+async function startBracketTest() {
+  const out = $('rp-start-bracket-out');
+  const btn = /** @type {HTMLButtonElement} */ ($('rp-start-bracket'));
+  if (!out || !btn) return;
+  if (!confirm(i18n('report.admin.start_bracket_confirm'))) return;
+  btn.disabled = true;
+  out.textContent = i18n('report.admin.start_bracket_running');
+  let r;
+  try { r = await api({ action: 'report_start_bracket', token: tok(), code: CODE }); } catch (e) { r = { ok: false, error: { message: String(e) } }; }
+  btn.disabled = false;
+  if (!r || !r.ok) { out.innerHTML = `<span class="rp-err">${escapeHtml(i18n('report.admin.start_bracket_error', { message: errText(r) }))}</span>`; return; }
+  const steps = r.steps || [];
+  const line = (s) => `<li>${escapeHtml((s.phase || '') + (s.ident ? ' ' + s.ident : ''))}: <b>${escapeHtml(i18n('report.admin.start_bracket_r.' + s.result))}</b>`
+    + (s.note ? ` <span class="rp-muted">(${escapeHtml(s.note)})</span>` : '') + '</li>';
+  out.innerHTML = (steps.length ? `<ul>${steps.map(line).join('')}</ul>` : `<p>${escapeHtml(i18n('report.admin.start_bracket_none'))}</p>`)
+    + (r.more ? `<p>${escapeHtml(i18n('report.admin.start_bracket_more', { n: r.more }))}</p>` : '');
+  // 始まったかを読み直す (始まっていれば帯ごと消える)
+  const p = await api({ action: 'report_phases', token: tok(), code: CODE, light: true });
+  if (p && p.ok && PHASES) {
+    const st = new Map((p.phases || []).map((x) => [x.key, x.started]));
+    for (const x of PHASES) if (st.has(x.key)) x.started = st.get(x.key);
+    if (PHASES.length && !PHASES.every((x) => x.started === false)) {
+      const box = $('rp-adm-notstarted');
+      if (box) { box.hidden = false; box.innerHTML = `<div class="rp-banner">${escapeHtml(i18n('report.admin.start_bracket_done'))}</div>${out.outerHTML}`; }
+      clearTimeout(notStartedTimer);
+    }
+  }
+}
+
 async function renderAdmin() {
   const root = $('rp-admin');
   root.hidden = false;
@@ -1654,7 +1719,8 @@ async function renderAdmin() {
   const url = pageUrl(CODE, false);
   if (r.role === 'manager') {
     // 報告管理者: 試合結果の管理と通知だけ (設定・停止・報告管理者の追加は無い)
-    root.innerHTML = `<section class="rp-card-sec">
+    root.innerHTML = `<div id="rp-adm-notstarted" hidden></div>
+    <section class="rp-card-sec">
       <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
       ${pushHtml()}
     </section>
@@ -1663,10 +1729,12 @@ async function renderAdmin() {
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
     wirePush(root);
+    if (ev.kind === 'startgg') watchNotStarted();
     await adminSetsStart(r);
     return;
   }
-  root.innerHTML = `<section class="rp-card-sec">
+  root.innerHTML = `<div id="rp-adm-notstarted" hidden></div>
+  <section class="rp-card-sec">
     <h2>${escapeHtml(i18n('report.admin.share'))}</h2>
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(url)}" id="rp-share-url"><button type="button" class="rp-btn" id="rp-copy">${escapeHtml(i18n('report.admin.copy'))}</button></div>
     <p class="rp-muted">${escapeHtml(i18n('report.admin.expires', { t: new Date(ev.expires_ms).toLocaleString() }))}</p>
@@ -1695,6 +1763,7 @@ async function renderAdmin() {
   const phasesP = (async () => {
     if (!PHASES) { const p = await api({ action: 'report_phases', token: tok(), code: CODE }); PHASES = p && p.ok ? p.phases : []; if (p && p.ok) setEntrants(root, p.entrants || null); }
     drawFt(curFt);
+    if (ev.kind === 'startgg') watchNotStarted();
   })();
   const formFt = () => (PHASES && PHASES.length ? readFt($('rp-ft-set')) : curFt);
   // ほかの運営が設定を変えたら読み込む (試合の一覧と一緒に読み直す)。こちらで書きかけなら上書きせず知らせる

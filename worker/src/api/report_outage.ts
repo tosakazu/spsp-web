@@ -80,7 +80,7 @@ export function guardProvider(p: Provider, h: Health, now: number): Provider {
   }
   const skip = { ok: false as const, note: 'outage_skip' };
   return {
-    phases: () => wrap(() => p.phases(), skip),
+    phases: (light) => wrap(() => p.phases(light), skip),
     readSet: (id) => wrap(() => p.readSet(id), { ok: false as const, code: 'provider_error' as const, note: 'outage_skip' }),
     apply: (s, r, m) => wrap(() => p.apply(s, r, m), skip),
     reset: (s) => wrap(() => p.reset(s), skip),

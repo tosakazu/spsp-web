@@ -947,3 +947,44 @@ test('3 分後に取り込む: 3 分たったら送る (5 分の設定と同じ�
   assert.strictEqual(reconcile(null, [{ result: R(0, G(0), G(0)), ts: 0 }, null], set0(), 'delay1', 59e3).state, 'pending');
   assert.strictEqual(reconcile(null, [{ result: R(0, G(0), G(0)), ts: 0 }, null], set0(), 'delay1', 60e3).op, 'report');
 });
+
+test('フェーズの開始済み: ブロックのどれかが CREATED 以外なら started、全部 CREATED なら false、状態が読めなければ付けない', () => {
+  const ph = (states) => ({ event: { phases: [{ id: 1, name: 'P', phaseGroups: { nodes: states.map((st, i) => ({ id: 10 + i, ...(st === undefined ? {} : { state: st }) })) } }] } });
+  assert.strictEqual(parsePhaseList(ph([1, 1]))[0].started, false);
+  assert.strictEqual(parsePhaseList(ph([1, 2]))[0].started, true);
+  assert.strictEqual(parsePhaseList(ph(['CREATED', 'ACTIVE']))[0].started, true);
+  assert.strictEqual(parsePhaseList(ph([undefined]))[0].started, undefined);
+  const info = phaseInfoOf(parsePhaseList(ph([1]))[0], []);
+  assert.strictEqual(info.started, false);
+  assert.ok(!('started' in phaseInfoOf(parsePhaseList(ph([undefined]))[0], [])));
+});
+
+test('(テスト用) ブラケット開始: 最初のフェーズの未開始ブロックで仮の試合を試合中 → 本物の ID なら取り消し → 状態を読み直す。エラーは手順に残す', async () => {
+  const { probeStartBracket } = await import('../src/api/report_startgg.ts');
+  const calls = [];
+  let started = false;
+  const fetchFn = async (_url, init) => {
+    const b = JSON.parse(init.body);
+    calls.push(b.query.match(/(query|mutation) (\w+)/)[2]);
+    const j = (data) => new Response(JSON.stringify({ data }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (b.query.includes('SpspProbePhases')) return j({ event: { phases: [
+      { id: 2, name: 'Top 8', phaseOrder: 2, phaseGroups: { nodes: [{ id: 20, displayIdentifier: '1', state: 1 }] } },
+      { id: 1, name: 'Pools', phaseOrder: 1, phaseGroups: { nodes: [{ id: 10, displayIdentifier: 'A1', state: 1 }, { id: 11, displayIdentifier: 'A2', state: 2 }] } },
+    ] } });
+    if (b.query.includes('SpspProbeSets')) return j({ phaseGroup: { id: 10, state: started ? 2 : 1, sets: { nodes: [
+      { id: 'preview_10_1_1', slots: [{ entrant: { id: 1 } }, { entrant: null }] },
+      { id: 'preview_10_1_2', slots: [{ entrant: { id: 3 } }, { entrant: { id: 4 } }] },
+    ] } } });
+    if (b.query.includes('SpspStartSet')) { assert.strictEqual(b.variables.setId, 'preview_10_1_2'); started = true; return j({ markSetInProgress: { id: '555', state: 2 } }); }
+    if (b.query.includes('SpspResetSet')) { assert.strictEqual(b.variables.setId, '555'); return new Response(JSON.stringify({ errors: [{ message: 'nope' }] }), { status: 200 }); }
+    throw new Error('unexpected ' + b.query);
+  };
+  const r = await probeStartBracket(fetchFn, 'tok', '99');
+  assert.ok(r.ok);
+  assert.strictEqual(r.steps.length, 1);   // 最初のフェーズ (Pools) の未開始ブロック A1 だけ
+  assert.strictEqual(r.steps[0].ident, 'A1');
+  assert.strictEqual(r.steps[0].result, 'started');
+  assert.match(r.steps[0].note, /id=555/);
+  assert.match(r.steps[0].note, /resetSet: gql:nope/);
+  assert.deepStrictEqual(calls, ['SpspProbePhases', 'SpspProbeSets', 'SpspStartSet', 'SpspResetSet', 'SpspProbeSets']);
+});
