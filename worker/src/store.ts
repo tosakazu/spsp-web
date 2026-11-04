@@ -180,6 +180,9 @@ export interface ReportNoshowRow {
   code: string; set_id: string; user_id: string; users: string; info: string; first_ms: number; last_ms: number; count: number; notified_ms: number; status: string; note: string;
 }
 
+/** report_starts の 1 行 (対戦開始、0018・0019)。sgg: 0 = start.gg にまだ / 1 = 入った / 2 = 要らない / -1 = 断られた */
+export interface ReportStartRow { set_id: string; user_id: string; ts_ms: number; sgg: number; tried_ms: number; note: string; info: string }
+
 export interface Store {
   /** ログインの記録を 1 行足す。 */
   insertLogin(row: LoginRow): Promise<void>;
@@ -318,10 +321,15 @@ export interface Store {
   /** その試合の記録を全部 resolved に (結果が出た・DQ にした・運営が対応した) */
   resolveReportNoshows(code: string, setId: string, note: string, userId: string | null): Promise<void>;
   /** 「対戦開始」(最初の 1 回だけ入る。入ったら true) */
-  insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number): Promise<boolean>;
-  getReportStart(code: string, setId: string): Promise<{ set_id: string; user_id: string; ts_ms: number } | null>;
+  insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number, info?: string): Promise<boolean>;
+  getReportStart(code: string, setId: string): Promise<ReportStartRow | null>;
+  /** その受付の対戦開始 (sinceMs 以降) */
+  listReportStarts(code: string, sinceMs: number): Promise<ReportStartRow[]>;
+  setReportStartSync(code: string, setId: string, sgg: number, note: string, triedMs: number): Promise<void>;
+  /** 運営が指定した試合 (m<id>) の対戦開始を、見つかった start.gg の試合に移す */
+  moveReportStart(code: string, fromSetId: string, toSetId: string): Promise<void>;
   /** その人が選手の「対戦開始」「見つからない」(sinceMs 以降) */
-  listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<{ set_id: string; user_id: string; ts_ms: number }[]>;
+  listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<ReportStartRow[]>;
   listReportNoshowsForUser(code: string, userId: string, sinceMs: number): Promise<ReportNoshowRow[]>;
   /** その人が sinceMs 以降に送った数と、最後に送った時刻。 */
   reportSubmissionActivity(userId: string, sinceMs: number): Promise<{ count: number; latestMs: number | null }>;

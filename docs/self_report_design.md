@@ -172,3 +172,14 @@ D1 = migration 0018 (`report_dqs` / `report_noshows` / `report_starts`)。コー
 - **運営の画面**: 「対戦相手が見つからない」の一覧、「参加者の試合 (対戦開始・DQ)」(名前で参加者を選ぶ → 結果の無い試合に 対戦開始にする / この試合を DQ、下に 勝者側のみ / 敗者側のみ / 両方)、DQ の一覧 (待ち / n 試合 / 済み、外す)。設定に「選手の『対戦相手が見つからない』を通知する」。
 - **検証**: worker/test/report_outage.test.mjs (通知の間隔・連打・相手の画面・対戦開始・運営の対戦開始・DQ の各範囲・障害中は待つ)、report_outage_sim.test.mjs に「会えない・対戦開始」と「運営が負けた側を DQ」を混ぜて各 1000 通り。`isDQ` と `markSetInProgress` は start.gg の公開の API の形どおりだが、本物の start.gg では未確認 (§8 と同じく本番で様子見)。
 - 見本 = `?demo=noshow` (選手)・`?demo=admin` (運営の一覧・参加者の試合・DQ)。本番に入れるとき: 本番 D1 に `migrations/0018_report_dq_noshow.sql` を execute --file。
+
+## 13. start.gg に未反映のものを見えるように (2026-11-04)
+
+- 運営の画面のいちばん上に「start.gg に未反映 (n 件)」(無ければ「ありません (HH:MM 時点)」の 1 行)。`report_admin` の `unsynced` (worker の unsyncedOf):
+  - 結果 = 状態が 未反映 (queued) / 取り込み待ち (pending) / 食い違い / 運営の確認待ち (review) の試合。理由 = 接続できず未送信・運営の修正 / 取り消しを未送信・指定した試合で start.gg に試合がまだ無い・n 分待ち・相手の報告待ち・承認待ち・食い違いで送っていない・運営が止めている・start.gg と食い違い・送信エラー。
+  - 指定した試合 = まだ start.gg の試合に移っていないもの (報告があれば結果のほうに出る)。
+  - DQ = まだ start.gg に入っていない DQ (次の試合待ち・確かめ中・断られた)。
+  - 対戦開始 = start.gg の試合を試合中にできていないもの。
+- 対戦開始が start.gg に入ったか (migration 0019、report_starts.sgg: 0 まだ / 1 入った / 2 要らない (結果が入った) / -1 断られた)。0 は画面の読みのたびに 1 分ごとにやり直す (`syncStarts`)。指定した試合の対戦開始は start.gg の試合に移ったときに移す。選手の画面の「対戦開始」にも「start.gg には未反映」の札。
+- 模擬の最後に `unsynced` が空になることを確かめる (各 1000 通り)。
+- 本番に入れるとき: 本番 D1 に `migrations/0019_report_start_sync.sql` を execute --file (ALTER TABLE なので 1 回だけ)。

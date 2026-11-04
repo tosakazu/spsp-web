@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -337,8 +337,12 @@ test('0018: 見つからないの押し直し (回数・時刻・通知の時刻
   assert.deepStrictEqual([r.first_ms, r.count, r.status, r.notified_ms], [30, 3, 'open', 30], '解決の後に押したら開き直す');
   assert.strictEqual(await store.insertReportStart('c1', '100', '|11|12|', '12', 40), true);
   assert.strictEqual(await store.insertReportStart('c1', '100', '|11|12|', '11', 50), false);
-  assert.deepStrictEqual({ ...(await store.getReportStart('c1', '100')) }, { set_id: '100', user_id: '12', ts_ms: 40 });
-  assert.strictEqual((await store.listReportStartsForUser('c1', '11', 0)).length, 1);
+  assert.deepStrictEqual({ ...(await store.getReportStart('c1', '100')) }, { set_id: '100', user_id: '12', ts_ms: 40, sgg: 0, tried_ms: 0, note: '', info: '{}' });
+  await store.setReportStartSync('c1', '100', 1, '', 60);
+  await store.insertReportStart('c1', 'm3', '|11|12|', '11', 70, '{"names":["A","B"]}');
+  await store.moveReportStart('c1', 'm3', '200');
+  assert.deepStrictEqual((await store.listReportStarts('c1', 0)).map((x) => [x.set_id, x.sgg, x.info]).sort(), [['100', 1, '{}'], ['200', 0, '{"names":["A","B"]}']]);
+  assert.strictEqual((await store.listReportStartsForUser('c1', '11', 0)).length, 2);
   const id = await store.insertReportDq({ code: 'c1', entrant_id: '4', name: 'P4', scope: 'l', status: 'open', done_sets: '', note: '', created_by: '1', created_ms: 1, updated_ms: 1 });
   await store.updateReportDq('c1', id, 'done', '103', '', 5);
   assert.deepStrictEqual((await store.listReportDqs('c1')).map((x) => [x.status, x.done_sets]), [['done', '103']]);

@@ -5,7 +5,7 @@
  * 条件付き INSERT (INSERT ... SELECT ... WHERE 条件) で同じことを 1 文で行い、
  * 書き込まれた行数で通ったかを判定する。
  */
-import type { LoginRow, ReportDqRow, ReportNoshowRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportHealthRow, ReportManualRow, ReportSnapshotRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
+import type { LoginRow, ReportDqRow, ReportNoshowRow, ReportStartRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportHealthRow, ReportManualRow, ReportSnapshotRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
   CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
@@ -576,18 +576,31 @@ export class D1Store implements Store {
     else await this.db.prepare("UPDATE report_noshows SET status = 'resolved', note = ? WHERE code = ? AND set_id = ? AND user_id = ? AND status = 'open'").bind(note, code, setId, userId).run();
   }
 
-  async insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number): Promise<boolean> {
-    const res = await this.db.prepare('INSERT OR IGNORE INTO report_starts (code, set_id, users, user_id, ts_ms) VALUES (?, ?, ?, ?, ?)').bind(code, setId, users, userId, nowMs).run();
+  async insertReportStart(code: string, setId: string, users: string, userId: string, nowMs: number, info = '{}'): Promise<boolean> {
+    const res = await this.db.prepare('INSERT OR IGNORE INTO report_starts (code, set_id, users, user_id, ts_ms, info) VALUES (?, ?, ?, ?, ?, ?)').bind(code, setId, users, userId, nowMs, info).run();
     return (res.meta?.changes ?? 0) > 0;
   }
 
-  async getReportStart(code: string, setId: string): Promise<{ set_id: string; user_id: string; ts_ms: number } | null> {
-    return await this.db.prepare('SELECT set_id, user_id, ts_ms FROM report_starts WHERE code = ? AND set_id = ?').bind(code, setId).first<{ set_id: string; user_id: string; ts_ms: number }>() ?? null;
+  async getReportStart(code: string, setId: string): Promise<ReportStartRow | null> {
+    return await this.db.prepare('SELECT set_id, user_id, ts_ms, sgg, tried_ms, note, info FROM report_starts WHERE code = ? AND set_id = ?').bind(code, setId).first<ReportStartRow>() ?? null;
   }
 
-  async listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<{ set_id: string; user_id: string; ts_ms: number }[]> {
-    const r = await this.db.prepare('SELECT set_id, user_id, ts_ms FROM report_starts WHERE code = ? AND users LIKE ? AND ts_ms >= ? LIMIT 100')
-      .bind(code, '%|' + userId + '|%', sinceMs).all<{ set_id: string; user_id: string; ts_ms: number }>();
+  async listReportStarts(code: string, sinceMs: number): Promise<ReportStartRow[]> {
+    const r = await this.db.prepare('SELECT set_id, user_id, ts_ms, sgg, tried_ms, note, info FROM report_starts WHERE code = ? AND ts_ms >= ? ORDER BY ts_ms DESC LIMIT 500').bind(code, sinceMs).all<ReportStartRow>();
+    return r.results || [];
+  }
+
+  async setReportStartSync(code: string, setId: string, sgg: number, note: string, triedMs: number): Promise<void> {
+    await this.db.prepare('UPDATE report_starts SET sgg = ?, note = ?, tried_ms = ? WHERE code = ? AND set_id = ?').bind(sgg, note, triedMs, code, setId).run();
+  }
+
+  async moveReportStart(code: string, fromSetId: string, toSetId: string): Promise<void> {
+    await this.db.prepare('UPDATE OR IGNORE report_starts SET set_id = ? WHERE code = ? AND set_id = ?').bind(toSetId, code, fromSetId).run();
+  }
+
+  async listReportStartsForUser(code: string, userId: string, sinceMs: number): Promise<ReportStartRow[]> {
+    const r = await this.db.prepare('SELECT set_id, user_id, ts_ms, sgg, tried_ms, note, info FROM report_starts WHERE code = ? AND users LIKE ? AND ts_ms >= ? LIMIT 100')
+      .bind(code, '%|' + userId + '|%', sinceMs).all<ReportStartRow>();
     return r.results || [];
   }
 

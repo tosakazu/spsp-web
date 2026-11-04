@@ -341,13 +341,20 @@ export class MemStore {
     this._rep(); for (const x of this.reportNoshows) if (x.code === code && x.set_id === setId && x.status === 'open' && (userId === null || x.user_id === userId)) Object.assign(x, { status: 'resolved', note });
   }
 
-  async insertReportStart(code, setId, users, userId, nowMs) {
+  async insertReportStart(code, setId, users, userId, nowMs, info = '{}') {
     this._rep(); if (this.reportStarts.some((x) => x.code === code && x.set_id === setId)) return false;
-    this.reportStarts.push({ code, set_id: setId, users, user_id: userId, ts_ms: nowMs }); return true;
+    this.reportStarts.push({ code, set_id: setId, users, user_id: userId, ts_ms: nowMs, sgg: 0, tried_ms: 0, note: '', info }); return true;
   }
-  async getReportStart(code, setId) { this._rep(); const r = this.reportStarts.find((x) => x.code === code && x.set_id === setId); return r ? { set_id: r.set_id, user_id: r.user_id, ts_ms: r.ts_ms } : null; }
+  _start(x) { return { set_id: x.set_id, user_id: x.user_id, ts_ms: x.ts_ms, sgg: x.sgg, tried_ms: x.tried_ms, note: x.note, info: x.info }; }
+  async getReportStart(code, setId) { this._rep(); const r = this.reportStarts.find((x) => x.code === code && x.set_id === setId); return r ? this._start(r) : null; }
+  async listReportStarts(code, sinceMs) { this._rep(); return this.reportStarts.filter((x) => x.code === code && x.ts_ms >= sinceMs).map((x) => this._start(x)); }
+  async setReportStartSync(code, setId, sgg, note, triedMs) { this._rep(); for (const x of this.reportStarts) if (x.code === code && x.set_id === setId) Object.assign(x, { sgg, note, tried_ms: triedMs }); }
+  async moveReportStart(code, from, to) {
+    this._rep(); if (this.reportStarts.some((x) => x.code === code && x.set_id === to)) return;
+    for (const x of this.reportStarts) if (x.code === code && x.set_id === from) x.set_id = to;
+  }
   async listReportStartsForUser(code, userId, sinceMs) {
-    this._rep(); return this.reportStarts.filter((x) => x.code === code && x.users.includes('|' + userId + '|') && x.ts_ms >= sinceMs).map(({ set_id, user_id, ts_ms }) => ({ set_id, user_id, ts_ms }));
+    this._rep(); return this.reportStarts.filter((x) => x.code === code && x.users.includes('|' + userId + '|') && x.ts_ms >= sinceMs).map((x) => this._start(x));
   }
   async listReportNoshowsForUser(code, userId, sinceMs) {
     this._rep(); return this.reportNoshows.filter((x) => x.code === code && (x.users || '').includes('|' + userId + '|') && x.last_ms >= sinceMs).map((x) => ({ ...x }));
