@@ -211,3 +211,32 @@ test('ブラウザの読み直し: 試合が残っていれば 15 秒ごと、�
   const out = await run(33, d);
   assert.deepStrictEqual(JSON.parse(JSON.stringify(out)), { timers: [30000], calls: [] });
 });
+
+test('次の相手が未定: 枠の前の試合をさかのぼって候補をシード順に (自分は出さない、決まった試合はそこで止まる)', () => {
+  const L = load();
+  const d = doc();
+  Object.assign(d.entrants, {
+    4: { tag: 'D', uid: 44, seed: 9, pg: 10 }, 5: { tag: 'E', uid: 55, seed: 4, pg: 10 },
+    6: { tag: 'F', uid: 66, seed: 12, pg: 10 }, 7: { tag: 'G', uid: 77, seed: 6, pg: 10 },
+  });
+  d.sets = [
+    { id: 1, pg: 10, round_text: 'WR1', e: [1, 2], score: [2, 1], winner: 1, completed_at: 100 },
+    // A の次の試合: 相手の枠は試合 20 の勝者
+    { id: 10, pg: 10, round_text: 'WQF', e: [1, null], score: [null, null], winner: null, pre: [['1', 1], ['20', 1]] },
+    // 試合 20: D と、試合 21 の勝者 (E か F)
+    { id: 20, pg: 10, round_text: 'WR2', e: [4, null], score: [null, null], winner: null, pre: [null, ['21', 1]] },
+    { id: 21, pg: 10, round_text: 'WR1', e: [5, 6], score: [null, null], winner: null, state: 2 },
+    { id: 22, pg: 10, round_text: 'WR1', e: [7, 3], score: [null, null], winner: null },
+  ];
+  const e = el();
+  L.render(e, 11, [{ summary: {}, doc: d }]);
+  const m = /<div class="live-cand">([\s\S]*?)<\/div>/.exec(e.innerHTML);
+  assert.ok(m, 'candidates shown');
+  assert.match(m[1], /live\.cand\{&quot;n&quot;:3\}/);
+  const order = [...m[1].matchAll(/live-cand-p">(?:[^<]*<a[^>]*>)?([A-Z])/g)].map((x) => x[1]);
+  assert.deepStrictEqual(order, ['E', 'D', 'F']);   // シード 4, 9, 12
+  // 相手が決まった試合には候補を出さない
+  const e2 = el();
+  L.render(e2, 11, [{ summary: {}, doc: doc() }]);
+  assert.doesNotMatch(e2.innerHTML, /live-cand/);
+});

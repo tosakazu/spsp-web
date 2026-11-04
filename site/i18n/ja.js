@@ -500,6 +500,7 @@ window.SPSP_I18N.ja = {
   'live.next': '次',
   'live.playing': '対戦中',
   'live.tbd': '未定',
+  'live.cand': '候補 {n} 人 (シード順):',
   'live.in_class': '{name} 参加中',
   'live.class_out': '{name} 敗退',
   'live.updated': '{time} 更新',

@@ -7,7 +7,7 @@
 // フェーズは 5 分おきか、知らないプールのセットが来たとき。何も起きていなければ 1 回だけ。
 //   refreshDoc(gql, doc, now)  doc の写しを更新して返す (doc は変えない)
 //   makeGql(token)             start.gg を呼ぶ関数 (間隔をあける・1 回の更新で MAX_REQUESTS まで・429 なら一定時間止める)
-export const DOC_VERSION = 2;
+export const DOC_VERSION = 3;   // 3: セットに pre (枠の前の試合、2026-11-04)
 export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z])[BCDE][\s_\-]*class(?![A-Za-z])/i;
 export const SET_CURSOR_MARGIN_SEC = 120;   // セットの続きは少し前から読み直す (時計のずれ。live.js と同じ)
 const PHASES_MAX_AGE_SEC = 300;
@@ -41,7 +41,7 @@ const SETS_QUERY = `query LiveSets($eid: ID!, $after: Timestamp, $page: Int!, $p
       nodes {
         id state round fullRoundText identifier winnerId startedAt completedAt updatedAt totalGames
         phaseGroup { id }
-        slots { prereqType entrant { id } standing { stats { score { value } } } }
+        slots { prereqType prereqId prereqPlacement entrant { id } standing { stats { score { value } } } }
         games { orderNum winnerId selections { entrant { id } character { id } } }
       }
     }
@@ -155,6 +155,8 @@ export function setRecord(s) {
     e: slots.map((sl) => sl?.entrant?.id ?? null),
     score: slots.map((sl) => sl?.standing?.stats?.score?.value ?? null),
     winner: s.winnerId ?? null, best_of: s.totalGames ?? null, bye: slots.some((sl) => sl?.prereqType === "bye"),
+    // 枠の前の試合 [試合 ID, 1 = 勝者 / 2 = 敗者] (相手が未定のときの候補に使う。DOC_VERSION 3)
+    pre: slots.map((sl) => (sl?.prereqType === "set" && sl.prereqId != null ? [String(sl.prereqId), sl.prereqPlacement ?? null] : null)),
     started_at: s.startedAt ?? null, completed_at: s.completedAt ?? null, updated_at: s.updatedAt ?? null,
     games: games.length ? games : null,
   };
