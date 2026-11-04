@@ -129,7 +129,7 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'report_view':
         return (await handleReportView(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 15 秒ごとに読む。記録しない
       case 'report_notices':
-        return (await handleReportNotices(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ。記録しない
+        return (await handleReportNotices(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_submit':
         res = await handleReportSubmit(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_start_bracket':
