@@ -8,6 +8,8 @@ import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
 import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
+import SpspReportNotice from './js/report_notice.js';   // 人型のメニューの「結果報告」(受付中の大会)
+import SpspLiveRoot from './js/live_root.js';   // 人型のメニューの「参加中」(開催中の大会。速報の一覧だけ読む)
 import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順位・Lv が上がった、二つ名を入手): ベルの一番上と印 (js/my_notice.js)
 
 // ── Google Analytics 4 (gtag.js) ──
@@ -291,6 +293,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       /* アカウントメニュー: 項目はほかのメニューのリンクと同じ見た目 (色も同じ灰色)。
          名前は押せないので見出しとして: 濃い字・太字、下に細い線 */
       .nav-user .nav-menu .nav-user-new { color:#dc2626; font-weight:600; }
+      .nav-user .nav-menu .nav-user-ev { color:#dc2626; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user-name { padding:7px 14px 6px; margin-bottom:4px; font-size:13px; font-weight:600; color:#111827;
                        border-bottom:1px solid #f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
@@ -441,6 +444,8 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
+    // 開催中の大会: 名前の下 (マイページの上) に「結果報告: 大会」(受付中のもの) と「参加中: 大会」(それ以外)。押すと報告ページ / 自分の速報
+    renderMyEvents(menu, String(sess.user.id));
     // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)
     trigger.classList.remove('has-new');
     if (SpspMyNotice) {
@@ -458,6 +463,21 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
         }
       }).catch(() => {});
     }
+  }
+  /** @param {HTMLElement} menu @param {string} myId */
+  function renderMyEvents(menu, myId) {
+    if (!SpspReportNotice || !SpspLiveRoot) return;
+    Promise.all([SpspReportNotice.items().catch(() => ({ events: [] })), SpspLiveRoot.myEvents(myId).catch(() => [])]).then(([rep, live]) => {
+      const now = SpspLogin && SpspLogin.session();
+      if (!now || String(now.user.id) !== myId || menu.querySelector('.nav-user-ev')) return;
+      const repIds = new Set(rep.events.filter((/** @type {any} */ e) => e.event_id != null).map((/** @type {any} */ e) => String(e.event_id)));
+      const links = rep.events.map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(SpspReportNotice.hrefOf(e))}" role="menuitem">${escHTML(t('nav.user.report_ev', { name: e.name || '' }))}</a>`)
+        .concat(live.filter((/** @type {any} */ e) => !repIds.has(e.event_id))
+          .map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(e.href)}" role="menuitem">${escHTML(t('nav.user.live_ev', { name: e.name }))}</a>`));
+      if (!links.length) return;
+      const mypage = menu.querySelector('a[href$="' + pageHref('me.html') + '"]');
+      if (mypage) mypage.insertAdjacentHTML('beforebegin', links.join(''));
+    }).catch(() => {});
   }
   // ベルの一番上に本人へのお知らせ (順位・Lv が上がった、二つ名を入手。押すとマイページ) と、ベルに印
   /** @type {{uid: string, n: number} | null} */

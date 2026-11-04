@@ -43,6 +43,8 @@ window.SPSP_I18N.ja = {
   'nav.user.vote': 'キャラ投票',
   'nav.user.login': 'start.gg でログイン',
   'nav.user.mypage': 'マイページ',
+  'nav.user.report_ev': '結果報告: {name}',
+  'nav.user.live_ev': '🔴 参加中: {name}',
   'nav.user.card_edit': 'カードを編集',
   'nav.user.new_titles': '🏷️ 新しい二つ名 ({n})',
   'nav.user.logout': 'ログアウト',

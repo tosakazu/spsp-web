@@ -847,6 +847,16 @@ async function advanceAfter(m) {
   return null;
 }
 
+/** 演出の案をランダムに (前の試合と同じ案は続けない。前回は localStorage、読めなければ毎回ただのランダム) */
+const LAST_ANIM_KEY = 'spsp_report_anim_last';
+function pickAnim() {
+  let last = '';
+  try { last = localStorage.getItem(LAST_ANIM_KEY) || ''; } catch (e) { /* 前回が分からないだけ */ }
+  const pool = LINE_ANIMS.filter((k) => k !== last);
+  const a = pool[Math.floor(Math.random() * pool.length)];
+  try { localStorage.setItem(LAST_ANIM_KEY, a); } catch (e) { /* 次も続けて同じになり得るだけ */ }
+  return a;
+}
 /** マッチングのアニメーション (試合ごとに 1 回) */
 const SEEN_KEY = 'spsp_report_seen_v1';
 function seen(id) { try { return (JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')).includes(id); } catch (e) { return false; } }
@@ -864,7 +874,7 @@ async function matchAnimation(m) {
   warmCards([me && me.uid, op && op.uid], [me ? me.name : '', op ? op.name : '']);   // VS のカード (ふつうは poll で読み始めている)
   // 幕は先に (同じ処理の中で) 出して、下の画面が見えないようにする。中身は二つ名を読んでから (最大 1.2 秒)
   const ov = document.createElement('div');
-  const anim = ANIM || LINE_ANIMS[Math.floor(Math.random() * LINE_ANIMS.length)];
+  const anim = ANIM || pickAnim();
   const lines = LINE_ANIMS.includes(anim);
   const cards = anim === 'cards' || lines;
   ov.className = 'rp-match-ov' + (anim !== 'dark' ? ' rp-anim-' + anim : '') + (lines ? ' rp-anim-cards rp-anim-lines' : '');

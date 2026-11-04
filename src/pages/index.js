@@ -181,8 +181,13 @@ async function loadData() {
     // views 読みでは表に居ない (まだ取っていない) 人の行は ranking/ensemble/ から 1 つだけ取る
     SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) ||
       (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
-    SpspLive.showNotice(document.getElementById('live-notice')).catch(() => {});   // ログイン中の本人が出ている開催中の大会 (js/live.js)
-    SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {});   // そのうち結果報告を受付中のもの・報告の食い違い (js/report_notice.js)
+    // ログイン中の本人が出ている開催中の大会 (js/live.js) と、そのうち結果報告を受付中のもの・報告の食い違い (js/report_notice.js)。
+    // 結果報告を受付中の大会は結果報告の帯だけに出す (参加中の帯と二重にしない、2026-11-04)
+    const rep = SpspReportNotice.items().catch(() => ({ events: [], conflicts: [] }));
+    SpspLive.showNotice(document.getElementById('live-notice'), {
+      skip: rep.then((r) => new Set(r.events.filter((e) => e.event_id != null).map((e) => String(e.event_id)))),
+    }).catch(() => {});
+    SpspReportNotice.show(document.getElementById('report-notice'), rep).catch(() => {});
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }
