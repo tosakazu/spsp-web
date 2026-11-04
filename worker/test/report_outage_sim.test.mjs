@@ -266,13 +266,12 @@ async function runOne(seed, flaky = 0, lost = 0, STRUCT = DE8) {
   for (let i = 0; i < 40; i++) {
     tick(61000);
     await view(1 + (i % 8));
-    await call({ action: 'report_admin', token: admin, code });
-    const rows = await store.listReportSets(code);
-    const manualOpen = (await store.listReportManual(code)).filter((m) => m.status === 'open');
-    const dqOpen = (await store.listReportDqs(code)).some((d) => d.status === 'open');
-    if (!rows.some((r) => r.state === 'queued' || (r.state === 'conflict' && /outage|manual/.test(r.note))) && !manualOpen.length && !dqOpen) break;
+    const adm = await call({ action: 'report_admin', token: admin, code });
+    if (adm.ok && !adm.unsynced.length) break;
   }
-  // 確かめる
+  // 確かめる: SPSP にあって start.gg に無いものが残っていない (結果・指定した試合・DQ・対戦開始)
+  const fin = await call({ action: 'report_admin', token: admin, code });
+  assert.deepStrictEqual(fin.unsynced, [], 'seed ' + seed + ' start.gg に未反映が残った ' + JSON.stringify(fin.unsynced) + ' fake=' + JSON.stringify(fake.sets.filter((x) => fin.unsynced.some((u) => u.set_id === String(x.id))).map((x) => [x.id, x.state])));
   for (const [n] of STRUCT) {
     const s = fake.sets.find((y) => y.id === 1000 + n);
     const tr = truth.t.get(n);

@@ -516,3 +516,26 @@ test('DQ: 勝者側だけ = いまの勝者側の試合を相手の勝ちに / �
   assert.strictEqual((await e.call({ action: 'report_dq_cancel', token: e.admin, code: e.code, id: d3.dq.id })).ok, true);
   assert.strictEqual((await e.call({ action: 'report_dq', token: await e.tok(11), code: e.code, entrant: '3', scope: 'a' })).error.code, 'not_admin');
 });
+
+test('start.gg に未反映: 結果・指定した試合・DQ・対戦開始を運営の画面に。対戦開始は start.gg に入るまでやり直し、結果が入れば要らない', async () => {
+  const e = await setup();
+  await e.view(11);
+  e.tick(4000);
+  e.fake.down = true;
+  await e.submit(11, '100', W2(0));
+  const m = await e.call({ action: 'report_manual_create', token: e.admin, code: e.code, group: '700', side: 'w', entrants: ['3', '4'] });
+  await e.call({ action: 'report_dq', token: e.admin, code: e.code, entrant: '2', scope: 'l' });
+  await e.call({ action: 'report_start', token: await e.tok(13), code: e.code, set_id: '101' });   // 写しで確かめて SPSP にだけ
+  let a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.deepStrictEqual(a.unsynced.map((x) => [x.kind, x.set_id || x.name, x.state || x.sgg || '']).sort(),
+    [['dq', 'P2', ''], ['manual', m.manual.set_id, ''], ['result', '100', 'queued'], ['start', '101', '']].sort());
+  // 選手の画面: 対戦開始は記録したが start.gg には未反映
+  assert.strictEqual((await e.view(13)).starts.find((x) => x.set_id === '101').sgg, 0);
+  // 復旧: 結果を送り、対戦開始を start.gg に入れる (指定した試合は 101 が P3 vs P4 なので移る)
+  e.fake.down = false;
+  for (let i = 0; i < 4; i++) { e.tick(61000); await e.view(11); }
+  assert.ok(e.fake.mutations.some((x) => x[0] === 'start' && x[1] === '101'), '対戦開始をやり直して start.gg に');
+  a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
+  assert.deepStrictEqual(a.unsynced.map((x) => x.kind), ['dq'], '残りは敗者側の試合を待っている DQ だけ');
+  assert.strictEqual((await e.view(13)).starts.find((x) => x.set_id === '101').sgg, 1);
+});

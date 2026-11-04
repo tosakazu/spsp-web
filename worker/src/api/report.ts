@@ -29,7 +29,7 @@ import {
   REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_CHALLONGE_CACHE_S, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
   REPORT_GRANT_MS, REPORT_MIN_OPEN_MS,
 } from '../config.ts';
-import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, Store } from '../store.ts';
+import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, ReportStartRow, Store } from '../store.ts';
 import { checkStartggAdmin, startggCurrentUser, startggGql } from './class_bracket.ts';
 import { challongeApi } from './challonge.ts';
 import { handleManagerBegin, logLogin } from './login.ts';
@@ -499,6 +499,7 @@ async function linkManual(store: Store, code: string, m: ReportManualRow, found:
     await store.casReportSet(next, real ? real.version : null);
     await store.deleteReportSet(code, mid);
   }
+  await store.moveReportStart(code, mid, found.id).catch(() => undefined);   // 対戦開始も start.gg の試合に (読み直しで試合中にする)
   await store.updateReportManual(code, m.id as number, 'matched', found.id, now);
 }
 
@@ -602,7 +603,8 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   const loaded: Kept = { snap: null, syncedMs: meta ? meta.synced_ms : 0, full: !!(meta && meta.full), sets: meta ? meta.sets : 0, manual: manualOpen.length };
   const dqOpen = ev.kind === 'startgg' ? (await store.listReportDqs(ev.code)).filter((d) => d.status === 'open') : [];
   const dqDue = dqOpen.some((d) => d.updated_ms === d.created_ms || now - d.updated_ms >= DQ_RECHECK_MS);
-  const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS) || dqDue;
+  const startsDue = ev.kind === 'startgg' ? (await store.listReportStarts(ev.code, now - NOSHOW_VIEW_MS)).filter((x) => x.sgg === 0 && !isManualId(x.set_id) && now - x.tried_ms >= START_RETRY_MS) : [];
+  const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS) || dqDue || startsDue.length > 0;
   const snapDue = ev.kind === 'startgg' && now - loaded.syncedMs >= (loaded.full ? SNAP_MIN_MS : SNAP_FIRST_MIN_MS);
   if (!queued && !snapDue) return loaded;
   if (health.down() && now - health.row.last_fail_ms < PROBE_GAP_MS) return loaded;
@@ -612,6 +614,7 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   try {
     if (queued) await flushQueued(store, p, ev, now, rows, manualOpen);
     if (dqDue) await applyDqs(store, p, ev, now, dqOpen);
+    if (startsDue.length) await syncStarts(store, p, ev, now, startsDue);
     if (snapDue) {
       const snap = (await keptSnap(store, ev.code, loaded)) || emptySnapshot();
       const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
@@ -850,7 +853,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const out: Record<string, unknown> = { report: publicOf(o.ev, now), me: { id: sess.id }, admin: !!roleOf(o.ev, sess.id), role: roleOf(o.ev, sess.id), sets,
     outage: health.view(),
     // 自分の試合の「対戦開始」と「見つからない」(自分が押した・相手が押した)
-    starts: (await store.listReportStartsForUser(o.ev.code, sess.id, now - NOSHOW_VIEW_MS)).map((x) => ({ set_id: x.set_id, ts_ms: x.ts_ms, by_me: x.user_id === sess.id })),
+    starts: (await store.listReportStartsForUser(o.ev.code, sess.id, now - NOSHOW_VIEW_MS)).map((x) => ({ set_id: x.set_id, ts_ms: x.ts_ms, by_me: x.user_id === sess.id, sgg: x.sgg })),
     noshows: (await store.listReportNoshowsForUser(o.ev.code, sess.id, now - NOSHOW_VIEW_MS)).filter((x) => x.status === 'open')
       .map((x) => ({ set_id: x.set_id, by_me: x.user_id === sess.id, first_ms: x.first_ms, last_ms: x.last_ms, count: x.count })) };
   if (o.ev.kind === 'startgg') {
@@ -916,6 +919,40 @@ async function adminOpen(cfg: Config, store: Store, fetchFn: FetchFn, req: Recor
   return { ...o, uid: sess.id, role };
 }
 
+/**
+ * SPSP にあって start.gg に無いもの (運営の画面の「start.gg に未反映」、2026-11-04 docs §13)。
+ *   result = 送っていない・送れていない試合の結果 (未反映・取り込み待ち・食い違い・運営の確認待ち・止めた・送信エラー)
+ *   manual = 運営が指定した試合で、まだ start.gg の試合に移っていないもの (報告の無いもの。報告があれば result に出る)
+ *   dq     = まだ start.gg に入っていない DQ
+ *   start  = start.gg の試合を試合中にできていない対戦開始
+ * 画面は kind と state / note / sgg から理由の文を作る
+ */
+async function unsyncedOf(store: Store, ev: ReportEventRow, now: number): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  const namesOf = (slots: string) => { try { return (JSON.parse(slots) as ({ name?: unknown } | null)[]).map((x) => String((x && x.name) || '?')); } catch (_) { return ['?', '?']; } };
+  const rows = await store.listReportSets(ev.code);
+  for (const r of rows) {
+    if (!['queued', 'pending', 'conflict', 'review'].includes(r.state)) continue;
+    out.push({ kind: 'result', set_id: r.set_id, names: namesOf(r.slots), state: r.state, note: r.note === SENDING ? '' : r.note, since_ms: r.updated_ms });
+  }
+  if (ev.kind === 'startgg') {
+    const withRow = new Set(rows.map((r) => r.set_id));
+    for (const m of (await store.listReportManual(ev.code)).filter((x) => x.status === 'open' && !withRow.has('m' + x.id))) {
+      out.push({ kind: 'manual', set_id: 'm' + m.id, names: manualSlots(m).map((x) => (x ? x.name : '?')), side: m.side, waiting: m.updated_ms !== m.created_ms, since_ms: m.created_ms });
+    }
+    for (const d of (await store.listReportDqs(ev.code)).filter((x) => x.status === 'open')) {
+      out.push({ kind: 'dq', id: d.id, name: d.name, scope: d.scope, set_id: d.set_id || null, note: d.note, done: d.done_sets.split(',').filter(Boolean).length, since_ms: d.created_ms });
+    }
+    for (const x of await store.listReportStarts(ev.code, now - NOSHOW_VIEW_MS)) {
+      if (x.sgg === 1 || x.sgg === 2) continue;
+      let info: { names?: unknown; round?: unknown } = {};
+      try { info = JSON.parse(x.info); } catch (_) { info = {}; }
+      out.push({ kind: 'start', set_id: x.set_id, names: Array.isArray(info.names) ? info.names.map(String) : [], round: String(info.round || ''), sgg: x.sgg, note: x.note, since_ms: x.ts_ms });
+    }
+  }
+  return out.sort((a, b) => Number(a.since_ms) - Number(b.since_ms));
+}
+
 /** action: "report_admin" — 試合ごとの状態と両者の報告 */
 export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const o = await adminOpen(cfg, store, fetchFn, req, now);
@@ -941,7 +978,8 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   });
   const dqs = o.ev.kind === 'startgg' ? (await store.listReportDqs(o.ev.code)).filter((d) => d.status === 'open' || now - d.updated_ms < NOSHOW_VIEW_MS)
     .map((d) => ({ id: d.id, entrant: d.entrant_id, name: d.name, scope: d.scope, set_id: d.set_id || null, status: d.status, done_sets: d.done_sets.split(',').filter(Boolean), note: d.note, created_ms: d.created_ms, updated_ms: d.updated_ms })) : [];
-  return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual, noshows, dqs,
+  const unsynced = await unsyncedOf(store, o.ev, now);
+  return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual, noshows, dqs, unsynced,
     snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
 }
 
@@ -1225,12 +1263,19 @@ export async function handleReportStart(cfg: Config, store: Store, fetchFn: Fetc
   const player = set.slots.some((s) => s && s.users.includes(sess.id));
   if (!player && !roleOf(o.ev, sess.id)) return err('not_player', 'この試合の選手か運営だけが使えます。', 'not_player');
   if (set.complete) return err('bad_request', 'この試合にはもう結果が入っています。', 'complete');
-  const first = await store.insertReportStart(o.ev.code, set.id, usersKey(set), sess.id, now);
+  const rl = await roundLabel(store, o.ev, set.id);
+  const info = JSON.stringify({ names: [set.slots[0].name, set.slots[1].name], round: rl.label });
+  const first = await store.insertReportStart(o.ev.code, set.id, usersKey(set), sess.id, now, info);
   await store.resolveReportNoshows(o.ev.code, set.id, 'started', null).catch(() => undefined);
   let startgg = false;
   if (first) {
     if (player) await store.putReportPick(o.ev.code, sess.id, set.id, now).catch(() => undefined);   // 総当たりの「この人とやる」も
-    if (!got.offline && !isManualId(set.id) && p.start) startgg = (await p.start(set.id).catch(() => ({ ok: false as const, note: 'throw' }))).ok;
+    // start.gg の試合を試合中に。繋がらない・運営が指定した試合 (start.gg の試合がまだ無い) は 0 のまま (読み直しのたびにやり直す)
+    if (!got.offline && !isManualId(set.id) && p.start) {
+      const r = await p.start(set.id).catch(() => ({ ok: false as const, note: 'throw' }));
+      startgg = r.ok;
+      await store.setReportStartSync(o.ev.code, set.id, r.ok ? 1 : isOutageNote(r.note || '') ? 0 : -1, r.ok ? '' : (r.note || '').slice(0, 80), now);
+    }
   }
   const st = await store.getReportStart(o.ev.code, set.id);
   return ok({ start: st, first, startgg });
@@ -1319,6 +1364,25 @@ export async function handleReportDqCancel(cfg: Config, store: Store, fetchFn: F
  * 試合中 (state 2) のものを先に、ラウンドの浅い順。w / l は 1 試合で終わり、a は運営が外すまで続ける。
  * DQ にした試合は運営が確定した扱い (fixed / note dq) で、その試合の「見つからない」は解決、同じ 2 人の指定した試合は取り消す。
  */
+/** 対戦開始を start.gg に入れ直す間隔 (入っていないもの) */
+const START_RETRY_MS = 60 * 1000;
+/** 対戦開始のうち start.gg に入っていないもの (繋がらなかった・指定した試合から移った) を試合中にする。結果が入った試合は要らない (2) */
+async function syncStarts(store: Store, p: Provider, ev: ReportEventRow, now: number, starts: ReportStartRow[]): Promise<void> {
+  if (!p.start) return;
+  for (const x of starts.slice(0, 3)) {
+    const rs = await p.readSet(x.set_id);
+    if (!rs.ok) {
+      if (isOutageNote(rs.note)) return;
+      await store.setReportStartSync(ev.code, x.set_id, rs.code === 'not_found' ? 2 : -1, rs.note.slice(0, 80), now);
+      continue;
+    }
+    if (rs.set.complete) { await store.setReportStartSync(ev.code, x.set_id, 2, 'complete', now); continue; }
+    const r = await p.start(x.set_id);
+    if (!r.ok && isOutageNote(r.note)) { await store.setReportStartSync(ev.code, x.set_id, 0, '', now); return; }
+    await store.setReportStartSync(ev.code, x.set_id, r.ok ? 1 : -1, r.ok ? '' : r.note.slice(0, 80), now);
+  }
+}
+
 /** DQ にした試合の後始末: 運営が確定した扱い (fixed / dq)・「見つからない」は解決・同じ 2 人の指定した試合は取り消し */
 async function recordDq(store: Store, ev: ReportEventRow, set: NSet, loserEntrant: string, now: number, dqCreatedMs: number): Promise<void> {
   const loser: Side = set.slots[0] && set.slots[0].id === loserEntrant ? 0 : 1;

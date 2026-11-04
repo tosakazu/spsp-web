@@ -1027,7 +1027,8 @@ function matchActionsHtml(m) {
   const st = startOf(m);
   if (st || m.started) {
     const who = st ? (st.by_me ? i18n('report.start.by_me') : i18n('report.start.by_other')) : i18n('report.start.by_startgg');
-    return `<div class="rp-start-done">▶ ${escapeHtml(i18n('report.start.done', { t: st ? hhmm(st.ts_ms) : '', who }))}</div>`;
+    const notSgg = st && st.sgg !== undefined && st.sgg !== 1 && st.sgg !== 2 && !m.started;   // SPSP には記録したが start.gg の試合はまだ試合中になっていない
+    return `<div class="rp-start-done">▶ ${escapeHtml(i18n('report.start.done', { t: st ? hhmm(st.ts_ms) : '', who }))}${notSgg ? ` <span class="rp-tag rp-state-queued">${escapeHtml(i18n('report.start.not_sgg'))}</span>` : ''}</div>`;
   }
   const ns = noshowsOf(m);
   const mine = ns.find((x) => x.by_me);
@@ -1647,6 +1648,7 @@ async function renderAdmin() {
       <p class="rp-muted">${escapeHtml(i18n('report.mgr.you'))}</p>
       ${pushHtml()}
     </section>
+    <section class="rp-card-sec rp-unsynced" id="rp-adm-unsynced" hidden></section>
     <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
@@ -1668,7 +1670,8 @@ async function renderAdmin() {
     ${pushHtml()}
   </section>
   ${ev.kind === 'startgg' ? mgrHtml() : ''}
-  <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
+  <section class="rp-card-sec rp-unsynced" id="rp-adm-unsynced" hidden></section>
+    <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
   <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
@@ -1745,6 +1748,7 @@ async function adminSetsStart(r) {
     const t = DEMO ? null : await Promise.race([SpspStartggIdentity.token().catch(() => null), sleepMs(5000).then(() => null)]);
     await Promise.race([loadStages(t ? makeGql(t, 1000000) : null), sleepMs(5000)]);
   }
+  unsyncedUpdate(r);
   manualUpdate(r);
   opsUpdate(r);
   renderAdminSets(r.sets || []);
@@ -2186,6 +2190,57 @@ function opsUpdate(r) {
   }
 }
 
+// ── 運営: start.gg に未反映 (SPSP にあって start.gg に無いもの、2026-11-04 docs §13) ─────────────
+/** 試合の結果が start.gg に無い理由 */
+function unsyncedResultText(x) {
+  const n = x.note || '';
+  if (x.state === 'queued') {
+    if (n === 'outage_admin') return i18n('report.unsynced.r_admin');
+    if (n === 'outage_reset') return i18n('report.unsynced.r_reset');
+    if (n === 'manual') return i18n('report.unsynced.r_manual');
+    if (n === 'manual_wait') return i18n('report.unsynced.r_manual_wait');
+    return i18n('report.unsynced.r_outage');
+  }
+  if (x.state === 'pending') return n === 'wait_both' ? i18n('report.unsynced.r_wait_both') : n === 'wait_admin' ? i18n('report.unsynced.r_wait_admin') : i18n('report.unsynced.r_wait_delay', { n: delayMin() });
+  if (x.state === 'conflict') return i18n('report.unsynced.r_conflict');
+  if (n === 'hold') return i18n('report.unsynced.r_hold');
+  if (/^error:/.test(n)) return i18n('report.unsynced.r_error', { e: n.slice(6, 80) });
+  return i18n('report.unsynced.r_review');
+}
+function unsyncedText(x) {
+  const names = (x.names || []).join(' vs ');
+  if (x.kind === 'result') return { what: i18n('report.unsynced.k_result', { names }), why: unsyncedResultText(x) };
+  if (x.kind === 'manual') return { what: i18n('report.unsynced.k_manual', { names, side: sideLabel(x.side) }), why: x.waiting ? i18n('report.unsynced.m_wait') : i18n('report.unsynced.m_new') };
+  if (x.kind === 'dq') {
+    const why = /^error:/.test(x.note || '') ? i18n('report.unsynced.d_error', { e: x.note.slice(6, 80) }) : /^try:/.test(x.note || '') ? i18n('report.unsynced.d_try')
+      : x.done ? i18n('report.unsynced.d_more', { n: x.done }) : i18n('report.unsynced.d_wait');
+    return { what: i18n('report.unsynced.k_dq', { name: x.name, scope: dqScopeLabel(x.scope) }), why };
+  }
+  const why = x.sgg === -1 ? i18n('report.unsynced.s_error', { e: (x.note || '').slice(0, 80) }) : /^m\d+$/.test(x.set_id) ? i18n('report.unsynced.s_manual') : i18n('report.unsynced.s_retry');
+  return { what: i18n('report.unsynced.k_start', { names }), why };
+}
+/** 運営の画面のいちばん上: SPSP にあって start.gg に無いもの。無ければ「ありません」の 1 行 */
+function unsyncedUpdate(r) {
+  const sec = $('rp-adm-unsynced');
+  if (!sec || !INFO) return;
+  sec.hidden = false;
+  const list = r.unsynced || [];
+  if (!list.length) {
+    sec.className = 'rp-card-sec rp-unsynced rp-unsynced-ok';
+    sec.innerHTML = `<p class="rp-muted">✓ ${escapeHtml(i18n('report.unsynced.none', { t: hhmm(Date.now()) }))}</p>`;
+    return;
+  }
+  sec.className = 'rp-card-sec rp-unsynced';
+  sec.innerHTML = `<h2>⚠ ${escapeHtml(i18n('report.unsynced.title', { n: list.length }))}</h2>
+    <p class="rp-muted">${escapeHtml(i18n('report.unsynced.help'))}</p>
+    <ul class="rp-mlist">${list.map((x) => {
+      const t = unsyncedText(x);
+      const id = x.set_id && /^\d+$/.test(String(x.set_id)) ? ' #' + x.set_id : '';
+      return `<li class="rp-mitem rp-unsynced-${escapeHtml(x.kind)}"><b>${escapeHtml(t.what)}</b><span class="rp-muted">${escapeHtml(id)}</span>
+        · <span>${escapeHtml(t.why)}</span> <span class="rp-muted">(${escapeHtml(hhmm(x.since_ms))}〜)</span></li>`;
+    }).join('')}</ul>`;
+}
+
 // ── 報告管理者 (運営だけが足す・外す)。名前・discriminator で SPSP の選手から探す。SPSP にデータが無い人は discriminator で ──
 let MGR_CANDS_P = null;
 /** 候補 (SPSP の選手。名前は players_index、discriminator は discriminators.json)。最初に打ったときに 1 回だけ読む */
@@ -2342,7 +2397,7 @@ async function refreshAdminSets(force) {
   const busy = !!box && (box.contains(document.activeElement) || !!ADMIN_FORM_OPEN);
   if (box && (force === true || (document.visibilityState !== 'hidden' && !busy))) {
     const r = await api({ action: 'report_admin', token: tok(), code: CODE });
-    if (r && r.ok) { manualUpdate(r); opsUpdate(r); renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
+    if (r && r.ok) { unsyncedUpdate(r); manualUpdate(r); opsUpdate(r); renderAdminSets(r.sets || []); if (ADMIN_SYNC) ADMIN_SYNC(r); }
   }
   adminTimer = setTimeout(refreshAdminSets, ADMIN_POLL_MS);
 }
@@ -2722,6 +2777,17 @@ let DEMO_MANUAL_ROWS = {};
 /** 見本の「見つからない」・DQ (運営の画面) */
 let DEMO_NOSHOWS = null;
 let DEMO_DQS = [];
+/** 見本の「start.gg に未反映」 */
+function demoUnsynced(P) {
+  const ago = (m) => Date.now() - m * 60000;
+  return [
+    { kind: 'result', set_id: '101', names: [P[0].name, P[1].name], state: 'queued', note: 'outage', since_ms: ago(20) },
+    { kind: 'result', set_id: '103', names: [P[4].name, P[5].name], state: 'conflict', note: 'outage', since_ms: ago(15) },
+    { kind: 'manual', set_id: 'm1', names: [P[2].name, P[3].name], side: 'l', waiting: true, since_ms: ago(12) },
+    { kind: 'dq', id: 1, name: P[6].name, scope: 'l', set_id: null, note: '', done: 0, since_ms: ago(9) },
+    { kind: 'start', set_id: '104', names: [P[6].name, P[7].name], round: 'Pools B3', sgg: 0, note: '', since_ms: ago(5) },
+  ];
+}
 function demoOps(P) {
   if (!DEMO_NOSHOWS) {
     DEMO_NOSHOWS = [
@@ -2817,11 +2883,11 @@ async function demoApi(body) {
         sets: [Object.assign(row('101', 'queued', R20, R20, 0), { note: 'outage' }), Object.assign(row('102', 'queued', R21, null, 2), { note: 'outage' }),
           Object.assign(row('103', 'conflict', R21, L12, 4), { note: 'outage' }), row('104', 'agreed', R20, R20, 6), ...Object.values(DEMO_MANUAL_ROWS)],
         role: 'admin', managers: DEMO_MGRS, outage: { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' },
-        manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true }, ...demoOps(P) };
+        manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true }, ...demoOps(P), unsynced: demoUnsynced(P) };
     }
     return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)],
-      role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS, ...demoOps(P) };
+      role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS, ...demoOps(P), unsynced: [] };
   }
   if (body.action === 'report_tournaments') {
     // 見本: 開催中 1 つ (イベント 2 つ、片方は受付中) とこれから 1 つ
