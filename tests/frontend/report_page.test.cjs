@@ -753,8 +753,8 @@ test('見本 admin (運営): 見つからないの一覧 (対戦開始にする�
   p.close();
 });
 
-test('運営の画面の「start.gg に未反映」: 障害中の見本は結果・指定した試合・DQ・対戦開始を理由つきで、ふだんの見本は「ありません」', { skip }, async () => {
-  let p = await open('?demo=admin_outage');
+test('運営の画面の「start.gg に未反映」: 障害中の見本は結果・指定した試合・DQ・対戦開始を理由つきで', { skip }, async () => {
+  const p = await open('?demo=admin_outage');
   assert.ok(await until(() => p.d.querySelector('#rp-adm-unsynced li')));
   const sec = p.d.getElementById('rp-adm-unsynced');
   assert.match(sec.querySelector('h2').textContent, /start\.gg に未反映 \(5 件\)/);
@@ -764,10 +764,16 @@ test('運営の画面の「start.gg に未反映」: 障害中の見本は結果
   assert.match(t[2], /指定した試合: .+ \(敗者側\) · start\.gg にこの試合がまだありません/);
   assert.match(t[3], /DQ: .+ \(敗者側のみ\) · 次の試合が決まったら DQ にします/);
   assert.match(t[4], /対戦開始: .+ #104 · start\.gg の試合を試合中にできていません/);
+  await sleep(300);   // 裏の読み込み (候補など) が終わってから閉じる
   assert.deepStrictEqual(p.errs, []);
   p.close();
-  p = await open('?demo=admin');
+});
+
+test('運営の画面の「start.gg に未反映」: ふだんの見本は「ありません」の 1 行', { skip }, async () => {
+  const p = await open('?demo=admin');
   assert.ok(await until(() => p.d.querySelector('#rp-adm-unsynced p')));
   assert.match(p.d.getElementById('rp-adm-unsynced').textContent, /start\.gg に未反映のものはありません/);
+  await sleep(300);
+  assert.deepStrictEqual(p.errs, []);
   p.close();
 });
