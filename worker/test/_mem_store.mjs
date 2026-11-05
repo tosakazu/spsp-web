@@ -211,6 +211,13 @@ export class MemStore {
 
   async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
+  async listReportAutoStartDue(nowMs, sinceMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => { let op = 0; try { op = Number(JSON.parse(x.settings || '{}').opens_ms) || 0; } catch (_) { op = 0; }
+      return x.status === 'active' && x.kind === 'startgg' && !x.ended_ms && !x.auto_start_ms && x.expires_ms >= nowMs && op > x.created_ms && op <= nowMs && op >= sinceMs; })
+      .map((x) => x.code);
+  }
+  async setReportAutoStart(code, v) { for (const x of this.reportEvents) if (x.code === code) { x.auto_start_ms = v.ms; x.auto_start_tries = v.tries; x.auto_start_note = v.note; } }
   async setReportEventEnded(code, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code && (ms === 0 || !x.ended_ms)) x.ended_ms = ms; }
   async putBracketShare(row) { (this.shares ||= new Map()).set(row.id, { ...row }); }
   async getBracketShare(id, nowMs) { const r = (this.shares || new Map()).get(id); return r && r.expires_ms >= nowMs ? { frag: r.frag, sgg: r.sgg, expires_ms: r.expires_ms } : null; }

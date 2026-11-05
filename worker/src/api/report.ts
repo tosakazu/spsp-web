@@ -93,6 +93,8 @@ function publicOf(ev: ReportEventRow, now: number) {
   return {
     code: ev.code, kind: ev.kind, name: ev.name, slug: ev.slug, event_id: ev.event_id, tournament_id: ev.tournament_id, class_id: ev.class_id,
     expires_ms: ev.expires_ms, active: ev.status === 'active' && ev.expires_ms >= now && !!ev.token_enc, settings: parseSettings(ev.settings),
+    // eligible = 開始時刻を受付を始めたより後に決めてある (= 自動開始の対象。runReportAutoStart と同じ条件)
+    auto_start: { ms: ev.auto_start_ms || 0, tries: ev.auto_start_tries || 0, note: ev.auto_start_note || '', eligible: (parseSettings(ev.settings).opens_ms || 0) > ev.created_ms },
   };
 }
 
@@ -1178,6 +1180,38 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   const unsynced = await unsyncedOf(store, o.ev, now);
   return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual, noshows, dqs, unsynced,
     snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
+}
+
+// ── 開始時刻にブラケットを自動で開始 (2026-11-05) ───────────────────────────
+// Worker の定期実行 (毎分) から。受付の開始時刻 (settings.opens_ms) を受付を始めたより後に決めてあり、その時刻を過ぎた
+// (AUTO_START_LATE_MS まで。それより遅れたら運営が自分で始める) start.gg の受付で、最初のフェーズの未開始のブロックを
+// probeStartBracket と同じ手順で始める。1 回に 1 受付・AUTO_START_GROUPS ブロックまで (start.gg の呼び出し数を抑える。残りは次の回)。
+// 始まらなかった・エラーのブロックがあれば次の回にやり直し、AUTO_START_TRIES 回で諦める (運営の画面に結果を出す)。
+export const AUTO_START_LATE_MS = 30 * 60 * 1000;
+export const AUTO_START_TRIES = 3;
+const AUTO_START_GROUPS = 10;
+export async function runReportAutoStart(cfg: Config, store: Store, fetchFn: FetchFn, now: number): Promise<{ code: string; note: string } | null> {
+  const due = await store.listReportAutoStartDue(now, now - AUTO_START_LATE_MS);
+  const code = due[0];
+  if (!code) return null;
+  const o = await openEvent(cfg, store, fetchFn, code, now);
+  const row = await store.getReportEvent(code);
+  const tries = (row && row.auto_start_tries) || 0;
+  const fail = async (note: string) => {
+    const t = tries + 1;
+    await store.setReportAutoStart(code, { ms: t >= AUTO_START_TRIES ? now : 0, tries: t, note });
+    return { code, note };
+  };
+  if (!o.ok) return fail('open: ' + ((o.res.body as { error?: { code?: string } }).error?.code || ''));
+  const r = await probeStartBracket(fetchFn, o.token, o.ev.target_id, AUTO_START_GROUPS);
+  if (!r.ok) return fail('read: ' + r.note);
+  const bad = r.steps.filter((s) => s.result !== 'started');
+  const note = r.steps.length ? r.steps.map((s) => (s.ident || s.group) + ':' + s.result + (s.result === 'started' ? '' : ' (' + s.note + ')')).join(', ') : 'already_started';
+  if (bad.length) return fail(note);
+  // 全部始まった (または最初から始まっていた)。続きのブロックがあれば次の回
+  if (r.more > 0) { await store.setReportAutoStart(code, { ms: 0, tries, note }); return { code, note }; }
+  await store.setReportAutoStart(code, { ms: now, tries, note });
+  return { code, note };
 }
 
 /** action: "report_start_bracket" — (テスト用) SPSP からブラケットを開始してみる。運営だけ・start.gg だけ。
