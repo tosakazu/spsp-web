@@ -108,7 +108,7 @@ async function useSource(src) {
 }
 /** 検索の当たり (players_index.json。並びは表と同じ = いまの順位評価の順位順、順位なしは末尾) @param {string} q @param {string} method */
 async function searchSource(q, method) {
-  const hits = await SPSPViews.searchIndex(q);
+  const hits = await SPSPViews.searchIndex(q, { byId: SPSPRankingPage.searchById() });
   const key = method === 'tjpr' ? 'tjpr' : method === 'bt_gated' ? 'bt' : 'ens';
   const rk = (/** @type {any} */ h) => (h[key] > 0 ? h[key] : Infinity);
   const order = hits.map((h, i) => ({ h, i })).sort((a, b) => (rk(a.h) - rk(b.h)) || (a.i - b.i)).map((x) => x.h.uid);
@@ -301,7 +301,7 @@ SPSPRankingPage.bindSearch(text => {
   filterText = text;
   if (TABLE) TABLE.rowFilter = rowFilter();   // 検索中は隠さない (次の描画から)
   if (VIEWS) { if (TABLE) refreshViewsSource().catch(() => {}); return; }
-  if (TABLE) TABLE.setFilterText(filterText);
+  if (TABLE) TABLE.setFilterText(filterText, SPSPRankingPage.searchById());
 });
 
 SPSPRankingPage.bindMethodTabs(method => {

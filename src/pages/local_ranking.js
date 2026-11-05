@@ -166,7 +166,7 @@ function render() {
 function setupEvents() {
   RP.bindSearch(text => {
     STATE.searchText = text;
-    if (TABLE) TABLE.setFilterText(STATE.searchText);
+    if (TABLE) TABLE.setFilterText(STATE.searchText, RP.searchById());
   });
   RP.bindMethodTabs(method => {
     STATE.method = method;
