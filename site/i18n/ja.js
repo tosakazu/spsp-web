@@ -1709,6 +1709,7 @@ window.SPSP_I18N.ja = {
   'bracket.sgg.count': 'シードの人数 ({a} 人) と start.gg の人数 ({b} 人) が違います。',
   'bracket.sgg.rr': '総当たりのブロックからの通過は計算しません。',
   'bracket.sgg.no_seeds': '次のフェーズの席が start.gg にまだ作られていないので、そこから先は空です。',
+  'bracket.sgg.est': '前のフェーズから同じ順位で抜ける人の並び (次のフェーズのどの席か) は、開始前は start.gg に無いので推定です (まれに違うことがあります)。',
   'bracket.sgg.error': 'start.gg から読めませんでした。',
   'bracket.sgg.seed': 'シード {n}',
   'bracket.page.t17': '平日大会の対戦も含める',

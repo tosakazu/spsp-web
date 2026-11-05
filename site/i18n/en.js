@@ -1682,6 +1682,7 @@ window.SPSP_I18N.en = {
   'bracket.sgg.count': 'Seed count ({a}) differs from start.gg ({b}).',
   'bracket.sgg.rr': 'Advancement out of round-robin pools is not calculated.',
   'bracket.sgg.no_seeds': 'The next phase has no seats on start.gg yet, so it is shown empty.',
+  'bracket.sgg.est': 'Which next-phase seat each tied finisher takes is estimated (start.gg does not have it before the pool starts) and can occasionally differ.',
   'bracket.sgg.error': 'Could not read start.gg.',
   'bracket.sgg.seed': 'Seed {n}',
   'bracket.page.t17': 'Include weekday-tournament matches',

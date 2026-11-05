@@ -89,6 +89,7 @@ async function main() {
       if (n && payload.uids && n !== payload.uids.length) warn.push(t('bracket.sgg.count', { a: payload.uids.length, b: n }));
       if (sim.warnings.includes('rr')) warn.push(t('bracket.sgg.rr'));
       if (sim.warnings.includes('no_seeds')) warn.push(t('bracket.sgg.no_seeds'));
+      if (sim.warnings.includes('est')) warn.push(t('bracket.sgg.est'));
       status.textContent = [got.via === 'server' ? t('bracket.sgg.via_server') : t('bracket.sgg.via_browser'), ...warn].join(' ');
       sel.innerHTML = sim.groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
       sel.hidden = sim.groups.length < 2;

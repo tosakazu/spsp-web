@@ -167,6 +167,8 @@ export function simulate(data: SimData): SimResult {
   const entrants = data.phases[0] ? data.phases[0].seeds.length : 0;
   // start.gg に次のフェーズの席 (シード) がまだ無い (通過の設定をする前など)
   if (data.phases.slice(1).some((ph) => !ph.seeds.length)) warnings.push('no_seeds');
+  // 前のフェーズからの通過の並び (同じ順位が 2 人以上) は、開始前は start.gg が持っていないのできまりで決めている (2026-11-05 の検証で 4,561 件中 6 件外れ)
+  if (data.phases.length > 1) warnings.push('est');
   if (data.phases.slice(1).some((ph) => ph.groups.some((g) => g.type === 'ROUND_ROBIN')) || data.phases.slice(0, -1).some((ph) => ph.groups.some((g) => g.type === 'ROUND_ROBIN'))) warnings.push('rr');
   return { groups, entrants, warnings };
 }

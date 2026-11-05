@@ -37,7 +37,7 @@ test('フェーズの構造を読む: 人数が同じプールの試合は 1 つ
 test('シード通りに勝ち上がらせる: 全部の試合が埋まり、各プールの 1 番手が勝者側を勝ち上がる・本戦の決勝は 1 シード', async () => {
   const data = await fetchSimData(fakeGql(FX.pools).gql, ['P1', 'P2'], 1);
   const r = simulate(data);
-  assert.deepStrictEqual(r.warnings, []);
+  assert.deepStrictEqual(r.warnings, ['est'], '通過の並びは推定');
   for (const g of r.groups) {
     const sets = g.views.sets.filter((s) => !s.sl.some((x) => x.pt === 'bye'));
     assert.ok(sets.length > 10);
