@@ -5,7 +5,7 @@
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
 import { DATA, manualMovedSet, manualParseUid, orderedRecs, renderManualUI, saveManual } from './30_core.js';
-import { render } from './40_startgg.js';
+import { fetchAllSeeds, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
 import { CSV_SEAT_COLS, CSV_TPL_OUT_NAMES, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
@@ -416,14 +416,19 @@ function exportSeedWorkCsv() {
 // プレビュー側も 9,500 字超で「共有には CSV 推奨」と出すので、それと揃えている。
 const BRACKET_URL_BUDGET = 9500;
 
-async function issueBracketPreview() {
+/**
+ * @param {{ recs?: any[], pools?: number | null, applied?: boolean } | Event} [opts] recs = この並びで (適用後に start.gg から読み直した並び)。
+ *   ボタンのクリックから呼ばれたとき (Event) は今の出力順
+ */
+async function issueBracketPreview(opts) {
+  const o = opts && !(opts instanceof Event) ? opts : {};
   const note = document.getElementById('work-note');
   const say = (m) => { if (note) note.textContent = m; };
   if (!DATA.length) { say(i18n('seed.spec.s15')); return; }
   if (typeof SeedShare === 'undefined') { say(i18n('seed.spec.s16')); return; }
   try {
-    const recs = orderedRecs();
-    const P = Math.max(1, parseInt(/** @type {{ value?: any }} */ (document.getElementById('so-pools') || {}).value, 10) || 1);
+    const recs = o.recs || orderedRecs();
+    const P = Math.max(1, (Number(o.pools) | 0) || parseInt(/** @type {{ value?: any }} */ (document.getElementById('so-pools') || {}).value, 10) || 1);
     const waveMap = currentWaveMap(P);
     const uids = recs.map((r) => (r.user_id != null && r.user_id > 0) ? r.user_id : null);
     // 表示名。uid が無い参加者は URL に名前が無いと誰か分からなくなるので必ず入れる。
@@ -564,6 +569,20 @@ export function applySeedLockChoice(uid) {
   if (exportBtn) exportBtn.addEventListener('click', exportSeedWorkCsv);
   const bracketBtn = document.getElementById('bracket-preview');
   if (bracketBtn) bracketBtn.addEventListener('click', issueBracketPreview);
+  // 適用後のトーナメントをプレビュー (40_startgg.js のボタン): start.gg から適用後のシード順を読み直して、その並びで開く (2026-11-05)
+  document.addEventListener('spsp:preview-applied', async (e) => {
+    const d = /** @type {CustomEvent} */ (e).detail || {};
+    const note = document.getElementById('work-note');
+    try {
+      if (note) note.textContent = i18n('seed.spec.applied_loading');
+      const nodes = await fetchAllSeeds(d.token, d.phaseId);
+      const infos = nodes.map(seedNodeToInfo).sort((a, b) => (a.originalSeed || 0) - (b.originalSeed || 0));
+      const recs = infos.map((si) => ({ user_id: si.userId, display: si.display }));
+      await issueBracketPreview({ recs, pools: S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount, applied: true });
+    } catch (err) {
+      if (note) note.textContent = i18n('seed.spec.applied_error') + ' ' + String((err && /** @type {any} */ (err).message) || err);
+    }
+  });
   const clearBtn = document.getElementById('spec-clear');
   if (clearBtn) clearBtn.addEventListener('click', clearSeedSpec);
   // プール数/ウェーブ数の変更は手動列のプール表示 (A3/P3) に反映する。

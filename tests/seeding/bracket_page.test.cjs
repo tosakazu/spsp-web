@@ -59,6 +59,8 @@ test('依存スクリプトの読み込み順が正しい', () => {
     '../seeding/seed_share.js',
     'bracket_core.js',
     'bracket_app.js',
+    '../../src/pages/bracket_sgg.js',   // 組み合わせを start.gg の構造で (2026-11-05)
+    '../../src/pages/bracket_share.js', // 短い URL
   ]);
   for (const src of order) {
     const p = path.resolve(DIR, src);

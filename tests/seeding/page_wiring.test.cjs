@@ -466,6 +466,7 @@ function uploadSetup(HTML) {
     function logSeedingUse(token, phaseId, count) { calls.logged = { phaseId: phaseId, count: count }; }   // 使用記録 (js/tool_log.js) は送ったことだけ見る
     var SmashSeed = { uploadSeeding: async function (phaseId, token, mapping) { calls.upload = { phaseId: phaseId, mapping: mapping }; return { ok: true, count: mapping.length }; } };
     ${extractFn(HTML, 'uploadOrderLabel')}
+    ${extractFn(HTML, 'appliedPreviewButton')}
     ${extractFn(HTML, 'isAutoOptimizeOn')}
     ${extractFn(HTML, 'openSeedOptPanel')}
     ${extractFn(HTML, 'ensureAutoOptimizeForUpload')}
