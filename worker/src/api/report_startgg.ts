@@ -316,7 +316,12 @@ const PROBE_PHASES_QUERY = `query SpspProbePhases($id: ID!) {
 const PROBE_SETS_QUERY = `query SpspProbeSets($id: ID!) {
   phaseGroup(id: $id) { id state sets(page: 1, perPage: 30, sortType: STANDARD) { nodes { id state slots { entrant { id } } } } }
 }`;
+// 取り消す前に読み直す試合 (勝者・スコアが入っていたら取り消さない)
+const PROBE_SET_CHECK_QUERY = `query SpspProbeSetCheck($id: ID!) {
+  set(id: $id) { id state winnerId slots { standing { stats { score { value } } } } }
+}`;
 const PROBE_GROUPS_MAX = 12;
+const groupNotStarted = (state: unknown) => Number(state) === 1 || state === 'CREATED';
 export interface ProbeStep { phase: string; group: string; ident: string; set?: string; result: 'started' | 'not_started' | 'skipped' | 'error'; note: string; state_after?: unknown }
 
 export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId: string, maxGroups = PROBE_GROUPS_MAX): Promise<{ ok: true; steps: ProbeStep[]; more: number } | { ok: false; note: string }> {
@@ -331,17 +336,22 @@ export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId
   if (!first) return { ok: false, note: 'no_phase' };
   type G = { id?: unknown; displayIdentifier?: unknown; state?: unknown };
   const groups = ((first.phaseGroups && Array.isArray(first.phaseGroups.nodes) ? first.phaseGroups.nodes : []) as G[])
-    .filter((g) => g && g.id != null && (Number(g.state) === 1 || g.state === 'CREATED'));
+    .filter((g) => g && g.id != null && groupNotStarted(g.state));
   const steps: ProbeStep[] = [];
   const phaseName = typeof first.name === 'string' ? first.name : '';
   for (const g of groups.slice(0, maxGroups)) {
     const step: ProbeStep = { phase: phaseName, group: String(g.id), ident: String(g.displayIdentifier ?? ''), result: 'skipped', note: '' };
     steps.push(step);
     const q = await startggGql(fetchFn, token, PROBE_SETS_QUERY, { id: String(g.id) });
-    const pg = q.ok && q.json.data ? q.json.data.phaseGroup as { sets?: { nodes?: unknown } | null } | null : null;
+    const pg = q.ok && q.json.data ? q.json.data.phaseGroup as { state?: unknown; sets?: { nodes?: unknown } | null } | null : null;
     if (!pg) { step.result = 'error'; step.note = 'read: ' + (q.ok ? gqlNote(q.json) : q.note); continue; }
     type S = { id?: unknown; slots?: { entrant?: { id?: unknown } | null }[] | null };
     const sets = (pg.sets && Array.isArray(pg.sets.nodes) ? pg.sets.nodes : []) as S[];
+    // 試合を始めて取り消すのは、ブロックがまだ始まっていないときだけ (2026-11-05)。開始時刻より前に選手が試合を始めていることがある。
+    // 直前に読み直して、ブロックが始まっていた・本物の ID の試合がある (= 始まっている) なら何もしない
+    if (!groupNotStarted(pg.state) || sets.some((x) => x && x.id != null && !String(x.id).startsWith('preview'))) {
+      step.result = 'started'; step.note = 'already_started'; step.state_after = pg.state; continue;
+    }
     const pick = sets.find((x) => x && String(x.id).startsWith('preview') && Array.isArray(x.slots) && x.slots.length === 2 && x.slots.every((sl) => sl && sl.entrant && sl.entrant.id != null));
     if (!pick) { step.note = 'no_preview_set_with_two_entrants'; continue; }
     step.set = String(pick.id);
@@ -352,14 +362,23 @@ export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId
     const realId = got && got.id != null && /^\d+$/.test(String(got.id)) ? String(got.id) : null;
     step.note = 'markSetInProgress -> id=' + String(got && got.id) + ' state=' + String(got && got.state);
     if (realId) {
-      const z = await startggGql(fetchFn, token, RESET_MUTATION, { setId: realId });
-      const zerr = !z.ok ? z.note : Array.isArray(z.json.errors) && z.json.errors.length ? gqlNote(z.json) : '';
-      step.note += zerr ? '; resetSet: ' + zerr : '; resetSet ok';
+      // 取り消す前に読み直す: 試合中でない・勝者やスコアが入っている (= 誰かが本当に始めて報告した) なら取り消さない
+      const c = await startggGql(fetchFn, token, PROBE_SET_CHECK_QUERY, { id: realId });
+      type CS = { state?: unknown; winnerId?: unknown; slots?: { standing?: { stats?: { score?: { value?: unknown } | null } | null } | null }[] | null };
+      const cs = c.ok && c.json.data ? c.json.data.set as CS | null : null;
+      const scored = !!cs && Array.isArray(cs.slots) && cs.slots.some((sl) => sl && sl.standing && sl.standing.stats && sl.standing.stats.score && sl.standing.stats.score.value != null);
+      const why = !cs ? 'unread' : !(Number(cs.state) === 2 || cs.state === 'ACTIVE') ? 'state=' + String(cs.state) : cs.winnerId != null ? 'has_winner' : scored ? 'has_score' : '';
+      if (why) step.note += '; resetSet skipped (' + why + ')';
+      else {
+        const z = await startggGql(fetchFn, token, RESET_MUTATION, { setId: realId });
+        const zerr = !z.ok ? z.note : Array.isArray(z.json.errors) && z.json.errors.length ? gqlNote(z.json) : '';
+        step.note += zerr ? '; resetSet: ' + zerr : '; resetSet ok';
+      }
     }
     const a = await startggGql(fetchFn, token, PROBE_SETS_QUERY, { id: String(g.id) });
     const after = a.ok && a.json.data ? a.json.data.phaseGroup as { state?: unknown } | null : null;
     step.state_after = after ? after.state : null;
-    step.result = after && !(Number(after.state) === 1 || after.state === 'CREATED') ? 'started' : 'not_started';
+    step.result = after && !groupNotStarted(after.state) ? 'started' : 'not_started';
   }
   return { ok: true, steps, more: Math.max(0, groups.length - maxGroups) };
 }
