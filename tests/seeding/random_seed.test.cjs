@@ -130,3 +130,9 @@ test('静的: 被り回避・CSV・適用の順はどれも currentMethod の ra
   assert.match(SRC, /data-method="random"/);
   assert.match(SRC, /S\.currentMethod === 'random'\) assignRandomRanks\(DATA, newRandomSeed\(\)\)/, 'タブを選ぶたびに種を作る');
 });
+
+test('静的: 手動調整を捨てる確認は、実際に動かした・CSV / 指定の順のときだけ (開いただけでは聞かない)', () => {
+  assert.match(SRC, /const manualWorthKeeping = \(\) => !!S\.MANUAL && \(S\.MANUAL\.hpos > 0 \|\| S\.MANUAL\.src === 'csv' \|\| S\.MANUAL\.src === 'spec'\)/);
+  assert.strictEqual((SRC.match(/if \(manualWorthKeeping\(\) && !confirm\(/g) || []).length, 2, 'タブの切り替え・種を入れて並べる');
+  assert.ok(!/if \(S\.MANUAL && !confirm\(/.test(SRC));
+});

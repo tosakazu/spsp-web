@@ -16,13 +16,16 @@ if (searchEl) searchEl.addEventListener('input', e => {
   const tbl = S.TABLE; if (tbl) tbl.setFilterText(S.filterText);
 });
 
+/** 基準を変えると捨てる手動調整に、捨てて困るものがあるか: 実際に動かした・CSV / 指定の順を基準にしている (11-05: 開いただけなら聞かない) */
+const manualWorthKeeping = () => !!S.MANUAL && (S.MANUAL.hpos > 0 || S.MANUAL.src === 'csv' || S.MANUAL.src === 'spec');
+
 const methodTabs = document.getElementById('method-tabs');
 if (methodTabs) methodTabs.addEventListener('click', e => {
   const tab = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.method-tab'));
   // ランダムは選んでいるときにもう一度押すと引き直す
   if (!tab || (tab.dataset.method === S.currentMethod && tab.dataset.method !== 'random')) return;
   // 手動調整がある場合は破棄確認を先に (キャンセルならタブ切替自体を中止)。
-  if (S.MANUAL && !confirm(i18n('seed.events.s1'))) return;
+  if (manualWorthKeeping() && !confirm(i18n('seed.events.s1'))) return;
   document.querySelectorAll('.method-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   S.currentMethod = /** @type {string} */ (tab.dataset.method);
@@ -54,7 +57,7 @@ if (rsApply) rsApply.addEventListener('click', () => {
   const note = document.getElementById('random-seed-note');
   const seed = parseRandomSeed(inp ? inp.value : '');
   if (seed == null) { if (note) note.textContent = i18n('seed.random.bad'); return; }
-  if (S.MANUAL && !confirm(i18n('seed.events.s1'))) return;
+  if (manualWorthKeeping() && !confirm(i18n('seed.events.s1'))) return;
   dropAppliedOrder();
   if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.events.s2'));
   if (S.MANUAL) { S.MANUAL = null; saveManual(); renderManualUI(); }
