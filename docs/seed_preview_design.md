@@ -421,7 +421,7 @@ start.gg の実ブラケット構造は `phaseGroup.sets(filters:{showByes:true}
 ## 9. start.gg と同じ形の表 (2026-11-05)
 
 シードページの共有 URL に start.gg のフェーズの id (`sgg`、選んだ phase から通過でつながる順) を載せる。プレビューはこれがあれば
-「start.gg と同じ形で見る (シード通り)」を出し、start.gg のブロックの構造 (`sets(showByes)` の枠の前の試合) をそのまま読んで、
+(2026-11-05 から) いつもの表の場所に従来の表の代わりに出し (ログインしていない・読めないときは従来の表のまま)、start.gg のブロックの構造 (`sets(showByes)` の枠の前の試合) をそのまま読んで、
 シード番号の小さい方が勝つとして勝ち上がらせる。計算は結果報告と同じ worker/src/api/bracket_engine.ts
 (組み立て = worker/src/api/bracket_struct.ts、画面 = src/pages/bracket_sgg.js、描き方 = 結果報告のトーナメント表)。
 

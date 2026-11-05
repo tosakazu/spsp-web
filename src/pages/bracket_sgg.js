@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * トーナメントプレビュー: start.gg と同じ形の表 (2026-11-05)。
- * 共有 URL に start.gg のフェーズの id (payload.sgg、シードページが入れる) があれば、start.gg のブロックの構造
+ * 共有 URL に start.gg のフェーズの id (payload.sgg、シードページが入れる) があれば、いつもの表の場所に (従来の表の代わりに) start.gg のブロックの構造
  * (試合のつながり・不戦勝・敗者側への落ち方) をそのまま読み、シード通り (シード番号の小さい方が勝つ) で勝ち上がらせて描く。
  * 計算は結果報告と同じ worker/src/api/bracket_engine.ts (bracket_struct.ts の simulate)、描き方は結果報告のトーナメント表と同じ。
  * 構造はまず SPSP のサーバー (bracket_structure、10 分キャッシュ) から、読めなければブラウザからログインのトークンで start.gg を直接読む。
@@ -41,20 +41,29 @@ async function loadData(phases) {
   return { data: await fetchSimData(gql, phases), via: 'browser' };
 }
 
+/** start.gg と同じ形の表を出しているあいだ隠す、従来の表とその操作 (SPSP 側で組み立てる表) */
+const OLD_IDS = ['bp-bracket', 'bp-phase-tabs', 'bp-pool-info', 'bp-phase-editor'];
+function showOld(on) {
+  for (const id of OLD_IDS) { const el = document.getElementById(id); if (el) el.hidden = !on; }
+  for (const id of ['bp-pool-select', 'bp-lb', 'bp-wd']) {
+    const el = document.getElementById(id);
+    const lab = el && el.closest('label');
+    if (lab) lab.hidden = !on;
+  }
+}
+
 async function main() {
   const payload = await payloadOfHash();
   const phases = payload && Array.isArray(payload.sgg) ? payload.sgg.map(String).filter((x) => /^\d+$/.test(x)) : [];
   const anchor = document.getElementById('bp-bracket');
   if (!phases.length || !anchor || document.getElementById('bp-sgg')) return;
+  // start.gg のフェーズが分かる共有 URL では、start.gg と同じ形の表をいつもの場所に出す (読めるまでは従来の表のまま)
   const box = document.createElement('section');
   box.id = 'bp-sgg';
-  box.className = 'bp-panel bp-sgg';
-  box.innerHTML = `<details data-sgg><summary>${escapeHtml(t('bracket.sgg.title'))}</summary>
-    <p class="bp-inline-status">${escapeHtml(t('bracket.sgg.help'))}</p>
-    <div class="bk-bar"><select data-sgg-group hidden></select> <span class="bp-inline-status" data-sgg-status></span></div>
-    <div data-sgg-body></div></details>`;
+  box.className = 'bp-sgg';
+  box.innerHTML = `<div class="bk-bar"><select data-sgg-group hidden></select> <span class="bp-inline-status" data-sgg-status></span></div>
+    <div data-sgg-body></div>`;
   anchor.before(box);
-  const det = /** @type {HTMLDetailsElement} */ (box.querySelector('[data-sgg]'));
   const sel = /** @type {HTMLSelectElement} */ (box.querySelector('[data-sgg-group]'));
   const body = /** @type {HTMLElement} */ (box.querySelector('[data-sgg-body]'));
   const status = /** @type {HTMLElement} */ (box.querySelector('[data-sgg-status]'));
@@ -71,38 +80,37 @@ async function main() {
     for (const s of g.views.sets) for (const x of s.sl) if (x.e) ents[x.e] = nameOf(x.e);
     body.innerHTML = renderGroup({ ...g.views, ents, me: [] }, t);
   };
-  det.addEventListener('toggle', async () => {
-    if (!det.open || res) return;
-    status.textContent = t('bracket.sgg.loading');
-    try {
-      const got = await loadData(phases);
-      if (!got.data) {
-        status.innerHTML = escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn" data-sgg-login>${escapeHtml(t('bracket.sgg.login'))}</button>`;
-        const b = status.querySelector('[data-sgg-login]');
-        if (b) b.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
-        return;
-      }
-      const sim = simulate(got.data);
-      res = sim;
-      const n = got.data.phases[0] ? got.data.phases[0].seeds.length : 0;
-      const warn = [];
-      if (n && payload.uids && n !== payload.uids.length) warn.push(t('bracket.sgg.count', { a: payload.uids.length, b: n }));
-      if (sim.warnings.includes('rr')) warn.push(t('bracket.sgg.rr'));
-      if (sim.warnings.includes('no_seeds')) warn.push(t('bracket.sgg.no_seeds'));
-      if (sim.warnings.includes('est')) warn.push(t('bracket.sgg.est'));
-      status.textContent = [got.via === 'server' ? t('bracket.sgg.via_server') : t('bracket.sgg.via_browser'), ...warn].join(' ');
-      sel.innerHTML = sim.groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
-      sel.hidden = sim.groups.length < 2;
-      draw();
-    } catch (e) {
-      status.textContent = t('bracket.sgg.error') + ' ' + String((e && /** @type {any} */ (e).message) || e);
-    }
-  });
   sel.addEventListener('change', draw);
+  try {
+    const got = await loadData(phases);
+    if (!got.data) {
+      // ログインしていない: 従来の表のまま、ログインすれば start.gg と同じ形になると出す
+      status.innerHTML = escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn" data-sgg-login>${escapeHtml(t('bracket.sgg.login'))}</button>`;
+      const btn = status.querySelector('[data-sgg-login]');
+      if (btn) btn.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
+      return;
+    }
+    const sim = simulate(got.data);
+    res = sim;
+    const n = got.data.phases[0] ? got.data.phases[0].seeds.length : 0;
+    const warn = [];
+    if (n && payload.uids && n !== payload.uids.length) warn.push(t('bracket.sgg.count', { a: payload.uids.length, b: n }));
+    if (sim.warnings.includes('rr')) warn.push(t('bracket.sgg.rr'));
+    if (sim.warnings.includes('no_seeds')) warn.push(t('bracket.sgg.no_seeds'));
+    if (sim.warnings.includes('est')) warn.push(t('bracket.sgg.est'));
+    status.textContent = warn.join(' ');
+    sel.innerHTML = sim.groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+    sel.hidden = sim.groups.length < 2;
+    showOld(false);
+    draw();
+  } catch (e) {
+    // 読めなかった: 従来の表のまま
+    status.textContent = t('bracket.sgg.error') + ' ' + String((e && /** @type {any} */ (e).message) || e);
+  }
 }
 
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { main(); });
   else main();
-  window.addEventListener('hashchange', () => { const old = document.getElementById('bp-sgg'); if (old) old.remove(); main(); });
+  window.addEventListener('hashchange', () => { const old = document.getElementById('bp-sgg'); if (old) { old.remove(); showOld(true); } main(); });
 }
