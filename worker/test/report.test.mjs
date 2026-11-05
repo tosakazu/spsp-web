@@ -1054,3 +1054,68 @@ test('(テスト用) ブラケット開始: 最初のフェーズの未開始ブ
   assert.match(r.steps[0].note, /resetSet: gql:nope/);
   assert.deepStrictEqual(calls, ['SpspProbePhases', 'SpspProbeSets', 'SpspStartSet', 'SpspResetSet', 'SpspProbeSets']);
 });
+
+test('開始時刻にブラケットを自動で開始: 時刻の前は何もしない・時刻を過ぎたら 1 回だけ・失敗は 3 回で諦める・遅れすぎ / 時刻が受付より前は対象外', async () => {
+  const { runReportAutoStart, AUTO_START_LATE_MS, AUTO_START_TRIES } = await import('../src/api/report.ts');
+  const fake = fakeStartgg();
+  let groupState = 1, mode = 'ok';
+  const probes = [];
+  const j = (data) => new Response(JSON.stringify({ data }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const fetchFn = async (u, init) => {
+    const q = init && typeof init.body === 'string' && init.body.includes('"query"') ? JSON.parse(init.body).query : '';
+    if (q.includes('SpspProbePhases')) { probes.push('phases'); return j({ event: { phases: [{ id: 1, name: 'Pools', phaseOrder: 1, phaseGroups: { nodes: [{ id: 10, displayIdentifier: 'A1', state: groupState }] } }] } }); }
+    if (q.includes('SpspProbeSets')) return j({ phaseGroup: { id: 10, state: groupState, sets: { nodes: [{ id: 'preview_10_1_1', slots: [{ entrant: { id: 1 } }, { entrant: { id: 2 } }] }] } } });
+    if (q.includes('SpspStartSet')) { probes.push('start'); if (mode === 'ok') groupState = 2; return j({ markSetInProgress: { id: mode === 'ok' ? '555' : 'preview_10_1_1', state: 2 } }); }
+    if (q.includes('SpspResetSet')) return j({ resetSet: { id: '555' } });
+    return fake.fetch(u, init);
+  };
+  const e = await enabled({ fetch: fetchFn, calls: fake.calls });
+  const t0 = e.ctx.now();
+  const opens = t0 + 3600e3;
+  const TO = e.login.token;
+  assert.ok((await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, opens_ms: opens } })).ok);
+  const run = (ms) => runReportAutoStart(e.cfg, e.store, fetchFn, ms);
+  assert.strictEqual(await run(opens - 60e3), null, '時刻の前は何もしない');
+  assert.strictEqual(probes.length, 0);
+  const adm0 = await e.call({ action: 'report_admin', token: TO, code: e.code });
+  assert.deepStrictEqual([adm0.report.auto_start.eligible, adm0.report.auto_start.ms], [true, 0], '運営の画面: 自動開始の対象・まだ');
+  const r = await run(opens + 1000);
+  assert.strictEqual(r.code, e.code);
+  assert.deepStrictEqual(probes, ['phases', 'start']);
+  const row = await e.store.getReportEvent(e.code);
+  assert.strictEqual(row.auto_start_ms, opens + 1000);
+  assert.strictEqual(row.auto_start_tries, 0);
+  assert.match(row.auto_start_note, /A1:started/);
+  assert.strictEqual(await run(opens + 61e3), null, '1 回だけ');
+  assert.strictEqual(probes.length, 2);
+
+  // 失敗 (始まらない): 3 回やり直して諦める。運営の画面に結果
+  await e.store.setReportAutoStart(e.code, { ms: 0, tries: 0, note: '' });
+  groupState = 1; mode = 'fail';
+  for (let i = 1; i <= AUTO_START_TRIES; i++) {
+    const x = await run(opens + i * 60e3);
+    assert.match(x.note, /A1:not_started/);
+    const rw = await e.store.getReportEvent(e.code);
+    assert.strictEqual(rw.auto_start_tries, i);
+    assert.strictEqual(rw.auto_start_ms > 0, i === AUTO_START_TRIES);
+  }
+  assert.strictEqual(await run(opens + 10 * 60e3), null, '諦めたらもうやらない');
+  const adm = await e.call({ action: 'report_admin', token: TO, code: e.code });
+  assert.strictEqual(adm.report.auto_start.tries, AUTO_START_TRIES);
+
+  // もう始まっていた (未開始のブロックが無い): 何もせず終わり
+  await e.store.setReportAutoStart(e.code, { ms: 0, tries: 0, note: '' });
+  groupState = 2;
+  const n0 = probes.filter((x) => x === 'start').length;
+  assert.strictEqual((await run(opens + 5 * 60e3)).note, 'already_started');
+  assert.strictEqual(probes.filter((x) => x === 'start').length, n0);
+
+  // 遅れすぎ (開始時刻から AUTO_START_LATE_MS 超え) は対象外
+  await e.store.setReportAutoStart(e.code, { ms: 0, tries: 0, note: '' });
+  assert.strictEqual(await run(opens + AUTO_START_LATE_MS + 1), null);
+  // 開始時刻が受付を始めたより前 (= 時刻を決めていない・過去の時刻) は対象外
+  assert.ok((await e.call({ action: 'report_settings', token: TO, code: e.code, settings: { top_cut: null, classes_only: false, opens_ms: t0 - 60e3 } })).ok);
+  assert.strictEqual(await run(t0), null);
+  const adm2 = await e.call({ action: 'report_admin', token: TO, code: e.code });
+  assert.strictEqual(adm2.report.auto_start.eligible, false);
+});

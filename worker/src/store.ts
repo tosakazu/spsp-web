@@ -145,6 +145,8 @@ export interface ReportEventRow {
   sgg_admins?: string; sgg_admins_ms?: number;
   /** 大会が終わった時刻 (start.gg の部門が COMPLETED、0023)。0 = まだ */
   ended_ms?: number;
+  /** 開始時刻のブラケット自動開始 (0026): 終わった時刻 (0 = まだ)・失敗した回数・結果。古い行・テストの行には無いことがある */
+  auto_start_ms?: number; auto_start_tries?: number; auto_start_note?: string;
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
@@ -246,6 +248,9 @@ export interface Store {
   insertToolLog(row: ToolLogRow, maxPerDay: number): Promise<boolean>;
   /** 報告の受付 (無ければ null)。 */
   getReportEvent(code: string): Promise<ReportEventRow | null>;
+  /** ブラケットを自動で開始する受付: 開始時刻 (settings.opens_ms) を受付を始めたより後に決めてあり、その時刻が sinceMs〜nowMs、まだ終えていない start.gg の受付 */
+  listReportAutoStartDue(nowMs: number, sinceMs: number): Promise<string[]>;
+  setReportAutoStart(code: string, v: { ms: number; tries: number; note: string }): Promise<void>;
   /** 同じ大会 (kind, target_id) の受付 (無ければ null)。 */
   getReportEventByTarget(kind: string, targetId: string): Promise<ReportEventRow | null>;
   /** 受付を足す (同じ (kind, target_id) があれば、code と created_ms はそのままでほかを置き換える)。 */

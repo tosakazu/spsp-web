@@ -319,7 +319,7 @@ const PROBE_SETS_QUERY = `query SpspProbeSets($id: ID!) {
 const PROBE_GROUPS_MAX = 12;
 export interface ProbeStep { phase: string; group: string; ident: string; set?: string; result: 'started' | 'not_started' | 'skipped' | 'error'; note: string; state_after?: unknown }
 
-export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId: string): Promise<{ ok: true; steps: ProbeStep[]; more: number } | { ok: false; note: string }> {
+export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId: string, maxGroups = PROBE_GROUPS_MAX): Promise<{ ok: true; steps: ProbeStep[]; more: number } | { ok: false; note: string }> {
   const r = await startggGql(fetchFn, token, PROBE_PHASES_QUERY, { id: eventId });
   if (!r.ok) return { ok: false, note: r.note };
   const ev = r.json.data ? r.json.data.event as { phases?: unknown } | null : null;
@@ -334,7 +334,7 @@ export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId
     .filter((g) => g && g.id != null && (Number(g.state) === 1 || g.state === 'CREATED'));
   const steps: ProbeStep[] = [];
   const phaseName = typeof first.name === 'string' ? first.name : '';
-  for (const g of groups.slice(0, PROBE_GROUPS_MAX)) {
+  for (const g of groups.slice(0, maxGroups)) {
     const step: ProbeStep = { phase: phaseName, group: String(g.id), ident: String(g.displayIdentifier ?? ''), result: 'skipped', note: '' };
     steps.push(step);
     const q = await startggGql(fetchFn, token, PROBE_SETS_QUERY, { id: String(g.id) });
@@ -361,5 +361,5 @@ export async function probeStartBracket(fetchFn: FetchFn, token: string, eventId
     step.state_after = after ? after.state : null;
     step.result = after && !(Number(after.state) === 1 || after.state === 'CREATED') ? 'started' : 'not_started';
   }
-  return { ok: true, steps, more: Math.max(0, groups.length - PROBE_GROUPS_MAX) };
+  return { ok: true, steps, more: Math.max(0, groups.length - maxGroups) };
 }

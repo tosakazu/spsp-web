@@ -322,6 +322,18 @@ export class D1Store implements Store {
     await this.db.prepare('UPDATE report_events SET managers = ? WHERE code = ?').bind(managers, code).run();
   }
 
+  async listReportAutoStartDue(nowMs: number, sinceMs: number): Promise<string[]> {
+    const r = await this.db.prepare(
+      "SELECT code, CAST(json_extract(settings, '$.opens_ms') AS INTEGER) AS op, created_ms FROM report_events " +
+      "WHERE status = 'active' AND kind = 'startgg' AND ended_ms = 0 AND auto_start_ms = 0 AND expires_ms >= ? AND op > created_ms AND op <= ? AND op >= ? ORDER BY op LIMIT 5")
+      .bind(nowMs, nowMs, sinceMs).all<{ code: string }>();
+    return (r.results || []).map((x) => x.code);
+  }
+
+  async setReportAutoStart(code: string, v: { ms: number; tries: number; note: string }): Promise<void> {
+    await this.db.prepare('UPDATE report_events SET auto_start_ms = ?, auto_start_tries = ?, auto_start_note = ? WHERE code = ?').bind(v.ms, v.tries, v.note.slice(0, 1000), code).run();
+  }
+
   async setReportEventEnded(code: string, ms: number): Promise<void> {
     if (ms === 0) await this.db.prepare('UPDATE report_events SET ended_ms = 0 WHERE code = ?').bind(code).run();
     else await this.db.prepare('UPDATE report_events SET ended_ms = ? WHERE code = ? AND ended_ms = 0').bind(ms, code).run();

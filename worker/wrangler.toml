@@ -25,6 +25,10 @@ workers_dev = true
 # 外すと spsp.games は何も指さなくなる (WING には戻らない: 09-09 以降 spsp.games は WING に無い)
 routes = [{ pattern = "spsp.games", custom_domain = true }]
 
+# 定期実行: 結果報告の受付の開始時刻にブラケットを自動で開始 (src/index.ts の scheduled、2026-11-05)。D1 を 1 回読むだけで、対象が無ければ start.gg は呼ばない
+[triggers]
+crons = ["* * * * *"]
+
 [assets]
 # dist-cf/ = 地域ごとのビルド出力をまとめたもの (dist/ → dist-cf/jp/, dist-na/ → dist-cf/na/)。
 # scripts/assemble_dist.sh が作る。20,000 ファイル上限があるので JSON (players/ 等) は入れない (R2)。
@@ -73,6 +77,9 @@ routes = []
 name = "spsp-web-preview"
 workers_dev = true
 
+[env.preview.triggers]
+crons = []
+
 [env.preview.assets]
 directory = "../dist-cf"
 binding = "ASSETS"
@@ -105,6 +112,9 @@ CSP_MODE = "report-only"
 routes = []
 name = "spsp-web-na"
 workers_dev = true
+
+[env.na.triggers]
+crons = []
 
 [env.na.assets]
 directory = "../dist-cf"
