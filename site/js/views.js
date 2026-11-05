@@ -17,7 +17,7 @@
 //   .rowsByUids(uids, opts)     → Promise<rec[]>            uids の表の行 (uids の順、居ない uid は飛ばす)。
 //                                  index の位置 → ranking/ensemble/<位置 / chunk> だけを取る。
 //                                  opts.plain: 全国表用の _display_rank / _is_overseas を外した、jsonl の行と同じ形で返す
-//   .searchIndex(query, opts)   → Promise<IndexRow[]>       名前の部分一致 / uid の部分一致 / discriminator の前方一致 (3 文字以上の 16 進)。
+//   .searchIndex(query, opts)   → Promise<IndexRow[]>       名前の部分一致。opts.byId のときは discriminator の前方一致 (16 進) も (uid では探さない)。
 //                                  ranking-table.js の絞り込みと同じ規則。並びは index の並び (総合順位順)。opts.discOf(uid) で discriminator を引く
 //                                  (既定は js/links.js の SPSPLinks.discOf。表は links.js が読む)
 //   .charRows(id) / .prefRows(order) → Promise<rec[]>       char/<id>.json / pref/<order>.json (無ければ [])
@@ -188,10 +188,9 @@ function makeInst(prefix) {
   function matcher(query, opts) {
     var ft = String(query || '').toLowerCase();
     var discOf = (opts && opts.discOf) || (global.SPSPLinks && global.SPSPLinks.discOf) || null;
-    var byDisc = !!discOf && ft.length >= 3 && /^[0-9a-f]+$/.test(ft);
+    var byDisc = !!(opts && opts.byId) && !!discOf && /^[0-9a-f]+$/.test(ft);
     return function (uid, name) {
       return (!!name && String(name).toLowerCase().indexOf(ft) >= 0) ||
-        String(uid).indexOf(ft) >= 0 ||
         (byDisc && String(discOf(uid) || '').toLowerCase().indexOf(ft) === 0);
     };
   }

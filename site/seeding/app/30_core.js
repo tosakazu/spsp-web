@@ -681,6 +681,7 @@ export function ensureTable() {
     rows: DATA,
     method: S.currentMethod,
     sort: { key: 'rank', dir: 'asc' },
+    filterAllIds: true,   // 検索は名前・uid・discriminator (ランキング表と違い ID も常に)
     pageSize: 512,
     infiniteScroll: true,
     totalForRankFrac: 'rows',           // seed: event 参加者数を分母にする

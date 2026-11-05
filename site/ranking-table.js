@@ -31,9 +31,10 @@ import { charName } from './js/chars.js';
  *                                     //   need(cap): cap 行目までを取ってきて replaceRows する }。無限スクロールが持っている行の先に
  *                                     //   届いたら need を呼ぶ。「さらに N 件」の N は total() から数える。exact() が false なら
  *                                     //   total() は目安 (絞り込みで全体の件数が分からない) で、N を出さない
+ *     filterAllIds: false,            // true = 検索で常に uid の部分一致・discriminator (3 文字以上) の前方一致も (シード生成ツール)
  *     rowFilter: null,                // (rec) => 表に出すか。検索の絞り込みの後にかける (全国ランキングの海外・計測中を隠す)
  *   });
- *   t.setRows(...); t.setMethod(...); t.setFilterText(...); t.setRowFilter(fn); t.setSort(key,dir);
+ *   t.setRows(...); t.setMethod(...); t.setFilterText(text, byId); t.setRowFilter(fn); t.setSort(key,dir);
  *   t.refresh();
  *
  *   イベント:
@@ -352,6 +353,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.rows = opts.rows || [];
       this.method = opts.method || 'ensemble';
       this.filterText = opts.filterText || '';
+      this.filterById = false;   // 「ID でも検索」(setFilterText の 2 つめ)
+      this.filterAllIds = !!opts.filterAllIds;   // 常に uid・discriminator でも当てる (シード生成ツール。ランキング表は「ID でも検索」のときだけ discriminator)
       this.sort = opts.sort || { key: 'rank', dir: 'asc' };
       this.pageSize = opts.pageSize || 100;
       this.infiniteScroll = opts.infiniteScroll !== false;
@@ -444,8 +447,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.method = method;
       this.refresh();
     }
-    setFilterText(text) {
+    setFilterText(text, byId) {
       this.filterText = text || '';
+      this.filterById = !!byId;   // 「ID でも検索」(discriminator でも当てる)
       this.currentCap = this.pageSize;
       this.refresh();
     }
@@ -535,12 +539,13 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       const ft = (this.filterText || '').toLowerCase();
       let filtered = this.rows;
       if (ft) {
-        // 名前の部分一致 / uid の部分一致 / discriminator の前方一致 (3 文字以上の 16 進。表は js/links.js が読む)
+        // 名前の部分一致。「ID でも検索」のときは discriminator の前方一致 (16 進。表は js/links.js が読む) も。
+        // uid では探さない (2026-11-05〜)
         const links = (typeof window !== 'undefined' && SPSPLinks) || null;
-        const byDisc = links && ft.length >= 3 && /^[0-9a-f]+$/.test(ft);
+        const byDisc = (this.filterById || this.filterAllIds) && links && /^[0-9a-f]+$/.test(ft) && (ft.length >= 3 || !this.filterAllIds);
         filtered = this.rows.filter(r =>
           (r.display && r.display.toLowerCase().includes(ft)) ||
-          String(r.user_id).includes(ft) ||
+          (this.filterAllIds && String(r.user_id).includes(ft)) ||
           (byDisc && (links.discOf(r.user_id) || '').toLowerCase().startsWith(ft))
         );
       }
