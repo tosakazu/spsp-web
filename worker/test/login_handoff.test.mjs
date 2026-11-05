@@ -36,6 +36,9 @@ test('別のブラウザで戻ったときだけ置き、始めた画面が s �
   const got = body(await handleLoginHandoff(cfg, store, { s: S }, 3000));
   assert.deepStrictEqual([got.token, got.user.id, got.startgg.access_token], [r.token, r.user.id, 'AT-x']);
   assert.deepStrictEqual(body(await handleLoginHandoff(cfg, store, { s: S }, 3001)), { ok: true, pending: true }, '1 回だけ');
+  // 記録: 普通のログイン 2 回 (同じ画面・別の画面) + 置いた + 取れた
+  assert.deepStrictEqual(store.logins.map((l) => l.flow), ['login', 'login', 'handoff_put', 'handoff']);
+  assert.ok(store.logins.every((l) => l.user_id === '42'));
   assert.strictEqual(body(await handleLoginHandoff(cfg, store, { s: 'x' }, 3000)).error.code, 'bad_request');
 });
 

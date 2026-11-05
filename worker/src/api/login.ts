@@ -39,7 +39,9 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   };
   // ログインを始めたブラウザと別のブラウザで戻ってきた (callback に nonce が無い): 始めたブラウザが取りに来られるよう、結果を暗号化して置く
   if (req.handoff === true && st.payload.h) {
-    await store.putLoginHandoff(st.payload.h, await sealJson(cfg, out), now + LOGIN_HANDOFF_TTL_MS, now).catch(() => undefined);
+    const put = await store.putLoginHandoff(st.payload.h, await sealJson(cfg, out), now + LOGIN_HANDOFF_TTL_MS, now).then(() => true, () => false);
+    // 記録: 別のブラウザで戻ってきて引き継ぎを置いた (login_log の flow = handoff_put)。始めた画面が取れたら handoff
+    if (put) await logLogin(store, auth.user.id, 'handoff_put', now);
   }
   return ok(out);
 }
@@ -61,6 +63,9 @@ export async function handleLoginHandoff(cfg: Config, store: Store, req: Record<
   if (typeof s !== 'string' || !/^[A-Za-z0-9_-]{22,128}$/.test(s)) return err('bad_request', '引き継ぎの指定が正しくありません。');
   const data = await store.takeLoginHandoff(await handoffHash(s), now);
   const v = data ? await openJson<Record<string, unknown>>(cfg, data) : null;
+  // 記録: 始めた画面が引き継ぎを取れた = 2 回目のログインが要らなかった (login_log の flow = handoff)
+  const u = v && v.user as { id?: unknown } | undefined;
+  if (u && u.id != null) await logLogin(store, String(u.id), 'handoff', now);
   return ok(v ? { ...v } : { pending: true });
 }
 
