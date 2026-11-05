@@ -1,4 +1,4 @@
-/* トーナメント表 (src/pages/report_bracket_view.js、2026-11-05)。結果報告と、トーナメントプレビューの start.gg と同じ形の表で使う */
+/* トーナメント表 (src/pages/report_bracket_view.js、2026-11-05)。結果報告のトーナメント表 */
 .bk-sec summary { cursor: pointer; font-weight: 700; }
 .bk-bar { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bk-side { margin: 12px 0 4px; font-size: 14px; }
@@ -26,5 +26,3 @@
 .bk-rr tr.bk-me th { text-decoration: underline; }
 .bk-rr td.bk-rr-self { background: var(--border, #eee); }
 .bk-rr td.bk-held-cell { outline: 2px solid #c77700; outline-offset: -2px; }
-.bp-sgg { margin: 8px 0; }
-.bp-sgg .bk-set { background: #fff; }

@@ -425,7 +425,7 @@ import SeedShare from '../seeding/seed_share.js';
   // 敗者側スタートの既定値はこれで決める。
   const _undefCache = new Map();
   function undefeatedCount(ph) {
-    const key = ph + ':' + STATE.payload.uids.length + ':' + JSON.stringify(STATE.payload.phases);
+    const key = ph + ':' + STATE.payload.uids.length + ':' + JSON.stringify(STATE.payload.phases) + ':' + ((window.SPSP && window.SPSP.BracketSgg && window.SPSP.BracketSgg.version) || 0);
     if (_undefCache.has(key)) return _undefCache.get(key);
     const counts = phaseCounts();
     const P = Math.max(1, STATE.payload.phases[ph].pools | 0);
@@ -433,11 +433,20 @@ import SeedShare from '../seeding/seed_share.js';
     let n = 0;
     for (const members of pools) {
       if (!members.length) continue;
-      const de = C.poolDoubleElim(members.length, advOfPhase(ph), lbOfPhase(ph, members.length));
+      const de = deOf(ph, members.length);
       n += de.undefeated ? de.undefeated.length : 1;
     }
     _undefCache.set(key, n);
     return n;
+  }
+
+  // プールの表。start.gg のフェーズの構造が読めていれば (共有 URL の sgg、src/pages/bracket_sgg.js)、組み合わせはそれ
+  // (表の列の形は従来の組み方に揃える)。読めていない・その人数のブロックが無いときは従来の組み方 (2026-11-05)
+  function deOf(ph, M) {
+    const base = C.poolDoubleElim(M, advOfPhase(ph), lbOfPhase(ph, M));
+    const sg = window.SPSP && window.SPSP.BracketSgg;
+    const got = sg && sg.ready ? sg.de(ph, M, base) : null;
+    return got || base;
   }
 
   // そのフェーズの1プールあたり敗者側スタート人数。
@@ -455,7 +464,7 @@ import SeedShare from '../seeding/seed_share.js';
     const ph = currentPhase();
     // 出どころチップは枠の左外に出るので、フェーズ1以降は左に余白を足す
     host.classList.toggle('has-prev', ph > 0);
-    const de = C.poolDoubleElim(members.length, advOfPhase(ph), lbOfPhase(ph, members.length));
+    const de = deOf(ph, members.length);
     const showLb = STATE.view.lb === 1 && de.losers.length > 0;
     const ctx = { members, agg, de, lastAt: lastAppearance(de, 'last'), firstAt: lastAppearance(de, 'first') };
     // GF 列は敗者側を出していて、かつ GF が実施される (= 優勝まで戦う) ときだけ
@@ -492,7 +501,7 @@ import SeedShare from '../seeding/seed_share.js';
     // 敗者側直入りのペアが実測テーブルに無い形なら、推定であることを明示する
     {
       const ph = currentPhase();
-      const de = C.poolDoubleElim(members.length, advOfPhase(ph), lbOfPhase(ph, members.length));
+      const de = deOf(ph, members.length);
       if (de.lbEntryEstimated) {
         parts.push(i18n('bracket.s10') +
           i18n('bracket.s11'));
@@ -1070,6 +1079,8 @@ import SeedShare from '../seeding/seed_share.js';
   }
 
   // ── イベント配線 ────────────────────────────────────────
+  // start.gg の構造を読み終えたら描き直す (src/pages/bracket_sgg.js)
+  document.addEventListener('spsp:bracket-sgg', () => { if (STATE.payload) renderAll(); });
   function wireEvents() {
     $('bp-phase-tabs').addEventListener('click', (e) => {
       const b = e.target.closest('[data-ph]');
