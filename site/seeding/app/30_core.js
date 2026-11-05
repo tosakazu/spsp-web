@@ -201,6 +201,7 @@ export function saveManual() {
       base: S.MANUAL ? S.MANUAL.base : null, ops: S.MANUAL ? S.MANUAL.ops : [],
       hpos: S.MANUAL ? S.MANUAL.hpos : 0, committed: S.MANUAL ? S.MANUAL.committed : false,
       src: (S.MANUAL && S.MANUAL.src) || null,
+      method: S.currentMethod, random_seed: S.currentMethod === 'random' ? S.RANDOM_SEED : null,   // 基準の並び (ランダムは種まで)
       spec: S.SEED_SPEC,   // 指定・固定 (MANUAL と独立に保持)
       ts: Date.now(),
     }));
@@ -218,7 +219,11 @@ export function restoreManualForEvent() {
       const s = JSON.parse(raw);
       if (s && s.eventKey === key) {
         const cur = new Set(DATA.map(r => r.user_id));
-        if (Array.isArray(s.base) && s.base.length === cur.size && s.base.every(u => cur.has(u))) {
+        // ランダムシードを選んでいるとき: 同じ種で作った手動調整だけ戻す (別の種・別の評価の並びを基準にすると、表示している種と
+        // 実際の順が食い違う。総合評価の順で書き込んでしまうのを防ぐ、2026-11-05)
+        // 逆に、ランダムの並びを基準にした手動調整を他の評価のときには戻さない
+        const sameBase = S.currentMethod === 'random' ? (s.method === 'random' && s.random_seed === S.RANDOM_SEED) : s.method !== 'random';
+        if (sameBase && Array.isArray(s.base) && s.base.length === cur.size && s.base.every(u => cur.has(u))) {
           S.MANUAL = {
             base: s.base, ops: Array.isArray(s.ops) ? s.ops : [],
             hpos: Math.min(s.hpos || 0, (s.ops || []).length),
