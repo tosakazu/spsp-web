@@ -475,7 +475,11 @@ async function issueBracketPreview() {
     };
     // start.gg のフェーズの id (あれば、プレビューが start.gg の構造をそのまま読んで同じ形の表を出す。2026-11-05)
     const chainIds = S.EVENT_CONTEXT && Array.isArray(S.EVENT_CONTEXT.phaseChain) ? S.EVENT_CONTEXT.phaseChain : [];
-    if (chainIds.length) /** @type {any} */ (payload).sgg = chainIds;
+    // start.gg から取れたフェーズ構成をそのまま使っているときだけ (カスタムした・取りようがないときは載せない = ログインなしで SPSP の組み方。2026-11-05)
+    //   2 フェーズ以上: start.gg の連鎖 (phasesFromGg) / 1 フェーズ: プール数が start.gg のプール数と同じ
+    const ggPools = S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount;
+    const fromGg = chainIds.length >= 2 ? phasesFromGg : chainIds.length === 1 && !!ggPools && !!phases && (phases[0].pools | 0) === ggPools;
+    if (fromGg) /** @type {any} */ (payload).sgg = chainIds;
     const bracketUrl = new URL(SPSP.langRoot + 'bracket/', location.href).toString();
     let blob = await SeedShare.encodePayload(payload);
     let url = bracketUrl + SeedShare.buildFragment({ ph: 0, wd: 1 }, blob);
