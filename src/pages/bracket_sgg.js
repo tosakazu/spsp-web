@@ -36,8 +36,10 @@ function sharedData() {
   } catch (_) { return null; }
 }
 
-/** 構造を読む: 短い URL の構造 → サーバー → だめならブラウザ (ログインのトークン)。読めなければ null */
-async function loadData(phases) {
+/** 構造を読む: 共有 URL・CSV に入っている構造 → 短い URL の構造 → サーバー → だめならブラウザ (ログインのトークン)。読めなければ null */
+async function loadData(phases, payload) {
+  const inUrl = payload && payload.sggData && payload.sggData.v === 1 && Array.isArray(payload.sggData.phases) ? payload.sggData : null;
+  if (inUrl) return inUrl;
   const shared = sharedData();
   if (shared) return shared;
   try {
@@ -120,7 +122,7 @@ async function main() {
   hideBracket(true);
   note(escapeHtml(t('bracket.sgg.loading')));
   try {
-    const data = await loadData(phases);
+    const data = await loadData(phases, payload);
     if (custom) return;
     if (!data) {
       const box = note(escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn">${escapeHtml(t('bracket.sgg.login'))}</button>`);
@@ -132,6 +134,13 @@ async function main() {
     W.SPSP = W.SPSP || {};
     W.SPSP.BracketSgg = provider(data, payload);
     W.SPSP.BracketSggData = data;   // 短い URL に入れる (bracket_share.js)
+    // 共有 URL (コピー)・CSV 保存にも入れる: 構造を入れた d= を作り直して表に渡す (表が URL を書き換える)
+    if (!payload.sggData) {
+      try {
+        const blob = await SeedShare.encodePayload({ ...payload, sggData: data });
+        document.dispatchEvent(new CustomEvent('spsp:bracket-blob', { detail: { blob, sggData: data } }));
+      } catch (_) { /* 入らなくても表示はできる */ }
+    }
     note('');
     hideBracket(false);
     document.dispatchEvent(new CustomEvent('spsp:bracket-sgg'));
@@ -142,7 +151,24 @@ async function main() {
   }
 }
 
+/** CSV を読み込んだ (別のデータ): 前の組み合わせは捨て、CSV に start.gg の構造があればそれで (ログイン不要) */
+function onPayload(e) {
+  const W = /** @type {any} */ (window);
+  const payload = e.detail && e.detail.payload;
+  if (W.SPSP) { W.SPSP.BracketSgg = null; W.SPSP.BracketSggData = null; }
+  hideBracket(false);
+  note('');
+  const sd = payload && payload.sggData;
+  if (payload && Array.isArray(payload.sgg) && sd && sd.v === 1 && Array.isArray(sd.phases)) {
+    W.SPSP = W.SPSP || {};
+    W.SPSP.BracketSgg = provider(sd, payload);
+    W.SPSP.BracketSggData = sd;
+    setTimeout(() => document.dispatchEvent(new CustomEvent('spsp:bracket-sgg')), 0);
+  }
+}
+
 if (typeof document !== 'undefined') {
+  document.addEventListener('spsp:bracket-payload', onPayload);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { main(); });
   else main();
 }

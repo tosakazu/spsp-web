@@ -365,6 +365,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     phases: ['phases'],
     wv: ['wv'],
     view: ['view'],
+    // start.gg のフェーズの id (JSON の配列) と、読んだ構造 (JSON。worker/src/api/bracket_struct.ts の SimData)。2026-11-05
+    sgg: ['sgg'],
+    sgg_data: ['sgg_data'],
   };
 
   function _findHeader(rows) {
@@ -395,6 +398,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     /** @type {number | null} */ let P = null, /** @type {number | null} */ W = null;
     /** @type {string | null} */ let evName = null, /** @type {string | null} */ phasesJson = null;
     /** @type {string | null} */ let wvJson = null, /** @type {string | null} */ viewStr = null;
+    /** @type {string | null} */ let sggJson = null, /** @type {string | null} */ sggDataJson = null;
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const row = rows[i];
       const get = (k) => (cols[k] != null && row[cols[k]] != null) ? String(row[cols[k]]).trim() : '';
@@ -405,6 +409,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       if (phasesJson == null && get('phases')) phasesJson = get('phases');
       if (wvJson == null && get('wv')) wvJson = get('wv');
       if (viewStr == null && get('view')) viewStr = get('view');
+      if (sggJson == null && get('sgg')) sggJson = get('sgg');
+      if (sggDataJson == null && get('sgg_data')) sggDataJson = get('sgg_data');
       const name = get('name');
       const uidS = get('uid');
       const uid = /^\d+$/.test(uidS) ? parseInt(uidS, 10) : null;
@@ -462,6 +468,13 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       uids,
       names,
     };
+    // start.gg のフェーズと構造 (あれば。壊れていたら無かったことにして警告)
+    try {
+      const sgg = sggJson ? JSON.parse(sggJson) : null;
+      if (Array.isArray(sgg) && sgg.every((x) => /^\d+$/.test(String(x)))) /** @type {any} */ (payload).sgg = sgg.map(String);
+      const sd = sggDataJson ? JSON.parse(sggDataJson) : null;
+      if (sd && sd.v === 1 && Array.isArray(sd.phases)) /** @type {any} */ (payload).sggData = sd;
+    } catch (e) { warnings.push(i18n('seed.share.sgg_bad')); }
     const errors = validatePayload(payload);
     if (errors.length) throw new Error(i18n('seed.share.s29') + errors.join(' / '));
     return { payload, warnings, view };
@@ -484,7 +497,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const viewStr = opts.view
       ? buildFragment(opts.view, 'x').slice(1).replace(/&d=x$/, '')
       : '';
-    const lines = ['seed,name,uid,pool,pools,waves,event,phases,wv,view'];
+    const sgg = Array.isArray(payload.sgg) ? payload.sgg : null;
+    const sggData = payload.sggData && payload.sggData.v === 1 ? payload.sggData : null;
+    const lines = ['seed,name,uid,pool,pools,waves,event,phases,wv,view' + (sgg ? ',sgg,sgg_data' : '')];
     payload.uids.forEach((uid, i) => {
       const name = opts.nameOf ? (opts.nameOf(i) || '') : ((payload.names || {})[String(i)] || '');
       lines.push([
@@ -498,6 +513,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         i === 0 ? field(JSON.stringify(payload.phases)) : '',
         i === 0 ? field(JSON.stringify(wv)) : '',
         i === 0 ? field(viewStr) : '',
+        ...(sgg ? [i === 0 ? field(JSON.stringify(sgg)) : '', i === 0 && sggData ? field(JSON.stringify(sggData)) : ''] : []),
       ].join(','));
     });
     return lines.join('\r\n') + '\r\n';

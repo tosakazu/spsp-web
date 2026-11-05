@@ -1933,6 +1933,7 @@ window.SPSP_I18N.ja = {
   'seed.share.s27': '予選',
   'seed.share.s28': 'ブラケット',
   'seed.share.s29': 'CSV から作ったペイロードが不正です: ',
+  'seed.share.sgg_bad': 'CSV の start.gg の構造 (sgg / sgg_data) が読めなかったので、使わずに読み込みました。',
 
   // ── seed.upload (site/seed-upload/seed_uploader.js) — tools/frontend/i18n_extract_literals.py で機械的に抽出 ──
   'seed.upload.s1': 'phaseId が空です',
