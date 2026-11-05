@@ -3,7 +3,8 @@
  * トーナメントプレビュー: 組み合わせを start.gg の構造で決める (2026-11-05)。
  * 共有 URL に start.gg のフェーズの id (payload.sgg、シードページが入れる) があれば、start.gg のブロックの構造 (試合のつながり・不戦勝・
  * 敗者側への落ち方) を読み、表 (bracket_app.js) の組み合わせをそれにする。表の見た目・列の形は従来のまま (bracket_sgg_core.js の alignToApp)。
- * ログイン必須 (ログインしていなければ表を出さずに案内)。start.gg が読めない・その人数のブロックが無いときだけ従来の組み方。
+ * ログイン必須 (ログインしていなければ表を出さずに案内)。start.gg が読めない・その人数のブロックが無いとき・このページでフェーズ構成を変えたときは従来の組み方。
+ * 共有 URL に sgg が入るのは、シードページで start.gg から取れたフェーズ構成をそのまま使ったときだけ (90_spec.js)。
  * 構造はまず SPSP のサーバー (bracket_structure、10 分キャッシュ) から、読めなければブラウザからログインのトークンで start.gg を直接読む。
  */
 import { escapeHtml } from '../../site/js/html.js';
@@ -97,16 +98,26 @@ async function main() {
   if (!phases.length) return;
   const W = /** @type {any} */ (window);
   // start.gg のフェーズが分かる共有 URL は、start.gg の組み合わせで出す (ログイン必須。2026-11-05)
+  let custom = false;
+  // このページでフェーズ構成を変えた (カスタム): start.gg の組み合わせは使わず、ログインなしで SPSP の組み方 (bracket_app.js が知らせる)
+  document.addEventListener('spsp:bracket-phases-edited', () => {
+    custom = true;
+    if (W.SPSP && W.SPSP.BracketSgg) W.SPSP.BracketSgg = null;
+    note('');
+    hideBracket(false);
+  });
   hideBracket(true);
   note(escapeHtml(t('bracket.sgg.loading')));
   try {
     const data = await loadData(phases);
+    if (custom) return;
     if (!data) {
       const box = note(escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn">${escapeHtml(t('bracket.sgg.login'))}</button>`);
       const btn = box && box.querySelector('button');
       if (btn) btn.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
       return;
     }
+    if (custom) return;
     W.SPSP = W.SPSP || {};
     W.SPSP.BracketSgg = provider(data, payload);
     note('');

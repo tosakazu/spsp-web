@@ -1145,6 +1145,8 @@ import SeedShare from '../seeding/seed_share.js';
     });
     $('bp-phase-apply').addEventListener('click', () => {
       STATE.phasesEdited = true;   // 以降、データ版が共有元と違って当然になる
+      // フェーズ構成をカスタムした: start.gg の組み合わせはやめて SPSP の組み方 (src/pages/bracket_sgg.js)
+      document.dispatchEvent(new CustomEvent('spsp:bracket-phases-edited'));
       applyPhases(readPhaseEditor());
     });
     $('bp-csv-file').addEventListener('change', (e) => {
