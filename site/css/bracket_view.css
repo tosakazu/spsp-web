@@ -27,5 +27,4 @@
 .bk-rr td.bk-rr-self { background: var(--border, #eee); }
 .bk-rr td.bk-held-cell { outline: 2px solid #c77700; outline-offset: -2px; }
 .bp-sgg { margin: 8px 0; }
-.bp-sgg summary { cursor: pointer; font-weight: 700; }
 .bp-sgg .bk-set { background: #fff; }
