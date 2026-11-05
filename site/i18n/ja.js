@@ -2173,6 +2173,7 @@ window.SPSP_I18N.ja = {
   'report.confirm': '{opp} との試合を {s} で{r}として送ります。よろしいですか?',
   'report.sent.reported': '送って反映しました (相手の報告と照らし合わせます)。',
   'report.sent.agreed': '送りました。相手の報告と一致しました。',
+  'report.sent.sgg_lag': 'start.gg の画面に出るまで 1〜2 分かかることがあります。',
   'report.sent.conflict': '相手の報告と食い違いました。結果を一度取り消したので、相手と確かめて送り直してください。',
   'report.sent.review': '送りました。運営の確認待ちです。',
   'report.sent.fixed': 'この試合は運営が結果を確定しています。違う場合は運営に伝えてください。',
