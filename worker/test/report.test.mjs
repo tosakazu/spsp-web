@@ -1042,6 +1042,7 @@ test('(テスト用) ブラケット開始: 最初のフェーズの未開始ブ
       { id: 'preview_10_1_2', slots: [{ entrant: { id: 3 } }, { entrant: { id: 4 } }] },
     ] } } });
     if (b.query.includes('SpspStartSet')) { assert.strictEqual(b.variables.setId, 'preview_10_1_2'); started = true; return j({ markSetInProgress: { id: '555', state: 2 } }); }
+    if (b.query.includes('SpspProbeSetCheck')) return j({ set: { id: 555, state: 2, winnerId: null, slots: [{ standing: null }, { standing: { stats: { score: { value: null } } } }] } });
     if (b.query.includes('SpspResetSet')) { assert.strictEqual(b.variables.setId, '555'); return new Response(JSON.stringify({ errors: [{ message: 'nope' }] }), { status: 200 }); }
     throw new Error('unexpected ' + b.query);
   };
@@ -1052,7 +1053,56 @@ test('(テスト用) ブラケット開始: 最初のフェーズの未開始ブ
   assert.strictEqual(r.steps[0].result, 'started');
   assert.match(r.steps[0].note, /id=555/);
   assert.match(r.steps[0].note, /resetSet: gql:nope/);
-  assert.deepStrictEqual(calls, ['SpspProbePhases', 'SpspProbeSets', 'SpspStartSet', 'SpspResetSet', 'SpspProbeSets']);
+  assert.deepStrictEqual(calls, ['SpspProbePhases', 'SpspProbeSets', 'SpspStartSet', 'SpspProbeSetCheck', 'SpspResetSet', 'SpspProbeSets']);
+});
+
+test('ブラケット開始: 試合を始めて取り消すのはブロックが始まっていないときだけ (開始時刻より前に選手が始めていたら触らない)', async () => {
+  const { probeStartBracket } = await import('../src/api/report_startgg.ts');
+  const j = (data) => new Response(JSON.stringify({ data }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const phases = j.bind(null, { event: { phases: [{ id: 1, name: 'Pools', phaseOrder: 1, phaseGroups: { nodes: [{ id: 10, displayIdentifier: 'A1', state: 1 }] } }] } });
+  const run = async (setsRead, check) => {
+    const calls = [];
+    const fetchFn = async (_u, init) => {
+      const b = JSON.parse(init.body);
+      calls.push(b.query.match(/(query|mutation) (\w+)/)[2]);
+      if (b.query.includes('SpspProbePhases')) return phases();
+      if (b.query.includes('SpspProbeSets')) return j({ phaseGroup: setsRead(calls) });
+      if (b.query.includes('SpspStartSet')) return j({ markSetInProgress: { id: '555', state: 2 } });
+      if (b.query.includes('SpspProbeSetCheck')) return j({ set: check });
+      if (b.query.includes('SpspResetSet')) return j({ resetSet: { id: '555' } });
+      throw new Error('unexpected ' + b.query);
+    };
+    const r = await probeStartBracket(fetchFn, 'tok', '99');
+    return { r, calls };
+  };
+  const two = [{ entrant: { id: 1 } }, { entrant: { id: 2 } }];
+  // 一覧では未開始だったが、読み直したらブロックが始まっていた
+  let x = await run(() => ({ id: 10, state: 2, sets: { nodes: [{ id: '777', slots: two }] } }));
+  assert.deepStrictEqual(x.calls, ['SpspProbePhases', 'SpspProbeSets'], '始めない・取り消さない');
+  assert.strictEqual(x.r.steps[0].note, 'already_started');
+  // 状態は未開始でも本物の ID の試合がある (= 誰かが始めた)
+  x = await run(() => ({ id: 10, state: 1, sets: { nodes: [{ id: 'preview_10_1_1', slots: two }, { id: '778', slots: two }] } }));
+  assert.deepStrictEqual(x.calls, ['SpspProbePhases', 'SpspProbeSets']);
+  // 始めた直後に読み直すと勝者・スコアが入っていた / 試合中でない → 取り消さない
+  let n = 0;
+  const pre = () => (n++ === 0 ? { id: 10, state: 1, sets: { nodes: [{ id: 'preview_10_1_1', slots: two }] } } : { id: 10, state: 2, sets: { nodes: [] } });
+  for (const [check, why] of [
+    [{ id: 555, state: 2, winnerId: 1, slots: [] }, 'has_winner'],
+    [{ id: 555, state: 2, winnerId: null, slots: [{ standing: { stats: { score: { value: 1 } } } }] }, 'has_score'],
+    [{ id: 555, state: 3, winnerId: null, slots: [] }, 'state=3'],
+    [null, 'unread'],
+  ]) {
+    n = 0;
+    x = await run(pre, check);
+    assert.ok(!x.calls.includes('SpspResetSet'), why);
+    assert.match(x.r.steps[0].note, new RegExp('resetSet skipped \\(' + why.replace('=', '=') + '\\)'));
+    assert.strictEqual(x.r.steps[0].result, 'started');
+  }
+  // 試合中で何も入っていなければ取り消す
+  n = 0;
+  x = await run(pre, { id: 555, state: 2, winnerId: null, slots: [{ standing: null }] });
+  assert.ok(x.calls.includes('SpspResetSet'));
+  assert.match(x.r.steps[0].note, /resetSet ok/);
 });
 
 test('開始時刻にブラケットを自動で開始: 時刻の前は何もしない・時刻を過ぎたら 1 回だけ・失敗は 3 回で諦める・遅れすぎ / 時刻が受付より前は対象外', async () => {
@@ -1066,6 +1116,7 @@ test('開始時刻にブラケットを自動で開始: 時刻の前は何もし
     if (q.includes('SpspProbePhases')) { probes.push('phases'); return j({ event: { phases: [{ id: 1, name: 'Pools', phaseOrder: 1, phaseGroups: { nodes: [{ id: 10, displayIdentifier: 'A1', state: groupState }] } }] } }); }
     if (q.includes('SpspProbeSets')) return j({ phaseGroup: { id: 10, state: groupState, sets: { nodes: [{ id: 'preview_10_1_1', slots: [{ entrant: { id: 1 } }, { entrant: { id: 2 } }] }] } } });
     if (q.includes('SpspStartSet')) { probes.push('start'); if (mode === 'ok') groupState = 2; return j({ markSetInProgress: { id: mode === 'ok' ? '555' : 'preview_10_1_1', state: 2 } }); }
+    if (q.includes('SpspProbeSetCheck')) return j({ set: { id: 555, state: 2, winnerId: null, slots: [] } });
     if (q.includes('SpspResetSet')) return j({ resetSet: { id: '555' } });
     return fake.fetch(u, init);
   };
