@@ -10,8 +10,8 @@
 //       opts.statusEl があれば描画のたびに「N / M 表示中」を書く (opts.statusTotal() = M)
 //   SPSPRankingPage.applyState(tbl, {rows, method, filterText, sort})
 //   SPSPRankingPage.bindMethodTabs(onChange)   総合 / 順位 / 直対 タブ (#method-tabs)。onChange(method)
-//   SPSPRankingPage.bindSearch(onChange)       #search の input と「ID で検索」(#search-by-id) の切り替え。onChange(text)
-//   SPSPRankingPage.searchById()               「ID で検索」にチェックがあるか (名前だけが既定)
+//   SPSPRankingPage.bindSearch(onChange)       #search の input と「ID検索」(#search-by-id) の切り替え。onChange(text)
+//   SPSPRankingPage.searchById()               「ID検索」にチェックがあるか (名前だけが既定)
 //   SPSPRankingPage.rowClickHandler(rec, tr, {cfg, colspan})
 //       行クリックで展開行 (大会別 / 直接対決) を出し入れする。開くのは 1 行だけ。詳細 JSON は SPSPDetail が取る
 //   SPSPRankingPage.bindDetailClicks(tbody, getCfg)
@@ -104,7 +104,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     });
   }
 
-  /** 「ID で検索」(#search-by-id) にチェックがあるか */
+  /** 「ID検索」(#search-by-id) にチェックがあるか */
   function searchById() {
     var cb = /** @type {HTMLInputElement | null} */ (document.getElementById('search-by-id'));
     return !!(cb && cb.checked);

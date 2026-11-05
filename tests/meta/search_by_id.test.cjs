@@ -1,5 +1,5 @@
 'use strict';
-// ランキングの検索 (2026-11-05〜): 既定は名前だけ。「ID で検索」(#search-by-id) のときは discriminator の前方一致も。
+// ランキングの検索 (2026-11-05〜): 既定は名前だけ。「ID検索」(#search-by-id) のときは discriminator の前方一致も。
 // uid では探さない。シード生成ツールの表だけは今までどおり名前・uid・discriminator (3 文字以上)。
 // 実ソースから関数 / 絞り込みの部分を取り出して動かす (定義が変わったら落ちる)。
 const test = require('node:test');
@@ -43,7 +43,7 @@ for (const [label, hits] of [['views.js', viewsHits], ['ranking-table.js', table
     assert.deepStrictEqual(hits('1849', false), []);         // uid でも discriminator でも当てない
     assert.deepStrictEqual(hits('100', false), []);
   });
-  test(label + ': 「ID で検索」なら discriminator の前方一致も (uid は無し)', () => {
+  test(label + ': 「ID検索」なら discriminator の前方一致も (uid は無し)', () => {
     assert.deepStrictEqual(hits('b6dc51b7', true), [1001]);
     assert.deepStrictEqual(hits('B6DC', true), [1001]);      // 大文字でも
     assert.deepStrictEqual(hits('b6', true), [1001, 1003]);  // 名前 + discriminator
@@ -64,7 +64,7 @@ test('配線: 4 つのランキングにチェックボックス・切り替え�
   for (const p of ['index.html', 'c/ranking.html', 'pref/ranking.html', 'local/ranking.html']) {
     const h = read(p);
     assert.match(h, /<input type="checkbox" id="search-by-id">/, p);
-    assert.doesNotMatch(h, /UID で検索/, p);
+    assert.doesNotMatch(h, /UID検索/, p);
   }
   const RP = read('js/ranking_page.js');
   assert.match(RP, /getElementById\('search-by-id'\);\n    if \(cb\) cb\.addEventListener\('change'/);

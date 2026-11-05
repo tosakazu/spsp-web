@@ -251,7 +251,7 @@ window.SPSP_I18N.ja = {
   'ranking.tab.bt': '直対評価',
   'ranking.tab.bt_desc': '直接対決ベースのランキング',
   'ranking.search_placeholder': 'プレイヤー名で検索…',
-  'ranking.search_by_id': 'ID で検索',
+  'ranking.search_by_id': 'ID検索',
   'ranking.show_overseas': '海外プレイヤーを表示',
   'ranking.show_provisional': '計測中プレイヤーを表示',
   'ranking.loading_data': 'データ読み込み中…',
@@ -1659,7 +1659,7 @@ window.SPSP_I18N.ja = {
   // ── seed.skeleton (site/seeding/app/10_skeleton.js) — tools/frontend/i18n_extract_templates.py で機械的に抽出 (テンプレートリテラル) ──
   'seed.skeleton.t116': '表示/隠す',
   'seed.skeleton.t117': 'ブラウザに保存',
-  'seed.skeleton.t118': 'プレイヤー名 / UID で検索…',
+  'seed.skeleton.t118': 'プレイヤー名 / UID検索…',
   'seed.skeleton.t119': 'ウェーブ = 連続するプールの塊 (A,B,C…)。start.gg から取得できたときは自動で入ります',
   'seed.skeleton.t120': '最適化を無かったことにして、実行する直前の並びに戻します',
   'seed.skeleton.t121': 'プール内で何回戦目に当たるかも最適化する（プール内順位を少し動かす）',

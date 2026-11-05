@@ -353,8 +353,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       this.rows = opts.rows || [];
       this.method = opts.method || 'ensemble';
       this.filterText = opts.filterText || '';
-      this.filterById = false;   // 「ID で検索」(setFilterText の 2 つめ)
-      this.filterAllIds = !!opts.filterAllIds;   // 常に uid・discriminator でも当てる (シード生成ツール。ランキング表は「ID で検索」のときだけ discriminator)
+      this.filterById = false;   // 「ID検索」(setFilterText の 2 つめ)
+      this.filterAllIds = !!opts.filterAllIds;   // 常に uid・discriminator でも当てる (シード生成ツール。ランキング表は「ID検索」のときだけ discriminator)
       this.sort = opts.sort || { key: 'rank', dir: 'asc' };
       this.pageSize = opts.pageSize || 100;
       this.infiniteScroll = opts.infiniteScroll !== false;
@@ -449,7 +449,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     }
     setFilterText(text, byId) {
       this.filterText = text || '';
-      this.filterById = !!byId;   // 「ID で検索」(discriminator でも当てる)
+      this.filterById = !!byId;   // 「ID検索」(discriminator でも当てる)
       this.currentCap = this.pageSize;
       this.refresh();
     }
@@ -539,7 +539,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       const ft = (this.filterText || '').toLowerCase();
       let filtered = this.rows;
       if (ft) {
-        // 名前の部分一致。「ID で検索」のときは discriminator の前方一致 (16 進。表は js/links.js が読む) も。
+        // 名前の部分一致。「ID検索」のときは discriminator の前方一致 (16 進。表は js/links.js が読む) も。
         // uid では探さない (2026-11-05〜)
         const links = (typeof window !== 'undefined' && SPSPLinks) || null;
         const byDisc = (this.filterById || this.filterAllIds) && links && /^[0-9a-f]+$/.test(ft) && (ft.length >= 3 || !this.filterAllIds);
