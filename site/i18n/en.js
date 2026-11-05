@@ -1684,6 +1684,7 @@ window.SPSP_I18N.en = {
   'bracket.share.copied': 'Copied (until {t})',
   'bracket.share.made': 'Until {t}',
   'bracket.share.error': 'Could not create a short URL.',
+  'bracket.share.need_login': 'Log in to create a short URL.',
   'bracket.share.opening': 'Opening the shared bracket…',
   'bracket.share.not_found': 'This short URL has expired or does not exist.',
   'bracket.sgg.loading': 'Reading the pairings from start.gg…',

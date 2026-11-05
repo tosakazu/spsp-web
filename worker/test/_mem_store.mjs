@@ -212,8 +212,10 @@ export class MemStore {
   async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
   async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
   async setReportEventEnded(code, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code && (ms === 0 || !x.ended_ms)) x.ended_ms = ms; }
-  async putBracketShare(id, frag, nowMs, expiresMs) { (this.shares ||= new Map()).set(id, { frag, created_ms: nowMs, expires_ms: expiresMs }); }
-  async getBracketShare(id, nowMs) { const r = (this.shares || new Map()).get(id); return r && r.expires_ms >= nowMs ? { frag: r.frag, expires_ms: r.expires_ms } : null; }
+  async putBracketShare(row) { (this.shares ||= new Map()).set(row.id, { ...row }); }
+  async getBracketShare(id, nowMs) { const r = (this.shares || new Map()).get(id); return r && r.expires_ms >= nowMs ? { frag: r.frag, sgg: r.sgg, expires_ms: r.expires_ms } : null; }
+  async listBracketSharesOf(userId) { return [...(this.shares || new Map()).entries()].filter(([, v]) => v.user_id === userId).map(([id, v]) => ({ id, created_ms: v.created_ms })).sort((a, b) => b.created_ms - a.created_ms); }
+  async deleteBracketShare(id) { (this.shares || new Map()).delete(id); }
   async purgeBracketShares(nowMs) { for (const [k, v] of (this.shares || new Map())) if (v.expires_ms < nowMs) this.shares.delete(k); }
   async listReportProgOk(code) { this._rep(); return (this.reportProgOk || []).filter((x) => x.code === code).map((x) => ({ group_id: x.group_id, list: x.list })); }
   async putReportProgOk(code, groupId, list, userId, ms) { this._rep(); this.reportProgOk = (this.reportProgOk || []).filter((x) => !(x.code === code && x.group_id === groupId)); this.reportProgOk.push({ code, group_id: groupId, list, user_id: userId, ms }); }

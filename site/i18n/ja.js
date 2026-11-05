@@ -1711,6 +1711,7 @@ window.SPSP_I18N.ja = {
   'bracket.share.copied': 'コピーしました ({t} まで)',
   'bracket.share.made': '{t} まで',
   'bracket.share.error': '短い URL を作れませんでした。',
+  'bracket.share.need_login': '短い URL を作るにはログインしてください。',
   'bracket.share.opening': '共有されたトーナメントを開いています…',
   'bracket.share.not_found': 'この短い URL は期限が切れたか、見つかりません。',
   'bracket.sgg.loading': 'start.gg の組み合わせを読んでいます…',

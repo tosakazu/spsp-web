@@ -327,12 +327,22 @@ export class D1Store implements Store {
     else await this.db.prepare('UPDATE report_events SET ended_ms = ? WHERE code = ? AND ended_ms = 0').bind(ms, code).run();
   }
 
-  async putBracketShare(id: string, frag: string, nowMs: number, expiresMs: number): Promise<void> {
-    await this.db.prepare('INSERT INTO bracket_shares (id, frag, created_ms, expires_ms) VALUES (?, ?, ?, ?)').bind(id, frag, nowMs, expiresMs).run();
+  async putBracketShare(row: { id: string; frag: string; sgg: string; user_id: string; user_name: string; created_ms: number; expires_ms: number }): Promise<void> {
+    await this.db.prepare('INSERT INTO bracket_shares (id, frag, sgg, user_id, user_name, created_ms, expires_ms) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(row.id, row.frag, row.sgg, row.user_id, row.user_name, row.created_ms, row.expires_ms).run();
   }
 
-  async getBracketShare(id: string, nowMs: number): Promise<{ frag: string; expires_ms: number } | null> {
-    return await this.db.prepare('SELECT frag, expires_ms FROM bracket_shares WHERE id = ? AND expires_ms >= ?').bind(id, nowMs).first<{ frag: string; expires_ms: number }>() ?? null;
+  async getBracketShare(id: string, nowMs: number): Promise<{ frag: string; sgg: string; expires_ms: number } | null> {
+    return await this.db.prepare('SELECT frag, sgg, expires_ms FROM bracket_shares WHERE id = ? AND expires_ms >= ?').bind(id, nowMs).first<{ frag: string; sgg: string; expires_ms: number }>() ?? null;
+  }
+
+  async listBracketSharesOf(userId: string): Promise<{ id: string; created_ms: number }[]> {
+    const r = await this.db.prepare('SELECT id, created_ms FROM bracket_shares WHERE user_id = ? ORDER BY created_ms DESC').bind(userId).all<{ id: string; created_ms: number }>();
+    return r.results || [];
+  }
+
+  async deleteBracketShare(id: string): Promise<void> {
+    await this.db.prepare('DELETE FROM bracket_shares WHERE id = ?').bind(id).run();
   }
 
   async purgeBracketShares(nowMs: number): Promise<void> {

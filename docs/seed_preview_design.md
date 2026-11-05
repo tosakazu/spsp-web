@@ -443,4 +443,7 @@ start.gg のものにする**。表の見た目と列の形 (ラウンドの数�
   (90_spec.js の issueBracketPreview({ recs, pools }))。フェーズ構成・start.gg の組み合わせは普段の共有と同じきまり。
 - **短い URL**: プレビューの「🔗 URLをコピー」の横に「🔗 短い URL」と保存期間 (1 / 3 / 7 日、既定 3 日)。今の共有 URL の # の後ろを Worker に置き
   (`bracket_share_create`、D1 `bracket_shares` = migration 0024)、`/bracket/?s=<id>` をコピーする。開くと `bracket_share_get` で読み、# の付いた元の URL に移る。
-  ID は 8 文字 (紛らわしい文字を除いた 55 種)。期限を過ぎたものは作るときに消す。ログイン不要。API の無いサイトでは出さない。src/pages/bracket_share.js / worker/src/api/bracket_share.ts。
+  ID は 8 文字 (紛らわしい文字を除いた 55 種)。期限を過ぎたものは作るときに消す。API の無いサイトでは出さない。src/pages/bracket_share.js / worker/src/api/bracket_share.ts。
+  - (2026-11-05 追記) **作るのはログイン必須**。作った人 (start.gg のユーザー ID・名前) を行に残す (migration 0025)。1 人 30 個まで (超えたら古いものから消す)・10 分に 10 個まで。
+  - start.gg の組み合わせで出しているときは、作った人のブラウザが読んだ構造 (SimData) も一緒に置く。開く人はログインなしで start.gg の組み合わせになる
+    (sessionStorage に置いて bracket_sgg.js が使う)。長い URL には入れない (大きな大会では長くなりすぎるため)。
