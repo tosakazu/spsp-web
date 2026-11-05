@@ -251,7 +251,7 @@ window.SPSP_I18N.ja = {
   'ranking.tab.bt': '直対評価',
   'ranking.tab.bt_desc': '直接対決ベースのランキング',
   'ranking.search_placeholder': 'プレイヤー名で検索…',
-  'ranking.search_by_id': 'ID でも検索',
+  'ranking.search_by_id': 'ID で検索',
   'ranking.show_overseas': '海外プレイヤーを表示',
   'ranking.show_provisional': '計測中プレイヤーを表示',
   'ranking.loading_data': 'データ読み込み中…',
