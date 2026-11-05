@@ -249,7 +249,7 @@ window.SPSP_I18N.en = {
   'ranking.tab.bt': 'Head-to-head',
   'ranking.tab.bt_desc': 'Ranking based on head-to-head results',
   'ranking.search_placeholder': 'Search by player name…',
-  'ranking.search_by_id': 'Also search by ID',
+  'ranking.search_by_id': 'Search by ID',
   'ranking.show_overseas': 'Show overseas players',
   'ranking.show_provisional': 'Show provisional players',
   'ranking.loading_data': 'Loading data…',
