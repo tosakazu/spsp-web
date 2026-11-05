@@ -1894,6 +1894,7 @@ window.SPSP_I18N.en = {
   'seed.share.s27': 'Pools',
   'seed.share.s28': 'Bracket',
   'seed.share.s29': 'The payload built from the CSV is invalid: ',
+  'seed.share.sgg_bad': 'The start.gg structure columns (sgg / sgg_data) in the CSV could not be read, so they were ignored.',
   'seed.upload.s1': 'phaseId is empty',
   'seed.upload.s2': 'API token is empty',
   'seed.upload.s3': 'seedMapping is empty',

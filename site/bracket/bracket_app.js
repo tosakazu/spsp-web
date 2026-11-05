@@ -1033,6 +1033,8 @@ import SeedShare from '../seeding/seed_share.js';
       clearError();
       st.textContent = `✅ ${payload.uids.length}${i18n('bracket.t59')}` + (warnings.length ? ' / ⚠ ' + warnings.join(' / ') : '');
       $('bp-controls').hidden = false;
+      // 別のデータになった: start.gg の組み合わせを読み直す (CSV に構造があればそれ。src/pages/bracket_sgg.js)
+      document.dispatchEvent(new CustomEvent('spsp:bracket-payload', { detail: { payload } }));
       renderAll();
     } catch (e) {
       st.textContent = '';
@@ -1081,6 +1083,14 @@ import SeedShare from '../seeding/seed_share.js';
   // ── イベント配線 ────────────────────────────────────────
   // start.gg の構造を読み終えたら描き直す (src/pages/bracket_sgg.js)
   document.addEventListener('spsp:bracket-sgg', () => { if (STATE.payload) renderAll(); });
+  // start.gg の構造を URL に入れる (src/pages/bracket_sgg.js が読んだ構造を入れて作り直した d=)。コピー・CSV 保存にも入る
+  document.addEventListener('spsp:bracket-blob', (e) => {
+    const d = /** @type {any} */ (e).detail || {};
+    if (!STATE.payload || !d.blob || !d.sggData) return;
+    STATE.payload.sggData = d.sggData;
+    STATE.blob = d.blob;
+    syncUrl();
+  });
   function wireEvents() {
     $('bp-phase-tabs').addEventListener('click', (e) => {
       const b = e.target.closest('[data-ph]');
@@ -1147,6 +1157,8 @@ import SeedShare from '../seeding/seed_share.js';
       STATE.phasesEdited = true;   // 以降、データ版が共有元と違って当然になる
       // フェーズ構成をカスタムした: start.gg の組み合わせはやめて SPSP の組み方 (src/pages/bracket_sgg.js)
       document.dispatchEvent(new CustomEvent('spsp:bracket-phases-edited'));
+      // カスタムした URL・CSV には start.gg のフェーズと構造を残さない (開いた人も SPSP の組み方になる)
+      if (STATE.payload) { delete STATE.payload.sgg; delete STATE.payload.sggData; }
       applyPhases(readPhaseEditor());
     });
     $('bp-csv-file').addEventListener('change', (e) => {

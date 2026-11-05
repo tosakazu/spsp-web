@@ -65,3 +65,19 @@ test('敗者側スタートのある本戦: 敗者側から始まる人の数と
   const dp = G.deFromSgg(simSets(pool), seedGs(pool), pool.seeds.length);
   assert.ok(dp.cut && dp.advancers.length > 0 && dp.undefeated.length > 0 && dp.undefeated.length < dp.advancers.length, 'プールは打ち切りで、無敗で通過する人と敗者側から通過する人がいる');
 });
+
+test('CSV 保存・読み込みで start.gg のフェーズと構造 (sgg / sgg_data) が戻る。無ければ列も出さない', () => {
+  const S = ((m) => m.default || m)(require('../../site/seeding/seed_share.js'));
+  const sggData = { v: 1, fetched_at: 1, phases: [{ id: '10', name: 'P', groups: [], seeds: [], templates: {} }] };
+  const payload = { v: 1, ev: 'テスト, "大会"', src: 'spsp', phases: [{ name: '予選', pools: 1 }], uids: [11, 22, 33, 44], names: { 0: 'A', 1: 'B', 2: 'C', 3: 'D' }, wv: [0], sgg: ['10'], sggData };
+  const csv = S.buildWorkCsv(payload, {});
+  assert.match(csv.split('\r\n')[0], /,sgg,sgg_data$/);
+  const back = S.workCsvToPayload(csv, {}).payload;
+  assert.deepStrictEqual(back.sgg, ['10']);
+  assert.deepStrictEqual(back.sggData, sggData);
+  const plain = S.buildWorkCsv({ ...payload, sgg: undefined, sggData: undefined }, {});
+  assert.doesNotMatch(plain.split('\r\n')[0], /sgg/);
+  assert.strictEqual(S.workCsvToPayload(plain, {}).payload.sgg, undefined);
+  // データ版 (突き合わせ用) は構造で変わらない
+  assert.strictEqual(S.payloadVersion(payload), S.payloadVersion({ ...payload, sggData: undefined }));
+});

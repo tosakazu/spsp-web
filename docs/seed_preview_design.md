@@ -446,4 +446,7 @@ start.gg のものにする**。表の見た目と列の形 (ラウンドの数�
   ID は 8 文字 (紛らわしい文字を除いた 55 種)。期限を過ぎたものは作るときに消す。API の無いサイトでは出さない。src/pages/bracket_share.js / worker/src/api/bracket_share.ts。
   - (2026-11-05 追記) **作るのはログイン必須**。作った人 (start.gg のユーザー ID・名前) を行に残す (migration 0025)。1 人 30 個まで (超えたら古いものから消す)・10 分に 10 個まで。
   - start.gg の組み合わせで出しているときは、作った人のブラウザが読んだ構造 (SimData) も一緒に置く。開く人はログインなしで start.gg の組み合わせになる
-    (sessionStorage に置いて bracket_sgg.js が使う)。長い URL には入れない (大きな大会では長くなりすぎるため)。
+    (sessionStorage に置いて bracket_sgg.js が使う)。
+  - (2026-11-05 追記) **長い URL・CSV 保存にも入れる**: プレビューで start.gg の構造を読み終えたら、構造 (payload.sggData) を入れた d= に作り直して URL を書き換える
+    (bracket_app.js が spsp:bracket-blob を受ける)。コピーした URL・CSV 保存 (1 行目の sgg / sgg_data 列) を開いた人はログインなしで start.gg の組み合わせ。
+    CSV 読み込みでも戻る (seed_share.js の workCsvToPayload)。データ版 (payloadVersion) には入れない。
