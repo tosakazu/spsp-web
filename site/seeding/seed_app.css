@@ -36,6 +36,15 @@
   }
   .method-tab:hover { color: #374151; background: #f3f4f6; }
   .method-tab.active { background: #dc2626; color: #fff; }
+  /* ランダムシード: 特殊なメニューなので紫の枠 (2026-11-05) */
+  .method-tab.method-tab-random { color: #7c3aed; border: 1.5px solid #7c3aed; margin-left: 6px; }
+  .method-tab.method-tab-random:hover { background: #f5f3ff; color: #6d28d9; }
+  .method-tab.method-tab-random.active { background: #7c3aed; color: #fff; }
+  .random-seed-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 12px; padding: 8px 10px; border: 1.5px solid #7c3aed; border-radius: 8px; color: #6d28d9; font-size: 12px; background: #faf5ff; }
+  .random-seed-box[hidden] { display: none; }
+  .random-seed-box input { width: 11ch; font: 600 13px ui-monospace, monospace; padding: 3px 6px; border: 1px solid #c4b5fd; border-radius: 4px; }
+  .random-seed-box button { font-size: 12px; padding: 3px 10px; border: 1px solid #7c3aed; background: #fff; color: #6d28d9; border-radius: 4px; cursor: pointer; font-family: inherit; }
+  .random-seed-note { color: #6b7280; font-size: 11px; }
   .method-tab .tab-desc { display: block; font-size: 10px; opacity: 0.7; margin-top: 2px; }
 
   .controls {

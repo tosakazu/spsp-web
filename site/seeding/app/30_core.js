@@ -21,6 +21,57 @@ import SeedOptimizer from '../seed_optimizer.js';
 
 export const DATA = [];
 
+// ── ランダムシード (2026-11-05) ──
+// 選ぶたびに乱数の種 (32 bit) を暗号用の乱数で作り、各プレイヤーに「種とその人の ID から作る乱数」を振って昇順に並べる。
+// 同じ種なら同じ並び (記録・説明用)。並びの後に被り回避 (既定 ON) をかけるのは他の評価と同じ。
+/** 種を作る @returns {number} */
+export function newRandomSeed() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0];
+}
+/** 種 × 文字列 → [0, 2^53) の乱数 (cyrb53) @param {number} seed @param {string} str */
+export function randomKey(seed, str) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+/** 記録の並びに使う ID (ランキングに無い人・ゲストも含めて全員に振る) @param {any} r */
+function randomIdOf(r) {
+  return r.user_id != null ? 'u' + r.user_id : r.seedId != null ? 's' + r.seedId : r.entrantId != null ? 'e' + r.entrantId : 'd' + (r.display || '');
+}
+/** ranks.random を 1..N で振る (種が無ければ作る) @param {any[]} recs @param {number | null} [seed] */
+export function assignRandomRanks(recs, seed) {
+  if (seed == null) seed = S.RANDOM_SEED != null ? S.RANDOM_SEED : newRandomSeed();
+  S.RANDOM_SEED = seed;
+  const keyed = recs.map((r) => ({ r, id: randomIdOf(r), k: randomKey(/** @type {number} */ (seed), randomIdOf(r)) }));
+  keyed.sort((a, b) => a.k - b.k || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  keyed.forEach((x, i) => { x.r.ranks = x.r.ranks || {}; x.r.ranks.random = i + 1; });
+}
+/** ランダムのタブの説明 (種の値) を書き直す */
+export function renderRandomTab() {
+  const el = document.getElementById('random-seed-desc');
+  if (el) el.textContent = S.currentMethod === 'random' && S.RANDOM_SEED != null ? i18n('seed.random.seed_value', { n: S.RANDOM_SEED }) : i18n('seed.random.desc');
+  // 種の値を見せる・コピーする・入れて同じ並びを作る (ランダムであることの証明と再現のため)
+  const box = document.getElementById('random-seed-box');
+  if (box) box.hidden = S.currentMethod !== 'random' || !DATA.length;
+  const inp = /** @type {HTMLInputElement | null} */ (document.getElementById('random-seed-input'));
+  if (inp && S.RANDOM_SEED != null && document.activeElement !== inp) inp.value = String(S.RANDOM_SEED);
+}
+/** 入力された種の値 (0〜4294967295 の整数)。正しくなければ null @param {string} v */
+export function parseRandomSeed(v) {
+  const s = String(v || '').trim();
+  if (!/^\d{1,10}$/.test(s)) return null;
+  const n = Number(s);
+  return n <= 0xffffffff ? n : null;
+}
+
 // MASTER は (uid → record) Map にキャッシュ
 /** @type {SpspRankMeta | null} */
 let MASTER_META = null;
