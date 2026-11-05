@@ -828,6 +828,21 @@ function buildPhasesConfig(ev, phaseId) {
   return out.length >= 2 ? out : null;
 }
 
+/** 選んだ phase から通過でつながる phase の id (予選から順)。@param {StartggEvent} ev @param {number | string} phaseId @returns {string[]} */
+function phaseChainIds(ev, phaseId) {
+  const all = (ev && ev.phases) || [];
+  const byId = new Map(all.map((p) => [String(p.id), p]));
+  if (!byId.has(String(phaseId))) return [];
+  const chain = [byId.get(String(phaseId))];
+  while (chain.length < 8) {
+    const cur = chain[chain.length - 1];
+    const next = all.find((q) => (q.progressingInData || []).some((d) => String(d.origin) === String(cur.id)));
+    if (!next || chain.includes(next)) break;
+    chain.push(next);
+  }
+  return chain.map((p) => String(p.id));
+}
+
 /** @param {string} token @param {StartggEvent} ev @param {number | string} phaseId */
 async function performSeedFetch(token, ev, phaseId) {
   const status = /** @type {HTMLElement} */ (document.getElementById('status'));   // 骨格 (10_skeleton.js) に必ずある
@@ -860,6 +875,8 @@ async function performSeedFetch(token, ev, phaseId) {
     waves,   // {poolCount, waveCount, poolToWave, letters, identifiers} | {error} | null
     // start.gg のフェーズ連鎖 (選択 phase 起点)。トーナメントプレビューの初期構成に使う。
     phasesConfig: buildPhasesConfig(ev, phaseId),   // [{name, pools, adv?}] | null
+    // 同じ連鎖の phase id (トーナメントプレビューが start.gg の構造をそのまま読む。2026-11-05)
+    phaseChain: phaseChainIds(ev, phaseId),
   };
   dropAppliedOrder({ render: false });   // 新規取得で被り回避の反映をリセット
   // Repopulate DATA in place (preserve reference)

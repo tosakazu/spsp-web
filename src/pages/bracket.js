@@ -11,3 +11,4 @@ import '../../site/seeding/seed_data.js';
 import '../../site/seeding/seed_share.js';
 import '../../site/bracket/bracket_core.js';
 import '../../site/bracket/bracket_app.js';
+import './bracket_sgg.js';   // start.gg と同じ形の表 (共有 URL に start.gg のフェーズの id があるとき)

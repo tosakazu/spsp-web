@@ -473,6 +473,9 @@ async function issueBracketPreview() {
       wv: waveMap,
       uids, names: fullNames,
     };
+    // start.gg のフェーズの id (あれば、プレビューが start.gg の構造をそのまま読んで同じ形の表を出す。2026-11-05)
+    const chainIds = S.EVENT_CONTEXT && Array.isArray(S.EVENT_CONTEXT.phaseChain) ? S.EVENT_CONTEXT.phaseChain : [];
+    if (chainIds.length) /** @type {any} */ (payload).sgg = chainIds;
     const bracketUrl = new URL(SPSP.langRoot + 'bracket/', location.href).toString();
     let blob = await SeedShare.encodePayload(payload);
     let url = bracketUrl + SeedShare.buildFragment({ ph: 0, wd: 1 }, blob);

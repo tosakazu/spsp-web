@@ -38,6 +38,8 @@ export interface Env {
   /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
+  /** トーナメントシミュレーションが start.gg の公開データ (フェーズの構造) を読むトークン (2026-11-05)。無ければ画面がログインのトークンで読む */
+  STARTGG_PUBLIC_TOKEN?: string;
   /** VAPID の連絡先 (mailto: か https:)。[vars] */
   VAPID_SUBJECT?: string;
 }
@@ -170,6 +172,8 @@ export interface Config {
   titleSyncKey?: string;
   /** Web Push の鍵 (未設定なら通知は出さない) */
   vapid?: { publicKey: string; privateKey: string; subject: string };
+  /** start.gg の公開データを読むトークン (トーナメントシミュレーション)。無ければ undefined */
+  publicToken?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -205,6 +209,7 @@ export function configFromEnv(env: Env): Config {
     titleSyncKey: env.TITLE_SYNC_KEY || undefined,
     vapid: env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
       ? { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: String(env.VAPID_SUBJECT || 'https://spsp.games/') } : undefined,
+    publicToken: env.STARTGG_PUBLIC_TOKEN || undefined,
     titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),

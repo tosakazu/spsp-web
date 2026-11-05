@@ -18,6 +18,7 @@
  */
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
+import { handleBracketStructure } from './bracket_sim.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
@@ -170,6 +171,9 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'report_bracket':
         return (await handleReportBracket(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       // 前のフェーズからの通過順 (障害中に次のフェーズを計算で埋める前に運営が確かめる、2026-11-05)
+      // トーナメントシミュレーション: start.gg のフェーズの構造 (bracket_sim.ts)
+      case 'bracket_structure':
+        return (await handleBracketStructure(ctx.cfg, ctx.fetch, r, now)).body;   // 読むだけ
       case 'report_bracket_view':
         return (await handleReportBracketView(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ (D1 の写し)
       case 'report_progression':
