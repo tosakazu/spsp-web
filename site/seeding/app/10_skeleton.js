@@ -130,6 +130,17 @@ const SEED_APP_SKELETON_HTML = `
     <div class="method-tab" data-method="bt_gated">
       ${i18n('seed.skeleton.t23')}<span class="tab-desc">${i18n('seed.skeleton.t24')}</span>
     </div>
+    <div class="method-tab method-tab-random" data-method="random" title="${i18n('seed.random.title')}">
+      ${i18n('seed.random.label')}<span class="tab-desc" id="random-seed-desc">${i18n('seed.random.desc')}</span>
+    </div>
+  </div>
+
+  <div class="random-seed-box" id="random-seed-box" hidden>
+    <span>${i18n('seed.random.box_label')}</span>
+    <input type="text" id="random-seed-input" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <button type="button" id="random-seed-copy">${i18n('seed.random.copy')}</button>
+    <button type="button" id="random-seed-apply">${i18n('seed.random.apply')}</button>
+    <span class="random-seed-note" id="random-seed-note">${i18n('seed.random.note')}</span>
   </div>
 
   <div class="controls">

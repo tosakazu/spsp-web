@@ -22,6 +22,7 @@
  *   UPCOMING_DATA: SpspUpcomingData | null,
  *   UPCOMING_PAGE: number,
  *   currentMethod: string,
+ *   RANDOM_SEED: number | null,
  *   filterText: string,
  * }} SeedState */
 /** @type {SeedState} */
@@ -45,5 +46,6 @@ export const S = {
   UPCOMING_DATA: null,   // { tournaments: [...] } or null while loading   // 60_upcoming.js
   UPCOMING_PAGE: 0,   // 0-indexed   // 60_upcoming.js
   currentMethod: 'ensemble',   // 30_core.js
+  RANDOM_SEED: null,   // ランダムシードの乱数の種 (選ぶたび・取り直すたびに作り直す)   // 30_core.js
   filterText: '',   // 30_core.js
 };

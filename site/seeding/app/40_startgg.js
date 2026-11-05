@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
@@ -380,7 +380,7 @@ export function downloadCsv() {
   a.href = url;
   // ファイル名に出力順の由来を付ける (手動調整 / 被り回避適用)。
   const orderTag = (S.MANUAL ? '_manual' : '') + (S.APPLIED_ORDER ? '_opt' : '');
-  a.download = `spsp_seed_${tName}_${S.currentMethod}${orderTag}.csv`;
+  a.download = `spsp_seed_${tName}_${S.currentMethod}${S.currentMethod === 'random' ? '_' + S.RANDOM_SEED : ''}${orderTag}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -390,6 +390,7 @@ function uploadOrderLabel() {
   const csvBase = !!(S.MANUAL && S.MANUAL.src === 'csv');   // シードアップロード: 読み込んだ CSV の順が基準
   const base = csvBase ? i18n('seed.startgg.order_csv') : {
     ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
+    random: i18n('seed.random.label_with_seed', { n: S.RANDOM_SEED != null ? S.RANDOM_SEED : '' }),
   }[S.currentMethod] || i18n('seed.startgg.s12');
   const extra = [];
   if (S.MANUAL && S.MANUAL.hpos > 0) extra.push(i18n('seed.startgg.s31'));   // 手動調整は取得後いつも開いている。実際に動かしたときだけ
@@ -642,6 +643,7 @@ function logSeedingUse(token, phaseId, count, orderLabel, phaseCreated) {
   const detail = {
     method: SEED_APP_CONFIG.mode === 'csv' ? 'csv' : S.currentMethod,
     order_label: orderLabel,
+    random_seed: S.currentMethod === 'random' ? S.RANDOM_SEED : undefined,
     csv: SEED_APP_CONFIG.mode === 'csv' && S.CSV_SOURCE ? { label: S.CSV_SOURCE.label, rows: S.CSV_SOURCE.rows.length } : undefined,
     optimize: { applied: !!S.APPLIED_ORDER, options },
     manual: { used: manualOps > 0, ops: manualOps },
@@ -966,6 +968,9 @@ function formatAvgRank(rec, _method) {
 }
 
 export function render() {
+  // ランダム: 新しく取った記録 (ranks.random が無い) には種を作り直して振る
+  if (S.currentMethod === 'random' && DATA.some((r) => !r.ranks || r.ranks.random == null)) assignRandomRanks(DATA, newRandomSeed());
+  renderRandomTab();
   const tbl = ensureTable();
   tbl.setRows(DATA);
   tbl.setMethod(S.currentMethod);
