@@ -512,8 +512,6 @@ window.SPSP_I18N.ja = {
   'player.pool.pool': 'プール {id}',
   'player.pool.seed': 'シード #{n}',
   'player.pool.view': 'トーナメント',
-  'player.pool.list': 'プールのプレイヤー ({n} 人)',
-  'player.upcoming.entrant_list': '参加者 ({n} 人)',
   'player.upcoming.view_tournament': '大会ページ',
   'player.simulate': '🔮 スコア予想',
   'player.sec.rivals': '👥 ライバルプレイヤー',
