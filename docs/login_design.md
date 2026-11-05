@@ -181,3 +181,17 @@ CREATE TABLE card_settings (
 - `detail` (JSON): シードは基準・被り回避 (反映したか・`so-*` の設定すべて)・手動の並べ替え (回数)・シード指定と固定 (件数)・フェーズを作ったか・CSV。下位クラスはクラス・形式・順位の範囲・Challonge。
 - 1 人 1 日 300 件まで (`TOOL_LOG_MAX_PER_DAY`)。記録に失敗しても操作は成功のまま。
 - 読むときは `wrangler d1 execute spsp --remote --command "SELECT … FROM tool_logs ORDER BY id DESC LIMIT 50"`。
+
+## ログインの引き継ぎ (2026-11-05)
+
+iPhone のアプリ内ブラウザ (Discord などの SFSafariViewController) でログインを始めると、start.gg のユニバーサルリンクでアプリを経て
+`redirect_uri` が Safari 本体で開くことがある (callback に nonce が無い = errors の `state_missing ios-safari`、週 66 回中約 30 回)。
+保存領域が別なので始めた画面は未ログインのまま、もう一度ログインすることになっていた。
+
+- 始めた画面 (js/login.js `startLogin`) が 256 bit の乱数 s を localStorage `spsp_login_handoff` に置き、`h = SHA-256(s)` (base64url 43 文字) を
+  `begin_login` の `handoff_h` で渡す。Worker は h を署名つき state (`payload.h`、普段のログインだけ) に入れる。
+- callback に nonce が無い (別のブラウザ) ときだけ、「ログインを続ける」を押したあと `login` に `handoff: true` を付ける。Worker はログインを済ませ、
+  結果 (セッション・start.gg のトークン) を AES-GCM で暗号化して D1 `login_handoffs` に h をキーに置く (15 分・取り出したら消す、migration 0027)。
+- 始めた画面は戻ってきたとき (読み込み・表示・focus・表示中は 5 秒おき、最長 45 分) に `login_handoff { s }` で取りに行く。Worker は SHA-256(s) で
+  引き当てて返し、その場で消す。まだ無ければ `{ pending: true }`。
+- URL・state に載るのは h だけ。callback の URL が漏れても s が無いので取り出せない。始めた画面で戻ってきた通常のログインはサーバに何も置かない。

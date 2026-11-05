@@ -232,7 +232,9 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
         confirmLogin(code, state, back);
         return;
       }
-      runLogin(code, state, back);
+      // ログインを始めた画面で戻ってきた: 引き継ぎは要らない (始めた画面が取りに行かないよう消す)
+      try { localStorage.removeItem('spsp_login_handoff'); } catch (_) { /* 何もしない (キーは js/login.js の HANDOFF_KEY) */ }
+      runLogin(code, state, back, false);
       return;
     }
     // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
@@ -316,7 +318,8 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
       b.disabled = true;
       h.textContent = i18n('callback.busy_login');   // 処理中 (ロゴの枠は消したので文字だけ)
       d.textContent = '';
-      runLogin(code, state, back);
+      // 別のブラウザで戻ってきた: 結果をログインを始めた画面にも引き継ぐ (Worker が置き、始めた画面が取りに行く)
+      runLogin(code, state, back, true);
     });
     root.appendChild(h);
     root.appendChild(d);
@@ -327,12 +330,12 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
    * login フロー: code をセッショントークンに替えて localStorage に保存し、
    * 元のページに ?login=1 で戻る。シートには何も書かれない。
    */
-  function runLogin(code, state, back) {
+  function runLogin(code, state, back, handoff) {
     fetch(CFG.GAS_ENDPOINT, {
       method: 'POST',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'login', code: code, state: state }),
+      body: JSON.stringify({ action: 'login', code: code, state: state, handoff: !!handoff }),
     }).then(function (res) {
       return res.json();
     }).then(function (json) {

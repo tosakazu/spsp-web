@@ -27,7 +27,7 @@ import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine,
 import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
-import { handleLogin, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
+import { handleLogin, handleLoginHandoff, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
   handleReportAdmin, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportProgression, handleReportProgressionOk, handleReportBracketView, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
@@ -80,6 +80,9 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleBeginLogin(ctx.cfg, r, now)).body;
       case 'login':
         res = await handleLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'login_handoff':
+        // ログインの引き継ぎを取りに来る (待っている間は数秒おき)。まだ無いのは失敗ではない ({ pending: true })
+        return (await handleLoginHandoff(ctx.cfg, ctx.store, r, now)).body;
       case 'manager_begin':
         return (await handleManagerBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
       case 'manager_login':

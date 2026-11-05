@@ -263,6 +263,7 @@ test('login: action:login を送り、トークンを保存して ?login=1 で�
   assert.strictEqual(loginBody.action, 'login');
   assert.strictEqual(loginBody.code, 'CODE-L');
   assert.ok(loginBody.state, 'state を渡していない');
+  assert.strictEqual(loginBody.handoff, false, '始めた画面で戻った: 引き継ぎは要らない');
   assert.deepStrictEqual(r.calls.nav, ['/spsp/vote.html?login=1']);
 
   const saved = JSON.parse(r.w.localStorage.getItem('spsp_session_v1'));
@@ -327,6 +328,7 @@ test('login: nonce が無ければボタンを押してから送る', { skip: !J
   await new Promise((res) => setTimeout(res, 20));
   const sent = r.calls.fetch.map((f) => JSON.parse(f.init.body)).find((b) => b.action === 'login');
   assert.ok(sent && sent.code === 'CODE-L' && sent.state);
+  assert.strictEqual(sent.handoff, true, '別のブラウザで戻った: 始めた画面に引き継ぐ (2026-11-05)');
   assert.deepStrictEqual(r.calls.nav, ['/spsp/vote.html?login=1']);
 });
 
