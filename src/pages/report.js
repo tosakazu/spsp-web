@@ -798,7 +798,9 @@ function wireForm(form, m) {
       : r.state === 'fixed' || r.state === 'review' ? r.state : 'queued')
       : r.state === 'pending' && ['wait_delay', 'wait_both', 'wait_admin'].includes(r.note) ? r.note
       : ['reported', 'agreed', 'conflict', 'review', 'fixed'].includes(r.state) ? r.state : 'reported';
-    setStatus(st, i18n('report.sent.' + sentKind, { n: delayMin() }), r.state === 'conflict' || r.state === 'review' || r.offline ? 'warn' : 'ok');
+    // start.gg に送れたとき: start.gg の画面に出るまで 1〜2 分かかることがある (start.gg 側の表示の遅れ、11-05)
+    const lag = !r.offline && INFO && INFO.kind === 'startgg' && (sentKind === 'reported' || sentKind === 'agreed') ? ' ' + i18n('report.sent.sgg_lag') : '';
+    setStatus(st, i18n('report.sent.' + sentKind, { n: delayMin() }) + lag, r.state === 'conflict' || r.state === 'review' || r.offline ? 'warn' : 'ok');
     FORM_OPEN = null;
     // 勝った側が報告して反映できたら、勝利の演出と勝利画面 (食い違い・運営の確認待ちのときは出さない)
     if (won && ['reported', 'agreed', 'fixed', 'pending', 'queued'].includes(r.state)) await showVictory(await victoryOf(m, result), r.offline ? Promise.resolve(null) : advanceAfter(m));

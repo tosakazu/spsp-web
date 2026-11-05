@@ -2120,6 +2120,7 @@ window.SPSP_I18N.en = {
   'report.confirm': 'Send your match against {opp} as a {s} {r}?',
   'report.sent.reported': 'Sent and applied (it will be checked against your opponent report).',
   'report.sent.agreed': 'Sent. It matches your opponent report.',
+  'report.sent.sgg_lag': 'It may take a minute or two to show on start.gg.',
   'report.sent.conflict': 'It does not match your opponent report. The result was cleared; check with your opponent and send again.',
   'report.sent.review': 'Sent. The organizers will check it.',
   'report.sent.fixed': 'The organizers have already set this result. Tell them if it is wrong.',
