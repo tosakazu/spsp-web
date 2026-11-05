@@ -3,7 +3,7 @@
  * トーナメントプレビュー: 組み合わせを start.gg の構造で決める (2026-11-05)。
  * 共有 URL に start.gg のフェーズの id (payload.sgg、シードページが入れる) があれば、start.gg のブロックの構造 (試合のつながり・不戦勝・
  * 敗者側への落ち方) を読み、表 (bracket_app.js) の組み合わせをそれにする。表の見た目・列の形は従来のまま (bracket_sgg_core.js の alignToApp)。
- * 読めない (ログインしていない・start.gg が読めない)・その人数のブロックが無いときは従来の組み方のまま。
+ * ログイン必須 (ログインしていなければ表を出さずに案内)。start.gg が読めない・その人数のブロックが無いときだけ従来の組み方。
  * 構造はまず SPSP のサーバー (bracket_structure、10 分キャッシュ) から、読めなければブラウザからログインのトークンで start.gg を直接読む。
  */
 import { escapeHtml } from '../../site/js/html.js';
@@ -77,31 +77,46 @@ function provider(data, payload) {
   };
 }
 
+/** 表 (と表の操作) を隠す / 戻す。start.gg の組み合わせが読めるまでは、違うかもしれない組み合わせを見せない */
+function hideBracket(on) {
+  const el = document.getElementById('bp-bracket');
+  if (el) el.hidden = on;
+}
+/** 表の上に一言 (ログインの案内・読み込み中・読めなかった) */
+function note(html) {
+  let box = document.getElementById('bp-sgg-note');
+  const st = document.getElementById('bp-status');
+  if (!box && st) { box = document.createElement('div'); box.id = 'bp-sgg-note'; box.className = 'bp-inline-status'; st.before(box); }
+  if (box) box.innerHTML = html;
+  return box;
+}
+
 async function main() {
   const payload = await payloadOfHash();
   const phases = payload && Array.isArray(payload.sgg) ? payload.sgg.map(String).filter((x) => /^\d+$/.test(x)) : [];
   if (!phases.length) return;
   const W = /** @type {any} */ (window);
+  // start.gg のフェーズが分かる共有 URL は、start.gg の組み合わせで出す (ログイン必須。2026-11-05)
+  hideBracket(true);
+  note(escapeHtml(t('bracket.sgg.loading')));
   try {
     const data = await loadData(phases);
     if (!data) {
-      // ログインしていない: ログインすれば start.gg の構造で組むと出す (表は従来の組み方のまま)
-      const st = document.getElementById('bp-status');
-      if (st && !document.getElementById('bp-sgg-login')) {
-        const box = document.createElement('div');
-        box.id = 'bp-sgg-login';
-        box.className = 'bp-inline-status';
-        box.innerHTML = escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn">${escapeHtml(t('bracket.sgg.login'))}</button>`;
-        const btn = box.querySelector('button');
-        if (btn) btn.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
-        st.before(box);
-      }
+      const box = note(escapeHtml(t('bracket.sgg.need_login')) + ` <button type="button" class="bp-btn">${escapeHtml(t('bracket.sgg.login'))}</button>`);
+      const btn = box && box.querySelector('button');
+      if (btn) btn.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
       return;
     }
     W.SPSP = W.SPSP || {};
     W.SPSP.BracketSgg = provider(data, payload);
+    note('');
+    hideBracket(false);
     document.dispatchEvent(new CustomEvent('spsp:bracket-sgg'));
-  } catch (_) { /* 読めなければ従来の組み方のまま */ }
+  } catch (e) {
+    // 読めなかった: 従来の組み方で出して、そう書く
+    note(escapeHtml(t('bracket.sgg.error')));
+    hideBracket(false);
+  }
 }
 
 if (typeof document !== 'undefined') {
