@@ -147,6 +147,16 @@ function usedCharsOf(uid) {
   }
   return USED.get(uid);
 }
+/** キャラの一覧を閉じた直後の押し間違い対策 (2026-11-05): 閉じた直後の CLICK_GUARD_MS は、画面のどこを押しても無視する。
+ * 一覧で 2 度押した・閉じたときに画面がずれた (キーボードが閉じる) と、下にあった「送る」などを押してしまうため */
+const CLICK_GUARD_MS = 600;
+let pickerClosedAt = 0;
+function guardClicksAfterPicker() {
+  pickerClosedAt = Date.now();
+  const swallow = (e) => { if (Date.now() - pickerClosedAt < CLICK_GUARD_MS) { e.preventDefault(); e.stopPropagation(); } };
+  document.addEventListener('click', swallow, true);
+  setTimeout(() => document.removeEventListener('click', swallow, true), CLICK_GUARD_MS + 50);
+}
 /** used = 使用キャラの ID (Promise)。一覧はすぐ開き、読めたらいちばん上に足す */
 function openCharPicker(input, title, used) {
   const cBtn = (c, cls) => `<button type="button" class="rp-cp-c${cls}${String(c.id) === input.value ? ' sel' : ''}" data-id="${c.id}" data-name="${escapeHtml(c.name)}"><span class="em">${escapeHtml(c.emoji || '🎮')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`;
@@ -159,7 +169,7 @@ function openCharPicker(input, title, used) {
     <div class="rp-cp-grid rp-cp-all">${(CHARS || []).map((c) => cBtn(c, '')).join('')}</div>
   </div>`;
   document.body.appendChild(ov);
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); guardClicksAfterPicker(); };
   const pick = (id) => { setChar(input, id); input.dispatchEvent(new Event('change', { bubbles: true })); close(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
@@ -188,7 +198,8 @@ function openCharPicker(input, title, used) {
   });
   // Enter で絞り込みの先頭を選ぶ
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = btns.find((x) => !x.hidden); if (b) pick(b.getAttribute('data-id')); } });
-  try { q.focus(); } catch (e) { /* 入力欄に移れないだけ */ }
+  // 検索欄に入るのはマウスの端末だけ (スマホで開くたびにキーボードが出て画面がずれ、閉じたときの押し間違いのもとになる)
+  try { if (!(W.matchMedia && W.matchMedia('(pointer: coarse)').matches)) q.focus(); } catch (e) { /* 入力欄に移れないだけ */ }
 }
 
 const STAGE_KEY = 'spsp_report_stages_v1';
@@ -765,6 +776,7 @@ function wireForm(form, m) {
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (submit.disabled) return;
+    if (Date.now() - pickerClosedAt < CLICK_GUARD_MS) return;   // キャラの一覧を閉じた直後 (押し間違い)
     const g = [];
     const v = (sel) => (sel && sel.value ? Number(sel.value) : null);
     if (mode === 'sum') {
