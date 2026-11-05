@@ -175,7 +175,7 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       // トーナメントシミュレーション: start.gg のフェーズの構造 (bracket_sim.ts)
       // トーナメントプレビューの短い URL (bracket_share.ts)
       case 'bracket_share_create':
-        res = await handleBracketShareCreate(ctx.store, r, now); break;
+        res = await handleBracketShareCreate(ctx.cfg, ctx.store, r, now); break;
       case 'bracket_share_get':
         return (await handleBracketShareGet(ctx.store, r, now)).body;   // 読むだけ
       case 'bracket_structure':
@@ -247,7 +247,7 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
   const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
-    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket', 'report_progression_ok'];
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket', 'report_progression_ok', 'bracket_share_create'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }

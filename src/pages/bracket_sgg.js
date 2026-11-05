@@ -27,8 +27,19 @@ async function payloadOfHash() {
   } catch (_) { return null; }
 }
 
-/** 構造を読む: サーバー → だめならブラウザ (ログインのトークン)。読めなければ null */
+/** 短い URL から開いたとき、作った人が start.gg から読んだ構造 (bracket_share.js が sessionStorage に置く。ログイン不要) */
+export const SHARED_KEY = 'spsp_bracket_shared_sgg';
+function sharedData() {
+  try {
+    const o = JSON.parse(sessionStorage.getItem(SHARED_KEY) || 'null');
+    return o && o.frag === location.hash.replace(/^#/, '') && o.sgg && o.sgg.v === 1 ? o.sgg : null;
+  } catch (_) { return null; }
+}
+
+/** 構造を読む: 短い URL の構造 → サーバー → だめならブラウザ (ログインのトークン)。読めなければ null */
 async function loadData(phases) {
+  const shared = sharedData();
+  if (shared) return shared;
   try {
     if (SpspLogin.apiAvailable && SpspLogin.apiAvailable()) {
       const r = await SpspLogin.api({ action: 'bracket_structure', phases });
@@ -120,6 +131,7 @@ async function main() {
     if (custom) return;
     W.SPSP = W.SPSP || {};
     W.SPSP.BracketSgg = provider(data, payload);
+    W.SPSP.BracketSggData = data;   // 短い URL に入れる (bracket_share.js)
     note('');
     hideBracket(false);
     document.dispatchEvent(new CustomEvent('spsp:bracket-sgg'));
