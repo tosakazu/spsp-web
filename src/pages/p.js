@@ -477,15 +477,17 @@ async function buildUpcomingSection() {
     return (c && c.emoji) || '';
   };
   /** プレイヤーの一覧 (プールのプレイヤー / 参加者)。POOL_PAGE 人ずつページ送り、見出しの右にページ送り
-   * (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない) @param {any[]} members @param {string} title */
-  const memberList = (members, title) => {
+   * (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない)。
+   * showSeed=false: シードが出る前の参加者一覧 (start.gg の仮の番号は参加順なので、シード順に見えないよう出さない)
+   * @param {any[]} members @param {string} title @param {boolean} [showSeed] */
+  const memberList = (members, title, showSeed = true) => {
     const pages = Math.ceil(members.length / POOL_PAGE);
     const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
       const em = x.uid != null ? emojiOf(x.uid) : '';
       const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
       const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
       const pg = Math.floor(k / POOL_PAGE);
-      return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+      return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${showSeed && x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
     }).join('');
     const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
       `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
@@ -517,7 +519,7 @@ async function buildUpcomingSection() {
       // シードが出る前: 小さい大会は参加者全員 (全国順位の順、順位の無い人は start.gg の順で後ろ)
       const members = ev.entrants.map((/** @type {any} */ x, /** @type {number} */ k) => ({ x, k, r: x.uid != null ? rankOf(x.uid) : null }))
         .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.r ?? 1e9) - (b.r ?? 1e9) || a.k - b.k).map((/** @type {any} */ o) => o.x);
-      list = memberList(members, i18n('player.upcoming.entrant_list', { n: members.length }));
+      list = memberList(members, i18n('player.upcoming.entrant_list', { n: members.length }), false);
     }
     // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
     const slug = slugOf.get(ev.tournament_id) || '';
