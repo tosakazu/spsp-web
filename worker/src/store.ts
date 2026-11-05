@@ -192,6 +192,10 @@ export interface ReportStartRow { set_id: string; user_id: string; ts_ms: number
 export interface Store {
   /** ログインの記録を 1 行足す。 */
   insertLogin(row: LoginRow): Promise<void>;
+  /** ログインの引き継ぎ (0027): h = 乱数の SHA-256、data = 暗号化した結果 */
+  putLoginHandoff(h: string, data: string, expiresMs: number, nowMs: number): Promise<void>;
+  /** 取り出して消す (1 回だけ)。期限切れ・無ければ null */
+  takeLoginHandoff(h: string, nowMs: number): Promise<string | null>;
   /** votes / posts のうちユーザーの直近の様子。 */
   recentActivity(table: 'votes' | 'posts', userId: string, dayKey: string): Promise<RecentActivity>;
   /** 連投条件を満たすときだけ 1 行追記する。追記したら true。 */

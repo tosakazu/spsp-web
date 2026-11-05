@@ -164,6 +164,18 @@ export class MemStore {
     return true;
   }
 
+  async putLoginHandoff(h, data, expiresMs, nowMs) {
+    this.handoffs = this.handoffs || new Map();
+    for (const [k, v] of this.handoffs) if (v.expires_ms < nowMs) this.handoffs.delete(k);
+    this.handoffs.set(h, { data, expires_ms: expiresMs });
+  }
+  async takeLoginHandoff(h, nowMs) {
+    const r = (this.handoffs || new Map()).get(h);
+    if (!r) return null;
+    this.handoffs.delete(h);
+    return r.expires_ms >= nowMs ? r.data : null;
+  }
+
   async insertLogin(row) {
     (this.logins = this.logins || []).push({ ...row });
   }

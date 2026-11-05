@@ -65,6 +65,18 @@ export class D1Store implements Store {
     return (res.meta?.changes ?? 0) > 0;
   }
 
+  async putLoginHandoff(h: string, data: string, expiresMs: number, nowMs: number): Promise<void> {
+    await this.db.batch([
+      this.db.prepare('DELETE FROM login_handoffs WHERE expires_ms < ?').bind(nowMs),
+      this.db.prepare('INSERT OR REPLACE INTO login_handoffs (h, data, expires_ms) VALUES (?, ?, ?)').bind(h, data, expiresMs),
+    ]);
+  }
+
+  async takeLoginHandoff(h: string, nowMs: number): Promise<string | null> {
+    const r = await this.db.prepare('DELETE FROM login_handoffs WHERE h = ? RETURNING data, expires_ms').bind(h).first<{ data: string; expires_ms: number }>();
+    return r && r.expires_ms >= nowMs ? r.data : null;
+  }
+
   async insertLogin(row: LoginRow): Promise<void> {
     await this.db.prepare('INSERT INTO login_log (user_id, ts_ms, flow) VALUES (?, ?, ?)').bind(row.user_id, row.ts_ms, row.flow).run();
   }

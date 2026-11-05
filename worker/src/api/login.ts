@@ -6,7 +6,8 @@ import type { FetchFn } from './oauth.ts';
 import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
-import { checkStateToken, issueSessionToken, signState, verifySessionToken } from './session.ts';
+import { base64UrlEncode, checkStateToken, issueSessionToken, signState, verifySessionToken } from './session.ts';
+import { openJson, sealJson } from './report_crypto.ts';
 
 export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || req.code.length === 0) {
@@ -29,13 +30,38 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   const token = await issueSessionToken(cfg, auth.user, now);
   const sess = await verifySessionToken(cfg, token, now); // exp を取り出すついでに自己検証
   await logLogin(store, auth.user.id, 'login', now);
-  return ok({
+  const out = {
     token,
     user: { id: auth.user.id, slug: auth.user.slug, gamerTag: auth.user.gamerTag },
     exp: sess ? sess.exp : null,
     // start.gg のトークン (scope user.identity)。ブラウザが参加中の大会を start.gg から直接読み直すのに使う (js/startgg_identity.js)
     startgg: auth.startgg || null,
-  });
+  };
+  // ログインを始めたブラウザと別のブラウザで戻ってきた (callback に nonce が無い): 始めたブラウザが取りに来られるよう、結果を暗号化して置く
+  if (req.handoff === true && st.payload.h) {
+    await store.putLoginHandoff(st.payload.h, await sealJson(cfg, out), now + LOGIN_HANDOFF_TTL_MS, now).catch(() => undefined);
+  }
+  return ok(out);
+}
+
+/*
+ * ログインの引き継ぎ (2026-11-05)。iPhone のアプリ内ブラウザ (SFSafariViewController) でログインを始めると、start.gg アプリを経て
+ * Safari 本体で戻ってくることがある (保存領域が別なので、始めた画面は未ログインのまま)。始めた画面は乱数 s を持ち、begin_login で
+ * SHA-256(s) を署名つき state に入れておく。別のブラウザで戻ってきたら handleLogin が結果をそのハッシュで置き、始めた画面が s で取りに来る。
+ *   action: "login_handoff" { s } → { token, user, exp, startgg } (1 回だけ) / まだ無い・期限切れは { pending: true }
+ * URL・state に出るのはハッシュだけなので、callback の URL が漏れても取り出せない。
+ */
+export const LOGIN_HANDOFF_TTL_MS = 15 * 60 * 1000;
+export async function handoffHash(s: string): Promise<string> {
+  // ブラウザ (js/login.js) と同じ形: base64url・末尾の = なし (43 文字)
+  return base64UrlEncode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))).replace(/=+$/, '');
+}
+export async function handleLoginHandoff(cfg: Config, store: Store, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
+  const s = req.s;
+  if (typeof s !== 'string' || !/^[A-Za-z0-9_-]{22,128}$/.test(s)) return err('bad_request', '引き継ぎの指定が正しくありません。');
+  const data = await store.takeLoginHandoff(await handoffHash(s), now);
+  const v = data ? await openJson<Record<string, unknown>>(cfg, data) : null;
+  return ok(v ? { ...v } : { pending: true });
 }
 
 /** ログインの記録 (ユーザー ID・時刻・どのログインか だけ。トークンなどは入れない)。記録に失敗してもログインは止めない */
