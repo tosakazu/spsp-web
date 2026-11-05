@@ -209,7 +209,7 @@ async function fetchTournament(token, tournamentSlug) {
 }
 
 /** @param {string} token @param {number | string} phaseId @param {(got: number, tot: number) => void} [progressFn] @returns {Promise<any[]>} */
-async function fetchAllSeeds(token, phaseId, progressFn) {
+export async function fetchAllSeeds(token, phaseId, progressFn) {
   const all = [];
   let page = 1;
   const perPage = 64;
@@ -275,7 +275,7 @@ function entrantNodeToInfo(node) {
 }
 
 /** @param {Record<string, any>} seedNode @returns {SeedInfo} */
-function seedNodeToInfo(seedNode) {
+export function seedNodeToInfo(seedNode) {
   const sid = seedNode.id;
   const sn = seedNode.seedNum;
   const ent = seedNode.entrant || {};
@@ -503,9 +503,25 @@ export async function uploadToStartgg() {
   if (r.ok) {
     if (status) status.textContent = `${i18n('seed.startgg.t8')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, S.EVENT_CONTEXT.phaseId, r.count, methodLabel, false);
+    appliedPreviewButton(status, token, S.EVENT_CONTEXT.phaseId);
   } else {
     showError(r.error || 'unknown error');
   }
+}
+
+/**
+ * 適用のあとに「適用後のトーナメントをプレビュー」(2026-11-05): start.gg から適用後のシード順を読み直してトーナメントプレビューを開く (90_spec.js)。
+ * @param {HTMLElement | null} status @param {string} token @param {number | string} phaseId
+ */
+function appliedPreviewButton(status, token, phaseId) {
+  if (!status) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn';
+  b.style.marginLeft = '8px';
+  b.textContent = i18n('seed.startgg.applied_preview');
+  b.addEventListener('click', () => document.dispatchEvent(new CustomEvent('spsp:preview-applied', { detail: { token, phaseId } })));
+  status.append(' ', b);
 }
 
 const UPSERT_PHASE_MUTATION = `
@@ -596,6 +612,7 @@ async function createPhaseThenUpload(token) {
   if (r.ok) {
     status.textContent = `${i18n('seed.startgg.t20')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, phase.id, r.count, uploadOrderLabel(), true);
+    appliedPreviewButton(status, token, phase.id);
     const metaInfo = document.getElementById('meta-info');
     if (metaInfo) metaInfo.textContent = `${S.EVENT_CONTEXT.eventName} (phase ${phase.id})`;
     // phase はもう存在するので自動作成の設定 UI は閉じる

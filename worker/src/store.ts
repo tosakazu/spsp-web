@@ -260,6 +260,10 @@ export interface Store {
   updateReportEventManagers(code: string, managers: string): Promise<void>;
   /** 大会が終わった時刻を入れる (まだ入っていなければ、0023)。ms = 0 なら消す (閉じ忘れと判定したあと動き出した) */
   setReportEventEnded(code: string, ms: number): Promise<void>;
+  /** トーナメントプレビューの短い URL (bracket_shares、0024) */
+  putBracketShare(id: string, frag: string, nowMs: number, expiresMs: number): Promise<void>;
+  getBracketShare(id: string, nowMs: number): Promise<{ frag: string; expires_ms: number } | null>;
+  purgeBracketShares(nowMs: number): Promise<void>;
   /** 運営が確かめた通過順 (report_prog_ok、0021) */
   listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]>;
   putReportProgOk(code: string, groupId: string, list: string, userId: string, ms: number): Promise<void>;

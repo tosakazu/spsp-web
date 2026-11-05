@@ -327,6 +327,18 @@ export class D1Store implements Store {
     else await this.db.prepare('UPDATE report_events SET ended_ms = ? WHERE code = ? AND ended_ms = 0').bind(ms, code).run();
   }
 
+  async putBracketShare(id: string, frag: string, nowMs: number, expiresMs: number): Promise<void> {
+    await this.db.prepare('INSERT INTO bracket_shares (id, frag, created_ms, expires_ms) VALUES (?, ?, ?, ?)').bind(id, frag, nowMs, expiresMs).run();
+  }
+
+  async getBracketShare(id: string, nowMs: number): Promise<{ frag: string; expires_ms: number } | null> {
+    return await this.db.prepare('SELECT frag, expires_ms FROM bracket_shares WHERE id = ? AND expires_ms >= ?').bind(id, nowMs).first<{ frag: string; expires_ms: number }>() ?? null;
+  }
+
+  async purgeBracketShares(nowMs: number): Promise<void> {
+    await this.db.prepare('DELETE FROM bracket_shares WHERE expires_ms < ?').bind(nowMs).run();
+  }
+
   async listReportProgOk(code: string): Promise<{ group_id: string; list: string }[]> {
     const r = await this.db.prepare('SELECT group_id, list FROM report_prog_ok WHERE code = ?').bind(code).all<{ group_id: string; list: string }>();
     return r.results || [];
