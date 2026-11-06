@@ -269,7 +269,7 @@ async function buildRivalsSection() {
     .filter(t => t.event_id != null && !t.is_dq)
     .sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 20);
   const docs = (await Promise.allSettled(tours.map(t =>
-    fetch(SPSP.data + `tournaments/${t.event_id}.json`).then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); })
+    tourDoc(/** @type {number} */ (t.event_id))
   ))).filter(r => r.status === 'fulfilled').map(r => r.value);
   // 現在の全国順位は大会 JSON には無い (全選手の現在順位から引く。data/views/ があれば players_index.json、無ければ players_current.json)
   const CUR = await SPSPPlayerData.loadRanks(SPSP.data).catch(() => null);
@@ -578,6 +578,42 @@ let _CHAR_EMOJI_BY_UID = null;  // uid -> メインキャラ絵文字 (CHAR_IDX.
 // uid -> メイン使用キャラの絵文字. character_index の main_by_char (char→uids) を逆引きし
 // char_emoji.json の emoji を引く. 1 度だけ構築してメモ化.
 /** @param {number | null | undefined} uid @returns {string} */
+/** @type {Map<number, Promise<any>>} 大会 JSON (tournaments/<id>.json) の読み込み。同じ大会は 1 回だけ */
+const TOUR_DOCS = new Map();
+/** @param {number} eid @returns {Promise<any>} */
+function tourDoc(eid) {
+  let p = TOUR_DOCS.get(eid);
+  if (!p) {
+    p = fetch(SPSP.data + `tournaments/${eid}.json`).then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); });
+    p.catch(() => TOUR_DOCS.delete(eid));   // 失敗は覚えない (次に開いたとき読み直す)
+    TOUR_DOCS.set(eid, p);
+  }
+  return p;
+}
+/** 試合一覧の使用キャラ: 大会 JSON の chars (選手ごとにその大会で使ったキャラ、使用数の多い順) を
+ *  相手の名前の前 (左から使用数順) と自分のスコアの左に入れる。chars が無い大会・選手はそのまま (相手はメインキャラの絵文字)
+ *  @param {HTMLElement} el .tour-matches @param {number} eid */
+function fillMatchChars(el, eid) {
+  if (!eid || !CHAR_EMOJI) return;
+  tourDoc(eid).then(doc => {
+    const chars = doc && doc.chars;
+    if (!chars) return;
+    /** @param {number[] | undefined} ids */
+    const emo = ids => (ids || []).filter((c, i, a) => a.indexOf(c) === i)
+      .map(c => CHAR_EMOJI && CHAR_EMOJI[c] && CHAR_EMOJI[c].emoji).filter(Boolean)
+      .map(e => `<span class="m-ch">${e}</span>`).join('');
+    const mine = emo((chars[String(UID)] || []).slice(0, 3));   // 自分は 3 つまで (スコアの位置を動かさないため幅を決める)
+    const list = /** @type {HTMLElement | null} */ (el.querySelector('.mx-list'));
+    if (mine && list) {
+      list.style.setProperty('--pc-w', (Math.min((chars[String(UID)] || []).length, 3) * 16 + 4) + 'px');
+      list.querySelectorAll('.m-pchars').forEach(x => { x.innerHTML = mine; });
+    }
+    el.querySelectorAll('.m-ochars[data-ouid]').forEach(x => {
+      const h = emo(chars[/** @type {string} */ (/** @type {HTMLElement} */ (x).dataset.ouid)]);
+      if (h) x.innerHTML = h;
+    });
+  }).catch(() => {});
+}
 /** 試合一覧の ⓘ (レート変動・相手のシード・ラウンドを出す) の状態。最初は隠す */
 let MX_INFO = false;
 function charEmojiOf(uid) {
@@ -1347,11 +1383,12 @@ function render() {
       <span class="m-bracket">${bracket}</span>
       <span class="m-content">
         <span class="m-player"><div>${escapeHtml(pName)}</div>${pSeedHtml}</span>
+        <span class="m-pchars"></span>
         <span class="m-score" style="color:${scoreColor};display:inline-block;text-align:center">
           <div>${score}</div>
           ${ufHtml}
         </span>
-        <span class="m-opp"><div>${oppEmoji ? oppEmoji + ' ' : ''}${oppLink}</div>${oSeedHtml}</span>
+        <span class="m-opp"><div><span class="m-ochars"${m.opp_uid ? ` data-ouid="${m.opp_uid}"` : ''}>${oppEmoji}</span>${oppEmoji ? ' ' : ''}${oppLink}</div>${oSeedHtml}</span>
       </span>
       <span class="m-delta" style="color:${dColor}">${dStr}</span>
     </div>`;
@@ -1395,6 +1432,7 @@ function render() {
         const tProxy = { event_id: isCls ? null : parseInt(pid), parent_event_id: isCls ? parseInt(pid) : null, seed };
         matchesEl.innerHTML = renderTournamentMatches(tProxy);
         matchesEl.dataset.rendered = '1';
+        fillMatchChars(matchesEl, parseInt(pid));
       }
     }
   });
@@ -1425,6 +1463,7 @@ function render() {
         const seed = g.dataset.seed !== '' ? parseInt(/** @type {string} */ (g.dataset.seed)) : null;
         matchesEl.innerHTML = _hlMatchesHtml(parseInt(/** @type {string} */ (g.dataset.eid)), seed);
         matchesEl.dataset.rendered = '1';
+        fillMatchChars(matchesEl, parseInt(/** @type {string} */ (g.dataset.eid)));
       }
     }
   });
