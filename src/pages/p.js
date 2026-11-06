@@ -1286,13 +1286,13 @@ function render() {
   /** @param {PMatch[]} g @returns {boolean} */
   function phaseIsDE(g) {
     return g.some(m => String(m.bracket_type || '').toUpperCase() === 'DOUBLE_ELIMINATION' ||
-      /^([BCDE]-)?Losers/.test(m.global_bracket_label || ''));
+      /^([B-J]-)?Losers/.test(m.global_bracket_label || ''));
   }
   /** @param {PMatch} m @param {boolean} de @returns {string} '' | 'w' | 'l' | 'gf' (+ クラスの接頭辞) */
   function matchSide(m, de) {
     if (!de) return '';
     const label = m.global_bracket_label || '';
-    const cm = label.match(/^([BCDE])-/);
+    const cm = label.match(/^([B-J])-/);
     const body = cm ? label.slice(2) : label;
     const pre = cm ? cm[1] : '';
     const rt = (m.round_text || '').toLowerCase();
@@ -1342,7 +1342,7 @@ function render() {
       }
       // 矢印は行ごとの部品 (行の高さの真ん中にそろえる): 一番上の行 = 真ん中から下へ線 + 上向きの矢印の先、間の行と境目の横線 = 上から下まで線、
       // 一番下の行 = 上から真ん中の札まで線 + 札、1 行だけ = 上の矢印の先から札まで
-      const k = side.replace(/^[BCDE]/, '');
+      const k = side.replace(/^[B-J]/, '');
       const seg = items.slice(i, j);
       const lbl = `<span class="m-rl-lbl">${i18n('match.side.' + k)}</span>`;
       out += `<div class="m-seg m-seg-${k}" title="${i18n('match.side.' + k + '_title')}">` + seg.map((x, n) => {
