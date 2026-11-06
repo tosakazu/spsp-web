@@ -567,6 +567,11 @@
   .lr-detail .lr-zen { padding: 8px 0 0; }
   .lr-detail .lr-zen + .lr-stats { padding-top: 4px; }
   .m-seg { position: relative; }
+  .mx-railed .match-phase { margin-left: 26px; }   /* 境目の横線も矢印の右から */
+  /* ⓘ で隠しているときは、スコアと相手の名前を行の真ん中に寄せる */
+  html:not(.mx-info) .mx-list .match-row .m-content { justify-content: center; }
+  html:not(.mx-info) .mx-list .match-row .m-opp { flex: 0 1 auto; }
+  html:not(.mx-info) .mx-railed .match-row { padding-right: 26px; }   /* 左の矢印の幅と釣り合わせて真ん中に */
   .m-seg + .m-seg { margin-top: 3px; }
   .m-seg .m-rail {
     position: absolute; left: 6px; top: 4px; bottom: 3px; width: 16px;

@@ -1236,15 +1236,14 @@ function render() {
     }
     const railed = [...byPhase.values()].some(g => phaseIsDE(g));
     const wrap = (/** @type {string} */ body) => header + `<div class="mx-list${railed ? ' mx-railed' : ''}">${body}</div>`;
-    if (byPhase.size < 2) return wrap(renderPhaseRows(sorted, pName, pSeed, noUf));
+    if (byPhase.size < 2) return wrap(renderRows([{ rows: sorted, sep: '' }], pName, pSeed, noUf));
     /** @param {string} name @param {PMatch[]} g */
     const size = (name, g) => {
       const n = name.match(/TOP\s*(\d+)/i);
       return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
     };
     const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
-    return wrap(groups.map(([name, g], i) =>
-      renderPhaseRows(g, pName, pSeed, noUf) + (i < groups.length - 1 ? phaseSeparator(name) : '')).join(''));
+    return wrap(renderRows(groups.map(([name, g], i) => ({ rows: g, sep: i < groups.length - 1 ? phaseSeparator(name) : '' })), pName, pSeed, noUf));
   }
   // 勝者側・敗者側の印: ダブルエリミネーションのフェーズだけ、続く同じ側の試合を左の縦の矢印 (下から上へ進む = 新しい試合が上) でまとめる。
   // シングルエリミ・総当たり・スイスドロー・レート戦は側が無いので印を出さない。下位クラスはクラスごとに別の矢印
@@ -1266,21 +1265,34 @@ function render() {
     if (/^Winners/i.test(body)) return pre + 'w';
     return '';
   }
-  /** @param {PMatch[]} rows @param {string} pName @param {number | null | undefined} pSeed @param {boolean} noUf @returns {string} */
-  function renderPhaseRows(rows, pName, pSeed, noUf) {
-    const de = phaseIsDE(rows);
+  // フェーズごとの試合 (新しいフェーズが先) を、境目の横線をはさんで並べる。同じ側が境目をまたいで続くときは矢印を切らない (横線も矢印の中に入れる)
+  /** @param {{ rows: PMatch[], sep: string }[]} phases sep = そのフェーズの下に入れる境目の横線 @param {string} pName @param {number | null | undefined} pSeed @param {boolean} noUf @returns {string} */
+  function renderRows(phases, pName, pSeed, noUf) {
+    /** @type {{ side: string, html: string }[]} */
+    const items = [];   // 試合の行 (side あり) と境目の横線 (side = null 扱いで前後の側に合わせる)
+    for (const p of phases) {
+      const de = phaseIsDE(p.rows);
+      for (const m of p.rows) items.push({ side: matchSide(m, de), html: _renderMatchRow(m, pName, pSeed, noUf) });
+      if (p.sep) items.push({ side: '|', html: p.sep });
+    }
     let out = '';
-    for (let i = 0; i < rows.length;) {
-      const side = matchSide(rows[i], de);
+    for (let i = 0; i < items.length;) {
+      const side = items[i].side;
+      if (side === '|' || !side) { out += items[i].html; i++; continue; }
+      // 同じ側の行が続く間 (間の横線は、その次の行も同じ側ならまたぐ)
       let j = i + 1;
-      while (j < rows.length && matchSide(rows[j], de) === side) j++;
-      const html = rows.slice(i, j).map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
-      if (!side) out += html;
-      else {
-        const k = side.replace(/^[BCDE]/, '');
-        out += `<div class="m-seg m-seg-${k}"><span class="m-rail" title="${i18n('match.side.' + k + '_title')}">` +
-          `<span class="m-rail-line"></span><span class="m-rail-lbl">${i18n('match.side.' + k)}</span></span>${html}</div>`;
+      while (j < items.length) {
+        if (items[j].side === side) { j++; continue; }
+        if (items[j].side === '|') {
+          let k = j; while (k < items.length && items[k].side === '|') k++;
+          if (k < items.length && items[k].side === side) { j = k + 1; continue; }
+        }
+        break;
       }
+      const k = side.replace(/^[BCDE]/, '');
+      out += `<div class="m-seg m-seg-${k}"><span class="m-rail" title="${i18n('match.side.' + k + '_title')}">` +
+        `<span class="m-rail-line"></span><span class="m-rail-lbl">${i18n('match.side.' + k)}</span></span>` +
+        items.slice(i, j).map(x => x.html).join('') + `</div>`;
       i = j;
     }
     return out;
