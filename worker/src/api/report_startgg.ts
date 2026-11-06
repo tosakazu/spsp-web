@@ -10,7 +10,7 @@ import { findStartggSet } from './report_outage.ts';
 import type { FoundSkip } from './report_outage.ts';
 
 /** 下位クラスのフェーズ・イベントの名前 (site/js/live_fetch.js の LOWER_CLASS_NAME_PAT と同じ) */
-export const LOWER_CLASS_NAME_PAT = /[BCDEＢＣＤＥ]\s*クラス|(?<![A-Za-z])[BCDE][\s_\-]*class(?![A-Za-z])/i;
+export const LOWER_CLASS_NAME_PAT = /[B-JＢ-Ｊ]\s*クラス|(?<![A-Za-z])[B-J][\s_\-]*class(?![A-Za-z])/i;   // 下位クラスは B〜J
 
 export type ProviderResult = { ok: true } | { ok: false; note: string };
 /** 何先の設定に使うフェーズとラウンド (n = 勝者側 1, 2, …・敗者側 -1, -2, …、label = start.gg の名前。無ければ null) */
