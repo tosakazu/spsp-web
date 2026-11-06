@@ -568,9 +568,10 @@
   .lr-detail .lr-zen + .lr-stats { padding-top: 4px; }
   .m-seg { position: relative; }
   .mx-railed .match-phase { margin-left: 26px; }   /* 境目の横線も矢印の右から */
-  /* ⓘ で隠しているときは、スコアと相手の名前を行の真ん中に寄せる */
-  html:not(.mx-info) .mx-list .match-row .m-content { justify-content: center; }
-  html:not(.mx-info) .mx-list .match-row .m-opp { flex: 0 1 auto; }
+  /* ⓘ で隠しているときは、スコアと相手の名前を行の真ん中あたりに寄せる。スコアは全部の行で同じ位置 (縦にそろう):
+     左端を「真ん中 − 90px」に固定し、その右に相手の名前 (名前の長さで動かない) */
+  html:not(.mx-info) .mx-list .match-row .m-content { padding-left: max(0px, calc(50% - 90px)); }
+  html:not(.mx-info) .mx-list .match-row .m-score { min-width: 34px; text-align: center; }
   html:not(.mx-info) .mx-railed .match-row { padding-right: 26px; }   /* 左の矢印の幅と釣り合わせて真ん中に */
   .m-seg + .m-seg { margin-top: 3px; }
   .m-seg .m-rail {
