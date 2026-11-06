@@ -573,6 +573,8 @@
   html:not(.mx-info) .mx-list .match-row .m-content { padding-left: max(0px, calc(50% - 90px)); }
   html:not(.mx-info) .mx-list .match-row .m-score { min-width: 34px; text-align: center; }
   html:not(.mx-info) .mx-railed .match-row { padding-right: 26px; }   /* 左の矢印の幅と釣り合わせて真ん中に */
+  /* 隠しているときは矢印をスコアのすぐ左に。スコアの左端 = 行の左 26px + max(0, (幅 − 52px) / 2 − 90px) = max(26px, 50% − 116px)、矢印 (幅 16px) はその 4px 手前 */
+  html:not(.mx-info) .m-seg .m-rail { left: max(6px, calc(50% - 136px)); }
   .m-seg + .m-seg { margin-top: 3px; }
   .m-seg .m-rail {
     position: absolute; left: 6px; top: 4px; bottom: 3px; width: 16px;
