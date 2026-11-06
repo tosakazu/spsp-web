@@ -188,7 +188,7 @@ function resultCardHtml(t, tabs, opts) {
   // 最新の大会結果と出場履歴でカードの中身の位置を揃える: アイコン・順位・SPR・パフォーマンスはそれぞれ幅の決まった箱 (無いときも空の箱)
   let hero = `<span class="ph-pl"><span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
     (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '') + `</span>`;
-  // SPR と全国順位の変動は展開した中 (試合一覧の下のチップ) に出す (2026-11-06)
+  // SPR は展開した中 (試合一覧の下のチップ) に出す。全国順位の変動はたたんだときはカードに、展開するとチップの上の段に移る (2026-11-06)
   let sprChip = '';
   if (!t.is_dq && t.spr != null) {
     const cls = t.spr > 0 ? 'pos' : (t.spr < 0 ? 'neg' : 'dim');
@@ -242,6 +242,7 @@ function resultCardHtml(t, tabs, opts) {
         <div class="lr-top">${dateHtml}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
         <div class="perf-hero"><span class="lr-ico">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}</span>${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
+        ${zenHtml}
       </div>
       <div class="lr-detail">
         <div class="tour-matches"></div>
