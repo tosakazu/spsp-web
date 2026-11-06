@@ -2044,6 +2044,13 @@ window.SPSP_I18N.ja = {
   // ── match.bracket.<start.gg phase bracket type 小文字>: ブラケット構造の無いフェーズの表示名 (js/match.js。ビルドの日本語カテゴリ名と同じ) ──
   'match.bracket.round_robin': '総当たり',
   'match.phase_advanced': '{name} 進出！',
+  'match.info_aria': 'レート変動・相手のシード・ラウンドを表示',
+  'match.side.w': 'W',
+  'match.side.l': 'L',
+  'match.side.gf': 'GF',
+  'match.side.w_title': '勝者側 (下から上へ進んだ順)',
+  'match.side.l_title': '敗者側 (下から上へ進んだ順)',
+  'match.side.gf_title': 'グランドファイナル',
   'match.bracket.swiss': 'スイスドロー',
   'match.bracket.matchmaking': 'レート戦',
   'lang.short.ja': 'JA',

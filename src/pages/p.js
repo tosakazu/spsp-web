@@ -188,17 +188,13 @@ function resultCardHtml(t, tabs, opts) {
   // 最新の大会結果と出場履歴でカードの中身の位置を揃える: アイコン・順位・SPR・パフォーマンスはそれぞれ幅の決まった箱 (無いときも空の箱)
   let hero = `<span class="ph-pl"><span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
     (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '') + `</span>`;
-  // SPR は順位の横に大きく (ラベル+値+seed のスタック)
+  // SPR と全国順位の変動は展開した中 (試合一覧の下のチップ) に出す (2026-11-06)
+  let sprChip = '';
   if (!t.is_dq && t.spr != null) {
     const cls = t.spr > 0 ? 'pos' : (t.spr < 0 ? 'neg' : 'dim');
     const txt = t.spr > 0 ? `+${t.spr}` : (t.spr < 0 ? `${t.spr}` : '±0');
-    hero += `<span class="ph-sep"></span>` +
-      `<span class="ph-perf ph-sprbox"><span class="ph-perf-lbl">SPR</span>` +
-      `<span class="ph-spr ${cls}">${txt}</span>` +
-      (t.seed != null ? `<span class="ph-perf-sub">seed ${t.seed}</span>` : '') +
-      `</span>`;
-  } else {
-    hero += `<span class="ph-sep"></span><span class="ph-perf ph-sprbox"></span>`;
+    sprChip = `<div class="chip"><span class="lbl">SPR</span><span class="val ${cls}">${txt}</span>` +
+      `<span class="sub">${t.seed != null ? 'seed ' + t.seed : '&nbsp;'}</span></div>`;
   }
   // パフォーマンスも同じ行 (ラベルを数値の上にスタック)
   let capHtml = '';
@@ -246,11 +242,11 @@ function resultCardHtml(t, tabs, opts) {
         <div class="lr-top">${dateHtml}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
         <div class="perf-hero"><span class="lr-ico">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}</span>${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
-        ${zenHtml}
       </div>
       <div class="lr-detail">
         <div class="tour-matches"></div>
-        <div class="v-stats lr-stats">${tjprChip}${btChip}</div>
+        <div class="v-stats lr-stats">${sprChip}${tjprChip}${btChip}</div>
+        ${zenHtml}
       </div>
     </div>`;
 }
@@ -581,6 +577,8 @@ let _CHAR_EMOJI_BY_UID = null;  // uid -> メインキャラ絵文字 (CHAR_IDX.
 // uid -> メイン使用キャラの絵文字. character_index の main_by_char (char→uids) を逆引きし
 // char_emoji.json の emoji を引く. 1 度だけ構築してメモ化.
 /** @param {number | null | undefined} uid @returns {string} */
+/** 試合一覧の ⓘ (レート変動・相手のシード・ラウンドを出す) の状態。最初は隠す */
+let MX_INFO = false;
 function charEmojiOf(uid) {
   if (_CHAR_EMOJI_BY_UID == null) {
     _CHAR_EMOJI_BY_UID = {};
@@ -1218,9 +1216,12 @@ function render() {
     const pSeed = (typeof t === 'object' && t !== null) ? t.seed : null;
     // ランダムシード大会 (シードが強さ順でない) は UF を出さない (ビルドも集計から外している)
     const noUf = typeof t === 'object' && t !== null && !!t.is_random_seed;
-    // モバイル時は各 match-row で本人名を省略するので、展開冒頭に「name + seed」を一回表示.
+    // 各 match-row では本人名を省略するので、展開冒頭に「キャラ絵文字 + name + seed」を一回表示。
+    // 右端の ⓘ でレート変動・相手のシード・ラウンド (W.Top8 など) をページ全体でまとめて出し入れする (最初は隠す)
+    const myEmoji = (typeof t === 'object' && t !== null) ? charEmojiOf(UID) : '';
     const header = (pName || pSeed != null)
-      ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
+      ? `<div class="match-header">${myEmoji ? `<span class="m-emoji">${myEmoji}</span>` : ''}${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}` +
+        `<button type="button" class="mx-info-btn" aria-pressed="${MX_INFO ? 'true' : 'false'}" aria-label="${i18n('match.info_aria')}" title="${i18n('match.info_aria')}">i</button></div>`
       : '';
     // フェーズが 2 つ以上なら、フェーズの境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」。
     // フェーズの順 = フェーズの大きさが小さいほど後。大きさは名前の「TOP N」、無ければそのフェーズの試合の global_top_x の最大
@@ -1232,16 +1233,66 @@ function render() {
       if (!byPhase.has(k)) byPhase.set(k, []);
       /** @type {PMatch[]} */ (byPhase.get(k)).push(m);
     }
-    if (byPhase.size < 2) return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    const railed = [...byPhase.values()].some(g => phaseIsDE(g));
+    const wrap = (/** @type {string} */ body) => header + `<div class="mx-list${railed ? ' mx-railed' : ''}">${body}</div>`;
+    if (byPhase.size < 2) return wrap(renderPhaseRows(sorted, pName, pSeed, noUf));
     /** @param {string} name @param {PMatch[]} g */
     const size = (name, g) => {
       const n = name.match(/TOP\s*(\d+)/i);
       return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
     };
     const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
-    return header + groups.map(([name, g], i) =>
-      g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('') + (i < groups.length - 1 ? phaseSeparator(name) : '')).join('');
+    return wrap(groups.map(([name, g], i) =>
+      renderPhaseRows(g, pName, pSeed, noUf) + (i < groups.length - 1 ? phaseSeparator(name) : '')).join(''));
   }
+  // 勝者側・敗者側の印: ダブルエリミネーションのフェーズだけ、続く同じ側の試合を左の縦の矢印 (下から上へ進む = 新しい試合が上) でまとめる。
+  // シングルエリミ・総当たり・スイスドロー・レート戦は側が無いので印を出さない。下位クラスはクラスごとに別の矢印
+  /** @param {PMatch[]} g @returns {boolean} */
+  function phaseIsDE(g) {
+    return g.some(m => String(m.bracket_type || '').toUpperCase() === 'DOUBLE_ELIMINATION' ||
+      /^([BCDE]-)?Losers/.test(m.global_bracket_label || ''));
+  }
+  /** @param {PMatch} m @param {boolean} de @returns {string} '' | 'w' | 'l' | 'gf' (+ クラスの接頭辞) */
+  function matchSide(m, de) {
+    if (!de) return '';
+    const label = m.global_bracket_label || '';
+    const cm = label.match(/^([BCDE])-/);
+    const body = cm ? label.slice(2) : label;
+    const pre = cm ? cm[1] : '';
+    const rt = (m.round_text || '').toLowerCase();
+    if (body === 'Grand Final' || (!cm && rt.includes('grand final'))) return pre + 'gf';
+    if (/^Losers/i.test(body)) return pre + 'l';
+    if (/^Winners/i.test(body)) return pre + 'w';
+    return '';
+  }
+  /** @param {PMatch[]} rows @param {string} pName @param {number | null | undefined} pSeed @param {boolean} noUf @returns {string} */
+  function renderPhaseRows(rows, pName, pSeed, noUf) {
+    const de = phaseIsDE(rows);
+    let out = '';
+    for (let i = 0; i < rows.length;) {
+      const side = matchSide(rows[i], de);
+      let j = i + 1;
+      while (j < rows.length && matchSide(rows[j], de) === side) j++;
+      const html = rows.slice(i, j).map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+      if (!side) out += html;
+      else {
+        const k = side.replace(/^[BCDE]/, '');
+        out += `<div class="m-seg m-seg-${k}"><span class="m-rail" title="${i18n('match.side.' + k + '_title')}">` +
+          `<span class="m-rail-lbl">${i18n('match.side.' + k)}</span><span class="m-rail-line"></span></span>${html}</div>`;
+      }
+      i = j;
+    }
+    return out;
+  }
+  // ⓘ (レート変動・相手のシード・ラウンドの表示) の切り替え。ページ全体で 1 つの状態 (どのカードの ⓘ でも全部が切り替わる)
+  document.addEventListener('click', e => {
+    const btn = /** @type {Element} */ (e.target).closest('.mx-info-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    MX_INFO = !MX_INFO;
+    document.documentElement.classList.toggle('mx-info', MX_INFO);
+    document.querySelectorAll('.mx-info-btn').forEach(b => b.setAttribute('aria-pressed', MX_INFO ? 'true' : 'false'));
+  }, true);
   /** フェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) @param {string} name */
   function phaseSeparator(name) {
     return `<div class="match-phase advanced"><span>${i18n('match.phase_advanced', { name: escapeHtml(name) })}</span></div>`;
@@ -1350,7 +1401,7 @@ function render() {
     return html;
   }
   if (highlightsEl) highlightsEl.addEventListener('click', (e) => {
-    if (/** @type {Element} */ (e.target).closest('a')) return;
+    if (/** @type {Element} */ (e.target).closest('a, .mx-info-btn')) return;
     const g = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.hl-group'));
     if (!g) return;
     const wasExpanded = g.classList.contains('expanded');
