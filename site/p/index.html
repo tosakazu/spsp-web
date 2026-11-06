@@ -552,8 +552,7 @@
 
   /* 試合一覧の ⓘ: レート変動・相手のシード・ラウンド (W.Top8 など) は最初は隠し、ⓘ でページ全体まとめて出す (html.mx-info) */
   html:not(.mx-info) .mx-list .match-row .m-delta,
-  html:not(.mx-info) .mx-list .match-row .m-bracket,
-  html:not(.mx-info) .mx-list .match-row .m-opp .m-seed { display: none; }
+  html:not(.mx-info) .mx-list .match-row .m-opp .m-seed { display: none; }   /* ラウンド (W.Top8 など) は常に出す */
   .match-header .m-emoji { margin-right: -4px; }
   .match-header .mx-info-btn {
     margin-left: auto; align-self: center; width: 18px; height: 18px; padding: 0; border-radius: 50%;
@@ -562,26 +561,27 @@
   }
   .match-header .mx-info-btn[aria-pressed="true"] { background: #374151; border-color: #374151; color: #ffffff; }
   /* 勝者側・敗者側 (ダブルエリミのフェーズだけ): 左に縦の矢印。下から上へ進む (新しい試合が上) */
-  .mx-railed .match-row { padding-left: 26px; }
   .tour-group.expanded .latestres-card .lr-zen { display: none; }   /* 全国順位の変動: 展開したらチップの上の段 (lr-detail 側) に移る */
   .lr-detail .lr-zen { padding: 8px 0 0; }
   .lr-detail .lr-zen + .lr-stats { padding-top: 4px; }
   .m-seg .match-row, .m-seg .match-phase { position: relative; }
   /* 境目の横線も矢印の右から。margin でなく padding にして、行と同じ幅 (矢印の位置の計算が同じになる) */
-  .mx-railed .match-phase { margin: 0; padding: 6px 8px 2px 26px; }   /* 上下も padding (margin だと矢印の線が途切れる) */
+  .mx-railed .match-phase { margin: 0; padding: 6px 8px 2px; }   /* 上下も padding (margin だと矢印の線が途切れる) */
   /* ⓘ で隠しているときは、スコアと相手の名前を行の真ん中あたりに寄せる。スコアは全部の行で同じ位置 (縦にそろう):
      左端を「真ん中 − 90px」に固定し、その右に相手の名前 (名前の長さで動かない) */
-  html:not(.mx-info) .mx-list .match-row .m-content { padding-left: max(0px, calc(50% - 90px - var(--pc-w, 0px))); }   /* 自分のキャラ (--pc-w) の分だけ左から始めてスコアの位置は変えない */
+  html:not(.mx-info) .mx-list .match-row .m-content { padding-left: max(0px, calc(50% - 110px - var(--pc-w, 0px))); }   /* 自分のキャラ (--pc-w) の分だけ左から始めてスコアの位置は変えない */
+  /* 矢印はスコア (自分のキャラがあればその左) のすぐ左。.m-content の左に 20px の場所 (矢印 16px + 4px) をとる。
+     行: 左 8px + ラウンド 56px + 間 6px = 70px から .m-content。矢印の left = 70px + 寄せの分 (% は .m-content では行の中身の幅 = 行 − 16px、矢印では行の幅) */
+  .mx-railed .match-row .m-content { padding-left: 20px; }
+  html:not(.mx-info) .mx-railed .match-row .m-content { padding-left: calc(20px + max(0px, 50% - 110px - var(--pc-w, 0px))); }
   html:not(.mx-info) .mx-list .match-row .m-score { min-width: 34px; text-align: center; }
-  html:not(.mx-info) .mx-railed .match-row { padding-right: 26px; }   /* 左の矢印の幅と釣り合わせて真ん中に */
-  /* 隠しているときは矢印をスコアのすぐ左に。スコアの左端 = 行の左 26px + max(0, (幅 − 52px) / 2 − 90px) = max(26px, 50% − 116px)、矢印 (幅 16px) はその 4px 手前 */
-  html:not(.mx-info) .m-seg .m-rl { left: max(6px, calc(50% - 136px - var(--pc-w, 0px))); }
+  html:not(.mx-info) .m-seg .m-rl { left: calc(70px + max(0px, 50% - 118px - var(--pc-w, 0px))); }
   /* 使用キャラ (大会 JSON の chars): 自分はスコアの左、相手は名前の前に使用数の多い順 */
   .match-row .m-pchars { flex: 0 0 auto; display: inline-flex; justify-content: flex-end; min-width: var(--pc-w, 0px); padding-right: 4px; margin-right: -6px; white-space: nowrap; }   /* 右の負の余白 = .m-content の gap を打ち消す (スコアの位置が --pc-w だけで決まるように) */
   .match-row .m-pchars:empty { display: none; }
   .match-row .m-ochars { white-space: nowrap; }
   .match-row .m-ch + .m-ch { margin-left: 1px; }
-  .m-seg .m-rl { position: absolute; left: 6px; top: 0; bottom: 0; width: 16px; pointer-events: none; }
+  .m-seg .m-rl { position: absolute; left: 70px; top: 0; bottom: 0; width: 16px; pointer-events: none; }
   .m-rl .m-rl-line { position: absolute; left: 7px; width: 2px; top: 0; bottom: 0; background: var(--side-line); }
   .m-rl-top .m-rl-line { top: calc(50% - 4px); }                       /* 一番上の行: 真ん中の少し上から下へ */
   .m-rl-bot .m-rl-line { bottom: calc(50% + 7px); }                    /* 一番下の行: 上から札の手前まで */

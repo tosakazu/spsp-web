@@ -1272,14 +1272,14 @@ function render() {
     }
     const railed = [...byPhase.values()].some(g => phaseIsDE(g));
     const wrap = (/** @type {string} */ body) => header + `<div class="mx-list${railed ? ' mx-railed' : ''}">${body}</div>`;
-    if (byPhase.size < 2) return wrap(renderRows([{ rows: sorted, sep: '' }], pName, pSeed, noUf));
+    if (byPhase.size < 2) return wrap(renderRows([{ rows: phaseOrder(sorted), sep: '' }], pName, pSeed, noUf));
     /** @param {string} name @param {PMatch[]} g */
     const size = (name, g) => {
       const n = name.match(/TOP\s*(\d+)/i);
       return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
     };
     const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
-    return wrap(renderRows(groups.map(([name, g], i) => ({ rows: g, sep: i < groups.length - 1 ? phaseSeparator(name) : '' })), pName, pSeed, noUf));
+    return wrap(renderRows(groups.map(([name, g], i) => ({ rows: phaseOrder(g), sep: i < groups.length - 1 ? phaseSeparator(name) : '' })), pName, pSeed, noUf));
   }
   // 勝者側・敗者側の印: ダブルエリミネーションのフェーズだけ、続く同じ側の試合を左の縦の矢印 (下から上へ進む = 新しい試合が上) でまとめる。
   // シングルエリミ・総当たり・スイスドロー・レート戦は側が無いので印を出さない。下位クラスはクラスごとに別の矢印
@@ -1300,6 +1300,21 @@ function render() {
     if (/^Losers/i.test(body)) return pre + 'l';
     if (/^Winners/i.test(body)) return pre + 'w';
     return '';
+  }
+  // フェーズの中の並び (新しい試合が上): グランドファイナル (リセットが上) → 敗者側 (後のラウンドが上) → 勝者側 (後のラウンドが上) → その他 (総当たりなど、元の順)。
+  // start.gg のラウンド番号 (round: 勝者側は 1, 2, …、敗者側は -1, -2, … で絶対値が大きいほど後) で決める。(global_top_x は 2 つ目以降のフェーズで計算を誤っていたことがある、2026-11-06)
+  /** @param {PMatch[]} g @returns {PMatch[]} */
+  function phaseOrder(g) {
+    /** @param {PMatch} m */
+    const key = m => {
+      const rt = (m.round_text || '').toLowerCase();
+      const r = typeof m.round === 'number' ? m.round : null;
+      if (rt.includes('grand final')) return [0, rt.includes('reset') ? 0 : 1];
+      if (r == null) return [3, 0];
+      return r < 0 ? [1, r] : [2, -r];
+    };
+    return g.map((m, i) => ({ m, i, k: key(m) }))
+      .sort((a, b) => (a.k[0] - b.k[0]) || (a.k[1] - b.k[1]) || (a.i - b.i)).map(x => x.m);
   }
   // フェーズごとの試合 (新しいフェーズが先) を、境目の横線をはさんで並べる。同じ側が境目をまたいで続くときは矢印を切らない (横線も矢印の中に入れる)
   /** @param {{ rows: PMatch[], sep: string }[]} phases sep = そのフェーズの下に入れる境目の横線 @param {string} pName @param {number | null | undefined} pSeed @param {boolean} noUf @returns {string} */
