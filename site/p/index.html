@@ -566,38 +566,39 @@
   .tour-group.expanded .latestres-card .lr-zen { display: none; }   /* 全国順位の変動: 展開したらチップの上の段 (lr-detail 側) に移る */
   .lr-detail .lr-zen { padding: 8px 0 0; }
   .lr-detail .lr-zen + .lr-stats { padding-top: 4px; }
-  .m-seg { position: relative; }
-  .mx-railed .match-phase { margin-left: 26px; }   /* 境目の横線も矢印の右から */
+  .m-seg .match-row, .m-seg .match-phase { position: relative; }
+  /* 境目の横線も矢印の右から。margin でなく padding にして、行と同じ幅 (矢印の位置の計算が同じになる) */
+  .mx-railed .match-phase { margin: 0; padding: 6px 8px 2px 26px; }   /* 上下も padding (margin だと矢印の線が途切れる) */
   /* ⓘ で隠しているときは、スコアと相手の名前を行の真ん中あたりに寄せる。スコアは全部の行で同じ位置 (縦にそろう):
      左端を「真ん中 − 90px」に固定し、その右に相手の名前 (名前の長さで動かない) */
   html:not(.mx-info) .mx-list .match-row .m-content { padding-left: max(0px, calc(50% - 90px - var(--pc-w, 0px))); }   /* 自分のキャラ (--pc-w) の分だけ左から始めてスコアの位置は変えない */
   html:not(.mx-info) .mx-list .match-row .m-score { min-width: 34px; text-align: center; }
   html:not(.mx-info) .mx-railed .match-row { padding-right: 26px; }   /* 左の矢印の幅と釣り合わせて真ん中に */
   /* 隠しているときは矢印をスコアのすぐ左に。スコアの左端 = 行の左 26px + max(0, (幅 − 52px) / 2 − 90px) = max(26px, 50% − 116px)、矢印 (幅 16px) はその 4px 手前 */
-  html:not(.mx-info) .m-seg .m-rail { left: max(6px, calc(50% - 136px - var(--pc-w, 0px))); }
+  html:not(.mx-info) .m-seg .m-rl { left: max(6px, calc(50% - 136px - var(--pc-w, 0px))); }
   /* 使用キャラ (大会 JSON の chars): 自分はスコアの左、相手は名前の前に使用数の多い順 */
   .match-row .m-pchars { flex: 0 0 auto; display: inline-flex; justify-content: flex-end; min-width: var(--pc-w, 0px); padding-right: 4px; margin-right: -6px; white-space: nowrap; }   /* 右の負の余白 = .m-content の gap を打ち消す (スコアの位置が --pc-w だけで決まるように) */
   .match-row .m-pchars:empty { display: none; }
   .match-row .m-ochars { white-space: nowrap; }
   .match-row .m-ch + .m-ch { margin-left: 1px; }
-  .m-seg + .m-seg { margin-top: 3px; }
-  .m-seg .m-rail {
-    position: absolute; left: 6px; top: 4px; bottom: 3px; width: 16px;
-    display: flex; flex-direction: column; align-items: center;
+  .m-seg .m-rl { position: absolute; left: 6px; top: 0; bottom: 0; width: 16px; pointer-events: none; }
+  .m-rl .m-rl-line { position: absolute; left: 7px; width: 2px; top: 0; bottom: 0; background: var(--side-line); }
+  .m-rl-top .m-rl-line { top: calc(50% - 4px); }                       /* 一番上の行: 真ん中の少し上から下へ */
+  .m-rl-bot .m-rl-line { bottom: calc(50% + 7px); }                    /* 一番下の行: 上から札の手前まで */
+  .m-rl-one .m-rl-line { top: 6px; bottom: calc(50% + 7px); }          /* 1 行だけ: 矢印の先から札の手前まで */
+  .m-rl-top .m-rl-line::before, .m-rl-one .m-rl-line::before {         /* 矢印の先 (上向き) */
+    content: ""; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid var(--side-line);
+  }
+  .m-rl .m-rl-lbl {                                                    /* 札: 一番下の行の高さの真ん中 */
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 9px; font-weight: 700; line-height: 12px; padding: 0 3px; border-radius: 3px; white-space: nowrap;
+    background: var(--side-bg); color: var(--side-fg);
   }
   /* 色は淡く: 札は薄い地に濃い文字、線は中間の濃さ (敗者側は相手の名前の赤と分けて橙) */
   .m-seg-w { --side-bg: #e0e7ff; --side-fg: #4338ca; --side-line: #a5b4fc; }
   .m-seg-l { --side-bg: #ffedd5; --side-fg: #c2410c; --side-line: #fdba74; }
   .m-seg-gf { --side-bg: #fef9c3; --side-fg: #854d0e; --side-line: #facc15; }
-  .m-rail .m-rail-lbl {
-    font-size: 9px; font-weight: 700; line-height: 12px; padding: 0 3px; border-radius: 3px; margin-top: 2px;
-    background: var(--side-bg); color: var(--side-fg); letter-spacing: 0;
-  }
-  .m-rail .m-rail-line { position: relative; flex: 1 1 auto; width: 2px; margin-top: 5px; background: var(--side-line); border-radius: 1px; }
-  .m-rail .m-rail-line::before {   /* 矢印の先 (上向き)。札は線の下端 */
-    content: ""; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
-    border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid var(--side-line);
-  }
 
   /* ─── モバイル (max-width: 720px) ─── */
   @media (max-width: 720px) {

@@ -1325,10 +1325,17 @@ function render() {
         }
         break;
       }
+      // 矢印は行ごとの部品 (行の高さの真ん中にそろえる): 一番上の行 = 真ん中から下へ線 + 上向きの矢印の先、間の行と境目の横線 = 上から下まで線、
+      // 一番下の行 = 上から真ん中の札まで線 + 札、1 行だけ = 上の矢印の先から札まで
       const k = side.replace(/^[BCDE]/, '');
-      out += `<div class="m-seg m-seg-${k}"><span class="m-rail" title="${i18n('match.side.' + k + '_title')}">` +
-        `<span class="m-rail-line"></span><span class="m-rail-lbl">${i18n('match.side.' + k)}</span></span>` +
-        items.slice(i, j).map(x => x.html).join('') + `</div>`;
+      const seg = items.slice(i, j);
+      const lbl = `<span class="m-rl-lbl">${i18n('match.side.' + k)}</span>`;
+      out += `<div class="m-seg m-seg-${k}" title="${i18n('match.side.' + k + '_title')}">` + seg.map((x, n) => {
+        const pos = seg.length === 1 ? 'one' : n === 0 ? 'top' : n === seg.length - 1 ? 'bot' : 'mid';
+        const rail = `<span class="m-rl m-rl-${pos}"><span class="m-rl-line"></span>${pos === 'bot' || pos === 'one' ? lbl : ''}</span>`;
+        const at = x.html.indexOf('>') + 1;   // 行・横線の開きタグの直後に入れる
+        return x.html.slice(0, at) + rail + x.html.slice(at);
+      }).join('') + `</div>`;
       i = j;
     }
     return out;
