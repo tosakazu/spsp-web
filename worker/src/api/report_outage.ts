@@ -171,6 +171,8 @@ export interface Snapshot {
   /** 速報の Worker の構造 (live/jp/struct/) を取り込んだブロック → その構造を取った時刻。lc = 一覧を見た時刻 (ms) */
   ls?: Record<string, number>;
   lc?: number;
+  /** 全体を最後に回った時刻 (ms、2026-11-06) */
+  rm?: number;
   /** start.gg の部門の state (ACTIVE / COMPLETED …、2026-11-05) */
   es?: string;
   /** 構造の照合 (bracket_engine で計算した対戦者と start.gg の対戦者)。bad = 食い違ったブロック → 理由 */
@@ -191,6 +193,8 @@ const SNAP_PER_PAGE = 40;   // 1 試合あたり 20 弱 (枠・出場者・順�
 const SNAP_FIRST_CALLS = 5;
 /** 写す間隔 (1 周目のあいだは短く) */
 export const SNAP_MIN_MS = 45 * 1000;
+/** 本人のトークンが無い選手 (画面が写しで描く) がいるときは、変わった試合だけ 15 秒ごとに読む (全体を回るのは SNAP_MIN_MS ごとのまま、2026-11-06) */
+export const SNAP_FAST_MS = 15 * 1000;
 export const SNAP_FIRST_MIN_MS = 5 * 1000;
 /** D1 の 1 行の上限 (2 MB) より手前 */
 const SNAP_MAX_BYTES = 1_800_000;
@@ -380,13 +384,18 @@ async function snapPage(fetchFn: FetchFn, token: string, eventId: string, snap: 
  * 全体を 1 周するたびに、その周で見なかった試合 (ブラケットを作り直して消えた等) を落とす。
  * 戻り値 = start.gg に繋がらなかったときの符号 (null = 進めた)
  */
-export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: string, snap: Snapshot, allowed: () => Promise<boolean>): Promise<string | null> {
+export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: string, snap: Snapshot, allowed: () => Promise<boolean>,
+  opts: { now?: number; fast?: boolean; res?: { changed: boolean } } = {}): Promise<string | null> {
+  // fast = 変わった試合だけ読む回 (全体を回るのは前に回ってから SNAP_MIN_MS 経ったときだけ)。res.changed = 中身が変わった (false なら書き直さなくてよい)
+  const now = opts.now ?? Date.now();
+  const res = opts.res || { changed: false };
   let calls = 0;
   const rotate = async (): Promise<string | null> => {
     if (!(await allowed())) return 'outage_skip';
     calls++;
     const r = await snapPage(fetchFn, token, eventId, snap, snap.rot, null);
     if (!r.ok) return r.note;
+    res.changed = true; snap.rm = now;
     let hw = 0;
     for (const n of r.nodes) hw = Math.max(hw, absorbSet(snap, n, snap.pass));
     if (!snap.full && hw) snap.cur = Math.max(snap.cur, hw);
@@ -398,6 +407,7 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
     return null;
   };
   if (!snap.full) {
+    res.changed = true;
     while (!snap.full && calls < SNAP_FIRST_CALLS) { const e = await rotate(); if (e) return e; }
     if (snap.full) await advanceSeeds(fetchFn, token, snap, allowed);
     return null;
@@ -408,11 +418,19 @@ export async function advanceSnapshot(fetchFn: FetchFn, token: string, eventId: 
       const r = await snapPage(fetchFn, token, eventId, snap, page, Math.max(0, snap.cur - 120));
       if (!r.ok) { if (r.gql) { snap.inc = false; break; } return r.note; }
       let hw = 0;
-      for (const n of r.nodes) hw = Math.max(hw, absorbSet(snap, n, snap.pass));
-      if (hw) snap.cur = Math.max(snap.cur, hw);
+      for (const n of r.nodes) {
+        // 前回から 120 秒ぶん重ねて読むので、同じ中身の試合は「変わった」に数えない (見た周 z は比べない。周が変わるのは全体を回ったときで、そのときは書く)
+        const id = n && typeof n === 'object' ? String((n as { id?: unknown }).id) : '';
+        const sig = () => (snap.sets[id] ? JSON.stringify({ ...snap.sets[id], z: 0 }) : '');
+        const before = sig();
+        hw = Math.max(hw, absorbSet(snap, n, snap.pass));
+        if (!res.changed && sig() !== before) res.changed = true;
+      }
+      if (hw && hw > snap.cur) { snap.cur = hw; res.changed = true; }
       if (page >= r.total) break;
     }
   }
+  if (opts.fast && snap.rm && now - snap.rm < SNAP_MIN_MS) return null;
   const e = await rotate();
   if (!e) await advanceSeeds(fetchFn, token, snap, allowed);
   return e;

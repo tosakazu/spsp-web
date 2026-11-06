@@ -539,3 +539,42 @@ test('start.gg に未反映: 結果・指定した試合・DQ・対戦開始を�
   assert.deepStrictEqual(a.unsynced.map((x) => x.kind), ['dq'], '残りは敗者側の試合を待っている DQ だけ');
   assert.strictEqual((await e.view(13)).starts.find((x) => x.set_id === '101').sgg, 1);
 });
+
+test('写しで描く選手 (fallback) が来ているあいだは変わった試合だけ 15 秒ごとに読む。変わらなければ書き直さず、写しはメモリから (2026-11-06)', async () => {
+  const e = await setup();
+  const snapCalls = () => e.fake.calls.filter((c) => c === 'SpspReportSnap').length;
+  let puts = 0, reads = 0;
+  const put0 = e.store.putReportSnapshot.bind(e.store), get0 = e.store.getReportSnapshot.bind(e.store);
+  e.store.putReportSnapshot = async (...a) => { puts++; return put0(...a); };
+  e.store.getReportSnapshot = async (...a) => { reads++; return get0(...a); };
+  let v = await e.view(11);
+  assert.strictEqual(v.ok, true);
+  assert.deepStrictEqual([snapCalls(), puts], [1, 1], '1 周目 (全体 1 ページ) を写す');
+  // トークンのある選手だけなら 45 秒まで読まない
+  e.tick(16000);
+  await e.view(12);
+  assert.strictEqual(snapCalls(), 1);
+  // 写しで描く選手が来た: 変わった試合だけ読む (全体を回るのは 45 秒ごと)。何も変わっていなければ書き直さない
+  const r0 = reads;
+  v = await e.view(11, { fallback: true });
+  assert.deepStrictEqual([snapCalls(), puts], [2, 1], '変わった試合を 1 回読むだけ・書き直さない');
+  assert.ok(v.snap && v.snap.sets.some((s) => String(s.id) === '100'), '自分の試合は写しから');
+  assert.ok(Date.now() - v.snap.synced_ms < 60000 && v.snap.synced_ms >= e.store.reportSnaps[0].checked_ms - 1, '確かめた時刻を出す');
+  assert.ok(e.store.reportSnaps[0].checked_ms > e.store.reportSnaps[0].synced_ms);
+  assert.strictEqual(reads, r0, '中身は Worker のメモリから (D1 から読み直さない)');
+  // 15 秒以内にもう一度来ても読まない
+  e.tick(5000);
+  await e.view(12, { fallback: true });
+  assert.strictEqual(snapCalls(), 2);
+  // 試合が始まった (台が付いた) → 次の回で書き直す
+  const s101 = e.fake.sets.find((s) => s.id === 101);
+  s101.state = 2; s101.updatedAt = 50;
+  e.tick(11000);
+  v = await e.view(13, { fallback: true });
+  assert.deepStrictEqual([snapCalls(), puts], [3, 2], '変わったので書き直す');
+  assert.strictEqual(v.snap.sets.find((s) => String(s.id) === '101').state, 2);
+  // 前に全体を回ってから 45 秒経った: 変わった試合 + 全体を 1 ページ
+  e.tick(30000);
+  await e.view(11, { fallback: true });
+  assert.strictEqual(snapCalls(), 5, '変わった試合と全体の 2 回');
+});

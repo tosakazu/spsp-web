@@ -322,9 +322,9 @@ export class MemStore {
   async getReportSnapshotMeta(code) {
     this._rep(); const r = this.reportSnaps.find((x) => x.code === code);
     if (!r) return null;
-    if (String(r.data).startsWith('z1:')) return { synced_ms: r.synced_ms, full: !!r.m_full, sets: r.m_sets || 0 };
+    if (String(r.data).startsWith('z1:')) return { synced_ms: r.synced_ms, checked_ms: r.checked_ms || 0, full: !!r.m_full, sets: r.m_sets || 0 };
     let d = {}; try { d = JSON.parse(r.data); } catch (_) { d = {}; }
-    return { synced_ms: r.synced_ms, full: d.full === true, sets: d.sets ? Object.keys(d.sets).length : 0 };
+    return { synced_ms: r.synced_ms, checked_ms: r.checked_ms || 0, full: d.full === true, sets: d.sets ? Object.keys(d.sets).length : 0 };
   }
   async putReportSnapshot(code, data, syncedMs, meta) {
     this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0, m_full: meta && meta.full ? 1 : 0, m_sets: meta ? meta.sets : 0 }]);
@@ -335,6 +335,7 @@ export class MemStore {
     if (!(r.lock_ms < nowMs - holdMs)) return false; r.lock_ms = nowMs; return true;
   }
   async releaseReportSnapshot(code) { this._rep(); for (const x of this.reportSnaps) if (x.code === code) x.lock_ms = 0; }
+  async touchReportSnapshot(code, checkedMs) { this._rep(); for (const x of this.reportSnaps) if (x.code === code) { x.checked_ms = checkedMs; x.lock_ms = 0; } }
   async insertReportManual(row) { this._rep(); const id = this.reportManual.length + 1; this.reportManual.push({ ...row, id }); return id; }
   async getReportManual(code, id) { this._rep(); const r = this.reportManual.find((x) => x.code === code && x.id === id); return r ? { ...r } : null; }
   async listReportManual(code) { this._rep(); return this.reportManual.filter((x) => x.code === code).sort((a, b) => b.id - a.id).map((x) => ({ ...x })); }
