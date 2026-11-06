@@ -591,7 +591,7 @@ function tourDoc(eid) {
   return p;
 }
 /** 試合一覧の使用キャラ: 大会 JSON の chars (選手ごとにその大会で使ったキャラ、使用数の多い順) を
- *  相手の名前の前 (左から使用数順) と自分のスコアの左に入れる。chars が無い大会・選手はそのまま (相手はメインキャラの絵文字)
+ *  相手の名前の前 (左から使用数順) と自分のスコアの左に入れる。chars が無い大会・選手は何も出さない
  *  @param {HTMLElement} el .tour-matches @param {number} eid */
 function fillMatchChars(el, eid) {
   if (!eid || !CHAR_EMOJI) return;
@@ -610,7 +610,7 @@ function fillMatchChars(el, eid) {
     }
     el.querySelectorAll('.m-ochars[data-ouid]').forEach(x => {
       const h = emo(chars[/** @type {string} */ (/** @type {HTMLElement} */ (x).dataset.ouid)]);
-      if (h) x.innerHTML = h;
+      if (h) x.innerHTML = h + ' ';
     });
   }).catch(() => {});
 }
@@ -1389,7 +1389,7 @@ function render() {
     const bracket = compactBracketLabel(m.global_bracket_label, m.round_text, m.bracket_type) || '';
     const pSeedHtml = pSeed != null ? `<div class="m-seed">#${pSeed}</div>` : '';
     const oSeedHtml = m.opp_seed != null ? `<div class="m-seed">#${m.opp_seed}</div>` : '';
-    const oppEmoji = charEmojiOf(m.opp_uid);  // 対戦相手のメイン使用キャラ絵文字 (名前の前に付与)
+    // 相手のキャラは大会 JSON の chars (キャラの報告) があるときだけ fillMatchChars が入れる。報告が無ければ出さない (メインキャラでは埋めない)
     // 直対の行はチームタグ (「FENNEL | 」など) と区切り (「れの/Reno」の「/Reno」など) の後ろを落とす
     const oppName = escapeHtml(SPSPFormat.shortName(m.opp_display || ''));
     const oppLink = m.opp_uid ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, oppName) : oppName;
@@ -1410,7 +1410,7 @@ function render() {
           <div>${score}</div>
           ${ufHtml}
         </span>
-        <span class="m-opp"><div><span class="m-ochars"${m.opp_uid ? ` data-ouid="${m.opp_uid}"` : ''}>${oppEmoji}</span>${oppEmoji ? ' ' : ''}${oppLink}</div>${oSeedHtml}</span>
+        <span class="m-opp"><div><span class="m-ochars"${m.opp_uid ? ` data-ouid="${m.opp_uid}"` : ''}></span>${oppLink}</div>${oSeedHtml}</span>
       </span>
       <span class="m-delta" style="color:${dColor}">${dStr}</span>
     </div>`;
