@@ -22,7 +22,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     var rt = (roundText || '').toLowerCase();
     var prefix = '';
     var body = label || '';
-    var m = body.match(/^([BCDE])-/);
+    var m = body.match(/^([B-J])-/);   // 下位クラスは B〜J (2026-11-06)
     if (m) { prefix = m[1] + '-'; body = body.slice(2); }
     if (rt.includes('grand final') && !prefix) return rt.includes('reset') ? 'GF2' : 'GF';
     if (body === 'Grand Final') return prefix + 'GF';
@@ -41,9 +41,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   function matchSortKey(m) {
     var label = m.global_bracket_label || '';
     var rt = (m.round_text || '').toLowerCase();
-    // class prefix ("B-" 等) を tier として分離. 0=main, 1=B, 2=C, 3=D, 4=E.
+    // class prefix ("B-" 等) を tier として分離. 0=main, 1=B, 2=C, … 8=J.
     var body = label, tier = 0;
-    var cm = body.match(/^([BCDE])-/);
+    var cm = body.match(/^([B-J])-/);
     if (cm) { tier = cm[1].charCodeAt(0) - 'A'.charCodeAt(0); body = body.slice(2); }
     var side, gfOrder = 0;
     if (rt.includes('grand final') && tier === 0) {

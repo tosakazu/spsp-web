@@ -56,7 +56,7 @@ export function parseLegacyLabel(label) {
     var name = m[1], cm;
     /** @type {string | null} */
     var cls = null;
-    if ((cm = /^(.*) ([BCDE])クラス$/.exec(name))) { name = cm[1]; cls = cm[2]; }
+    if ((cm = /^(.*) ([B-J])クラス$/.exec(name))) { name = cm[1]; cls = cm[2]; }   // 下位クラスは B〜J
     else if ((cm = /^(.*) カジュアル$/.exec(name))) { name = cm[1]; cls = 'casual'; }
     if (m[3]) return { kind: 'tour_series', params: { series: name, bucket: BUCKET_CODE[m[2]], cls: cls, count: Number(m[3]) } };
     return { kind: 'tour', params: { name: name, bucket: BUCKET_CODE[m[2]], cls: cls } };

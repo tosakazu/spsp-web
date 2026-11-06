@@ -22,7 +22,7 @@ const OTHER_RD = 90;
  * @param {any} s 速報のセット (label はビルドと同じ「ブラケットの位置」) @returns {number[]} */
 export function bracketOrderKey(s) {
   let body = String(s.label || '');
-  if (body.length >= 2 && 'BCDE'.includes(body[0]) && body[1] === '-') body = body.slice(2);
+  if (body.length >= 2 && body[0] >= 'B' && body[0] <= 'J' && body[1] === '-') body = body.slice(2);   // 下位クラスは B〜J
   const rt = String(s.round_text || '').toLowerCase();
   const side = rt.includes('grand final') || body === 'Grand Final' ? 3 : body.startsWith('Winners') ? 1 : body.startsWith('Losers') ? 2 : 0;
   const m = /TOP\s*(\d+)/i.exec(body);
