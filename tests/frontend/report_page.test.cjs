@@ -41,8 +41,12 @@ async function open(query, opts) {
   w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   w.scrollTo = () => {};
   const fetched = [];
-  w.fetch = async (u) => {
+  w.fetch = async (u, init) => {
     fetched.push(String(u));
+    if (opts && opts.api && init && init.body) {   // Worker の API (POST、action ごとに返す)
+      const r = opts.api(JSON.parse(init.body));
+      if (r) return { ok: true, status: 200, json: async () => r, text: async () => JSON.stringify(r) };
+    }
     const body = opts && opts.json ? opts.json(String(u)) : null;   // この URL はこの中身を返す
     if (body) return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
     const ok = !!okRe && okRe.test(String(u));
@@ -776,4 +780,38 @@ test('運営の画面の「start.gg に未反映」: ふだんの見本は「あ
   await sleep(300);
   assert.deepStrictEqual(p.errs, []);
   p.close();
+});
+
+test('ログイン済みで start.gg のトークンが無い (2026-10-28 より前のログイン): 再ログインを求めず、Worker の写しで自分の試合を出す。障害の帯も出さない', { skip }, async () => {
+  const calls = [];
+  const snapSet = { id: '7001', state: 1, fullRoundText: 'Winners Round 1', round: 1,
+    phaseGroup: { id: '55', displayIdentifier: '1', phase: { id: '9', name: 'Pools', groupCount: 2 } },
+    slots: [{ entrant: { id: '101', name: 'Me', initialSeedNum: 3, participants: [{ user: { id: '42' }, player: { gamerTag: 'Me' } }] } },
+      { entrant: { id: '102', name: 'Rival', initialSeedNum: 14, participants: [{ user: { id: '77' }, player: { gamerTag: 'Rival' } }] } }] };
+  const r = await open('?c=abc', {
+    before: (w) => {
+      w.localStorage.setItem('spsp_session_v1', JSON.stringify({ token: 'tok', user: { id: 42, slug: 'me', gamerTag: 'Me' }, exp: Date.now() + 3600e3 }));
+      w.localStorage.removeItem('spsp_startgg_identity');
+    },
+    api: (bd) => {
+      calls.push(bd);
+      if (bd.action === 'report_info') return { ok: true, report: { code: 'abc', kind: 'startgg', name: 'テスト大会', active: true } };
+      if (bd.action === 'me') return { ok: true };
+      if (bd.action === 'report_view') {
+        const base = { ok: true, report: { code: 'abc' }, me: { id: '42' }, admin: false, sets: [], outage: null, starts: [], noshows: [], manual: [], picks: [], playing: [] };
+        return bd.fallback ? { ...base, snap: { sets: [snapSet], pre: {}, entrant: true, synced_ms: Date.now() - 20000 } } : base;
+      }
+      return { ok: false, error: { code: 'unknown_action' } };
+    },
+  });
+  try {
+    await until(() => r.d.querySelector('.rp-current'));
+    assert.ok(calls.some((c) => c.action === 'report_view' && c.fallback === true), '写しを頼む');
+    const text = r.d.body.textContent;
+    assert.ok(!/もう一度ログイン/.test(text), '再ログインを求めない');
+    assert.ok(!r.d.querySelector('.rp-outage'), '障害の帯は出さない (start.gg は止まっていない)');
+    assert.ok(/Rival/.test(r.d.querySelector('.rp-current').textContent), '写しの自分の試合 (相手) を出す');
+    assert.ok(!/start\.gg に接続できません/.test(r.d.getElementById('rp-status').textContent));
+    assert.deepStrictEqual(r.errs, []);
+  } finally { r.close(); }
 });

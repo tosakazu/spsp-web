@@ -2,7 +2,7 @@
 //   ?c=<受付>          選手の画面: 自分の試合 (台・相手のカード)・結果の報告・試合待ちの次の相手の候補
 //   ?c=<受付>&admin=1  運営の画面: 試合ごとの状態・両者の報告・直す / 取り消す・設定・受付の停止
 //   (c なし)            運営が受付を始める画面 (start.gg のイベント)。下位クラス (Challonge) は下位クラス作成のページから
-// start.gg の試合は、ブラウザが本人のログインのトークン (user.identity) で 15 秒ごとに読む。報告は Worker (action report_submit) が
+// start.gg の試合は、ブラウザが本人のログインのトークン (user.identity) で 15 秒ごとに読む (トークンが無ければ Worker の写し)。報告は Worker (action report_submit) が
 // 運営のトークンで start.gg / Challonge に送る。Challonge の試合は Worker が読む (action report_view)。
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
@@ -66,6 +66,9 @@ let pollTimer = 0;
 let FORM_OPEN = null; // 入力中の試合 (読み直しで消さない)
 /** start.gg を読めなかった (障害中)。読み直しでは Worker の写し (report_view の snap) と運営が指定した試合を使う (docs §11) */
 let FALLBACK = false;
+/** 本人の start.gg のトークンが無い (2026-10-28 より前のログイン・延長できなかった)。障害ではないので、Worker の写しで描くだけで
+ *  再ログインは求めない (報告は Worker が運営のトークンで送るので、本人のトークンは画面の読み込みにしか使わない) */
+let NOTOKEN = false;
 /** ブラウザから start.gg を読むのを待つ上限 (応答が無いまま止まらないように) */
 const LIVE_TIMEOUT_MS = 12000;
 const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -405,7 +408,7 @@ function overlayHeld(list) {
   }
   return list;
 }
-const outageNow = () => !!((VIEW && VIEW.outage) || FALLBACK);
+const outageNow = () => !!((VIEW && VIEW.outage) || (FALLBACK && !NOTOKEN));
 const hhmm = (ms) => { if (!ms) return ''; const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 /** 障害中の帯 (選手の画面)。いつから・未反映の数・試合の情報がいつの時点か */
 function outageBannerHtml() {
@@ -1232,9 +1235,10 @@ async function poll(force) {
       else {
         // start.gg が止まっている (Worker が障害中と判定・ブラウザから読めない) ときは、Worker の写しと運営が指定した試合で描く
         let live = false;
-        if (!v.outage) {
-          const stok = await SpspStartggIdentity.token().catch(() => null);
-          if (!stok) { setStatus(st, i18n('report.need_relogin'), 'warn'); $('rp-relogin').hidden = false; return; }
+        // 本人のトークンが無ければ再ログインは求めず、Worker の写し (運営のトークンで読んだもの) で描く
+        const stok = v.outage ? null : await SpspStartggIdentity.token().catch(() => null);
+        NOTOKEN = !v.outage && !stok;
+        if (stok) {
           if (!GQL) GQL = makeGql(stok, 1000000);
           if (!CHARS) await loadChars();
           try {
@@ -1242,7 +1246,8 @@ async function poll(force) {
             MATCHES = await Promise.race([read(), sleepMs(LIVE_TIMEOUT_MS).then(() => { throw new Error('timeout'); })]);
             live = true;
           } catch (e) {
-            if (e && e.auth) throw e;
+            // トークンを start.gg に断られた: 消して、写しで描く (再ログインは求めない)
+            if (e && e.auth) { SpspStartggIdentity.clear(); GQL = null; NOTOKEN = true; }
           }
         }
         FALLBACK = !live;
@@ -3183,7 +3188,6 @@ async function main() {
 }
 
 $('rp-login-btn').addEventListener('click', () => { if (!DEMO) SpspLogin.startLogin(location.pathname + location.search); });
-$('rp-relogin-btn').addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search));
 $('rp-to-admin').addEventListener('click', () => { location.href = pageUrl(CODE, true); });
 $('rp-to-player').addEventListener('click', () => { location.href = pageUrl(CODE, false); });
 // この画面のプレイヤーカードのリンクは押せない (CSS で止める。キーボードの Enter もここで止める)

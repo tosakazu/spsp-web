@@ -2004,7 +2004,6 @@ window.SPSP_I18N.en = {
   'report.closed': 'Match reporting for this event has closed. Please tell the organizers your result.',
   'report.login': 'To report results for this event, log in with the start.gg account you entered with.',
   'report.login_btn': 'Log in with start.gg',
-  'report.need_relogin': 'Please log in again so the page can read your start.gg matches (your login is from before 2026-10-28).',
   'report.to_admin': 'Organizer view',
   'report.to_player': 'Player view',
   'report.updated': 'Updated {t}',

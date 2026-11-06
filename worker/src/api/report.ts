@@ -50,7 +50,7 @@ import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, n
 import type { Held, Snapshot } from './report_outage.ts';
 import {
   absorbLiveStructs, advanceSnapshot, bracketCandidates, candidateFor, emptySnapshot, flipResult, groupName, guardProvider, Health, heldResult, isManualId, isOutageNote, isQueuedRow,
-  manualNSet, manualSlots, manualView, offlineDecision, decodeSnapshot, encodeSnapshot, PROBE_GAP_MS, SNAP_FIRST_MIN_MS, SNAP_MIN_MS, snapMine, snapNSet,
+  manualNSet, manualSlots, manualView, offlineDecision, decodeSnapshot, encodeSnapshot, PROBE_GAP_MS, SNAP_FAST_MS, SNAP_FIRST_MIN_MS, SNAP_MIN_MS, snapMine, snapNSet,
 } from './report_outage.ts';
 import { validSub } from './webpush.ts';
 import type { HandlerResult } from './respond.ts';
@@ -506,10 +506,28 @@ function rowNSet(row: ReportSetRow): NSet | null {
     lPlacement: null, isClass: false, round: null };
 }
 
-async function loadSnap(store: Store, code: string): Promise<{ snap: Snapshot | null; syncedMs: number }> {
-  const r = await store.getReportSnapshot(code).catch(() => null);
-  return r ? { snap: await decodeSnapshot(r.data), syncedMs: r.synced_ms } : { snap: null, syncedMs: 0 };
+/** 開いた写し (Worker のメモリ、2026-11-06)。中身を書いた時刻 (synced_ms) が同じなら D1 から 0.4 MB を読み直さず・開き直さない
+ *  (本人のトークンが無い選手は 15 秒ごとに写しを読みに来る。3000 人規模で 1 回 15〜20 ms)。読むだけの所で使う (書き換えない) */
+const SNAP_MEM = new Map<string, { syncedMs: number; snap: Snapshot }>();
+function memPut(code: string, syncedMs: number, snap: Snapshot): void {
+  if (!syncedMs) return;
+  SNAP_MEM.delete(code); SNAP_MEM.set(code, { syncedMs, snap });
+  while (SNAP_MEM.size > 8) { const k = SNAP_MEM.keys().next().value; if (k === undefined) break; SNAP_MEM.delete(k); }
 }
+/** 写し。known = maintain で読んだ時刻 (無ければ時刻だけ D1 から読む)。返す写しは書き換えないこと (fresh = 書き換える用に別の物を返す) */
+async function loadSnap(store: Store, code: string, known?: { syncedMs: number; checkedMs: number } | null, fresh = false):
+  Promise<{ snap: Snapshot | null; syncedMs: number; checkedMs: number }> {
+  const meta = known || await store.getReportSnapshotMeta(code).then((m) => (m ? { syncedMs: m.synced_ms, checkedMs: m.checked_ms } : null)).catch(() => null);
+  const c = SNAP_MEM.get(code);
+  if (meta && c && meta.syncedMs && c.syncedMs === meta.syncedMs) return { snap: fresh ? structuredClone(c.snap) : c.snap, syncedMs: meta.syncedMs, checkedMs: meta.checkedMs };
+  const r = await store.getReportSnapshot(code).catch(() => null);
+  if (!r) return { snap: null, syncedMs: 0, checkedMs: 0 };
+  const snap = await decodeSnapshot(r.data);
+  if (!fresh) memPut(code, r.synced_ms, snap);
+  return { snap, syncedMs: r.synced_ms, checkedMs: Number(r.checked_ms) || 0 };
+}
+/** 画面に出す「試合の情報は何時の時点か」= 中身を書いた時刻と、変わっていないと確かめた時刻の新しい方 */
+const seenMs = (k: { syncedMs: number; checkedMs: number }) => Math.max(k.syncedMs, k.checkedMs);
 
 /** 指定した試合を見つけた start.gg の試合に移す (報告は側を合わせて付け替え、行は start.gg の試合の行に) */
 async function linkManual(store: Store, code: string, m: ReportManualRow, found: { id: string; flip: boolean }, now: number): Promise<void> {
@@ -660,25 +678,26 @@ async function flushQueued(store: Store, p: Provider, ev: ReportEventRow, now: n
  * 選手・運営の画面が読みに来たときの後始末 (定時の処理は無い): 取り込み待ちを送り直し、ブラケットの写しを進める。
  * 何もすることが無ければ D1 に書かない。障害中は試す番 (PROBE_GAP_MS ごと) まで何もしない。同時に 2 つは動かさない (report_snapshots.lock_ms)
  */
-interface Kept { snap: Snapshot | null; syncedMs: number; full: boolean; sets: number; manual: number }
+interface Kept { snap: Snapshot | null; syncedMs: number; checkedMs: number; full: boolean; sets: number; manual: number }
 /** 写しの中身 (要るときだけ読む。kept.snap に置く) */
 async function keptSnap(store: Store, code: string, kept: Kept): Promise<Snapshot | null> {
   // 写した時刻が 0 (最初の写しの途中で繋がらなかった) でも、中身があれば読む (空から作り直して上書きしないように。2026-11-05)
-  if (!kept.snap && (kept.syncedMs || kept.sets)) kept.snap = (await loadSnap(store, code)).snap;
+  if (!kept.snap && (kept.syncedMs || kept.sets)) kept.snap = (await loadSnap(store, code, kept)).snap;
   return kept.snap;
 }
-async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, p: Provider, health: Health, now: number): Promise<Kept> {
+/** fast = 写しで描いている選手が読みに来た (変わった試合を SNAP_FAST_MS ごとに読む) */
+async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, p: Provider, health: Health, now: number, fast = false): Promise<Kept> {
   const ev = o.ev;
   // 写しは中身を読まずに時刻だけ見る (15 秒ごとに全員が読みに来るので)。中身は写すとき・障害中・指定した試合があるときだけ
   const meta = ev.kind === 'startgg' ? await store.getReportSnapshotMeta(ev.code).catch(() => null) : null;
   const rows = await store.listReportSets(ev.code);
   const manualOpen = ev.kind === 'startgg' ? (await store.listReportManual(ev.code)).filter((m) => m.status === 'open') : [];
-  const loaded: Kept = { snap: null, syncedMs: meta ? meta.synced_ms : 0, full: !!(meta && meta.full), sets: meta ? meta.sets : 0, manual: manualOpen.length };
+  const loaded: Kept = { snap: null, syncedMs: meta ? meta.synced_ms : 0, checkedMs: meta ? meta.checked_ms : 0, full: !!(meta && meta.full), sets: meta ? meta.sets : 0, manual: manualOpen.length };
   const dqOpen = ev.kind === 'startgg' ? (await store.listReportDqs(ev.code)).filter((d) => d.status === 'open') : [];
   const dqDue = dqOpen.some((d) => d.updated_ms === d.created_ms || now - d.updated_ms >= DQ_RECHECK_MS);
   const startsDue = ev.kind === 'startgg' ? (await store.listReportStarts(ev.code, now - NOSHOW_VIEW_MS)).filter((x) => x.sgg === 0 && !isManualId(x.set_id) && now - x.tried_ms >= START_RETRY_MS) : [];
   const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS) || dqDue || startsDue.length > 0;
-  const snapDue = ev.kind === 'startgg' && now - loaded.syncedMs >= (loaded.full ? SNAP_MIN_MS : SNAP_FIRST_MIN_MS);
+  const snapDue = ev.kind === 'startgg' && now - seenMs(loaded) >= (!loaded.full ? SNAP_FIRST_MIN_MS : fast ? SNAP_FAST_MS : SNAP_MIN_MS);
   if (!queued && !snapDue) return loaded;
   if (health.down() && now - health.row.last_fail_ms < PROBE_GAP_MS) return loaded;
   if (!(await store.claimReportSnapshot(ev.code, now, 25 * 1000).catch(() => false))) return loaded;
@@ -689,10 +708,19 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
     if (dqDue) await applyDqs(store, p, ev, now, dqOpen);
     if (startsDue.length) await syncStarts(store, p, ev, now, startsDue);
     if (snapDue) {
-      const snap = (await keptSnap(store, ev.code, loaded)) || emptySnapshot();
+      // 書き換えるので、メモリの写しとは別の物 (読むだけの所が使っている物は変えない)
+      const snap = (loaded.syncedMs || loaded.sets ? (await loadSnap(store, ev.code, loaded, true)).snap : null) || emptySnapshot();
       // 速報の Worker がブロックの開始時に取った構造 (不戦勝の試合・順位・通過先・シード) を先に入れる (2026-11-05)
-      await absorbLiveStructs(fetchFn, snap, ev.target_id, now);
-      const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now));
+      const lc0 = snap.lc;
+      const nLive = await absorbLiveStructs(fetchFn, snap, ev.target_id, now);
+      const res = { changed: nLive > 0 || snap.lc !== lc0 };
+      const e = await advanceSnapshot(fetchFn, o.token, ev.target_id, snap, () => health.allowed(now), { now, fast, res });
+      if (!e && !res.changed && loaded.syncedMs) {
+        // 変わっていなかった: 書き直さず (gzip・D1 に 0.4 MB) に確かめた時刻だけ進める
+        await health.ok(now);
+        await store.touchReportSnapshot(ev.code, now); wrote = true;
+        return { ...loaded, snap, checkedMs: now };
+      }
       if (!e) { try { checkSnap(snap, now); } catch (_) { /* 照合できなくても写しは残す */ } }
       // 大会が終わった: お知らせ・メニュー・ホームの帯から外す (運営は結果報告管理から開ける)
       if (snap.es === 'COMPLETED' && !ev.ended_ms) await store.setReportEventEnded(ev.code, now).catch(() => undefined);
@@ -701,7 +729,11 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
       const js = await encodeSnapshot(snap);
       // 繋がらなかったときは写した時刻を進めない (次に試せる番ですぐ続きを読む)。それ以外の失敗は進める (毎回呼ばない)
       const synced = e && isOutageNote(e) ? loaded.syncedMs : now;
-      if (js) { await store.putReportSnapshot(ev.code, js, synced, { full: snap.full, sets: Object.keys(snap.sets).length }); wrote = true; out = { ...loaded, snap, syncedMs: synced, full: snap.full, sets: Object.keys(snap.sets).length }; }
+      if (js) {
+        await store.putReportSnapshot(ev.code, js, synced, { full: snap.full, sets: Object.keys(snap.sets).length }); wrote = true;
+        memPut(ev.code, synced, snap);
+        out = { ...loaded, snap, syncedMs: synced, checkedMs: 0, full: snap.full, sets: Object.keys(snap.sets).length };
+      }
     }
   } finally {
     if (!wrote) await store.releaseReportSnapshot(ev.code).catch(() => undefined);
@@ -1000,8 +1032,9 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const health = await Health.load(store, o.ev.kind);
   const p = guardProvider(providerOf(fetchFn, o), health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
-  const none: Kept = { snap: null, syncedMs: 0, full: false, sets: 0, manual: 0 };
-  const kept = await maintain(store, fetchFn, o, p, health, now).catch(() => none);
+  const none: Kept = { snap: null, syncedMs: 0, checkedMs: 0, full: false, sets: 0, manual: 0 };
+  // 写しで描いている選手 (fallback: 本人のトークンが無い・ブラウザから読めない) が来ているあいだは、変わった試合を短い間隔で読む
+  const kept = await maintain(store, fetchFn, o, p, health, now, req.fallback === true).catch(() => none);
   const rows = await store.listReportSetsForUser(sess.id, [o.ev.code]);
   const sets = [];
   for (const r of rows) sets.push(await setView(store, r, sess.id));
@@ -1018,7 +1051,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
     const want = req.fallback === true || health.down() || mine.length > 0 || req.rr === true;
     const snap = want ? await keptSnap(store, o.ev.code, kept) : null;
     out.manual = mine.map((m) => manualView(m, snap));
-    if (req.fallback === true || health.down()) out.snap = snap ? { ...snapMine(await projectedSnap(store, o.ev.code, snap), sess.id), synced_ms: kept.syncedMs } : null;
+    if (req.fallback === true || health.down()) out.snap = snap ? { ...snapMine(await projectedSnap(store, o.ev.code, snap), sess.id), synced_ms: seenMs(kept) } : null;
     // 総当たり: ほかの選手が選んだ相手 (30 分以内) と、start.gg で試合中の人 (写し)。選手の画面で空いている相手を先に出す
     out.picks = (await store.listReportPicks(o.ev.code, now - PICK_TTL_MS)).map((x) => ({ u: x.user_id, s: x.set_id }));
     out.playing = snap ? Array.from(new Set(Object.values(snap.sets).filter((s) => s.s === 2).flatMap((s) => s.sl.map((x) => x.e).filter((e): e is string => !!e)))) : [];
@@ -1159,7 +1192,7 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   const health = await Health.load(store, o.ev.kind);
   const p = guardProvider(providerOf(fetchFn, o), health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
-  const kept = await maintain(store, fetchFn, o, p, health, now).catch((): Kept => ({ snap: null, syncedMs: 0, full: false, sets: 0, manual: 0 }));
+  const kept = await maintain(store, fetchFn, o, p, health, now).catch((): Kept => ({ snap: null, syncedMs: 0, checkedMs: 0, full: false, sets: 0, manual: 0 }));
   const sets = [];
   for (const r of await store.listReportSets(o.ev.code)) sets.push(await setView(store, r, null));
   // 指定した試合: 受付中のものと、6 時間以内に start.gg の試合が見つかった・取り消したもの
@@ -1179,7 +1212,7 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
     .map((d) => ({ id: d.id, entrant: d.entrant_id, name: d.name, scope: d.scope, set_id: d.set_id || null, status: d.status, done_sets: d.done_sets.split(',').filter(Boolean), note: d.note, created_ms: d.created_ms, updated_ms: d.updated_ms })) : [];
   const unsynced = await unsyncedOf(store, o.ev, now);
   return ok({ report: publicOf(o.ev, now), sets, role: o.role, managers: managersOf(o.ev), outage: health.view(), manual, noshows, dqs, unsynced,
-    snapshot: o.ev.kind === 'startgg' ? { synced_ms: kept.syncedMs, sets: kept.sets, full: kept.full } : null });
+    snapshot: o.ev.kind === 'startgg' ? { synced_ms: seenMs(kept), sets: kept.sets, full: kept.full } : null });
 }
 
 // ── 開始時刻にブラケットを自動で開始 (2026-11-05) ───────────────────────────
@@ -1346,7 +1379,8 @@ export async function handleReportBracketView(cfg: Config, store: Store, fetchFn
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
-  const { snap, syncedMs } = await loadSnap(store, o.ev.code);
+  const ld = await loadSnap(store, o.ev.code);
+  const { snap } = ld; const syncedMs = seenMs(ld);
   if (!snap || !Object.keys(snap.sets).length) return err('not_ready', MSG_NO_SNAP, 'no_snapshot');
   const health = await Health.load(store, o.ev.kind);
   const base = { synced_ms: syncedMs, outage: health.view(), checked: !!snap.chk, me: Object.entries(snap.ents).filter(([, e]) => e.u.includes(sess.id)).map(([id]) => id) };
@@ -1406,7 +1440,8 @@ export async function handleReportBracket(cfg: Config, store: Store, fetchFn: Fe
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
   if (o.ev.kind !== 'startgg') return err('bad_request', 'start.gg の大会だけで使えます。', 'bad:kind');
-  const { snap, syncedMs } = await loadSnap(store, o.ev.code);
+  const ld = await loadSnap(store, o.ev.code);
+  const { snap } = ld; const syncedMs = seenMs(ld);
   if (!snap || !Object.keys(snap.sets).length) return err('not_ready', MSG_NO_SNAP, 'no_snapshot');
   const manualOpen = (await store.listReportManual(o.ev.code)).filter((m) => m.status === 'open');
   const held = await heldList(store, o.ev.code, snap, manualOpen);
