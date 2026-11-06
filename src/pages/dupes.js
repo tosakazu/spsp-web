@@ -14,6 +14,7 @@ import '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
 import { parseStartggUrl, pickEvents } from '../../site/js/class_bracket.js';
 import SpspDupeCheck from '../../site/js/dupe_check.js';
+import { isAdminTournament, readAdminTournaments } from '../../site/js/my_tournaments.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -91,7 +92,7 @@ async function resolveEventSlug(token) {
 let MY_TOURNAMENTS = { token: '', ids: /** @type {Set<string>} */ (new Set()) };
 
 /** その大会の管理者か (owner / admins / 自分が管理する大会の一覧。下位クラス作成と同じ確かめ方)
- * @param {string} token @param {{ id: number, owner?: { id: number } | null }} tour */
+ * @param {string} token @param {{ id: number, startAt?: number | null, owner?: { id: number } | null }} tour */
 async function isAdmin(token, tour) {
   if (MY_TOURNAMENTS.token === token && MY_TOURNAMENTS.ids.has(String(tour.id))) return true;
   const me = await sgg(token, 'query { currentUser { id } }');
@@ -102,15 +103,8 @@ async function isAdmin(token, tour) {
     const a = await sgg(token, 'query($id: ID) { tournament(id: $id) { admins { id } } }', { id: tour.id });
     if (((a.tournament && a.tournament.admins) || []).some((/** @type {any} */ x) => x && x.id === myId)) return true;
   } catch (e) { /* admins は admin でないと読めない */ }
-  for (let page = 1; page <= 4; page++) {
-    const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-      pageInfo { totalPages } nodes { id } } } }`, { page });
-    const ts = d.currentUser && d.currentUser.tournaments;
-    const nodes = (ts && ts.nodes) || [];
-    if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(tour.id))) return true;
-    if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
-  }
-  return false;
+  // 自分が管理する大会の一覧 (新しい順に、この大会より前まで)
+  return isAdminTournament((q, v) => sgg(token, q, v), tour.id, tour.startAt);
 }
 
 const USER_FIELDS = 'id discriminator location { city state country } authorizations { type externalUsername externalId }';
@@ -396,19 +390,23 @@ async function loadMyTournaments() {
   const token = sggToken();
   const row = $('dp-tour-pick-row');
   if (!token) { row.hidden = true; return; }
-  /** @type {any[]} */
-  let all = [];
-  try {
-    for (let page = 1; page <= 4; page++) {
-      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-        nodes { id name slug startAt endAt } } } }`, { page });
-      const nodes = (d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
-      all = all.concat(nodes);
-      if (nodes.length < 50) break;
-    }
-  } catch (e) { row.hidden = true; return; }
-  MY_TOURNAMENTS = { token, ids: new Set(all.filter((x) => x && x.id != null).map((x) => String(x.id))) };
   const now = Date.now() / 1000;
+  // 新しい順に読み、開始が 7 日より前の大会まで来たら止める。読んだページの分から先に出す
+  let any = false;
+  try {
+    await readAdminTournaments((q, v) => sgg(token, q, v), {
+      fields: 'name slug endAt', sinceSec: now - 7 * 86400, perPage: 20,
+      onPage: (all) => { if (sggToken() !== token) return true; any = fillTourPick(token, all, now) || any; return false; },
+    });
+  } catch (e) { /* 読めた分だけ */ }
+  if (!any && sggToken() === token) row.hidden = true;
+}
+
+/** 読んだところまでの大会を選択欄に (開催中 → これから → 最近終わった)。出したら true
+ * @param {string} token @param {any[]} all @param {number} now */
+function fillTourPick(token, all, now) {
+  const row = $('dp-tour-pick-row');
+  MY_TOURNAMENTS = { token, ids: new Set(all.filter((x) => x && x.id != null).map((x) => String(x.id))) };
   const DAY = 86400;
   const rank = (/** @type {any} */ t) => {
     const s = t.startAt || 0, e = t.endAt || s;
@@ -418,11 +416,14 @@ async function loadMyTournaments() {
   };
   const list = all.filter((t) => t && t.slug).map((t) => ({ t, k: rank(t) }))
     .sort((x, y) => (x.k[0] - y.k[0]) || (x.k[1] - y.k[1])).slice(0, 30);
-  if (!list.length) { row.hidden = true; return; }
+  if (!list.length) return false;
   const fmt = (/** @type {number} */ s) => new Date(s * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  const keep = $('dp-tour-pick').value;   // 読んでいる途中に選んだものは残す
   $('dp-tour-pick').innerHTML = `<option value="">${escapeHtml(i18n('class.tour_pick_none'))}</option>` + list.map(({ t, k }) =>
     `<option value="${escapeHtml(t.slug)}">${k[0] === 0 ? escapeHtml(i18n('class.tour_live')) + ' ' : ''}${escapeHtml(t.name)}${t.startAt ? ` (${fmt(t.startAt)})` : ''}</option>`).join('');
+  if (keep && list.some((x) => x.t.slug === keep)) $('dp-tour-pick').value = keep;
   row.hidden = false;
+  return true;
 }
 $('dp-tour-pick').addEventListener('change', () => {
   const v = $('dp-tour-pick').value;

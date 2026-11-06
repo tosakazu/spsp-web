@@ -1170,3 +1170,29 @@ test('開始時刻にブラケットを自動で開始: 時刻の前は何もし
   const adm2 = await e.call({ action: 'report_admin', token: TO, code: e.code });
   assert.strictEqual(adm2.report.auto_start.eligible, false);
 });
+
+test('運営の大会一覧: 新しい順に読み、開始が 4 日より前の大会が出たページで止める (全件は読まない、2026-11-06)', async () => {
+  const fake = fakeStartgg();
+  const now = Math.floor(Date.now() / 1000);
+  const base = fake.fetch;
+  const pages = [];
+  fake.fetch = async (url, init) => {
+    const b = !url.includes('/oauth/') && JSON.parse(init.body);
+    if (b && b.query.includes('SpspReportTours')) {
+      const p = b.variables.page;
+      pages.push(p);
+      // 1 ページ目 = これから 50 件、2 ページ目 = 開催中 1 件 + 古い大会、3 ページ目以降 = もっと古い (読まない)
+      const nodes = p === 1 ? Array.from({ length: 50 }, (_, i) => ({ id: 100 + i, name: 'F' + i, slug: 'tournament/f' + i, startAt: now + (60 - i) * 86400, endAt: now + (60 - i) * 86400, events: [] }))
+        : p === 2 ? [{ id: 5, name: 'Live', slug: 'tournament/l', startAt: now - 3600, endAt: now + 3600, events: [] },
+          ...Array.from({ length: 49 }, (_, i) => ({ id: 200 + i, name: 'O' + i, slug: 'tournament/o' + i, startAt: now - (10 + i) * 86400, endAt: now - (10 + i) * 86400, events: [] }))]
+          : Array.from({ length: 50 }, (_, i) => ({ id: p * 1000 + i, name: 'X', slug: 'tournament/x' + i, startAt: now - 400 * 86400, endAt: now - 400 * 86400, events: [] }));
+      return new Response(JSON.stringify({ data: { currentUser: { tournaments: { nodes } } } }), { status: 200 });
+    }
+    return base(url, init);
+  };
+  const e = await enabled(fake);
+  const r = await e.call({ action: 'report_tournaments', token: e.login.token });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.deepStrictEqual(pages, [1, 2], '古い大会が出た 2 ページ目で止める');
+  assert.strictEqual(r.tournaments[0].name, 'Live');
+});

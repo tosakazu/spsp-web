@@ -20,6 +20,7 @@ import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
 import SPSPPublishedSeeds from '../../site/seeding/published_seeds.js';
 import SPSPPublishedSeedsUI from '../../site/seeding/published_seeds_ui.js';
+import { isAdminTournament, readAdminTournaments } from '../../site/js/my_tournaments.js';
 import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
@@ -359,15 +360,8 @@ async function load() {
       admins = (a.tournament && a.tournament.admins) || [];
     } catch (e) { /* admins は admin でないと読めない: 読めなければ owner だけで判断 */ }
     let isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
-    // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る
-    for (let page = 1; !isTo && page <= 4; page++) {
-      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-        pageInfo { totalPages } nodes { id } } } }`, { page });
-      const ts = d.currentUser && d.currentUser.tournaments;
-      const nodes = (ts && ts.nodes) || [];
-      if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(ev.tournament.id))) isTo = true;
-      if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
-    }
+    // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る (新しい順に、この大会より前まで)
+    if (!isTo) isTo = await isAdminTournament((q, v) => sgg(token, q, v), ev.tournament.id, ev.tournament.startAt);
     if (!isTo) return status(i18n('class.err.not_admin'), 'error');
   }
 
@@ -693,20 +687,25 @@ async function loadMyTournaments() {
   const token = sggToken();
   const row = $('cb-tour-pick-row');
   if (!token) { row.hidden = true; return; }
-  /** @type {any[]} */
-  let all = [];
-  try {
-    for (let page = 1; page <= 4; page++) {
-      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-        nodes { id name slug startAt endAt } } } }`, { page });
-      const nodes = (d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
-      all = all.concat(nodes);
-      if (nodes.length < 50) break;
-    }
-  } catch (e) { row.hidden = true; return; }
-  MY_TOURNAMENTS = { token, ids: new Set(all.filter(x => x && x.id != null).map(x => String(x.id))) };
   const now = Date.now() / 1000;
   const DAY = 86400;
+  // 新しい順に読み、開始が 7 日より前の大会まで来たら止める (それより前に終わった大会は出さない)。読んだページの分から先に出す
+  let any = false;
+  try {
+    await readAdminTournaments((q, v) => sgg(token, q, v), {
+      fields: 'name slug endAt', sinceSec: now - 7 * DAY, perPage: 20,
+      onPage: (all, done) => { if (sggToken() !== token) return true; any = fillTourPick(token, all, now, done) || any; return false; },
+    });
+  } catch (e) { /* 読めた分だけ */ }
+  if (!any && sggToken() === token) row.hidden = true;
+}
+
+/** 読んだところまでの大会を選択欄に (開催中 → これから → 最近終わった)。出したら true
+ * @param {string} token @param {any[]} all @param {number} now @param {boolean} done */
+function fillTourPick(token, all, now, done) {
+  const row = $('cb-tour-pick-row');
+  const DAY = 86400;
+  MY_TOURNAMENTS = { token, ids: new Set(all.filter(x => x && x.id != null).map(x => String(x.id))) };
   const rank = (/** @type {any} */ t) => {
     const s = t.startAt || 0, e = t.endAt || s;
     if (s <= now + DAY / 2 && e >= now - DAY / 2) return [0, -s];   // 開催中 (前後半日)
@@ -717,13 +716,15 @@ async function loadMyTournaments() {
     .map(t => ({ t, k: rank(t) }))
     .sort((x, y) => (x.k[0] - y.k[0]) || (x.k[1] - y.k[1]))
     .slice(0, 30);
-  if (!list.length) { row.hidden = true; return; }
+  if (!list.length) return false;
   const fmt = (/** @type {number} */ s) => new Date(s * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  const keep = $('cb-tour-pick').value;   // 読んでいる途中に選んだものは残す
   $('cb-tour-pick').innerHTML = `<option value="">${escapeHtml(i18n('class.tour_pick_none'))}</option>` + list.map(({ t, k }) =>
     `<option value="${escapeHtml(t.slug)}">${k[0] === 0 ? escapeHtml(i18n('class.tour_live')) + ' ' : ''}${escapeHtml(t.name)}${t.startAt ? ` (${fmt(t.startAt)})` : ''}</option>`).join('');
-  // 開催中が 1 つだけなら、URL が空のときはそれを選んでおく
+  if (keep && list.some(x => x.t.slug === keep)) $('cb-tour-pick').value = keep;
+  // 開催中が 1 つだけなら、URL が空のときはそれを選んでおく (読み終えてから)
   const live = list.filter(x => x.k[0] === 0);
-  if (live.length === 1 && !String($('cb-event').value || '').trim()) {
+  if (done && live.length === 1 && !String($('cb-event').value || '').trim()) {
     $('cb-tour-pick').value = live[0].t.slug;
     $('cb-event').value = 'https://www.start.gg/' + live[0].t.slug;
   }
