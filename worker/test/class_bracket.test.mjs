@@ -341,6 +341,22 @@ test('class_create: 管理している大会の一覧は 50 件ずつ、見つ�
   assert.strictEqual((await post(e, body())).error.code, 'not_admin');
 });
 
+test('class_create: 大会の開始日が分かれば、一覧は新しい順にその大会より前まで (4 ページを超えても読む・前の大会が出たら止める、2026-11-06)', async () => {
+  const T0 = 1800000000;
+  const ev = () => resp(200, { data: { currentUser: { id: 111 }, event: { id: 1234567, tournament: { id: 777, startAt: T0, owner: { id: 999 }, admins: null } } } });
+  // 新しい順の 1 ページ 50 件 (page が進むほど開始が前)。777 は 6 ページ目
+  const page = (p, withTarget) => resp(200, { data: { currentUser: { tournaments: { nodes: Array.from({ length: 50 }, (_, i) => (withTarget && i === 10
+    ? { id: 777, startAt: T0 } : { id: p * 1000 + i, startAt: T0 + (6 - p) * 86400 + (50 - i) })) } } } });
+  let e = env({ ...okHandlers(), gql: gqlRouter(ev, (p) => page(p, p === 6)) });
+  assert.strictEqual((await post(e, body())).ok, true, '4 ページを超えても、まだ新しい大会なら読む');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 7);
+  // その大会より前の大会が出たページで止める (無い = 管理者ではない)
+  const older = (p) => resp(200, { data: { currentUser: { tournaments: { nodes: Array.from({ length: 50 }, (_, i) => ({ id: p * 1000 + i, startAt: T0 + 86400 - p * 86400 - i })) } } } });
+  e = env({ ...okHandlers(), gql: gqlRouter(ev, older) });
+  assert.strictEqual((await post(e, body())).error.code, 'not_admin');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 2, '1 ページ目の途中で前の大会になったので 2 ページ目は読まない');
+});
+
 test('class_create: 管理している大会の一覧の取得に失敗したら startgg_error (not_admin にはしない)', async () => {
   for (const [page, note] of [
     [() => resp(500, {}), 'tours:http_500'],

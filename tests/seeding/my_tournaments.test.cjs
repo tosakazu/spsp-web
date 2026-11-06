@@ -33,6 +33,7 @@ function setup(respond) {
   w.handleFetch = () => calls.push(['fetch', w.document.getElementById('event-url').value]);
   w.startggQuery = async (token, q, vars) => { calls.push(['query', token, vars.page]); return respond(vars.page); };
   w.HTMLElement.prototype.scrollIntoView = () => {};
+  w.eval(built('js/my_tournaments.js').replace(/\}\)\(\);\n$/, 'window.readAdminTournaments = readAdminTournaments;\n})();\n'));
   w.eval(built('seeding/app/60_upcoming.js').replace(/\}\)\(\);\n$/, 'window.__t = { loadMyTournaments };\n})();\n'));
   return { w, calls };
 }
@@ -71,4 +72,23 @@ test('取れない・0 件・トークン無しなら欄を出さない。同じ
   await w.__t.loadMyTournaments('');
   assert.strictEqual(box.style.display, 'none');
   assert.strictEqual(calls.length, 2);
+});
+
+test('新しい順に読み、開始が 3 日より前の大会が出たページで止める (終わった大会は読まない)。読んだページの分から先に出す (2026-11-06)', { skip: !JSDOM }, async () => {
+  // 1 ページ目 = これから 20 件 (遠い順)、2 ページ目 = 開催中 + 古い大会、3 ページ目以降 = もっと古い (読まない)
+  const page = (p) => ({ currentUser: { tournaments: { nodes: p === 1
+    ? Array.from({ length: 20 }, (_, i) => ({ id: 100 + i, name: '先の大会' + i, slug: 'tournament/f' + i, startAt: NOW + (40 - i) * 86400, endAt: NOW + (40 - i) * 86400, events: [ev('Singles', 'tournament/f' + i + '/event/s', 1386)] }))
+    : p === 2 ? [NODES[3], ...Array.from({ length: 19 }, (_, i) => ({ id: 200 + i, name: '古い' + i, slug: 'tournament/o' + i, startAt: NOW - (5 + i) * 86400, endAt: NOW - (5 + i) * 86400, events: [ev('Singles', 'tournament/o' + i + '/event/s', 1386)] }))]
+      : Array.from({ length: 20 }, (_, i) => ({ id: p * 1000 + i, name: 'x', slug: 'tournament/x' + p + i, startAt: NOW - 400 * 86400, endAt: NOW - 400 * 86400, events: [] })) } } });
+  let shownAfterFirst = null;
+  const { w, calls } = setup((p) => {
+    if (p === 2) shownAfterFirst = w.document.getElementById('mytours-list').children.length;
+    return page(p);
+  });
+  await w.__t.loadMyTournaments('tok');
+  assert.deepStrictEqual(calls.map((c) => c[2]), [1, 2], '古い大会が出た 2 ページ目で止める');
+  assert.strictEqual(shownAfterFirst, 20, '1 ページ目を読んだ時点で出している');
+  const rows = [...w.document.querySelectorAll('#mytours-list .upcoming-item')];
+  assert.strictEqual(rows[0].querySelector('.ev-name').textContent, '開催中の大会', '開催中が先頭');
+  assert.strictEqual(w.document.getElementById('mytours-count').textContent, '20');
 });

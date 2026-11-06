@@ -211,7 +211,9 @@ export async function handleReportTournaments(cfg: Config, store: Store, fetchFn
   if (!g) return err('no_grant', MSG_GRANT, 'no_grant');
   type T = { id: number; name: string; slug: string; startAt: number | null; endAt: number | null; events: { id: number; name: string; slug: string; startAt: number | null; entrants: number | null; game: number | null }[] };
   const all: T[] = [];
-  for (let page = 1; page <= 4; page++) {
+  // start.gg は開始日の新しい順に返す。一覧に出すのは終わってから 2 日までなので、開始が 4 日より前の大会まで来たら止める (全件は読まない)
+  const since = Math.floor(now / 1000) - 4 * 86400;
+  for (let page = 1; page <= 10; page++) {
     const r = await startggGql(fetchFn, g.at, TOURS_QUERY, { page });
     if (!r.ok) return err('startgg_error', 'start.gg に確認できませんでした。時間をおいてやり直してください。', 'tours:' + r.note);
     const cu = r.json.data && (r.json.data.currentUser as { tournaments?: { nodes?: unknown[] } | null } | null);
@@ -227,7 +229,8 @@ export async function handleReportTournaments(cfg: Config, store: Store, fetchFn
         })),
       });
     }
-    if (nodes.length < 50) break;
+    const last = nodes.length ? Number(nodes[nodes.length - 1].startAt) || 0 : 0;
+    if (nodes.length < 50 || (last > 0 && last < since)) break;
   }
   const active = await store.listActiveReportEvents(now);
   const codeOf = new Map(active.filter((a) => a.kind === 'startgg' && a.event_id !== null).map((a) => [Number(a.event_id), a.code]));

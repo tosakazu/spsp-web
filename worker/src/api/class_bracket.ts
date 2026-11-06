@@ -103,13 +103,14 @@ export function parseClassCreate(r: Record<string, unknown>): { input: ClassCrea
 
 const ADMIN_QUERY = `query SpspClassAdmin($eventId: ID!) {
   currentUser { id }
-  event(id: $eventId) { id tournament { id owner { id } admins { id } } }
+  event(id: $eventId) { id tournament { id startAt owner { id } admins { id } } }
 }`;
 
 const ADMIN_TOURS_PER_PAGE = 50;
-const ADMIN_TOURS_MAX_PAGES = 4;
+/** start.gg は開始日の新しい順に返すので、その大会より開始が前の大会まで来たら止める (それまでに無ければ管理者ではない) */
+const ADMIN_TOURS_MAX_PAGES = 20;
 const ADMIN_TOURNAMENTS_QUERY = `query SpspClassAdminTours($page: Int!, $perPage: Int!) {
-  currentUser { tournaments(query: { page: $page, perPage: $perPage, filter: { tournamentView: "admin" } }) { nodes { id } } }
+  currentUser { tournaments(query: { page: $page, perPage: $perPage, filter: { tournamentView: "admin" } }) { nodes { id startAt } } }
 }`;
 
 export type AdminCheck =
@@ -153,7 +154,8 @@ export async function startggGql(fetchFn: FetchFn, token: string, query: string,
  *   1. 大会の owner  2. 大会の admins に入っている
  *   3. 本人の「管理している大会」(currentUser.tournaments、tournamentView: admin) にその大会がある
  * スタッフの役割によっては admins が null で返る (2026-10-01、ブラケット・シード編集の権限がある人で確認) ため 3 も見る。
- * 3 は 50 件ずつ最大 4 ページ (pageInfo の総数は当てにならないので、空か 50 件未満のページで止める)。
+ * 3 は 50 件ずつ新しい順に読み、その大会より開始が前の大会まで来たら止める (2026-11-06。開始日が分からなければ 4 ページまで)。
+ *   pageInfo の総数は当てにならないので、空か 50 件未満のページでも止める。
  * キーは Authorization ヘッダにだけ入れる。本文・エラーの記録には入れない。
  */
 export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId: number): Promise<AdminCheck> {
@@ -166,7 +168,7 @@ export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId
     return { ok: false, code: 'startgg_error', note: Array.isArray(json.errors) && json.errors.length ? 'gql_error' : 'no_user' };
   }
   const userId = String(cu.id);
-  const ev = data && (data.event as { tournament?: { id?: unknown; owner?: { id?: unknown } | null; admins?: unknown } | null } | null);
+  const ev = data && (data.event as { tournament?: { id?: unknown; startAt?: unknown; owner?: { id?: unknown } | null; admins?: unknown } | null } | null);
   if (!ev) return { ok: false, code: 'bad_request', note: 'event_not_found' };
   const t = ev.tournament;
   const tournamentId = t ? Number(t.id) : NaN;
@@ -179,7 +181,8 @@ export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId
   if (ids.includes(userId)) return { ok: true, userId, tournamentId };
 
   // 3. 本人の管理している大会の一覧
-  for (let page = 1; page <= ADMIN_TOURS_MAX_PAGES; page++) {
+  const startAt = Number(t.startAt) || 0;
+  for (let page = 1; page <= (startAt ? ADMIN_TOURS_MAX_PAGES : 4); page++) {
     const r = await startggGql(fetchFn, token, ADMIN_TOURNAMENTS_QUERY, { page, perPage: ADMIN_TOURS_PER_PAGE });
     if (!r.ok) return { ok: false, code: 'startgg_error', note: 'tours:' + r.note };
     const d = (r.json && r.json.data) || null;
@@ -190,7 +193,8 @@ export async function checkStartggAdmin(fetchFn: FetchFn, token: string, eventId
       break;
     }
     if (nodes.some((n) => n && Number((n as { id?: unknown }).id) === tournamentId)) return { ok: true, userId, tournamentId };
-    if (nodes.length < ADMIN_TOURS_PER_PAGE) break;
+    const last = nodes.length ? Number((nodes[nodes.length - 1] as { startAt?: unknown }).startAt) || 0 : 0;
+    if (nodes.length < ADMIN_TOURS_PER_PAGE || (startAt && last && last < startAt)) break;
   }
   return { ok: false, code: 'not_admin', note: 'not_admin' };
 }

@@ -6,6 +6,7 @@ import { S } from './00_state.js';
 import { i18n } from './10_skeleton.js';
 import { handleFetch, startggQuery } from './40_startgg.js';
 import { escapeHtml } from '../../js/html.js';
+import { readAdminTournaments } from '../../js/my_tournaments.js';
 'use strict';
 
 // ── 今後の大会ピッカー ─────────────────────────
@@ -200,20 +201,27 @@ export async function loadMyTournaments(token) {
   if (!token) { box.style.display = 'none'; setMyToursState('none'); return; }
   box.style.display = 'none';
   setMyToursState('loading');
-  /** @type {any[]} */
-  let all = [];
-  try {
-    for (let page = 1; page <= 5; page++) {
-      const d = await startggQuery(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 20, filter: { tournamentView: "admin" } }) {
-        nodes { id name slug startAt endAt city isOnline events { name slug numEntrants videogame { id } } } } } }`, { page });
-      const nodes = (d && d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
-      all = all.concat(nodes);
-      if (nodes.length < 20) break;
-    }
-  } catch (e) { all = []; }
-  if (token !== MY_TOURS_TOKEN) return;   // 取っている間にトークンが変わった
   const now = Date.now() / 1000;
   const HALF_DAY = 43200;
+  // 新しい順に読み、開始が 3 日より前の大会まで来たら止める (終わった大会は出さないので読まない)。読んだページの分から先に出す
+  let shown = false;
+  try {
+    await readAdminTournaments((q, v) => startggQuery(token, q, v), {
+      fields: 'name slug endAt city isOnline events { name slug numEntrants videogame { id } }', sinceSec: now - 3 * 86400, perPage: 20,
+      onPage: (all, done) => {
+        if (token !== MY_TOURS_TOKEN) return true;   // 取っている間にトークンが変わった
+        shown = renderMyTours(all, now, HALF_DAY, list, box, countBadge, done) || shown;
+        return false;
+      },
+    });
+  } catch (e) { /* 読めた分だけ (最初のページで失敗したら下で「ありません」) */ }
+  if (token !== MY_TOURS_TOKEN) return;
+  if (!shown) { box.style.display = 'none'; setMyToursState('empty'); }
+}
+
+/** 読んだところまでの大会を欄に出す (開催中 → 近い順)。出したら true
+ * @param {any[]} all @param {number} now @param {number} HALF_DAY @param {HTMLElement} list @param {HTMLElement} box @param {HTMLElement} countBadge @param {boolean} done */
+function renderMyTours(all, now, HALF_DAY, list, box, countBadge, done) {
   /** @type {(SpspUpcomingTournament & { live: boolean })[]} */
   const tours = all.filter(t => t && t.slug && t.startAt && (t.endAt || t.startAt) >= now - HALF_DAY)
     .map(t => ({
@@ -226,12 +234,13 @@ export async function loadMyTournaments(token) {
     .filter(t => t.events.length)
     .sort((a, b) => (Number(b.live) - Number(a.live)) || (a.start_at - b.start_at))
     .slice(0, MY_TOURS_MAX);
-  if (!tours.length) { box.style.display = 'none'; setMyToursState('empty'); return; }
+  if (!tours.length) return false;
   list.innerHTML = '';
   for (const t of tours) list.appendChild(upcomingRowEl(t));
-  countBadge.textContent = String(tours.length);
+  countBadge.textContent = String(tours.length) + (done ? '' : '…');
   box.style.display = '';
   setMyToursState('ok');
+  return true;
 }
 
 /**
