@@ -245,8 +245,8 @@ function resultCardHtml(t, tabs, opts) {
       </div>
       <div class="lr-detail">
         <div class="tour-matches"></div>
-        <div class="v-stats lr-stats">${sprChip}${tjprChip}${btChip}</div>
         ${zenHtml}
+        <div class="v-stats lr-stats">${sprChip}${tjprChip}${btChip}</div>
       </div>
     </div>`;
 }
@@ -1278,7 +1278,7 @@ function render() {
       else {
         const k = side.replace(/^[BCDE]/, '');
         out += `<div class="m-seg m-seg-${k}"><span class="m-rail" title="${i18n('match.side.' + k + '_title')}">` +
-          `<span class="m-rail-lbl">${i18n('match.side.' + k)}</span><span class="m-rail-line"></span></span>${html}</div>`;
+          `<span class="m-rail-line"></span><span class="m-rail-lbl">${i18n('match.side.' + k)}</span></span>${html}</div>`;
       }
       i = j;
     }

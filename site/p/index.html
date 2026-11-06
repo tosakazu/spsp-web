@@ -563,24 +563,26 @@
   .match-header .mx-info-btn[aria-pressed="true"] { background: #374151; border-color: #374151; color: #ffffff; }
   /* 勝者側・敗者側 (ダブルエリミのフェーズだけ): 左に縦の矢印。下から上へ進む (新しい試合が上) */
   .mx-railed .match-row { padding-left: 26px; }
-  .lr-detail .lr-zen { padding: 0 0 8px; }
+  .lr-detail .lr-zen { padding: 8px 0 0; }
+  .lr-detail .lr-zen + .lr-stats { padding-top: 4px; }
   .m-seg { position: relative; }
   .m-seg + .m-seg { margin-top: 3px; }
   .m-seg .m-rail {
     position: absolute; left: 6px; top: 4px; bottom: 3px; width: 16px;
-    display: flex; flex-direction: column; align-items: center; color: var(--side);
+    display: flex; flex-direction: column; align-items: center;
   }
-  .m-seg-w { --side: #7c3aed; }
-  .m-seg-l { --side: #ea580c; }
-  .m-seg-gf { --side: #ca8a04; }
+  /* 色は淡く: 札は薄い地に濃い文字、線は中間の濃さ (敗者側は相手の名前の赤と分けて橙) */
+  .m-seg-w { --side-bg: #e0e7ff; --side-fg: #4338ca; --side-line: #a5b4fc; }
+  .m-seg-l { --side-bg: #ffedd5; --side-fg: #c2410c; --side-line: #fdba74; }
+  .m-seg-gf { --side-bg: #fef9c3; --side-fg: #854d0e; --side-line: #facc15; }
   .m-rail .m-rail-lbl {
-    font-size: 9px; font-weight: 700; line-height: 12px; padding: 0 2px; border-radius: 3px;
-    background: var(--side); color: #ffffff; letter-spacing: 0;
+    font-size: 9px; font-weight: 700; line-height: 12px; padding: 0 3px; border-radius: 3px; margin-top: 2px;
+    background: var(--side-bg); color: var(--side-fg); letter-spacing: 0;
   }
-  .m-rail .m-rail-line { position: relative; flex: 1 1 auto; width: 2px; margin-top: 6px; background: var(--side); opacity: 0.55; border-radius: 1px; }
-  .m-rail .m-rail-line::before {   /* 矢印の先 (上向き) */
-    content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
-    border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid var(--side);
+  .m-rail .m-rail-line { position: relative; flex: 1 1 auto; width: 2px; margin-top: 5px; background: var(--side-line); border-radius: 1px; }
+  .m-rail .m-rail-line::before {   /* 矢印の先 (上向き)。札は線の下端 */
+    content: ""; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid var(--side-line);
   }
 
   /* ─── モバイル (max-width: 720px) ─── */
