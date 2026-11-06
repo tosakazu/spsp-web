@@ -2057,7 +2057,6 @@ window.SPSP_I18N.ja = {
   'report.closed': 'この大会の結果報告の受付は終わっています。結果は運営に伝えてください。',
   'report.login': 'この大会の結果を報告するには、出場した start.gg のアカウントでログインしてください。',
   'report.login_btn': 'start.gg でログイン',
-  'report.need_relogin': 'start.gg の試合を読むために、もう一度ログインしてください (2026-10-28 より前のログインのため)。',
   'report.to_admin': '運営の画面',
   'report.to_player': '選手の画面',
   'report.updated': '{t} に更新',

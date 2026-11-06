@@ -43,7 +43,9 @@
           report_events に写す → /jp/report/?c=…&admin=1   (2026-10-30 からログインが先。シード作成・下位クラス作成と同じ)
       下位クラス作成の「結果報告」→ action report_enable_class (Challonge のトークンを暗号化して預かる)
 選手  /jp/report/?c=…  15 秒ごと:
-        start.gg: ブラウザが本人のトークンで event.sets(filters:{playerIds}) を読む (台 station・配信台 stream・前の試合 prereq も)
+        start.gg: ブラウザが本人のトークンで event.sets(filters:{playerIds}) を読む (台 station・配信台 stream・前の試合 prereq も)。
+                  本人のトークンが無い (2026-10-28 より前のログイン・延長できない・start.gg に断られた) ときは再ログインを求めず、
+                  Worker の写し (report_view の fallback: true、45 秒ごとに運営のトークンで更新) で描く。障害の帯は出さない (2026-11-06)
         Challonge: Worker が運営のトークンで読む (action report_view、Worker の cache 15 秒)
         D1 の報告の状態: action report_view
       送信 → action report_submit → Worker が set を読み直し、選手か・運営の設定・結果の形を確かめ、判定して start.gg / Challonge に送る
