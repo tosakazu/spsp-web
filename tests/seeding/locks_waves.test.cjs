@@ -596,14 +596,16 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
   assert.ok(/function exportSeedWorkCsv\(/.test(APP_SRC), 'exportSeedWorkCsv が無い');
   // インポート側の列と一致するヘッダを出す。
   assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves'/.test(APP_SRC), 'エクスポート列が想定と違う');
-  // 被り回避は「最後に別枠でかける処理」: 手動編集の再開で base に畳み込まない。
+  // 被り回避の反映中に編集を再開したら、最適化後の並びを手動調整の 1 手 ({ order }) として積む (base には畳み込まない。
+  // 「元に戻す」で最適化前に戻せる、2026-11-11)。
   const unlock = APP_SRC.slice(APP_SRC.indexOf('function manualUnlock('), APP_SRC.indexOf('function manualCommit('));
   assert.ok(!/} else if \(APPLIED_ORDER\) \{/.test(unlock),
     '被り回避の結果が手動調整の基準に畳み込まれている');
   assert.ok(/dropAppliedOrder\(/.test(unlock), '再編集で被り回避の反映が解除されない');
+  assert.ok(/manualPushOrder\(S\.APPLIED_ORDER\.slice\(\), 'opt'\)/.test(unlock), '最適化後の並びを手動調整に積んでいない');
   const csvApply = APP_SRC.slice(APP_SRC.indexOf('function applyCsvOrderIfReady('),
                                  APP_SRC.indexOf('async function buildParticipantsFromCsv('));
-  assert.ok(/dropAppliedOrder\(/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない');
+  assert.ok(/manualPushOrder\(order, 'csv'\)/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない (manualPushOrder が解除する)');
   // 共有した CSV でプール数/ウェーブ数も揃う。
   assert.ok(/\['pools', 'so-pools', 'プール数'\]/.test(APP_SRC), 'pools/waves 列の反映が無い');
 });

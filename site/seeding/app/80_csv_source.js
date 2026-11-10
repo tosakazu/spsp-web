@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, _csvNormDisc, _disc2uid, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualMovedSet, renderManualUI, saveManual } from './30_core.js';
+import { DATA, _csvNormDisc, _disc2uid, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualPushOrder, renderManualUI, saveManual } from './30_core.js';
 import { filterAndRerank, render, setParticipantsUiVisible } from './40_startgg.js';
 import { dropAppliedOrder, resetSeedOptResultPanel } from './75_series_rematch.js';
 import { _applyCsvSettingColumns } from './90_spec.js';
@@ -176,8 +176,7 @@ export function applyCsvOrderIfReady(fromFetch) {
     _csvStatus(i18n('seed.csv.s8'));
     return;
   }
-  if (!fromFetch && S.MANUAL && manualMovedSet().size > 0 &&
-      !confirm(i18n('seed.csv.s9'))) return;
+  // 読み込み直しは手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
   const { order, matched, unmatched, ambiguous, discUnavailable, sampleRows, restCount } = csvRowsToOrder(S.CSV_SOURCE.rows);
   if (discUnavailable) {
     _csvStatus(`${i18n('seed.csv.t1')}` +
@@ -190,10 +189,9 @@ export function applyCsvOrderIfReady(fromFetch) {
     return;
   }
   if (!matched) { _csvStatus(i18n('seed.csv.s11'), true); return; }
-  S.MANUAL = { base: order, ops: [], hpos: 0, committed: true, editing: false, sel: null, src: 'csv' };
-  // 後から読み込んだ CSV が最新の作業なので、適用済みの被り回避結果は解除する
-  // (これをしないと CSV 順が出力に反映されない)。
-  dropAppliedOrder();
+  // 後から読み込んだ CSV が最新の作業なので、その順を 1 手として積む (被り回避の反映は解除。反映中だった並びも 1 手として残し、
+  // 「元に戻す」で戻れる。2026-11-11)。手動調整が無ければ CSV の順を基準にする (src 'csv')
+  manualPushOrder(order, 'csv');
   if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.csv.s12'));
   saveManual(); renderManualUI();
   const settingNotes = _applyCsvSettingColumns(S.CSV_SOURCE.rows);
