@@ -304,6 +304,19 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
   // ───────────────────────── ウェーブ / プール表示名 ─────────────────────────
   // seed_app.js の chunkWaveMap / waveLetter / poolLabel と同一仕様 (純関数として再掲)。
+  // ウェーブ交互の割り当て (篝火 #14・#15 の作り方、2026-11-11): プール番号ごとに W 個ずつ並べ、1 組ごとに向きを変える。
+  // W=2 なら A, B, B, A, A, B, B, A, … (シードは 1 つごとに A, B, B, A, …)。start.gg にまだプールが無い (ウェーブが分からない)
+  // ときの既定。前半 A・後半 B (chunkWaveMap) だとシードが十数個の塊でウェーブを替え、ウェーブ指定で大きくずれていた
+  /** @param {number} P @param {number} W @returns {number[]} */
+  function interleaveWaveMap(P, W) {
+    const Wc = Math.max(1, Math.min(W, P));
+    const map = new Array(P);
+    for (let p = 0; p < P; p++) {
+      const k = Math.floor(p / Wc), j = p % Wc;
+      map[p] = k % 2 === 0 ? j : Wc - 1 - j;
+    }
+    return map;
+  }
   function chunkWaveMap(P, W) {
     const map = new Array(P);
     const Wc = Math.max(1, Math.min(W, P));
@@ -464,7 +477,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       ev: evName || opts.ev || i18n('seed.share.s26'),
       src: 'csv',
       phases: withFinalPhase(phases || [{ name: P >= 2 ? i18n('seed.share.s27') : i18n('seed.share.s28'), pools: P, adv: 2 }], uids.length),
-      wv: wvArr || chunkWaveMap(P, Math.max(1, W)),
+      wv: wvArr || interleaveWaveMap(P, Math.max(1, W)),   // 既定は交互 (seeding/app/85_waves.js と同じ、2026-11-11)
       uids,
       names,
     };
@@ -523,7 +536,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase,
     versionSource, payloadVersion,
     parseFragment, buildFragment,
-    chunkWaveMap, waveLetter, poolLabel,
+    chunkWaveMap, interleaveWaveMap, waveLetter, poolLabel,
     parseCsv, workCsvToPayload, buildWorkCsv,
     // テスト用の下位 API
     bytesToBase64url, base64urlToBytes, deflateRawBytes, inflateRawBytes,

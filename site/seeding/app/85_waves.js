@@ -95,7 +95,20 @@ export function currentWaveMap(P) {
   if (wv && Array.isArray(wv.poolToWave) && wv.poolCount === P && wv.waveCount === W) {
     return wv.poolToWave.slice();
   }
-  return chunkWaveMap(P, W);
+  return interleaveWaveMap(P, W);
+}
+// ウェーブ交互の割り当て (篝火 #14・#15 の作り方、2026-11-11): プール番号ごとに W 個ずつ並べ、1 組ごとに向きを変える。
+// W=2 なら A, B, B, A, A, B, B, A, … (シードは 1 つごとに A, B, B, A, …)。start.gg にまだプールが無い (ウェーブが分からない)
+// ときの既定。前半 A・後半 B (chunkWaveMap) だとシードが十数個の塊でウェーブを替え、ウェーブ指定で大きくずれていた
+/** @param {number} P @param {number} W @returns {number[]} */
+function interleaveWaveMap(P, W) {
+  const Wc = Math.max(1, Math.min(W, P));
+  const map = new Array(P);
+  for (let p = 0; p < P; p++) {
+    const k = Math.floor(p / Wc), j = p % Wc;
+    map[p] = k % 2 === 0 ? j : Wc - 1 - j;
+  }
+  return map;
 }
 // P プールを W 個の連続チャンクに分ける (純関数)。
 /** @param {number} P @param {number} W @returns {number[]} */
