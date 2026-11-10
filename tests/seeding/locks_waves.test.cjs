@@ -643,3 +643,27 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
   // 共有した CSV でプール数/ウェーブ数も揃う。
   assert.ok(/\['pools', 'so-pools', 'プール数'\]/.test(APP_SRC), 'pools/waves 列の反映が無い');
 });
+
+// ── optimizer: シード位置の固定 (seedFixed、2026-11-11) ─────────────
+test('optimizer: seedFixed の人は pools・winners スコープとも入力の位置から動かない', () => {
+  const N = 32, P = 4;
+  const ranking = Array.from({ length: N }, (_, i) => i + 1);
+  // 同地域を固めて移動を誘発する。8・16・30・31・32 を固定 (30〜32 はノーシード想定)
+  const prefByUid = { 1: '愛知県', 8: '愛知県', 9: '愛知県', 16: '愛知県', 17: '愛知県', 25: '福岡県', 30: '福岡県', 31: '福岡県', 32: '福岡県' };
+  const fixed = [8, 16, 30, 31, 32];
+  for (const scope of ['pools', 'winners']) {
+    for (const seed of [1, 2, 3]) {
+      const res = SO.optimize({
+        poolCount: P, format: 'DOUBLE_ELIMINATION', ranking, prefByUid, recentPair: {},
+        params: { mode: 'sa', rngSeed: seed, avoidRecent: false, keepDePlace: false, bracketScope: scope,
+          seedFixed: fixed, _verifyDelta: true, _verifyMoves: true },
+      });
+      for (const u of fixed) assert.strictEqual(res.seedOrder.indexOf(u), u - 1, `${scope} seed=${seed}: uid${u} が動いた`);
+      assert.deepStrictEqual(res.seedOrder.slice().sort((a, b) => a - b), ranking);
+    }
+  }
+  // 固定なしなら少なくとも誰かは動く (このデータで最適化が効いていることの確認)
+  const free = SO.optimize({ poolCount: P, format: 'DOUBLE_ELIMINATION', ranking, prefByUid, recentPair: {},
+    params: { mode: 'sa', rngSeed: 1, avoidRecent: false, keepDePlace: false } });
+  assert.ok(free.seedOrder.some((u, i) => u !== i + 1));
+});

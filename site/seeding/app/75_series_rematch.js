@@ -349,6 +349,13 @@ export async function runSeedOptimize() {
     params.seedLocks = seedLocks;
     params.poolWaves = waveMap;
   }
+  // シード位置の固定 (2026-11-11): 📌 シード指定 CSV で seed を指定した人 (「◯◯の逆」の ◯◯ を含む) とノーシードは
+  // 最適化しても今の位置から動かさない (プール/ウェーブ固定だけだとプールの中で動いていた)
+  if (S.SEED_SPEC) {
+    const fixed = Object.keys(S.SEED_SPEC.pins || {}).concat((S.SEED_SPEC.noseed || []).map(String))
+      .map(manualParseUid).filter((u) => rankingSet.has(u));
+    if (fixed.length) params.seedFixed = [...new Set(fixed)];
+  }
   // undefined のキーは optimizer 既定に任せる（明示的に消す）。
   Object.keys(params).forEach(k => { if (params[k] === undefined) delete params[k]; });
   // シードズレ上限の昇順チェック (optimizer でも throw するが、取得前にわかりやすく弾く)。

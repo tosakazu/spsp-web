@@ -161,6 +161,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // 'wave' = 元ランキング位置のプールと同じウェーブのプール内でのみ動ける。
     // 'wave' 指定には poolWaves が必須 (無指定は fail-loud で throw)。null = 固定なし。
     seedLocks: null,
+    // シード位置の固定 (ハード制約、2026-11-11)。uid の配列。ここに入った人は最適化の入力の位置 (シード番号) から一切動かない。
+    // 📌 シード指定 CSV で seed を指定した人・ノーシード・「◯◯の逆」の ◯◯ に使う。null = 固定なし。
+    seedFixed: null,
     // プール index (0始まり) → ウェーブ index (0始まり) の配列。長さ = poolCount。
     // ウェーブ = 連続するプールの塊 (A,B,C,… の連番アルファベット)。null = ウェーブなし。
     poolWaves: null,
@@ -376,6 +379,14 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     };
   }
 
+  // シード位置の固定 (seedFixed)。固定された uid か (null = 固定なし)
+  function buildFixedCheck(params) {
+    const arr = params.seedFixed;
+    if (!arr || !arr.length) return null;
+    const set = new Set(arr.map(String));
+    return (uid) => set.has(String(uid));
+  }
+
   function kInterFn(params) {
     if (typeof params.kInter === 'function') return params.kInter;
     if (Array.isArray(params.kInter)) {
@@ -447,9 +458,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const keepDe = params.keepDePlace === true;
     const origRank = params._origRank || {};
     const lockCheck = buildLockCheck(params, P);
+    const fixedI = buildFixedCheck(params);
     function swapAllowed(order, i, j) {
       const pi = poolOfSeed(i, P), pj = poolOfSeed(j, P);
       const X = order[i], Y = order[j];
+      if (fixedI && (fixedI(X) || fixedI(Y))) return false;   // シード位置の固定
       const rowX = rowOfSeed(i, P) + 1, rowY = rowOfSeed(j, P) + 1; // 同じはず
       if (Math.abs(pj - initPool[X]) > kInter(rowX)) return false;   // X→pool pj
       if (Math.abs(pi - initPool[Y]) > kInter(rowY)) return false;   // Y→pool pi
@@ -500,6 +513,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // よって行き先を候補集合から引けば片側は常に成立し、残る棄却は相手側の1チェックだけ。
     // 候補集合は盤面に依存しないので前計算1回で済む（swap ごとの更新は不要）。
     function posOkInter(uid, j) {
+      if (fixedI && fixedI(uid)) return false;
       const pj = poolOfSeed(j, P), rowJ = rowOfSeed(j, P) + 1;
       if (Math.abs(pj - initPool[uid]) > kInter(rowJ)) return false;
       if (lockCheck && !lockCheck(uid, pj)) return false;
@@ -597,9 +611,11 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const shiftCap = shiftCapFn(params);
     const keepDe = params.keepDePlace === true;
     const origRank = params._origRank || {};
+    const fixedA = buildFixedCheck(params);
 
     function swapAllowed(order, i, j) {
       const A = order[i], B2 = order[j];
+      if (fixedA && (fixedA(A) || fixedA(B2))) return false;   // シード位置の固定
       // プール間移動した選手も他と同じ ±k 制約で動ける。
       // （旧実装は移動者を intra 固定していたが、実データ検証で参加者の約8割が
       //   固定され再対戦回避の主なボトルネックになっていたため撤廃。合成変位は
@@ -657,6 +673,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // よって行き先を候補集合から引けば片側は常に成立し、残る棄却は相手側の1チェックだけ。
     // 候補集合は盤面に依存しないので前計算1回で済む（swap ごとの更新は不要）。
     function posOkIntra(uid, k) {
+      if (fixedA && fixedA(uid)) return false;
       if (Math.abs((k + 1) - initRank[uid]) > kIntra(initRank[uid], M)) return false;
       if (maxShift != null && gs1 && Math.abs(gs1[k] - (origRank[uid] || gs1[k])) > maxShift) return false;
       if (shiftCap && gs1) {
@@ -735,6 +752,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const maxShift = params.maxSeedShift != null ? params.maxSeedShift : null;
     const shiftCapW = shiftCapFn(params);
     const lockCheckW = buildLockCheck(params, P);
+    const fixedW = buildFixedCheck(params);
     // 位置 (0始まり) → タイ帯。帯内の swap だけを近傍にする（末尾帯は N で切れていてよい）。
     const posByBand = {};
     const bandOfPos = new Array(N);
@@ -758,6 +776,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
     function swapAllowed(order, i, j) {
       const X = order[i], Y = order[j];
+      if (fixedW && (fixedW(X) || fixedW(Y))) return false;   // シード位置の固定
       // タイ帯不変（origRank 基準なので、何回 swap を重ねても各自の元帯から出ない）。
       if (dePlaceOfSeed(j + 1) !== dePlaceOfSeed(origRank[X] || (j + 1))) return false;
       if (dePlaceOfSeed(i + 1) !== dePlaceOfSeed(origRank[Y] || (i + 1))) return false;
@@ -785,6 +804,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // よって行き先を候補集合から引けば片側は常に成立し、残る棄却は相手側の1チェックだけ。
     // 候補集合は盤面に依存しないので前計算1回で済む（swap ごとの更新は不要）。
     function posOkWinners(uid, k) {
+      if (fixedW && fixedW(uid)) return false;
       if (dePlaceOfSeed(k + 1) !== dePlaceOfSeed(origRank[uid] || (k + 1))) return false;
       if (maxShift != null && Math.abs((k + 1) - (origRank[uid] || (k + 1))) > maxShift) return false;
       if (shiftCapW) {

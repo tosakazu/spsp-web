@@ -383,6 +383,7 @@ function applySpecRows(rows, label) {
     pins: Object.fromEntries(pins),
     waves: Object.fromEntries(waveOf),
     locks: lockObjs,
+    noseed: [...noSeed],
   };
   saveManual();
   render();
