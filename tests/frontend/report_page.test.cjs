@@ -85,7 +85,7 @@ for (const sc of SCENES) {
   });
 }
 
-test('読み込み中は SPSP のロゴ: 開いたとき (最初の画面が出たら消す)・マッチングの演出でカードを待つあいだ (2026-11-10)', { skip }, async () => {
+test('読み込み中は SPSP のロゴ: 開いたとき (最初の画面が出たら消す)。マッチングの演出の中には出さない (2026-11-11)', { skip }, async () => {
   // 開いたとき: 受付の情報が来るまでロゴ → エラーが出たら消す
   let answer = null;
   const p = await open('?c=abcd2345', { api: (b) => (b.action === 'report_info' ? new Promise((r) => { answer = r; }) : null) });
@@ -96,16 +96,17 @@ test('読み込み中は SPSP のロゴ: 開いたとき (最初の画面が出�
   assert.ok(await until(() => ld.hidden && !ld.querySelector('.spsp')), 'エラーを出したら消す');
   assert.deepStrictEqual(p.errs, []);
   p.close();
-  // マッチングの演出: カードの読み込みが長いとき (0.8 秒を過ぎたら) ロゴを出し、カードがそろったら (.go) 消す
+  // マッチングの演出: カードの読み込みが長くても、演出の中にロゴは出さない (演出が始まったら読み込みのロゴは要らない)
   //   (見本のカードは NO DATA。カードのフォントの読み込みを 1.5 秒かかることにする)
   const q = await open('?demo=match&anim=cards', { before: (w) => {
     Object.defineProperty(w.document, 'fonts', { configurable: true, value: { ready: Promise.resolve(), check: () => false, load: () => new Promise((r) => setTimeout(() => r([]), 1500)) } });
   } });
   assert.ok(await until(() => q.d.querySelector('.rp-match-ov')));
   const ov = q.d.querySelector('.rp-match-ov');
-  assert.ok(await until(() => ov.classList.contains('loading') && ov.querySelector('.rp-match-load .spsp'), 2500), '待つあいだはロゴ');
+  await sleep(1000);
+  assert.ok(!ov.classList.contains('go') && !q.d.querySelector('.rp-match-ov .spsp'), 'カードを待つあいだもロゴは出さない');
   assert.ok(await until(() => ov.classList.contains('go'), 4000));
-  assert.ok(!ov.querySelector('.rp-match-load') && !ov.classList.contains('loading'), '始まったらロゴは消す');
+  assert.ok(!q.d.querySelector('.rp-match-ov .spsp'));
   assert.deepStrictEqual(q.errs, []);
   q.close();
 });

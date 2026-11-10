@@ -132,13 +132,6 @@ body {
 .rp-match-ov.out { opacity: 0; transition: opacity .35s; }
 .rp-match-ov.skip { opacity: 0; transition: opacity .12s; pointer-events: none; }
 .rp-match-skip { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); font-size: 12px; opacity: .55; animation: rp-fade 1s; }
-/* 読み込みが長いとき (二つ名・カード): SPSP のロゴのアニメーション (logo.css)。そのあいだは演出の中身を隠す (.go で消える) */
-.rp-match-load { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-.rp-match-load:empty { display: none; }
-.rp-match-ov.loading:not(.go) > :not(.rp-match-load):not(.rp-match-skip) { visibility: hidden; }
-.rp-match-ov.loading:not(.go)::before, .rp-match-ov.loading:not(.go)::after { visibility: hidden; }
-/* 暗い演出 (dark) では白いロゴ */
-.rp-match-ov:not([class*="rp-anim-"]) .spsp { --spsp-ink: #fff; --spsp-muted: #d1d5db; --spsp-tier: 255, 255, 255; --spsp-accent: #fca5a5; --spsp-tier1: 252, 165, 165; }
 /* 選手の画面を開いたときの読み込み */
 .rp-loading[hidden] { display: none; }
 .rp-loading { padding: 32px 0; }

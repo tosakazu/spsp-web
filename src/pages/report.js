@@ -899,15 +899,6 @@ async function matchAnimation(m) {
   const lines = LINE_ANIMS.includes(anim);
   const cards = anim === 'cards' || lines;
   ov.className = 'rp-match-ov' + (anim !== 'dark' ? ' rp-anim-' + anim : '') + (lines ? ' rp-anim-cards rp-anim-lines' : '');
-  // 読み込み (二つ名・カード) が長いときは SPSP のロゴのアニメーションを出す (2026-11-10)。すぐ読めたときは出さない (線の案は線が走りきる 0.7 秒は待つので、それより後)
-  const ld = document.createElement('div');
-  ld.className = 'rp-match-load';
-  ov.appendChild(ld);
-  const loadT = setTimeout(() => {
-    if (ov.classList.contains('go')) return;
-    ov.classList.add('loading');
-    SPSPLogo.inline(ld, { sub: true });
-  }, lines ? 800 : 400);
   document.body.appendChild(ov);
   let skipped = false;
   let onSkip = () => {};
@@ -935,9 +926,6 @@ async function matchAnimation(m) {
   const cardEls = /** @type {HTMLElement[]} */ ([...ov.querySelectorAll('.rp-match-card')]);
   const ready = Promise.all([Promise.all(mounts).then(() => Promise.all(cardEls.map(cardSettled))), lines ? sleep(700) : null]);
   if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
-  clearTimeout(loadT);
-  ld.remove();
-  ov.classList.remove('loading');
   ov.classList.add('go');
   // 振動: 飛ばしたときは鳴らさない。ブラウザ (Android の Chrome など) はページに一度も触れていないと振動させない
   // (呼んでも無視される。iPhone の Safari はそもそも無い) ので、触れたことがあるときだけ呼ぶ
