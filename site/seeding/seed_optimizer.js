@@ -162,7 +162,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     // 'wave' 指定には poolWaves が必須 (無指定は fail-loud で throw)。null = 固定なし。
     seedLocks: null,
     // シード位置の固定 (ハード制約、2026-11-11)。uid の配列。ここに入った人は最適化の入力の位置 (シード番号) から一切動かない。
-    // 📌 シード指定 CSV で seed を指定した人・ノーシード・「◯◯の逆」の ◯◯ に使う。null = 固定なし。
+    // 📌 シード指定 CSV で seed を指定した人・「◯◯の逆」の ◯◯ に使う。null = 固定なし。
     seedFixed: null,
     // プール index (0始まり) → ウェーブ index (0始まり) の配列。長さ = poolCount。
     // ウェーブ = 連続するプールの塊 (A,B,C,… の連番アルファベット)。null = ウェーブなし。

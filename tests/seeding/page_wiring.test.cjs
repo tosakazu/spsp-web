@@ -173,8 +173,8 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   assert.strictEqual(p.seedLocks['101'], 'pool');
   assert.ok(!('999' in p.seedLocks), 'ranking 外の uid が seedLocks に残っている');
   assert.strictEqual(p.poolWaves.length, 4);
-  // シード位置の固定: 順位指定 (103) とノーシード (108) が seedFixed に載る (ranking 外の 998 は載らない)
-  assert.deepStrictEqual(Array.from(p.seedFixed).sort(), [103, 108]);
+  // シード位置の固定: 順位指定 (103) だけが seedFixed に載る (ノーシード 108 は最下位シードなので固定しない・ranking 外の 998 は載らない)
+  assert.deepStrictEqual(Array.from(p.seedFixed), [103]);
   // poolCount / ranking も入力どおり。
   assert.strictEqual(cap.post.input.poolCount, 4);
   assert.deepStrictEqual(Array.from(cap.post.input.ranking), [101, 102, 103, 104, 105, 106, 107, 108]);

@@ -1396,7 +1396,7 @@ window.SPSP_I18N.en = {
   'seed.csvguide.uid': 'The number in the SPSP player page URL (?uid=…) (the start.gg user ID).',
   'seed.csvguide.seedid': 'The start.gg seed ID. It is in the CSV from SPSP “Download CSV”.',
   'seed.csvguide.name': 'The start.gg name. The team tag (zeta | …) can be left out. Two players with the same name cause an error, so use it together with another column if you can.',
-  'seed.csvguide.seed_spec': 'The seed number to place the player at (1 = top seed). Write noseed to put them at the very end (in the current order among themselves). Blank = no rank specified. Players given a seed number and noseed players stay where they are during conflict avoidance.',
+  'seed.csvguide.seed_spec': 'The seed number to place the player at (1 = top seed). Write noseed to put them at the very end (in the current order among themselves). Blank = no rank specified. Players given a seed number stay where they are during conflict avoidance (noseed players are simply the lowest seeds and may move a little like everyone else).',
   'seed.csvguide.seed_source': 'The order (from 1). Blank rows, or no seed column, follow the row order.',
   'seed.csvguide.wave': 'The wave to place the player in (A / B / … or 1 / 2 / …). “opposite of NAME” (or NAMEの逆) puts them in a different wave from NAME (a name or discriminator from the CSV, or the start.gg name; if NAME has no wave, NAME is pinned at their current ranking seed and this player goes to the other wave). any / none mean no wave.',
   'seed.csvguide.lock': 'pool = never move out of the pool they are placed in / wave = never move out of the wave. Conflict avoidance keeps it too. Blank = not pinned.',
