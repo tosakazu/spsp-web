@@ -721,3 +721,16 @@ test('app: buildSpecOrder — 同じウェーブの枠を取り合うときは�
   assert.deepStrictEqual(order, [1, 2, 5, 6, 7, 8, 3, 4], '上位 (3) が近い枠、下位 (4) がその下');
   assert.deepStrictEqual(Array.from(r.moved).map((m) => [m.uid, m.from, m.to]), [[3, 3, 7], [4, 4, 8]]);
 });
+
+test('app: interleaveWaveMap — 既定のウェーブの並びは交互 (篝火 #14・#15 式、2026-11-11)', () => {
+  const ctx = extractFns(['interleaveWaveMap']);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(8, 2)), [0, 1, 1, 0, 0, 1, 1, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3)), [0, 1, 2, 2, 1, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1)), [0, 0, 0, 0]);
+  // プール 16・ウェーブ 2: シードは 1 つごとに A, B, B, A, …、一番下の段にも両方のウェーブが来る
+  const wm = arr(ctx.interleaveWaveMap(16, 2));
+  const waveOfSeed = (s1) => wm[SO.poolOfSeed(s1 - 1, 16)];
+  assert.deepStrictEqual([1, 2, 3, 4, 5, 6].map(waveOfSeed), [0, 1, 1, 0, 0, 1]);
+  const last = Array.from({ length: 16 }, (_, i) => waveOfSeed(1536 - i));
+  assert.ok(last.includes(0) && last.includes(1));
+});

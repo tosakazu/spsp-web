@@ -115,7 +115,7 @@ test('作業状況 CSV → ペイロード (uid/名前/プール数/ウェーブ
   assert.strictEqual(payload.names['0'], 'Shu, ton');
   assert.strictEqual(payload.names['1'], 'NoDB プレイヤー');
   assert.strictEqual(payload.phases[0].pools, 4);
-  assert.deepStrictEqual(payload.wv, [0, 0, 1, 1]);
+  assert.deepStrictEqual(payload.wv, [0, 1, 1, 0]);   // 既定のウェーブの並びは交互 (2026-11-11)
   assert.strictEqual(payload.src, 'csv');
 });
 

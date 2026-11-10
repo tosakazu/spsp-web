@@ -449,13 +449,13 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
     function saveManual() {} function render() {} function resetSeedOptResultPanel() {} function dropAppliedOrder() {}
     function _specStatus(m) { document.getElementById('spec-status').innerHTML = m; }
     ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
-    ${['currentWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
+    ${['currentWaveMap', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
        'parseWaveValue', 'parseFixValue', 'parseWaveOpposite', 'oppositeWave', '_specRefKey', 'buildSpecOrder', 'applySpecRows'].map((n) => extractFn(HTML, n)).join('\n')}
   `);
-  // 16 人・4 プール・2 ウェーブ (A = プール 1・2、B = プール 3・4)。discriminator は d01〜d16
+  // 16 人・4 プール・2 ウェーブ (既定は交互: プール 1 = A, 2 = B, 3 = B, 4 = A)。discriminator は d01〜d16
   for (let i = 1; i <= 16; i++) win.DATA.push({ user_id: i, display: 'P' + i, discriminator: ('0000000' + i.toString(16)).slice(-8).replace(/^0/, 'a'), ranks: { ensemble: i } });
   const disc = (i) => win.DATA[i - 1].discriminator;
-  const waveOfSeat = (s) => win.eval('chunkWaveMap(4, 2)')[win.SeedOptimizer.poolOfSeed(s, 4)];
+  const waveOfSeat = (s) => win.eval('interleaveWaveMap(4, 2)')[win.SeedOptimizer.poolOfSeed(s, 4)];
   win.applySpecRows([
     { name: 'P3', discriminator: disc(3), seed: 'ノーシード', wave: '', lock: '' },
     { name: 'P5', discriminator: disc(5), seed: 'noseed', wave: '', lock: '' },
