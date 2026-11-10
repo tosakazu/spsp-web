@@ -14,7 +14,7 @@ import { handleApiRequest } from './api/router.ts';
 import type { Env } from './config.ts';
 import { configFromEnv } from './config.ts';
 import { D1Store } from './db.ts';
-import { runReportAutoStart } from './api/report.ts';
+import { runReportAutoStart, runReportEntrants } from './api/report.ts';
 
 /**
  * 旧 URL (spsp.games 直下 / gh-pages の /spsp/ 直下にあったもの) の先頭セグメント。
@@ -188,10 +188,14 @@ export default {
     return withSecurityHeaders(res, url.pathname, env.CSP_MODE);
   },
 
-  // 定期実行 (wrangler.toml の [triggers]、本番だけ毎分): 結果報告の受付の開始時刻にブラケットを自動で開始する (2026-11-05)
+  // 定期実行 (wrangler.toml の [triggers]、本番だけ毎分): 結果報告の受付の開始時刻にブラケットを自動で開始する (2026-11-05)・受付の参加者を読み直す (2026-11-10)
   async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runReportAutoStart(configFromEnv(env), new D1Store(env.DB), (input, init) => fetch(input, init), Date.now())
       .then((r) => { if (r) console.log('auto_start', r.code, r.note); })
       .catch((e) => console.log('auto_start error', String(e))));
+    // 受付の参加者 (結果報告のお知らせを本人に開始時刻から出す、2026-11-10)
+    ctx.waitUntil(runReportEntrants(configFromEnv(env), new D1Store(env.DB), (input, init) => fetch(input, init), Date.now())
+      .then((r) => { for (const x of r) console.log('entrants', x.code, x.n); })
+      .catch((e) => console.log('entrants error', String(e))));
   },
 } satisfies ExportedHandler<Env>;

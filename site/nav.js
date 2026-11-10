@@ -472,9 +472,20 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       }).catch(() => {});
     }
   }
+  // 結果報告のお知らせを読み直したら (受付の開始時刻など、js/report_notice.js) 描き直す (2026-11-10)
+  /** @type {{ menu: HTMLElement, myId: string } | null} */
+  var myEventsArgs = null;   // var: リスナーより先に renderMyEvents が呼ばれても良いように
+  if (typeof window !== 'undefined') window.addEventListener('spsp:report-notice', () => {
+    if (!myEventsArgs) return;
+    const { menu, myId } = myEventsArgs;
+    menu.querySelectorAll('.nav-user-ev').forEach((x) => x.remove());
+    const tr = document.querySelector('.nav-user-trigger'); if (tr) tr.classList.remove('has-report');
+    renderMyEvents(menu, myId);
+  });
   /** @param {HTMLElement} menu @param {string} myId */
   function renderMyEvents(menu, myId) {
     if (!SpspReportNotice || !SpspLiveRoot) return;
+    myEventsArgs = { menu, myId };
     Promise.all([SpspReportNotice.items().catch(() => ({ events: [], conflicts: [], admin: [] })), SpspLiveRoot.myEvents(myId).catch(() => [])]).then(([rep, live]) => {
       const now = SpspLogin && SpspLogin.session();
       if (!now || String(now.user.id) !== myId || menu.querySelector('.nav-user-ev')) return;

@@ -50,6 +50,34 @@ async function myStartggEvents() {
   } catch (e) { return new Set(); }
 }
 
+// 読み直し (2026-11-10): サーバが返す next_ms (本人が出ている受付のうち、まだ始まっていないもののいちばん早い開始時刻) に
+// 読み直し、帯 (show した場所) を描き直して 'spsp:report-notice' を投げる (人型のメニューが描き直す)。
+// ページに戻ってきたとき (visibilitychange) も、前に読んでから RELOAD_MS 以上たっていれば読み直す。
+const RELOAD_MS = 60 * 1000;
+/** @type {Set<HTMLElement>} */
+const SHOWN = new Set();
+let loadedAt = 0;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let timer = null;
+function reload() {
+  MEMO = null;
+  const p = items();
+  for (const el of SHOWN) show(el, p).catch(() => {});
+  p.then(() => { try { W.dispatchEvent(new CustomEvent('spsp:report-notice')); } catch (e) { /* 古いブラウザ */ } }).catch(() => {});
+}
+/** @param {number | null | undefined} nextMs */
+function schedule(nextMs) {
+  if (timer) { clearTimeout(timer); timer = null; }
+  if (!nextMs) return;
+  const wait = nextMs - Date.now() + 1500;   // 開始時刻を少し過ぎてから (サーバとの時計のずれ)
+  if (wait > 0 && wait < 24 * 3600 * 1000) timer = setTimeout(reload, wait);
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && loadedAt && Date.now() - loadedAt >= RELOAD_MS && SpspLogin.session()) reload();
+  });
+}
+
 /** 同じページで 1 回だけ読む (トップの帯・人型のメニューで共有)。ログインし直したら読み直す
  * @type {{ key: string, p: Promise<{ events: any[], conflicts: any[], admin: any[] }> } | null} */
 let MEMO = null;
@@ -76,12 +104,16 @@ async function loadItems() {
   const s = SpspLogin.session();
   if (!s || !SpspLogin.apiAvailable()) return { events: [], conflicts: [], admin: [] };
   const [r, mine] = await Promise.all([SpspLogin.api({ action: 'report_notices', token: s.token }), liveEventIds(String(s.user.id))]);
+  loadedAt = Date.now();
   if (!r || !r.ok) return { events: [], conflicts: [], admin: [] };
+  schedule(r.next_ms);
   const admin = /** @type {any[]} */ (r.admin || []);
   const conflicts = /** @type {any[]} */ (r.mine || []);
   const withConflict = new Set(conflicts.map((x) => x.code));
   const all = /** @type {any[]} */ (r.events || []);
-  const hit = (/** @type {Set<string>} */ ids) => all.filter((e) => (e.event_id != null && ids.has(String(e.event_id))) || withConflict.has(e.code));
+  // entrant = サーバが参加者の一覧 (report_entrants) で本人のものと分かった受付 (速報を待たない、2026-11-10)
+  const entrant = new Set(/** @type {string[]} */ (r.entrant || []));
+  const hit = (/** @type {Set<string>} */ ids) => all.filter((e) => (e.event_id != null && ids.has(String(e.event_id))) || withConflict.has(e.code) || entrant.has(e.code));
   let events = hit(mine);
   // 速報に載っていない大会 (速報の対象外など): 受付中の start.gg の大会が残っていれば、本人の出場一覧で確かめる
   if (all.some((e) => e.kind === 'startgg' && e.event_id != null && !events.includes(e))) {
@@ -104,6 +136,7 @@ function tapWhole(el, href) {
 /** @param {HTMLElement | null} el @param {Promise<{ events: any[], conflicts: any[], admin: any[] }>} [pre] 読んだもの (無ければ読む) */
 export async function show(el, pre) {
   if (!el) return;
+  SHOWN.add(el);
   const { events, conflicts, admin = [] } = await (pre || items());
   if (!events.length && !conflicts.length && !admin.length) { el.style.display = 'none'; return; }
   const n = new Map();

@@ -346,6 +346,36 @@ export class D1Store implements Store {
     await this.db.prepare('UPDATE report_events SET auto_start_ms = ?, auto_start_tries = ?, auto_start_note = ? WHERE code = ?').bind(v.ms, v.tries, v.note.slice(0, 1000), code).run();
   }
 
+  async listReportEntrantCodes(uid: string): Promise<string[]> {
+    const r = await this.db.prepare('SELECT code FROM report_entrants WHERE uid = ?').bind(uid).all<{ code: string }>();
+    return (r.results || []).map((x) => x.code);
+  }
+
+  async replaceReportEntrants(code: string, uids: string[] | null, ms: number): Promise<void> {
+    const stmts = [this.db.prepare('UPDATE report_events SET entrants_ms = ? WHERE code = ?').bind(ms, code)];
+    if (uids) {
+      // 書き込みを減らす: 今ある行と比べて、増えた人だけ足し・いなくなった人だけ消す
+      const have = new Set(((await this.db.prepare('SELECT uid FROM report_entrants WHERE code = ?').bind(code).all<{ uid: string }>()).results || []).map((x) => x.uid));
+      const want = new Set(uids);
+      for (const u of want) if (!have.has(u)) stmts.push(this.db.prepare('INSERT OR IGNORE INTO report_entrants (uid, code) VALUES (?, ?)').bind(u, code));
+      for (const u of have) if (!want.has(u)) stmts.push(this.db.prepare('DELETE FROM report_entrants WHERE uid = ? AND code = ?').bind(u, code));
+    }
+    await this.db.batch(stmts);
+  }
+
+  async listReportEntrantsCandidates(nowMs: number): Promise<{ code: string; opens_ms: number; created_ms: number; entrants_ms: number }[]> {
+    const r = await this.db.prepare(
+      "SELECT code, COALESCE(CAST(json_extract(settings, '$.opens_ms') AS INTEGER), 0) AS opens_ms, created_ms, entrants_ms FROM report_events " +
+      "WHERE status = 'active' AND kind = 'startgg' AND ended_ms = 0 AND expires_ms >= ? AND token_enc <> '' ORDER BY entrants_ms LIMIT 50")
+      .bind(nowMs).all<{ code: string; opens_ms: number; created_ms: number; entrants_ms: number }>();
+    return (r.results || []).map((x) => ({ code: x.code, opens_ms: Number(x.opens_ms) || 0, created_ms: Number(x.created_ms), entrants_ms: Number(x.entrants_ms) || 0 }));
+  }
+
+  async purgeReportEntrants(nowMs: number): Promise<void> {
+    await this.db.prepare(
+      "DELETE FROM report_entrants WHERE code IN (SELECT code FROM report_events WHERE status <> 'active' OR expires_ms < ? OR ended_ms > 0)").bind(nowMs).run();
+  }
+
   async setReportEventEnded(code: string, ms: number): Promise<void> {
     if (ms === 0) await this.db.prepare('UPDATE report_events SET ended_ms = 0 WHERE code = ?').bind(code).run();
     else await this.db.prepare('UPDATE report_events SET ended_ms = ? WHERE code = ? AND ended_ms = 0').bind(ms, code).run();

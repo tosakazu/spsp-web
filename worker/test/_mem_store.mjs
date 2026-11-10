@@ -230,6 +230,21 @@ export class MemStore {
       .map((x) => x.code);
   }
   async setReportAutoStart(code, v) { for (const x of this.reportEvents) if (x.code === code) { x.auto_start_ms = v.ms; x.auto_start_tries = v.tries; x.auto_start_note = v.note; } }
+  async listReportEntrantCodes(uid) { this._rep(); return (this.reportEntrants || []).filter((x) => x.uid === uid).map((x) => x.code); }
+  async replaceReportEntrants(code, uids, ms) {
+    this._rep(); for (const x of this.reportEvents) if (x.code === code) x.entrants_ms = ms;
+    if (uids) this.reportEntrants = (this.reportEntrants || []).filter((x) => x.code !== code).concat([...new Set(uids)].map((uid) => ({ uid, code })));
+  }
+  async listReportEntrantsCandidates(nowMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => x.status === 'active' && x.kind === 'startgg' && !x.ended_ms && x.expires_ms >= nowMs && x.token_enc)
+      .map((x) => { let op = 0; try { op = Number(JSON.parse(x.settings || '{}').opens_ms) || 0; } catch (_) { op = 0; } return { code: x.code, opens_ms: op, created_ms: x.created_ms, entrants_ms: x.entrants_ms || 0 }; })
+      .sort((a, b) => a.entrants_ms - b.entrants_ms);
+  }
+  async purgeReportEntrants(nowMs) {
+    this._rep(); const live = new Set(this.reportEvents.filter((x) => x.status === 'active' && x.expires_ms >= nowMs && !x.ended_ms).map((x) => x.code));
+    this.reportEntrants = (this.reportEntrants || []).filter((x) => live.has(x.code));
+  }
   async setReportEventEnded(code, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code && (ms === 0 || !x.ended_ms)) x.ended_ms = ms; }
   async putBracketShare(row) { (this.shares ||= new Map()).set(row.id, { ...row }); }
   async getBracketShare(id, nowMs) { const r = (this.shares || new Map()).get(id); return r && r.expires_ms >= nowMs ? { frag: r.frag, sgg: r.sgg, expires_ms: r.expires_ms } : null; }
