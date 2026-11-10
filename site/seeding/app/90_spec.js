@@ -93,6 +93,8 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   const taken = new Set();
   const placed = new Set();
   let waveGaveUp = 0, movedDown = 0, movedUp = 0, maxDown = 0;
+  /** @type {{ uid: number, from: number, to: number }[]} ウェーブのために動かした人 (シード番号は 1 始まり) */
+  const moved = [];
   const want = new Map(waveOf);
   for (let qi = 0; qi < queue.length; qi++) {
     const u = queue[qi];
@@ -105,6 +107,7 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
     if (at < 0) { waveGaveUp++; continue; }
     taken.add(at); placed.add(u);
     out[freeSeats[at]] = u;
+    if (at !== home && home < freeSeats.length) moved.push({ uid: u, from: freeSeats[home] + 1, to: freeSeats[at] + 1 });
     if (at > home) { movedDown++; maxDown = Math.max(maxDown, freeSeats[at] - freeSeats[home]); } else if (at < home) movedUp++;
   }
   // 残り: 今の並びの順に空きへ詰め、ノーシードは最後
@@ -116,7 +119,7 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   if (movedDown) info.push(i18n('seed.spec.wave_moved_down', { n: movedDown, max: maxDown }));
   if (movedUp) notes.push(i18n('seed.spec.wave_moved_up', { n: movedUp }));
   if (waveGaveUp) notes.push(`${i18n('seed.spec.t4')} ${waveGaveUp}${i18n('seed.spec.t5')}`);
-  return { order: out, notes, info };
+  return { order: out, notes, info, moved };
 }
 
 // 固定 (対象付き) を満たすよう並びを組み直す (純関数・挿入ソート方式)。
@@ -364,10 +367,13 @@ function applySpecRows(rows, label) {
   if (pins.size || waveOf.size || noSeed.size) {
     // 手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
     const curOrder = orderedRecs().map(r => r.user_id);
-    const { order, notes, info } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
+    const { order, notes, info, moved } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
       (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0), noSeed);
     problems.push(...notes);
     infos.push(...info);
+    // 誰をどれだけ動かしたか (上位から。下げるのは順位の高い指定者から順に近い枠を取った残り = 下位の指定者ほど下がる)
+    const nameOf = new Map(DATA.map((r) => [r.user_id, r.display]));
+    for (const m of moved) infos.push(i18n('seed.spec.wave_moved_one', { name: nameOf.get(m.uid) || String(m.uid), from: m.from, to: m.to }));
     manualPushOrder(order, 'spec');
     if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.spec.s10'));
   } else if (Object.keys(locks).length && !S.MANUAL) {
