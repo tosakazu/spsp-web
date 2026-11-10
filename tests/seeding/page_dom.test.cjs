@@ -358,6 +358,7 @@ test('jsdom: CSV の読み込み・初期状態に戻すは手動調整の 1 手
     ${extractFn(HTML, 'manualFromOptimized')}
     ${extractFn(HTML, 'initialOrder')}
     ${extractFn(HTML, 'manualResetToInitial')}
+    ${extractFn(HTML, 'manualMovedSet')}
     function uids() { return orderedRecs().map(function (r) { return r.user_id; }); }
   `);
   for (let i = 1; i <= 5; i++) win.DATA.push({ user_id: 100 + i, display: 'P' + i, ranks: { ensemble: i } });
@@ -377,8 +378,12 @@ test('jsdom: CSV の読み込み・初期状態に戻すは手動調整の 1 手
   win.eval('manualResetToInitial();');
   assert.deepStrictEqual(norm(win.eval('uids()')), [101, 102, 103, 104, 105]);
   assert.strictEqual(win.eval('manualSrc()'), 'reset');
-  win.eval('MANUAL.hpos--;');
+  assert.strictEqual(win.eval('manualMovedSet().size'), 0, '初期状態に戻したのに移動の印が残っている');
+  win.eval('manualPushOp(104, 0);');
+  assert.deepStrictEqual(norm(win.eval('Array.from(manualMovedSet())')), [104], '戻したあとの移動だけ印を付ける');
+  win.eval('MANUAL.hpos -= 2;');
   assert.deepStrictEqual(norm(win.eval('uids()')), [103, 104, 105, 101, 102]);
+  assert.ok(win.eval('manualMovedSet().size') > 0, '元に戻したら印も戻る');
   // 手動調整が無いときの CSV は、これまでどおり CSV の順を基準にする (シードアップロード)
   win.eval('MANUAL = null; manualPushOrder([102, 101, 103, 104, 105], "csv");');
   assert.deepStrictEqual(norm(win.eval('MANUAL.base')), [102, 101, 103, 104, 105]);
