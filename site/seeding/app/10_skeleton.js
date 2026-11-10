@@ -319,7 +319,10 @@ const SEED_APP_SKELETON_HTML = `
 <!-- 作業状況の保存 (現在のシード順 + 固定を CSV に。読み込みは 📌 パネル側) -->
 <div id="work-bar" style="display:none;margin:10px 0 0">
   <button id="spec-export" style="background:#16a34a;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">${i18n('seed.skeleton.t111')}</button>
-  <button id="bracket-preview" title="${i18n('seed.skeleton.t143')}" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:6px">${i18n('seed.skeleton.t112')}</button>
+  <span id="bracket-preview-wrap" style="position:relative;display:inline-block;margin-left:6px">
+    <button id="bracket-preview" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="bracket-preview-menu" title="${i18n('seed.skeleton.t143')}" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">${i18n('seed.skeleton.t112')} ▾</button>
+    <div id="bracket-preview-menu" role="menu" hidden style="position:absolute;left:0;top:calc(100% + 4px);z-index:50;width:280px;max-width:calc(100vw - 32px);background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:4px"></div>
+  </span>
   <span id="work-note" style="font-size:11px;color:#6b7280;margin-left:8px"></span>
 </div>
 
