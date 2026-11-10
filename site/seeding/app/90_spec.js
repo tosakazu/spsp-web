@@ -233,6 +233,7 @@ function applySpecRows(rows, label) {
   let sampleRows = 0;   // テンプレートの記入例が残っていた行 (無視 + 警告)
   let matchedRows = 0;
   const noSeed = new Set();
+  let waveOver = 0;   // ウェーブ数より大きいウェーブの指定 (ウェーブ数を入れ忘れて読んだとき)
   /** @type {{ u: number, rec: any, ref: string, seat: number | null, fixV: unknown }[]} 「◯◯の逆」(全行を読んでから決める) */
   const opposites = [];
   /** CSV の行の名前・discriminator → 参加者 (「◯◯の逆」の参照先。参加者の start.gg の名前と違う呼び方でも引ける) */
@@ -271,6 +272,7 @@ function applySpecRows(rows, label) {
       // 指定不可・どっちでも = 指定しない
     } else if (waveV != null) {
       wIdx = parseWaveValue(waveV);
+      if (wIdx != null && wIdx >= W) waveOver++;
       if (wIdx == null || wIdx >= W) { problems.push(`${rec.display}${i18n('seed.spec.t14')}${waveV})`); wIdx = null; }
     }
     if (seat != null) {
@@ -324,6 +326,8 @@ function applySpecRows(rows, label) {
       locks[o.u] = fx || 'wave';
     }
   }
+  // ウェーブ数を入れ忘れて読んだ: 1 件ずつの警告より先に、何をすればよいかを出す (2026-11-11)
+  if (waveOver || (W < 2 && opposites.length)) problems.unshift(i18n('seed.spec.wave_count_hint', { w: W, n: waveOver + (W < 2 ? opposites.length : 0) }));
   // discriminator 列があるのに照合データが無い = エラー (黙って名前照合等に劣化させない)。
   if (discUnavailable) {
     _specStatus(`${i18n('seed.spec.t19')}` +
@@ -333,7 +337,7 @@ function applySpecRows(rows, label) {
   // 名前の被り = エラー (何も適用しない)。黙って別人に指定が付くのを防ぐ。
   if (ambiguous.length) {
     _specStatus(`${i18n('seed.spec.t21')} ` +
-      `${[...new Set(ambiguous)].slice(0, 5).map(escHtml).join(', ')}${ambiguous.length > 5 ? ' …' : ''}` +
+      `${[...new Set(ambiguous)].map(escHtml).join(', ')}` +   // 省略しない (2026-11-11)
       i18n('seed.spec.s7'), true);
     return;
   }
@@ -393,10 +397,11 @@ function applySpecRows(rows, label) {
   if (settingNotes.length) msg += ` ${i18n('seed.spec.t24')}${settingNotes.join('・')})`;
   if (sampleRows) msg += ` ${i18n('seed.spec.t25')} ${sampleRows}${i18n('seed.spec.t26')}`;
   if (unmatched.length) {
-    msg += ` ${i18n('seed.spec.t27')} ${unmatched.length}${i18n('seed.spec.t28')} ${unmatched.slice(0, 5).map(escHtml).join(', ')}${unmatched.length > 5 ? ' …' : ''}`;
+    // 未照合・注意は省略せずに全部出す (注意は 1 件 1 行、2026-11-11)
+    msg += ` ${i18n('seed.spec.t27')} ${unmatched.length}${i18n('seed.spec.t28')} ${unmatched.map(escHtml).join(', ')}`;
   }
   if (problems.length) {
-    msg += `<br>⚠ ${problems.slice(0, 8).map(escHtml).join(' ／ ')}${problems.length > 8 ? ' …' : ''}`;
+    msg += problems.map((p) => `<br>⚠ ${escHtml(p)}`).join('');
   }
   _specStatus(msg, false);
   const st = document.getElementById('status');

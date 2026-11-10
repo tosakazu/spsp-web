@@ -1368,6 +1368,7 @@ window.SPSP_I18N.ja = {
   'seed.core.s27': 'プール指定',
   'seed.core.s28': '被り回避の結果から手動調整しています。「元に戻す」で最適化前の並びに戻せます。',
   'seed.spec.opp_no_wave': '「◯◯の逆」はウェーブが 2 つ以上のときだけ使えます (ウェーブ数を設定してから読み込み直してください)',
+  'seed.spec.wave_count_hint': 'ウェーブ数が {w} なので、ウェーブの指定 {n} 件を反映できませんでした。プール数・ウェーブ数を入れてから読み込み直してください',
   'seed.spec.opp_not_found': '「{name}の逆」の {name} が参加者に見つかりません (CSV の name・discriminator か start.gg の名前で書いてください)',
   'seed.spec.noseed_count': 'ノーシード {n} 人 (最後尾)。',
   'seed.csvtpl.sample1': '山田太郎',
