@@ -35,18 +35,24 @@ function wavesFromGroupNodes(nodes) {
       ? String(n.wave.identifier).trim().toUpperCase()
       : (m[1] ? m[1].toUpperCase() : null);
     const num = m[2] != null ? parseInt(m[2], 10) : null;
-    return { disp, letter, num };
+    const id = n && n.id != null && /^\d+$/.test(String(n.id)) ? Number(n.id) : null;
+    return { disp, letter, num, id };
   });
-  // 識別子の自然順 (A1, A2, …, A10, B1, …)。文字なしは先頭に数値順で並ぶ。
-  parsed.sort((a, b) => {
+  // プールの並び = start.gg がシードを配る順。start.gg はプール (phase group) の ID 順にスネークで配る
+  // (篝火 #12・#14・#15 の実際の配置と 99.9〜100% 一致、2026-11-11)。ID が無いときだけ識別子の自然順
+  // (A1, A2, …, A10, B1, …。文字なしは先頭に数値順)。以前は常に識別子順で、ウェーブを交互に作った大会
+  // (篝火 #15 = A100, B100, B200, A200, …) ではシードとプール・ウェーブの対応がほぼ全部ずれていた
+  const byName = (a, b) => {
     const la = a.letter || '', lb = b.letter || '';
     if (la !== lb) return la < lb ? -1 : 1;
     return (a.num || 0) - (b.num || 0);
-  });
+  };
+  parsed.sort(parsed.every((p) => p.id != null) ? ((a, b) => /** @type {number} */ (a.id) - /** @type {number} */ (b.id)) : byName);
   const letters = [];
   for (const p of parsed) {
     if (p.letter && !letters.includes(p.letter)) letters.push(p.letter);
   }
+  letters.sort();   // ウェーブの番号は文字順 (A = 0)。プールが ID 順で B から始まっても、CSV の A・画面の A と同じウェーブを指すように
   if (!letters.length) {
     return { poolCount: parsed.length, waveCount: 1, poolToWave: parsed.map(() => 0),
              letters: [], identifiers: parsed.map(p => p.disp) };

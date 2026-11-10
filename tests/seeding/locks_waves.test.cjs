@@ -667,3 +667,24 @@ test('optimizer: seedFixed の人は pools・winners スコープとも入力の
     params: { mode: 'sa', rngSeed: 1, avoidRecent: false, keepDePlace: false } });
   assert.ok(free.seedOrder.some((u, i) => u !== i + 1));
 });
+
+// start.gg はプール (phase group) の ID 順にスネークでシードを配る (篝火 #12・#14・#15 の実データで 99.9〜100% 一致、2026-11-11)
+test('app: wavesFromGroupNodes はプールを ID 順に並べる (ウェーブを交互に作った大会)', () => {
+  const ctx = extractFns(['wavesFromGroupNodes']);
+  // 篝火 #15 の形: ID 順が A100, B100, B200, A200, A300, B300, B400, A400 (API は名前順で返す)
+  const ids = { A100: 1, B100: 2, B200: 3, A200: 4, A300: 5, B300: 6, B400: 7, A400: 8 };
+  const nodes = ['A100', 'A200', 'A300', 'A400', 'B100', 'B200', 'B300', 'B400']
+    .map((d) => ({ id: 3520000 + ids[d], displayIdentifier: d, wave: { identifier: d[0] } }));
+  const wv = ctx.wavesFromGroupNodes(nodes);
+  assert.deepStrictEqual(Array.from(wv.identifiers), ['A100', 'B100', 'B200', 'A200', 'A300', 'B300', 'B400', 'A400']);
+  assert.deepStrictEqual(Array.from(wv.poolToWave), [0, 1, 1, 0, 0, 1, 1, 0]);
+  const SOx = require('../../site/seeding/seed_optimizer.js');
+  const poolOf = (s) => (SOx.default || SOx).poolOfSeed(s, 8);
+  // シード 1 は A100 (ウェーブ A)、シード 2 は B100 (ウェーブ B)、3 は B200、4 は A200
+  assert.deepStrictEqual([0, 1, 2, 3].map((s) => wv.identifiers[poolOf(s)]), ['A100', 'B100', 'B200', 'A200']);
+  // 篝火 #14 の形 (ID 順が B から始まる) でもウェーブ番号は文字順 (A = 0)
+  const ids14 = { B100: 1, A100: 2, A200: 3, B200: 4 };
+  const wv14 = ctx.wavesFromGroupNodes(['A100', 'A200', 'B100', 'B200'].map((d) => ({ id: ids14[d], displayIdentifier: d, wave: { identifier: d[0] } })));
+  assert.deepStrictEqual(Array.from(wv14.letters), ['A', 'B']);
+  assert.deepStrictEqual(Array.from(wv14.poolToWave), [1, 0, 0, 1]);
+});
