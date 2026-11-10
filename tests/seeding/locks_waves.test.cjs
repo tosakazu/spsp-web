@@ -710,3 +710,14 @@ test('app: buildSpecOrder — ウェーブ指定を優先し、シードは下�
   const ns = order.filter((u) => u >= 17);
   assert.deepStrictEqual(ns, [17, 18, 19, 20]);
 });
+
+test('app: buildSpecOrder — 同じウェーブの枠を取り合うときは下位の指定者ほど下がる・動かした人の一覧 (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  // P=4・A=プール1・2 / B=プール3・4。シード 3・4 は本来 B の枠。2 人とも A 指定 → A の枠は 7・8 番目
+  const r = ctx.buildSpecOrder(cur, [], [[3, 0], [4, 0]], 4, [0, 0, 1, 1], poolOf);
+  const order = Array.from(r.order);
+  assert.deepStrictEqual(order, [1, 2, 5, 6, 7, 8, 3, 4], '上位 (3) が近い枠、下位 (4) がその下');
+  assert.deepStrictEqual(Array.from(r.moved).map((m) => [m.uid, m.from, m.to]), [[3, 3, 7], [4, 4, 8]]);
+});
