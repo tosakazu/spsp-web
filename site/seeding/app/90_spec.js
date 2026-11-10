@@ -5,7 +5,7 @@
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
 import { DATA, manualMovedSet, manualParseUid, orderedRecs, renderManualUI, saveManual } from './30_core.js';
-import { fetchAllSeeds, render, seedNodeToInfo } from './40_startgg.js';
+import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
 import { CSV_SEAT_COLS, CSV_TPL_OUT_NAMES, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
@@ -513,6 +513,127 @@ async function issueBracketPreview(opts) {
   }
 }
 
+// ── トーナメントプレビューのメニュー (2026-11-10) ──
+// どの並びで組むかを選ぶ:
+//   current   = 表示中のシード (今の表の並び = orderedRecs)
+//   optimized = 被り回避最適化後のシード (最適化の結果があるときだけ。反映を外した・手動調整を再開したあとでも結果の並びで出せる)
+//   startgg   = start.gg 上のシード (API で今のシードを読む。start.gg の大会を読み込んでいるときだけ)
+
+/** 各項目を選べるか。選べないときは理由の文言 @returns {{ current: string | null, optimized: string | null, startgg: string | null }} */
+export function bracketPreviewAvailability() {
+  const opt = S.SEEDOPT_RESULT && Array.isArray(S.SEEDOPT_RESULT.seedOrder) && S.SEEDOPT_RESULT.seedOrder.length;
+  const ctx = S.EVENT_CONTEXT;
+  return {
+    current: null,
+    optimized: opt ? null : i18n('seed.preview.opt_disabled'),
+    startgg: !ctx ? i18n('seed.preview.gg_disabled') : ctx.phaseId == null ? i18n('seed.preview.gg_no_phase') : null,
+  };
+}
+
+/** 被り回避最適化の結果の並び (結果に無い人は後ろ) */
+function optimizedRecs() {
+  const order = /** @type {SpspSeedOptResult} */ (S.SEEDOPT_RESULT).seedOrder;
+  const pos = new Map(order.map((u, i) => [u, i]));
+  const at = (r) => (pos.has(r.user_id) ? /** @type {number} */ (pos.get(r.user_id)) : 1e9);
+  return DATA.slice().sort((a, b) => at(a) - at(b));
+}
+
+/** start.gg に入っている今のシードを読んで、その並びで開く @param {string} token @param {number | string} phaseId */
+async function previewStartggSeeds(token, phaseId) {
+  const note = document.getElementById('work-note');
+  try {
+    if (note) note.textContent = i18n('seed.spec.applied_loading');
+    const nodes = await fetchAllSeeds(token, phaseId);
+    const infos = nodes.map(seedNodeToInfo).sort((a, b) => (a.originalSeed || 0) - (b.originalSeed || 0));
+    const recs = infos.map((si) => ({ user_id: si.userId, display: si.display }));
+    await issueBracketPreview({ recs, pools: S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount, applied: true });
+  } catch (err) {
+    if (note) note.textContent = i18n('seed.spec.applied_error') + ' ' + String((err && /** @type {any} */ (err).message) || err);
+  }
+}
+
+/** メニューの項目を選んだとき @param {'current' | 'optimized' | 'startgg'} kind */
+export function runBracketPreviewChoice(kind) {
+  closeBracketPreviewMenu();
+  if (bracketPreviewAvailability()[kind]) return;
+  if (kind === 'current') return issueBracketPreview();
+  if (kind === 'optimized') return issueBracketPreview({ recs: optimizedRecs() });
+  const token = getToken();
+  if (!token) {
+    const note = document.getElementById('work-note');
+    if (note) note.textContent = i18n('seed.startgg.s16');
+    return;
+  }
+  return previewStartggSeeds(token, /** @type {number | string} */ (/** @type {SpspSeedEventContext} */ (S.EVENT_CONTEXT).phaseId));
+}
+
+/** メニューを作り直す (開くたびに今の状態で) */
+function renderBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  if (!menu) return;
+  const av = bracketPreviewAvailability();
+  /** @type {[ 'current' | 'optimized' | 'startgg', string, string ][]} */
+  const items = [
+    ['current', i18n('seed.preview.current'), i18n('seed.preview.current_sub')],
+    ['optimized', i18n('seed.preview.opt'), i18n('seed.preview.opt_sub')],
+    ['startgg', i18n('seed.preview.gg'), i18n('seed.preview.gg_sub')],
+  ];
+  menu.innerHTML = items.map(([k, label, sub]) => {
+    const why = av[k];
+    return `<button type="button" role="menuitem" data-bp-kind="${k}"${why ? ' disabled aria-disabled="true"' : ''}
+      style="display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:7px 10px;cursor:${why ? 'not-allowed' : 'pointer'};color:${why ? '#9ca3af' : '#111827'};font-size:12px">
+      <span style="font-weight:600">${escHtml(label)}</span>
+      <span style="display:block;font-size:11px;color:${why ? '#9ca3af' : '#6b7280'};margin-top:2px">${escHtml(why || sub)}</span>
+    </button>`;
+  }).join('');
+  menu.querySelectorAll('[data-bp-kind]').forEach((b) => {
+    const el = /** @type {HTMLButtonElement} */ (b);
+    if (!el.disabled) {
+      el.addEventListener('mouseenter', () => { el.style.background = '#f3f4f6'; });
+      el.addEventListener('mouseleave', () => { el.style.background = 'none'; });
+    }
+    el.addEventListener('click', () => { runBracketPreviewChoice(/** @type {any} */ (el.dataset.bpKind)); });
+  });
+}
+
+/** @param {Event} e */
+function _bpOutside(e) {
+  const wrap = document.getElementById('bracket-preview-wrap');
+  if (wrap && e.target instanceof Node && wrap.contains(e.target)) return;
+  closeBracketPreviewMenu();
+}
+/** @param {KeyboardEvent} e */
+function _bpKey(e) {
+  if (e.key !== 'Escape') return;
+  closeBracketPreviewMenu();
+  const btn = document.getElementById('bracket-preview');
+  if (btn) btn.focus();
+}
+
+export function closeBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  const btn = document.getElementById('bracket-preview');
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', _bpOutside, true);
+  document.removeEventListener('keydown', _bpKey);
+}
+
+export function toggleBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  const btn = document.getElementById('bracket-preview');
+  if (!menu || !btn) return;
+  if (!menu.hidden) { closeBracketPreviewMenu(); return; }
+  if (!DATA.length) { const note = document.getElementById('work-note'); if (note) note.textContent = i18n('seed.spec.s15'); return; }
+  renderBracketPreviewMenu();
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  document.addEventListener('click', _bpOutside, true);
+  document.addEventListener('keydown', _bpKey);
+  const first = /** @type {HTMLButtonElement | null} */ (menu.querySelector('[data-bp-kind]:not([disabled])'));
+  if (first) first.focus();
+}
+
 function clearSeedSpec() {
   if (!S.SEED_SPEC) { _specStatus(i18n('seed.spec.s24')); return; }
   S.SEED_SPEC = null;
@@ -567,21 +688,13 @@ export function applySeedLockChoice(uid) {
   ], 'spsp_seed_spec_template.csv'));
   const exportBtn = document.getElementById('spec-export');
   if (exportBtn) exportBtn.addEventListener('click', exportSeedWorkCsv);
+  // トーナメントプレビューはメニューから並びを選ぶ (2026-11-10)
   const bracketBtn = document.getElementById('bracket-preview');
-  if (bracketBtn) bracketBtn.addEventListener('click', issueBracketPreview);
+  if (bracketBtn) bracketBtn.addEventListener('click', toggleBracketPreviewMenu);
   // 適用後のトーナメントをプレビュー (40_startgg.js のボタン): start.gg から適用後のシード順を読み直して、その並びで開く (2026-11-05)
-  document.addEventListener('spsp:preview-applied', async (e) => {
+  document.addEventListener('spsp:preview-applied', (e) => {
     const d = /** @type {CustomEvent} */ (e).detail || {};
-    const note = document.getElementById('work-note');
-    try {
-      if (note) note.textContent = i18n('seed.spec.applied_loading');
-      const nodes = await fetchAllSeeds(d.token, d.phaseId);
-      const infos = nodes.map(seedNodeToInfo).sort((a, b) => (a.originalSeed || 0) - (b.originalSeed || 0));
-      const recs = infos.map((si) => ({ user_id: si.userId, display: si.display }));
-      await issueBracketPreview({ recs, pools: S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount, applied: true });
-    } catch (err) {
-      if (note) note.textContent = i18n('seed.spec.applied_error') + ' ' + String((err && /** @type {any} */ (err).message) || err);
-    }
+    previewStartggSeeds(d.token, d.phaseId);
   });
   const clearBtn = document.getElementById('spec-clear');
   if (clearBtn) clearBtn.addEventListener('click', clearSeedSpec);

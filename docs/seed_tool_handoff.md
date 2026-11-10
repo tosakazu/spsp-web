@@ -122,6 +122,11 @@ SEED_SPEC = { label, pins: {uid: seat1}, waves: {uid: waveIdx0},
 同居住地/直近対戦バッジ、プレイヤー概要ポップアップ、フェーズ区切りエディタ、
 作業状況 CSV の直接読み込み)。設計と検証記録は [seed_preview_design.md](seed_preview_design.md)。
 
+- 2026-11-10 からボタンはメニューを開き、どの並びで組むかを選ぶ (`90_spec.js` の `toggleBracketPreviewMenu`):
+  **表示中のシード** (`orderedRecs`) / **被り回避最適化後のシード** (`SEEDOPT_RESULT.seedOrder`。結果があるときだけ選べる) /
+  **start.gg 上のシード** (`fetchAllSeeds` で今のシードを読む。start.gg の大会を読み込んで phase があるときだけ。
+  適用直後に出る「適用後のトーナメントをプレビュー」と同じ処理 `previewStartggSeeds`)。
+
 - 状態は全部 URL フラグメント (`#d=<deflate+base64url>` + `ph/pool/wd/lb`)。共有すれば同じ画面。
 - **名前は URL に同梱**する (9,500字を超える規模のみ DB 未登録者だけに縮小)。選手 JSON は
   上位帯で 1 人 1MB 級あるため、取得を待たずに先に描画し、居住地/直近対戦バッジは後付け。
