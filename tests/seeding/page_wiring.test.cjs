@@ -470,6 +470,7 @@ function uploadSetup(HTML) {
     ${extractFn(HTML, 'isAutoOptimizeOn')}
     ${extractFn(HTML, 'openSeedOptPanel')}
     ${extractFn(HTML, 'manualFromOptimized')}
+    ${extractFn(HTML, 'manualSrc')}
     ${extractFn(HTML, 'ensureAutoOptimizeForUpload')}
     ${extractFn(HTML, 'settleSeedOptWaiter')}
     ${extractFn(HTML, 'runSeedOptimizeAndWait')}

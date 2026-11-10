@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, manualMovedSet, manualParseUid, orderedRecs, renderManualUI, saveManual } from './30_core.js';
+import { DATA, manualMovedSet, manualOrder, manualParseUid, manualPushOrder, orderedRecs, renderManualUI, saveManual } from './30_core.js';
 import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
 import { CSV_SEAT_COLS, CSV_TPL_OUT_NAMES, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
@@ -269,14 +269,12 @@ function applySpecRows(rows, label) {
   }
   // 順位/ウェーブ指定があれば現在の出力順を組み直して手動調整 base に取り込む。
   if (pins.size || waveOf.size) {
-    if (S.MANUAL && manualMovedSet().size > 0 &&
-        !confirm(i18n('seed.spec.s9'))) return;
+    // 手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
     const curOrder = orderedRecs().map(r => r.user_id);
     const { order, notes } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
       (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0));
     problems.push(...notes);
-    S.MANUAL = { base: order, ops: [], hpos: 0, committed: true, editing: false, sel: null, src: 'spec' };
-    dropAppliedOrder();
+    manualPushOrder(order, 'spec');
     if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.spec.s10'));
   } else if (Object.keys(locks).length && !S.MANUAL) {
     // 固定のみの CSV: 現在の並びを手動調整として取り込む (手動列に射影後の位置と
@@ -289,7 +287,7 @@ function applySpecRows(rows, label) {
   const lockObjs = {};
   if (Object.keys(locks).length) {
     const placedOrder = (pins.size || waveOf.size)
-      ? /** @type {SpspSeedManual} */ (S.MANUAL).base   // 直前で S.MANUAL に入れている
+      ? manualOrder()   // 直前で手動調整に積んだ並び
       : orderedRecs().map(r => r.user_id);
     const poolOfS = (s) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, P) : 0);
     for (const k in locks) {

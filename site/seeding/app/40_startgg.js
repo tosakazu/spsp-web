@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, manualSrc, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
@@ -387,7 +387,7 @@ export function downloadCsv() {
 
 // 適用の confirm に出す「何の順か」。被り回避・手動調整の反映があれば添える。
 function uploadOrderLabel() {
-  const csvBase = !!(S.MANUAL && S.MANUAL.src === 'csv');   // シードアップロード: 読み込んだ CSV の順が基準
+  const csvBase = manualSrc() === 'csv';   // シードアップロード: 読み込んだ CSV の順が基準
   const base = csvBase ? i18n('seed.startgg.order_csv') : {
     ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
     random: i18n('seed.random.label_with_seed', { n: S.RANDOM_SEED != null ? S.RANDOM_SEED : '' }),

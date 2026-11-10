@@ -202,7 +202,7 @@ declare global {
   /** 手動調整 (app/30_core.js)。base = 基準の並び (uid)、ops = 移動の履歴、hpos = undo 位置、sel = 選択中の uid。
    *  lockSel / lockKind は固定バー (📌) の編集中の状態 (app/40_startgg.js, app/90_spec.js) */
   /** 手動調整の 1 手: 1 人の移動、または並び全体 (被り回避の結果から手動調整を始めたとき、2026-11-11) */
-  type SpspSeedManualOp = { uid: number; to: number; order?: undefined } | { order: number[]; uid?: undefined; to?: undefined };
+  type SpspSeedManualOp = { uid: number; to: number; order?: undefined; kind?: undefined } | { order: number[]; kind?: "opt" | "csv" | "spec" | "reset"; uid?: undefined; to?: undefined };
   interface SpspSeedManual {
     base: number[];
     ops: SpspSeedManualOp[];

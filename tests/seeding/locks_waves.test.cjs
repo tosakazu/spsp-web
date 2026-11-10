@@ -602,10 +602,10 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
   assert.ok(!/} else if \(APPLIED_ORDER\) \{/.test(unlock),
     '被り回避の結果が手動調整の基準に畳み込まれている');
   assert.ok(/dropAppliedOrder\(/.test(unlock), '再編集で被り回避の反映が解除されない');
-  assert.ok(/S\.MANUAL\.ops\.push\(\{ order \}\)/.test(unlock), '最適化後の並びを手動調整に積んでいない');
+  assert.ok(/manualPushOrder\(S\.APPLIED_ORDER\.slice\(\), 'opt'\)/.test(unlock), '最適化後の並びを手動調整に積んでいない');
   const csvApply = APP_SRC.slice(APP_SRC.indexOf('function applyCsvOrderIfReady('),
                                  APP_SRC.indexOf('async function buildParticipantsFromCsv('));
-  assert.ok(/dropAppliedOrder\(/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない');
+  assert.ok(/manualPushOrder\(order, 'csv'\)/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない (manualPushOrder が解除する)');
   // 共有した CSV でプール数/ウェーブ数も揃う。
   assert.ok(/\['pools', 'so-pools', 'プール数'\]/.test(APP_SRC), 'pools/waves 列の反映が無い');
 });
