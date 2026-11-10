@@ -16,7 +16,7 @@ import SPSPGeo from './geo.js';
 import SPSPPlayerData from './player_data.js';
 import SPSPCharEmoji from './char_emoji.js';
 import { charName, mergeCharUses } from './chars.js';
-import { achievementLabel } from './achievements.js';
+import { achievementLabel, achievementLabelHidden } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
 
@@ -68,6 +68,17 @@ export function achievementBadge(item) {
   return { label: '', cls: '' };
 }
 
+/** SPSP の順位を隠すときの実績の文字 (hideCardRanks、2026-11-11) @param {SpspAchievement | string} item @returns {string} */
+function achievementHidden(item) {
+  if (typeof item === 'object' && (item.label || item.kind)) return achievementLabelHidden(item);
+  if (typeof item === 'string') {
+    if (/^lv\d_reached$/.test(item)) return i18n('ach.hidden.lv');
+    if (/^top\d+$/.test(item)) return i18n('ach.hidden.top');
+    if (item.startsWith('climb_30d_+')) return i18n('player.ach.rank_up_month', { n: '?' });
+  }
+  return achievementBadge(item).label;
+}
+
 /** @param {SpspAchievement | string} a */
 const isTourAch = a => typeof a === 'object' && (a.kind === 'tour' || a.kind === 'tour_series');
 /** @param {SpspAchievement | string} a */
@@ -91,15 +102,16 @@ const achKey = a => (typeof a === 'string' ? a : a.kind ? `${a.kind}:${JSON.stri
 
 /** カードに出せる実績の全部 [{ key, label }]。既定の並び: 大会の成績 (kind: tour / tour_series) を先に順位評価のポイント順
  * (同点・ポイントの無いものはビルドの優先度順)、残りはビルドの優先度順。カードの文言は「達成」を省く
- * @param {CardData} data @returns {{ key: string, label: string }[]} */
+ * hidden = SPSP の順位を隠すときの文字 (hideCardRanks、2026-11-11。順位と関係ない実績は label と同じ・無ければ label)
+ * @param {CardData} data @returns {{ key: string, label: string, hidden?: string }[]} */
 export function cardAchievements(data) {
   const all = /** @type {(SpspAchievement | string)[]} */ (data.player.achievements || []);
   const ev = data.meta.eval_date;
   return [...all.filter(isTourAch).sort((a, b) => (achTjprPts(b, ev) - achTjprPts(a, ev)) || (achPriority(b) - achPriority(a))),
           ...all.filter(a => !isTourAch(a))]
-    .map(a => ({ key: achKey(a), label: achievementBadge(a).label.replace(/\s*達成/g, '').trim() }))
+    .map(a => ({ key: achKey(a), label: achievementBadge(a).label.replace(/\s*達成/g, '').trim(), hidden: achievementHidden(a).replace(/\s*達成/g, '').trim() }))
     .filter(a => a.label)
-    .concat(baseAchievements(data));
+    .concat(/** @type {{ key: string, label: string, hidden: string }[]} */ (baseAchievements(data)));
 }
 
 /** だれでも持てる実績 (カードが空にならないように、ビルドの実績の後ろに付ける。2026-10-15 ユーザー決定): 大会に参加・1 試合以上・
@@ -211,12 +223,12 @@ export function buildCardModel(data, settings, titleText) {
   // 総合評価の札: 海外 / 計測中 / 全一〜全三、いちばん右に現在の Lv
   const lvNow = (rec.scores && (rec.scores.shared_cascade_lv || rec.scores.tjpr_level)) || 0;
   const rankNow = (rec.ranks && rec.ranks.ensemble) || 0;
-  /** @type {{ text: string, title?: string }[]} */
+  /** @type {{ text: string, title?: string, lv?: boolean }[]} */
   const pills = [];
   if (data.overseas && data.overseas.has(uid)) pills.push({ text: i18n('table.overseas') });
   if (rec.metadata && rec.metadata.provisional) pills.push({ text: i18n('table.provisional') });   // 2 年で集計対象大会 3 未満
   for (const z of zenichiOf(data)) pills.push({ text: i18n('table.zenichi.' + z.rank, { chars: z.chars, emoji: z.emoji }), title: i18n('table.zenichi.title.' + z.rank, { chars: z.chars }) });
-  pills.push({ text: lvNow ? `Lv${lvNow}${SPSPFormat.lvSuffix(lvNow, rankNow)}` : i18n('player.lv_none') });
+  pills.push({ text: lvNow ? `Lv${lvNow}${SPSPFormat.lvSuffix(lvNow, rankNow)}` : i18n('player.lv_none'), lv: true });   // lv = Lv の札 (hideCardRanks が Lv? にする)
 
   const tours = /** @type {any[]} */ (player.tournaments || []);
   /** @type {import('./player_card.js').PCardLatest | null} */
@@ -256,7 +268,7 @@ export function buildCardModel(data, settings, titleText) {
     // 名前はチームタグ・「/name」無し (ランキング一覧・直対と同じ js/format.js shortName)
     name: SPSPFormat.shortName(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
-    achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label })),
+    achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label, hidden: /** @type {any} */ (a).hidden })),
     latest,
     totalTournaments: tours.length,
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
@@ -268,6 +280,26 @@ export function buildCardModel(data, settings, titleText) {
 }
 
 /** SPSP にデータが無い人 (初参加など) のカード: 既定の見た目で名前だけ、実績・総合評価は NO DATA (結果報告の VS、2026-10-31) @param {string} name */
+/** SPSP の順位を隠したカード (結果報告の「SPSP 順位を表示」を外したとき、2026-11-11)。
+ * 総合評価・都道府県・キャラの順位、Lv (札・パフォーマンス)、パフォーマンス (全国何位相当)・Rank Update、大会で取った順位、実績の順位 (大会の成績・最高順位・最高 Lv・ランクの上昇) を ? に。
+ * どの大会に出たか (大会名・参加人数) と、順位と関係ない実績 (出場数・UF など) はそのまま
+ * @param {import('./player_card.js').PCardModel} m @returns {import('./player_card.js').PCardModel} */
+export function hideCardRanks(m) {
+  const H = /** @type {any} */ ('??');
+  const Q = /** @type {any} */ ('?');
+  return {
+    ...m,
+    rank: m.rank != null ? H : null,
+    loc: m.loc ? { ...m.loc, rank: m.loc.rank != null ? H : null } : m.loc,
+    chars: m.chars.map(c => ({ ...c, rank: c.rank != null ? H : null })),
+    pills: m.pills.map(p => (/** @type {any} */ (p).lv ? { ...p, text: 'Lv?' } : p)),
+    achievements: m.achievements.map(a => (/** @type {any} */ (a).hidden ? { ...a, label: /** @type {any} */ (a).hidden } : a)),
+    latest: m.latest ? { ...m.latest, perfRank: m.latest.perfRank != null ? H : null, perfLv: m.latest.perfLv ? 'Lv?' : m.latest.perfLv,
+      rankBefore: m.latest.rankBefore != null ? H : null, rankAfter: m.latest.rankAfter != null ? H : null,
+      place: m.latest.place != null ? Q : m.latest.place, placeUnit: i18n('player.place_unit', { n: 0 }) } : m.latest,
+  };
+}
+
 export function noDataCardModel(name) {
   return {
     name: SPSPFormat.shortName(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
@@ -375,5 +407,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };
