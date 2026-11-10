@@ -187,7 +187,7 @@ export function applyCsvOrderIfReady(fromFetch) {
     return;
   }
   if (ambiguous.length) {
-    _csvStatus(`${i18n('seed.csv.t3')} ${[...new Set(ambiguous)].slice(0, 5).join(', ')}${ambiguous.length > 5 ? ' …' : ''}` +
+    _csvStatus(`${i18n('seed.csv.t3')} ${[...new Set(ambiguous)].join(', ')}` +
       i18n('seed.csv.s10'), true);
     return;
   }
@@ -202,7 +202,7 @@ export function applyCsvOrderIfReady(fromFetch) {
   if (restCount) msg += ` ${i18n('seed.csv.t5')} ${restCount}${i18n('seed.csv.t6')}`;
   if (settingNotes.length) msg += ` ${i18n('seed.csv.t7')}${settingNotes.join('・')})`;
   if (sampleRows) msg += ` ${i18n('seed.csv.t8')} ${sampleRows}${i18n('seed.csv.t9')}`;
-  if (unmatched.length) msg += ` ${i18n('seed.csv.t10')} ${unmatched.length}${i18n('seed.csv.t11')} ${unmatched.slice(0, 5).join(', ')}${unmatched.length > 5 ? ' …' : ''}`;
+  if (unmatched.length) msg += ` ${i18n('seed.csv.t10')} ${unmatched.length}${i18n('seed.csv.t11')} ${unmatched.join(', ')}`;   // 省略しない (2026-11-11)
   _csvStatus(msg, false);
   const st = document.getElementById('status');
   if (st) st.textContent = i18n('seed.csv.s13');

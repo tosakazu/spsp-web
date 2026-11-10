@@ -481,4 +481,16 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.strictEqual(spec.locks[10].kind, 'wave');
   assert.ok(/ノーシード 2 人/.test(st), st);
   assert.deepStrictEqual(order.slice().sort((a, b) => a - b), Array.from({ length: 16 }, (_, i) => i + 1));
+  // ウェーブ数を入れ忘れた (1 のまま): ノーシードは効き、ウェーブはまとめて案内する。注意は省略しない
+  win.document.getElementById('so-waves').value = '1';
+  win.eval('pushed = null;');
+  win.applySpecRows([
+    { name: 'P3', discriminator: disc(3), seed: 'ノーシード', wave: '', lock: '' },
+    ...[9, 10, 11, 12, 13, 14, 15, 16, 4, 6].map((k) => ({ name: 'P' + k, discriminator: disc(k), seed: '', wave: 'B', lock: 'wave' })),
+  ], 'test2.csv');
+  const st2 = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/ウェーブ数が 1 なので、ウェーブの指定 10 件/.test(st2), st2);
+  assert.ok(!/順位が不正/.test(st2), 'ノーシードが順位の不正になっている');
+  assert.ok(!/…/.test(st2) && (st2.match(/⚠/g) || []).length >= 11, '注意を省略している: ' + st2);
+  assert.strictEqual(Array.from(win.eval('pushed')).slice(-1)[0], 3);
 });
