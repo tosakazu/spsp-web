@@ -9,6 +9,8 @@ import { filterAndRerank, render, setParticipantsUiVisible } from './40_startgg.
 import { dropAppliedOrder, resetSeedOptResultPanel } from './75_series_rematch.js';
 import { _applyCsvSettingColumns } from './90_spec.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
+import { CSV_COMMENT, decodeCsvBytes } from '../../js/csv_text.js';
+import { escapeHtml } from '../../js/html.js';
 'use strict';
 
 // ── csv モード: 基準順位ソース (CSV / Google Sheets) ─────────────────────────
@@ -51,7 +53,8 @@ const CSV_DISC_COLS = ['discriminator', 'disc'];
 // 出力は ASCII 名にする: Shift_JIS 前提で CSV を開くアプリ (Excel for Mac 等) でも
 // 化けないため。判定側は旧テンプレの日本語名も引き続き例として扱う。
 export const CSV_TPL_OUT_NAMES = ['Taro Yamada', 'Hanako Suzuki'];
-const CSV_TPL_NAMES = CSV_TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子']);
+// 2026-11-11 からテンプレートは表示言語の名前 (seed.csvtpl.sample1〜3) を使う。どの言語の例も記入例として扱う
+const CSV_TPL_NAMES = CSV_TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato']);
 /** @param {Record<string, unknown>} row @returns {boolean} */
 export function isCsvTemplateSample(row) {
   const nm = _csvPick(row, CSV_NAME_COLS);
@@ -347,7 +350,7 @@ async function loadCsvSource() {
       } else {
         const res = await fetch(url);
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        text = await res.text();
+        text = decodeCsvBytes(await res.arrayBuffer());   // Shift_JIS の CSV もある (2026-11-11)
         label = 'CSV URL';
       }
     } else {
@@ -375,10 +378,120 @@ if (SEED_APP_CONFIG.mode === 'csv') {
   const btn = document.getElementById('csv-src-load');
   if (btn) btn.addEventListener('click', loadCsvSource);
   const tpl = document.getElementById('csv-tpl');
-  // seed は任意 (省略時は行順。2 行目が空欄可の例)。
-  if (tpl) tpl.addEventListener('click', () => downloadCsvTemplate([
+    // テンプレートは表示言語で、使い方の説明行つき (2026-11-11)
+  if (tpl) tpl.addEventListener('click', () => downloadCsvTemplate(csvTemplateLines('source'), 'spsp_seed_template.csv'));
+}
+
+// ── CSV のテンプレートと列の書き方 (2026-11-11) ─────────────────────────
+// テンプレートは表示言語で作る: 先頭の「##」行に使い方 (読み込み時は読み飛ばす = js/csv_text.js の CSV_COMMENT)、
+// 列名は機械が読むので英語のまま、記入例の行 (discriminator が 0000000x) も読み込み時に無視する。
+// 列の書き方は 📌 パネル・基準順位ソースの欄を開いたときに表で見せる (csvGuideHtml)。
+/** @typedef {'source' | 'spec'} CsvTplKind  source = シードアップロードの基準順位 / spec = 📌 シード指定・固定 */
+
+/** CSV の 1 行に入れる説明 (カンマ・引用符はセルが割れるので置き換える) @param {string} s */
+const _tplComment = (s) => CSV_COMMENT + ' ' + String(s).replace(/,/g, '、').replace(/"/g, '”');
+
+/** テンプレートの行 @param {CsvTplKind} kind @returns {string[]} */
+export function csvTemplateLines(kind) {
+  const n = [i18n('seed.csvtpl.sample1'), i18n('seed.csvtpl.sample2'), i18n('seed.csvtpl.sample3')];
+  const head = [
+    _tplComment(kind === 'spec' ? i18n('seed.csvtpl.title_spec') : i18n('seed.csvtpl.title_source')),
+    _tplComment(i18n('seed.csvtpl.rows')),
+    _tplComment(i18n('seed.csvtpl.match')),
+    _tplComment(i18n('seed.csvtpl.col_discriminator')),
+    _tplComment(i18n('seed.csvtpl.col_uid')),
+    _tplComment(i18n('seed.csvtpl.col_name')),
+  ];
+  if (kind === 'spec') {
+    head.push(_tplComment(i18n('seed.csvtpl.col_seed_spec')), _tplComment(i18n('seed.csvtpl.col_wave')), _tplComment(i18n('seed.csvtpl.col_lock')),
+      _tplComment(i18n('seed.csvtpl.blank_spec')));
+  } else {
+    head.push(_tplComment(i18n('seed.csvtpl.col_seed_source')));
+  }
+  head.push(_tplComment(i18n('seed.csvtpl.ignored')), _tplComment(i18n('seed.csvtpl.save')));
+  if (kind === 'spec') {
+    return head.concat([
+      'name,discriminator,seed,wave,lock',
+      `${n[0]},="00000000",1,,pool`,
+      `${n[1]},="00000001",,B,`,
+      `${n[2]},="00000002",,,wave`,
+    ]);
+  }
+  return head.concat([
     'name,discriminator,seed',
-    `${CSV_TPL_OUT_NAMES[0]},="00000000",1`,
-    `${CSV_TPL_OUT_NAMES[1]},="00000001",`,
-  ], 'spsp_seed_template.csv'));
+    `${n[0]},="00000000",1`,
+    `${n[1]},="00000001",2`,
+    `${n[2]},="00000002",`,
+  ]);
+}
+
+/** 列の書き方の表 (タップで開く欄の中身) @param {CsvTplKind} kind @returns {string} */
+export function csvGuideHtml(kind) {
+  const e = escapeHtml;
+  /** role: match = 照合 (どれか 1 つ) / order = 並び・指定 / lock = 固定 */
+  const ROLE = {
+    match: { bg: '#dbeafe', fg: '#1e40af', label: i18n('seed.csvguide.role_match') },
+    order: { bg: '#ffedd5', fg: '#9a3412', label: kind === 'spec' ? i18n('seed.csvguide.role_place') : i18n('seed.csvguide.role_order') },
+    lock: { bg: '#ede9fe', fg: '#5b21b6', label: i18n('seed.csvguide.role_lock') },
+  };
+  /** @type {[string, 'match' | 'order' | 'lock', string, string][]} 列名・役割・説明・例 */
+  const cols = [
+    ['discriminator', 'match', i18n('seed.csvguide.discriminator'), '="1a2b3c4d"'],
+    ['uid', 'match', i18n('seed.csvguide.uid'), '1234567'],
+    ['seedId', 'match', i18n('seed.csvguide.seedid'), '98765432'],
+    ['name', 'match', i18n('seed.csvguide.name'), i18n('seed.csvtpl.sample1')],
+  ];
+  if (kind === 'spec') {
+    cols.push(['seed', 'order', i18n('seed.csvguide.seed_spec'), '1'],
+      ['wave', 'order', i18n('seed.csvguide.wave'), 'B'],
+      ['lock', 'lock', i18n('seed.csvguide.lock'), 'pool / wave']);
+  } else {
+    cols.push(['seed', 'order', i18n('seed.csvguide.seed_source'), '1']);
+  }
+  const chip = (/** @type {string} */ c, /** @type {'match' | 'order' | 'lock'} */ r) =>
+    `<code style="background:${ROLE[r].bg};color:${ROLE[r].fg};padding:1px 6px;border-radius:4px;font-weight:700;white-space:nowrap">${e(c)}</code>`;
+  // 表計算ソフトの見た目の記入例 (列ごとに色分け)
+  const sample = kind === 'spec'
+    ? [['name', 'discriminator', 'seed', 'wave', 'lock'], [i18n('seed.csvtpl.sample1'), '1a2b3c4d', '1', '', 'pool'],
+       [i18n('seed.csvtpl.sample2'), '5e6f7a8b', '', 'B', ''], [i18n('seed.csvtpl.sample3'), '9c0d1e2f', '', '', 'wave']]
+    : [['name', 'discriminator', 'seed'], [i18n('seed.csvtpl.sample1'), '1a2b3c4d', '1'], [i18n('seed.csvtpl.sample2'), '5e6f7a8b', '2'],
+       [i18n('seed.csvtpl.sample3'), '9c0d1e2f', '']];
+  const roleOf = (/** @type {string} */ h) => (h === 'seed' || h === 'wave' ? 'order' : h === 'lock' ? 'lock' : 'match');
+  const letters = 'ABCDEFG';
+  const grid = `<div style="overflow-x:auto;margin:6px 0 10px"><table style="border-collapse:collapse;font-size:12px;background:#fff;min-width:320px">`
+    + `<tr><td style="background:#f3f4f6;border:1px solid #d1d5db;width:22px"></td>`
+    + sample[0].map((_, i) => `<td style="background:#f3f4f6;border:1px solid #d1d5db;color:#6b7280;text-align:center;padding:1px 8px">${letters[i]}</td>`).join('') + `</tr>`
+    + sample.map((row, ri) => `<tr><td style="background:#f3f4f6;border:1px solid #d1d5db;color:#6b7280;text-align:center">${ri + 1}</td>`
+      + row.map((v, ci) => {
+        const r = ROLE[roleOf(sample[0][ci])];
+        return ri === 0
+          ? `<td style="border:1px solid #d1d5db;padding:3px 8px;background:${r.bg};color:${r.fg};font-weight:700">${e(v)}</td>`
+          : `<td style="border:1px solid #e5e7eb;padding:3px 8px;color:${v ? '#111827' : '#d1d5db'}">${v ? e(v) : '—'}</td>`;
+      }).join('') + `</tr>`).join('')
+    + `</table></div>`;
+  const legend = `<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-bottom:6px">`
+    + Object.values(ROLE).filter((r, i) => kind === 'spec' || i < 2)
+      .map((r) => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${r.bg};border:1px solid ${r.fg};vertical-align:-1px"></span> ${e(r.label)}</span>`).join('')
+    + `</div>`;
+  const rows = cols.map(([c, r, desc, ex]) =>
+    `<tr><td style="padding:5px 8px 5px 0;vertical-align:top">${chip(c, r)}</td>`
+    + `<td style="padding:5px 8px;vertical-align:top;line-height:1.55">${e(desc)}</td>`
+    + `<td style="padding:5px 0;vertical-align:top;white-space:nowrap;color:#6b7280">${i18n('seed.csvguide.example')} <code>${e(ex)}</code></td></tr>`).join('');
+  const tips = [i18n('seed.csvguide.tip_one_match'), kind === 'spec' ? i18n('seed.csvguide.tip_blank_spec') : i18n('seed.csvguide.tip_blank_source'),
+    i18n('seed.csvguide.tip_excel'), i18n('seed.csvguide.tip_ignored'), i18n('seed.csvguide.tip_sheets')]
+    .map((t) => `<li>${e(t)}</li>`).join('');
+  return `<div style="font-size:12px;color:#374151;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:10px 12px;margin-top:8px">`
+    + `<div style="font-weight:700;margin-bottom:4px">📖 ${e(i18n('seed.csvguide.title'))}</div>`
+    + legend + grid
+    + `<table style="border-collapse:collapse;width:100%">${rows}</table>`
+    + `<ul style="margin:8px 0 0;padding-left:18px;line-height:1.6;color:#4b5563">${tips}</ul>`
+    + `</div>`;
+}
+
+// 列の書き方の表を置く (csv モードの基準順位ソースの欄・📌 パネル)
+{
+  const src = document.getElementById('csv-guide');
+  if (src) src.innerHTML = csvGuideHtml('source');
+  const spec = document.getElementById('spec-guide');
+  if (spec) spec.innerHTML = csvGuideHtml('spec');
 }
