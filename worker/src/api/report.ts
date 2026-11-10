@@ -280,6 +280,8 @@ export async function handleReportEnable(cfg: Config, store: Store, fetchFn: Fet
   await store.upsertReportEvent(row);
   const saved = (await store.getReportEventByTarget('startgg', String(eventId))) || row;
   await refreshSggAdmins(store, fetchFn, saved, g.at, now, true).catch(() => null);   // ほかの管理者の導線用 (読めなくても受付は始める)
+  // 参加者 (結果報告のお知らせを本人に出す)。読めなくても受付は始める (定期実行が読み直す)
+  await fetchEntrantUids(fetchFn, g.at, saved.target_id).then((u) => store.replaceReportEntrants(saved.code, u, now)).catch(() => null);
   return ok({ report: publicOf(saved, now), joined });
 }
 
@@ -1120,6 +1122,13 @@ export async function handleReportNotices(cfg: Config, store: Store, fetchFn: Fe
   // 受付の開始前と、大会が終わった受付 (ended_ms) はお知らせに出さない
   const events = active.filter((e) => !((parseSettings(e.settings).opens_ms || 0) > now) && !e.ended_ms);
   const sess = req.token ? await sessionOf(cfg, req, now) : null;
+  // 本人が参加者の受付 (report_entrants)。速報の一覧を待たずに出す。next_ms = まだ始まっていない受付のいちばん早い開始時刻 (画面がその時刻に読み直す)
+  const entrantOf = sess ? new Set(await store.listReportEntrantCodes(String(sess.id)).catch(() => [] as string[])) : new Set<string>();
+  let nextMs = 0;
+  for (const e of active) {
+    const op = parseSettings(e.settings).opens_ms || 0;
+    if (entrantOf.has(e.code) && !e.ended_ms && op > now && (!nextMs || op < nextMs)) nextMs = op;
+  }
   const mine = [];
   // admin = この人が運営・報告管理者の受付 (受付の開始前も)。人型のメニューとトップの帯から運営の画面へ (2026-11-04)
   const admin: { code: string; name: string; kind: string; role: 'admin' | 'manager' }[] = [];
@@ -1136,7 +1145,7 @@ export async function handleReportNotices(cfg: Config, store: Store, fetchFn: Fe
       if (row.kind === 'startgg' && sggAdminsList(row).includes(sess.id)) admin.push({ code: e.code, name: e.name, kind: e.kind, role: 'admin' });
     }
   }
-  return ok({ events, mine, admin });
+  return ok({ events, mine, admin, entrant: events.filter((e) => entrantOf.has(e.code)).map((e) => e.code), next_ms: nextMs || null });
 }
 
 // ── 運営の画面 ───────────────────────────────────────────────────────
@@ -1248,6 +1257,61 @@ export async function runReportAutoStart(cfg: Config, store: Store, fetchFn: Fet
   if (r.more > 0) { await store.setReportAutoStart(code, { ms: 0, tries, note }); return { code, note }; }
   await store.setReportAutoStart(code, { ms: now, tries, note });
   return { code, note };
+}
+
+// ── 受付の参加者 (2026-11-10) ───────────────────────────────────────────
+// 結果報告のお知らせ (report_notices) を、本人が出ている受付に、開始時刻ちょうどから出すため。これまでは速報の一覧 (5 分ごと・
+// 開始予定を過ぎた大会だけ) で本人の大会を探していて遅れがあった。参加者の start.gg の user id を D1 report_entrants に持つ。
+// 読むのは受付を始めたときと定期実行 (毎分、1 回に ENTRANTS_PER_RUN 受付まで)。間隔は開始時刻の 30 分前〜1 時間後は 3 分、
+// それより前は 60 分、後は 30 分 (当日の申し込み・取り消しに追いつく)。
+const ENTRANTS_QUERY = `query SpspReportEntrants($id: ID!, $page: Int!, $perPage: Int!) {
+  event(id: $id) { entrants(query: { page: $page, perPage: $perPage }) { pageInfo { totalPages } nodes { participants { user { id } } } } }
+}`;
+const ENTRANTS_PER_PAGE = 128;
+const ENTRANTS_MAX_PAGES = 24;   // 3,072 人まで
+const ENTRANTS_PER_RUN = 3;
+const MIN_MS = 60 * 1000;
+
+/** 部門の参加者の start.gg user id (読めなければ null) */
+export async function fetchEntrantUids(fetchFn: FetchFn, token: string, eventId: string): Promise<string[] | null> {
+  const out = new Set<string>();
+  for (let page = 1; page <= ENTRANTS_MAX_PAGES; page++) {
+    const q = await startggGql(fetchFn, token, ENTRANTS_QUERY, { id: eventId, page, perPage: ENTRANTS_PER_PAGE });
+    if (!q.ok) return null;
+    const ev = q.json.data ? q.json.data.event as { entrants?: { pageInfo?: { totalPages?: unknown } | null; nodes?: unknown[] | null } | null } | null : null;
+    const ent = ev && ev.entrants;
+    if (!ent) return null;
+    for (const n of ent.nodes || []) {
+      for (const p of ((n || {}) as { participants?: unknown[] | null }).participants || []) {
+        const u = p ? (p as { user?: { id?: unknown } | null }).user : null;
+        if (u && u.id !== null && u.id !== undefined && u.id !== '') out.add(String(u.id));
+      }
+    }
+    if (page >= (Number(ent.pageInfo && ent.pageInfo.totalPages) || 1)) break;
+  }
+  return [...out];
+}
+
+/** 参加者を読み直す間隔 @param {{ opens_ms: number; created_ms: number }} c */
+export function entrantsInterval(c: { opens_ms: number; created_ms: number }, now: number): number {
+  const opens = c.opens_ms > c.created_ms ? c.opens_ms : c.created_ms;
+  if (now < opens - 30 * MIN_MS) return 60 * MIN_MS;
+  if (now < opens + 60 * MIN_MS) return 3 * MIN_MS;
+  return 30 * MIN_MS;
+}
+
+/** 定期実行 (毎分) から: 間隔の来た受付の参加者を読み直す。読めなかったときも時刻は進める (次は間隔のあと) */
+export async function runReportEntrants(cfg: Config, store: Store, fetchFn: FetchFn, now: number): Promise<{ code: string; n: number }[]> {
+  if (now % (60 * MIN_MS) < MIN_MS) await store.purgeReportEntrants(now).catch(() => undefined);   // 1 時間に 1 回
+  const due = (await store.listReportEntrantsCandidates(now)).filter((c) => now - c.entrants_ms >= entrantsInterval(c, now)).slice(0, ENTRANTS_PER_RUN);
+  const out: { code: string; n: number }[] = [];
+  for (const c of due) {
+    const o = await openEvent(cfg, store, fetchFn, c.code, now);
+    const uids = o.ok ? await fetchEntrantUids(fetchFn, o.token, o.ev.target_id) : null;
+    await store.replaceReportEntrants(c.code, uids, now);
+    out.push({ code: c.code, n: uids ? uids.length : -1 });
+  }
+  return out;
 }
 
 /** action: "report_start_bracket" — (テスト用) SPSP からブラケットを開始してみる。運営だけ・start.gg だけ。

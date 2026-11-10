@@ -147,6 +147,8 @@ export interface ReportEventRow {
   ended_ms?: number;
   /** 開始時刻のブラケット自動開始 (0026): 終わった時刻 (0 = まだ)・失敗した回数・結果。古い行・テストの行には無いことがある */
   auto_start_ms?: number; auto_start_tries?: number; auto_start_note?: string;
+  /** 参加者を最後に読んだ時刻 (0029)。0 = まだ */
+  entrants_ms?: number;
   status: 'active' | 'stopped'; created_ms: number; expires_ms: number;
 }
 /** 受付中の一覧 (だれでも読める欄だけ) */
@@ -255,6 +257,14 @@ export interface Store {
   /** ブラケットを自動で開始する受付: 開始時刻 (settings.opens_ms) を受付を始めたより後に決めてあり、その時刻が sinceMs〜nowMs、まだ終えていない start.gg の受付 */
   listReportAutoStartDue(nowMs: number, sinceMs: number): Promise<string[]>;
   setReportAutoStart(code: string, v: { ms: number; tries: number; note: string }): Promise<void>;
+  /** 受付の参加者 (0029): この uid が出ている受付の code */
+  listReportEntrantCodes(uid: string): Promise<string[]>;
+  /** 受付の参加者を uids に置き換え、entrants_ms を ms にする (uids が null なら時刻だけ。読めなかったとき) */
+  replaceReportEntrants(code: string, uids: string[] | null, ms: number): Promise<void>;
+  /** 参加者を読み直す候補: 受付中・終わっていない start.gg の受付 (code・開始時刻・受付を始めた時刻・最後に読んだ時刻) */
+  listReportEntrantsCandidates(nowMs: number): Promise<{ code: string; opens_ms: number; created_ms: number; entrants_ms: number }[]>;
+  /** 受付中でなくなった受付の参加者を消す */
+  purgeReportEntrants(nowMs: number): Promise<void>;
   /** 同じ大会 (kind, target_id) の受付 (無ければ null)。 */
   getReportEventByTarget(kind: string, targetId: string): Promise<ReportEventRow | null>;
   /** 受付を足す (同じ (kind, target_id) があれば、code と created_ms はそのままでほかを置き換える)。 */

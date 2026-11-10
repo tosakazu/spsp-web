@@ -221,6 +221,11 @@ function fakeStartgg() {
     if (name === 'SpspReportPhases') return j({ event: { numEntrants: 40, phases: [{ id: 77, name: 'Pools', phaseGroups: { nodes: [{ id: 700, rounds: [{ number: 1, bestOf: 3 }, { number: -1, bestOf: null }] }] } }] } });
     if (name === 'SpspReportGroupSets') return j({ phaseGroup: { sets: { pageInfo: { totalPages: 1 }, nodes: [{ round: 1, fullRoundText: 'Winners Round 1' }] } } });
     if (name === 'SpspReportNext') return j({ event: { sets: { nodes: st.next } } });
+    if (name === 'SpspReportEntrants') {
+      const all = st.entrantUids || [11, 22];
+      const per = variables.perPage, pages = Math.max(1, Math.ceil(all.length / per));
+      return j({ event: { entrants: { pageInfo: { totalPages: pages }, nodes: all.slice((variables.page - 1) * per, variables.page * per).map((u) => ({ participants: [{ user: { id: u } }] })) } } });
+    }
     if (name === 'SpspReportBracketSet' || name === 'SpspUpdateSet') {
       st.set.state = 3; st.set.winnerId = Number(variables.winnerId);
       st.set.games = variables.gameData.map((g) => ({ orderNum: g.gameNum, winnerId: Number(g.winnerId) }));
@@ -1195,4 +1200,47 @@ test('運営の大会一覧: 新しい順に読み、開始が 4 日より前の
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   assert.deepStrictEqual(pages, [1, 2], '古い大会が出た 2 ページ目で止める');
   assert.strictEqual(r.tournaments[0].name, 'Live');
+});
+
+test('お知らせ: 参加者 (report_entrants) で本人の受付を開始時刻から出す・開始前は next_ms (2026-11-10)', async () => {
+  const { runReportEntrants, entrantsInterval } = await import('../src/api/report.ts');
+  const fake = fakeStartgg();
+  const opens = Date.now() + 2 * 3600 * 1000;
+  const e = await enabled(fake, { opens_ms: opens });
+  assert.ok(fake.calls.includes('SpspReportEntrants'), '受付を始めたときに参加者を読む');
+  const A = await e.tok(11), C = await e.tok(33);
+  let n = await e.call({ action: 'report_notices', token: A });
+  assert.deepStrictEqual(n.entrant, [], '開始前は出さない');
+  assert.strictEqual(n.next_ms, opens, '開始時刻に読み直す');
+  assert.strictEqual((await e.call({ action: 'report_notices', token: C })).next_ms, null, '参加者でない人には時刻も出さない');
+  e.tick(2 * 3600 * 1000 + 1000);
+  n = await e.call({ action: 'report_notices', token: A });
+  assert.deepStrictEqual(n.entrant, [e.code], '開始時刻を過ぎたら速報を待たずに出す');
+  assert.strictEqual(n.next_ms, null);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: C })).entrant, []);
+  // 当日の申し込み: 定期実行が間隔ごとに読み直す
+  fake.entrantUids = [11, 22, 33];
+  const now = e.ctx.now();
+  assert.strictEqual(entrantsInterval({ opens_ms: opens, created_ms: 0 }, now), 3 * 60 * 1000);
+  assert.strictEqual(entrantsInterval({ opens_ms: opens, created_ms: 0 }, opens - 3 * 3600 * 1000), 60 * 60 * 1000);
+  assert.strictEqual(entrantsInterval({ opens_ms: opens, created_ms: 0 }, opens + 2 * 3600 * 1000), 30 * 60 * 1000);
+  await e.store.replaceReportEntrants(e.code, null, now);   // 直前に読んだことにする
+  assert.deepStrictEqual(await runReportEntrants(e.cfg, e.store, (u, i) => fake.fetch(u, i), now + 60 * 1000), [], "まだ間隔が来ていない");
+  const r = await runReportEntrants(e.cfg, e.store, (u, i) => fake.fetch(u, i), now + 3 * 60 * 1000);
+  assert.deepStrictEqual(r, [{ code: e.code, n: 3 }]);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: C })).entrant, [e.code]);
+  // 何ページにもまたがる (128 人ごと)
+  fake.entrantUids = Array.from({ length: 300 }, (_, i) => 1000 + i);
+  const r2 = await runReportEntrants(e.cfg, e.store, (u, i) => fake.fetch(u, i), now + 6 * 60 * 1000);
+  assert.deepStrictEqual(r2, [{ code: e.code, n: 300 }]);
+  assert.deepStrictEqual((await e.call({ action: 'report_notices', token: C })).entrant, [], '取り消した人は外れる');
+  // 読めなかった: 参加者はそのまま、時刻だけ進める
+  fake.fail = 'SpspReportEntrants';
+  const r3 = await runReportEntrants(e.cfg, e.store, (u, i) => fake.fetch(u, i), now + 9 * 60 * 1000);
+  assert.deepStrictEqual(r3, [{ code: e.code, n: -1 }]);
+  assert.strictEqual(e.store.reportEntrants.filter((x) => x.code === e.code).length, 300);
+  // 受付を止めたら消す
+  await e.store.stopReportEvent(e.code);
+  await e.store.purgeReportEntrants(now);
+  assert.strictEqual(e.store.reportEntrants.length, 0);
 });
