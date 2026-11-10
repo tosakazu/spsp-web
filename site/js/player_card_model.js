@@ -268,6 +268,23 @@ export function buildCardModel(data, settings, titleText) {
 }
 
 /** SPSP にデータが無い人 (初参加など) のカード: 既定の見た目で名前だけ、実績・総合評価は NO DATA (結果報告の VS、2026-10-31) @param {string} name */
+/** SPSP の順位を隠したカード (結果報告の「SPSP 順位を表示」を外したとき、2026-11-11)。総合評価・都道府県・キャラの順位、
+ * パフォーマンス (全国何位相当)・Rank Update を ?? に、Lv の印 (👑 🥇 🥈 🥉 + = 順位の帯) を外す。Lv の数字・実績はそのまま
+ * @param {import('./player_card.js').PCardModel} m @returns {import('./player_card.js').PCardModel} */
+export function hideCardRanks(m) {
+  const H = /** @type {any} */ ('??');
+  const lvOnly = (/** @type {string} */ t) => t.replace(/^(Lv\d)\S+$/u, '$1');
+  return {
+    ...m,
+    rank: m.rank != null ? H : null,
+    loc: m.loc ? { ...m.loc, rank: m.loc.rank != null ? H : null } : m.loc,
+    chars: m.chars.map(c => ({ ...c, rank: c.rank != null ? H : null })),
+    pills: m.pills.map(p => ({ ...p, text: lvOnly(p.text) })),
+    latest: m.latest ? { ...m.latest, perfRank: m.latest.perfRank != null ? H : null, perfLv: m.latest.perfLv ? lvOnly(m.latest.perfLv) : m.latest.perfLv,
+      rankBefore: m.latest.rankBefore != null ? H : null, rankAfter: m.latest.rankAfter != null ? H : null } : m.latest,
+  };
+}
+
 export function noDataCardModel(name) {
   return {
     name: SPSPFormat.shortName(name || ''), title: null, loc: null, evalDate: '', chars: [], rank: null, pills: [{ text: 'NO DATA' }],
@@ -375,5 +392,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };

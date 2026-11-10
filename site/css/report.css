@@ -44,6 +44,9 @@ body {
 .rp-vs { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0; }
 .rp-vs-side { width: 100%; max-width: 514px; display: flex; flex-direction: column; align-items: flex-start; }
 .rp-vs-side .rp-card { margin: 0; }
+/* SPSP 順位を表示 (相手のカードの下・試合待ちは候補の下、2026-11-11) */
+.rp-show-rank { display: flex; align-items: center; gap: 6px; align-self: flex-end; margin-top: 8px; font-size: 13px; color: #374151; cursor: pointer; }
+.rp-show-rank input { margin: 0; }
 .rp-vs-mid { position: relative; z-index: 2; height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
 .rp-vs-mark { flex: none; width: 46px; height: 46px; border-radius: 50%; background: #dc2626; color: #fff; font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 900; font-size: 16px; line-height: 1; letter-spacing: 0; text-box: trim-both cap alphabetic; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .rp-plate { width: 100%; height: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; padding: 10px; border-radius: 12px; background: #f3f4f6; border: 1px solid #e5e7eb; }

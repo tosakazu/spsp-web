@@ -2106,6 +2106,7 @@ window.SPSP_I18N.ja = {
   'report.gate.classes_only': '下位クラスの試合だけ選手が報告できます',
   'report.gate.top_cut': 'トップ {n} からは運営が結果を入力します',
   'report.waiting': '試合待ち',
+  'report.show_rank': 'SPSP 順位を表示',
   'report.cand.title': '次の相手の候補',
   'report.cand.none': '候補はまだ分かりません。',
   'report.cand.route': '{round} の{who}',

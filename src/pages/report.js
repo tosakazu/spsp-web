@@ -15,7 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, warmCards } from '../../site/js/player_card_embed.js';
+import { cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, redrawCards, setCardRanksHidden, warmCards } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -518,15 +518,37 @@ function stationHtml(m) {
  * カードが読み込まれるまでと SPSP にデータが無い人 (初参加・start.gg のアカウントが無い) は名前だけのカード、相手が未定なら札を出す
  */
 /** VS のカード。読み込むまでは同じ大きさの空の枠、SPSP にデータが無い人 (初参加・start.gg のアカウントがつながっていない) は NO DATA のカード */
-function vsCardHtml(slot, cls) {
-  if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div></div>`;
+function vsCardHtml(slot, cls, after) {
+  if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div>${after || ''}</div>`;
   const body = `<div class="rp-card rp-vs-card pcard rp-card-wait"${slot.uid ? ` data-card-uid="${escapeHtml(slot.uid)}"` : ''} data-card-name="${escapeHtml(slot.name)}"></div>`;
-  return `<div class="rp-vs-side ${cls}">${body}</div>`;
+  return `<div class="rp-vs-side ${cls}">${body}${after || ''}</div>`;
 }
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
-  return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mid"><div class="rp-vs-mark">VS</div></div>${vsCardHtml(op, 'rp-op')}</div>`;
+  return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mid"><div class="rp-vs-mark">VS</div></div>${vsCardHtml(op, 'rp-op', showRankHtml())}</div>`;
 }
+
+// ── SPSP 順位を表示 (2026-11-11) ──
+// 外すと、結果報告の画面に出る SPSP の順位 (カードの総合評価・都道府県・キャラの順位、パフォーマンス、Rank Update、運営の追加の候補の順位) を ?? にする。
+// 既定はオン。見ている人の端末に覚える (localStorage)。置き場所は相手のカードの下 (試合待ちは候補の下)
+const SHOW_RANK_KEY = 'spsp_report_show_rank';
+let SHOW_RANK = (() => { try { return localStorage.getItem(SHOW_RANK_KEY) !== '0'; } catch (e) { return true; } })();
+setCardRanksHidden(!SHOW_RANK);
+/** 順位の表示 (隠しているときは ??) @param {number | null | undefined} n */
+const rankText = (n) => (n == null ? '' : SHOW_RANK ? String(n) : '??');
+function showRankHtml() {
+  return `<label class="rp-show-rank"><input type="checkbox" data-show-rank${SHOW_RANK ? ' checked' : ''}> ${escapeHtml(i18n('report.show_rank'))}</label>`;
+}
+document.addEventListener('change', (e) => {
+  const t = /** @type {HTMLInputElement} */ (e.target);
+  if (!t || !t.matches || !t.matches('[data-show-rank]')) return;
+  SHOW_RANK = t.checked;
+  try { localStorage.setItem(SHOW_RANK_KEY, SHOW_RANK ? '1' : '0'); } catch (err) { /* この画面のあいだだけ */ }
+  setCardRanksHidden(!SHOW_RANK);
+  for (const x of document.querySelectorAll('[data-show-rank]')) /** @type {HTMLInputElement} */ (x).checked = SHOW_RANK;
+  redrawCards(document);
+  document.dispatchEvent(new CustomEvent('spsp:report-show-rank'));
+});
 
 /** 報告の状態 (この試合の D1 の行) */
 function reportStateHtml(m) {
@@ -1158,6 +1180,7 @@ function renderPlayer() {
       ${stationHtml(waiting)}
       <h3>${escapeHtml(i18n('report.cand.title'))}</h3>
       ${candidatesHtml(waiting)}
+      ${showRankHtml()}
     </section>`;
   } else {
     const idle = outageNow() && ENTRANT !== false ? i18n('report.outage.wait_admin') : MATCHES.length ? i18n('report.no_current') : i18n('report.no_sets');
@@ -2523,7 +2546,7 @@ function wireMgr(root, initial) {
     }
     const dm = DISC_RE.exec(v);
     const disc = dm ? dm[1].toLowerCase() : null;
-    let h = hits.map((p) => `<button type="button" class="rp-mgr-it" data-uid="${escapeHtml(p.uid)}"><span>${escapeHtml(p.tag)}</span><span class="rp-muted">${p.rank ? '#' + p.rank + ' · ' : ''}${escapeHtml(p.disc)}</span></button>`).join('');
+    let h = hits.map((p) => `<button type="button" class="rp-mgr-it" data-uid="${escapeHtml(p.uid)}"><span>${escapeHtml(p.tag)}</span><span class="rp-muted">${p.rank ? '#' + rankText(p.rank) + ' · ' : ''}${escapeHtml(p.disc)}</span></button>`).join('');
     if (disc && !hits.some((p) => p.disc === disc)) h += `<button type="button" class="rp-mgr-it" data-disc="${escapeHtml(disc)}"><span>${escapeHtml(i18n('report.mgr.add_disc', { d: disc }))}</span></button>`;
     if (!h) h = `<div class="rp-mgr-it rp-muted">${escapeHtml(i18n('report.mgr.no_hit'))}</div>`;
     sug.innerHTML = h;

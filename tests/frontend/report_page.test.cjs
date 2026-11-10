@@ -629,6 +629,28 @@ test('トーナメント表: start.gg 未反映でも SPSP に報告済みの試
   } finally { p.close(); }
 });
 
+test('SPSP 順位を表示: 相手のカードの下 (試合待ちは候補の下)、既定はオン、外すと端末に覚える (2026-11-11)', { skip }, async () => {
+  const p = await open('?demo=match&anim=dark');
+  try {
+    assert.ok(await until(() => p.d.querySelector('.rp-op [data-show-rank]')), '相手のカードの下');
+    const op = p.d.querySelector('.rp-op');
+    const cb = op.querySelector('[data-show-rank]');
+    assert.ok(op.querySelector('.rp-vs-card').compareDocumentPosition(cb) & p.w.Node.DOCUMENT_POSITION_FOLLOWING, 'カードの後');
+    assert.strictEqual(cb.checked, true, '既定はオン');
+    assert.match(cb.closest('label').textContent, /SPSP 順位を表示/);
+    cb.checked = false; cb.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+    assert.strictEqual(p.w.localStorage.getItem('spsp_report_show_rank'), '0');
+    assert.deepStrictEqual(p.errs, []);
+  } finally { p.close(); }
+  // 覚えた設定で開く (試合待ちの画面は候補の下)
+  const q = await open('?demo=waiting', { before: (w) => w.localStorage.setItem('spsp_report_show_rank', '0') });
+  try {
+    assert.ok(await until(() => q.d.querySelector('[data-show-rank]')));
+    assert.strictEqual(q.d.querySelector('[data-show-rank]').checked, false);
+    assert.deepStrictEqual(q.errs, []);
+  } finally { q.close(); }
+});
+
 test('選手が報告できる範囲 (トップ N): 参加人数より小さいものだけ選べて、人数を出す', { skip }, async () => {
   // 運営の画面 (見本は 128 人)
   const p = await open('?demo=admin');

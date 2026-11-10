@@ -11,7 +11,19 @@
 import SPSPPlayerCard, { cardSettled, shownTitle } from './player_card.js';
 export { cardSettled };
 import SPSPViews from './views.js';
-import { buildCardModel, fetchAppliedCard, loadCardData, loadCardShared, noDataCardModel } from './player_card_model.js';
+import { buildCardModel, fetchAppliedCard, hideCardRanks, loadCardData, loadCardShared, noDataCardModel } from './player_card_model.js';
+
+/** SPSP の順位を隠して描く (結果報告の「SPSP 順位を表示」、2026-11-11)。変えたら描いたカードを redrawCards で描き直す */
+let HIDE_RANKS = false;
+/** @param {boolean} on */
+export function setCardRanksHidden(on) { HIDE_RANKS = !!on; }
+/** 描いたカード (mountPlayerCard で描いたもの) を今の設定で描き直す @param {ParentNode} [root] */
+export function redrawCards(root) {
+  for (const el of Array.from((root || document).querySelectorAll('.pcard'))) {
+    const f = /** @type {any} */ (el).__pcardRedraw;
+    if (typeof f === 'function') f();
+  }
+}
 
 /** p/index.html・p/edit.html と同じフォント (変えるときは 3 か所とも) */
 export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
@@ -116,7 +128,9 @@ export async function mountPlayerCard(el, uid) {
   const draw = (/** @type {any} */ x) => {
     if (!el.isConnected) return;
     drawn = true;
-    SPSPPlayerCard.render(el, buildCardModel(data, x ? x.settings : null, x ? x.titleText : null));
+    const m = buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
+    SPSPPlayerCard.render(el, HIDE_RANKS ? hideCardRanks(m) : m);
+    /** @type {any} */ (el).__pcardRedraw = () => draw(x);
   };
   const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
   const x = await settingsP;
@@ -132,4 +146,4 @@ export function mountNoDataCard(el, name) {
   SPSPPlayerCard.render(el, noDataCardModel(name));
 }
 
-export default { mountPlayerCard, mountNoDataCard, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, warmCards, CARD_FONTS_URL };
+export default { mountPlayerCard, mountNoDataCard, setCardRanksHidden, redrawCards, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, warmCards, CARD_FONTS_URL };
