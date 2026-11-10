@@ -545,4 +545,4 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   (global.SPSP = global.SPSP || {}).SeedShare = API;   // window.SPSP.SeedShare (名前空間。旧名 SeedShare も残す)
 
 export default API;
-export { encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase, versionSource, payloadVersion, parseFragment, buildFragment, chunkWaveMap, waveLetter, poolLabel, parseCsv, workCsvToPayload, buildWorkCsv, base64urlToBytes, deflateRawBytes, inflateRawBytes };
+export { encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase, versionSource, payloadVersion, parseFragment, buildFragment, chunkWaveMap, interleaveWaveMap, waveLetter, poolLabel, parseCsv, workCsvToPayload, buildWorkCsv, base64urlToBytes, deflateRawBytes, inflateRawBytes };

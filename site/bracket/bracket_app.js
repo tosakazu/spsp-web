@@ -987,10 +987,10 @@ import SeedShare from '../seeding/seed_share.js';
     const oldP0 = STATE.payload.phases[0].pools;
     STATE.payload.phases = phases;
     if (phases[0].pools !== oldP0) {
-      // 予選プール数が変わったら wv を同じウェーブ数で作り直す
+      // 予選プール数が変わったら wv を同じウェーブ数で作り直す。並びはシード作成の既定と同じ交互 (篝火 #15 式、2026-11-11)
       const oldWv = STATE.payload.wv || [0];
       const W = oldWv.reduce((m, w) => Math.max(m, w), 0) + 1;
-      STATE.payload.wv = S.chunkWaveMap(phases[0].pools, W);
+      STATE.payload.wv = S.interleaveWaveMap(phases[0].pools, W);
     }
     STATE.blob = await S.encodePayload(STATE.payload);
     STATE.poolAgg.clear();
