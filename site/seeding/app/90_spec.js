@@ -79,31 +79,44 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
     out[s] = uid;
     pinned.add(uid);
   }
-  const wanted = new Map(waveOf);
-  // ノーシード (2026-11-11): 残りの空き位置の最後にまとめる (その中は今の並びの順)
+  // ウェーブ指定を優先する (2026-11-11 ユーザー指定): ウェーブ指定の人は、本来の位置 (今の並びで空きに詰めたときの位置)
+  // から下へ見て最初の同じウェーブの空きに置く (シードは下げる方向にだけずらす)。ノーシードの枠に入ってもよい
+  // (ノーシードの人は残りの最後にまとまるので、さらに下がる)。下に空きが無いときだけ上の一番近い空きに置き、
+  // それも無い (= そのウェーブの枠を使い切った) ときは指定を諦める。残りの人は今の並びの順に空きへ詰め、ノーシードは最後。
   const tail = noSeed ? curOrder.filter((u) => noSeed.has(u) && !pinned.has(u)) : [];
   const tailSet = new Set(tail);
   const queue = curOrder.filter((u) => !pinned.has(u) && !tailSet.has(u));
-  const free = out.reduce((n, x) => n + (x == null ? 1 : 0), 0);
-  let seen = 0;
-  let waveGaveUp = 0;   // ウェーブの枠が足りず指定を諦めた人数
-  for (let s = 0; s < N; s++) {
-    if (out[s] != null) continue;
-    if (seen++ >= free - tail.length) { out[s] = /** @type {number} */ (tail.shift()); continue; }
-    const wv = waveMap ? waveMap[poolOf(s, P)] : 0;
-    let k = -1;
-    for (let q = 0; q < queue.length; q++) {
-      const want = wanted.get(queue[q]);
-      if (want == null || want === wv) { k = q; break; }
-    }
-    // 置ける人が居ない (= そのウェーブの枠が足りない) ときは先頭の 1 人だけ諦める。
-    if (k < 0) k = 0;
-    const picked = queue.splice(k, 1)[0];
-    if (wanted.has(picked) && wanted.get(picked) !== wv) { waveGaveUp++; wanted.delete(picked); }
-    out[s] = picked;
+  /** @type {number[]} 空きの位置 (上から) */
+  const freeSeats = [];
+  for (let k = 0; k < N; k++) if (out[k] == null) freeSeats.push(k);
+  const waveAt = (/** @type {number} */ k) => (waveMap ? waveMap[poolOf(k, P)] : 0);
+  const taken = new Set();
+  const placed = new Set();
+  let waveGaveUp = 0, movedDown = 0, movedUp = 0, maxDown = 0;
+  const want = new Map(waveOf);
+  for (let qi = 0; qi < queue.length; qi++) {
+    const u = queue[qi];
+    if (!want.has(u)) continue;
+    const w = want.get(u);
+    const home = qi;   // 本来の位置 = 空きの中で qi 番目
+    let at = -1;
+    for (let i = home; i < freeSeats.length; i++) if (!taken.has(i) && waveAt(freeSeats[i]) === w) { at = i; break; }
+    if (at < 0) for (let i = home - 1; i >= 0; i--) if (!taken.has(i) && waveAt(freeSeats[i]) === w) { at = i; break; }
+    if (at < 0) { waveGaveUp++; continue; }
+    taken.add(at); placed.add(u);
+    out[freeSeats[at]] = u;
+    if (at > home) { movedDown++; maxDown = Math.max(maxDown, freeSeats[at] - freeSeats[home]); } else if (at < home) movedUp++;
   }
+  // 残り: 今の並びの順に空きへ詰め、ノーシードは最後
+  const rest = queue.filter((u) => !placed.has(u)).concat(tail);
+  let r = 0;
+  for (let i = 0; i < freeSeats.length; i++) if (!taken.has(i)) out[freeSeats[i]] = rest[r++];
+  /** @type {string[]} 注意ではないお知らせ (ウェーブのために下げた) */
+  const info = [];
+  if (movedDown) info.push(i18n('seed.spec.wave_moved_down', { n: movedDown, max: maxDown }));
+  if (movedUp) notes.push(i18n('seed.spec.wave_moved_up', { n: movedUp }));
   if (waveGaveUp) notes.push(`${i18n('seed.spec.t4')} ${waveGaveUp}${i18n('seed.spec.t5')}`);
-  return { order: out, notes };
+  return { order: out, notes, info };
 }
 
 // 固定 (対象付き) を満たすよう並びを組み直す (純関数・挿入ソート方式)。
@@ -233,6 +246,8 @@ function applySpecRows(rows, label) {
   let sampleRows = 0;   // テンプレートの記入例が残っていた行 (無視 + 警告)
   let matchedRows = 0;
   const noSeed = new Set();
+  /** @type {string[]} */
+  const infos = [];
   let waveOver = 0;   // ウェーブ数より大きいウェーブの指定 (ウェーブ数を入れ忘れて読んだとき)
   /** @type {{ u: number, rec: any, ref: string, seat: number | null, fixV: unknown }[]} 「◯◯の逆」(全行を読んでから決める) */
   const opposites = [];
@@ -349,9 +364,10 @@ function applySpecRows(rows, label) {
   if (pins.size || waveOf.size || noSeed.size) {
     // 手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
     const curOrder = orderedRecs().map(r => r.user_id);
-    const { order, notes } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
+    const { order, notes, info } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
       (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0), noSeed);
     problems.push(...notes);
+    infos.push(...info);
     manualPushOrder(order, 'spec');
     if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.spec.s10'));
   } else if (Object.keys(locks).length && !S.MANUAL) {
@@ -402,6 +418,9 @@ function applySpecRows(rows, label) {
   }
   if (problems.length) {
     msg += problems.map((p) => `<br>⚠ ${escHtml(p)}`).join('');
+  }
+  if (infos.length) {
+    msg += infos.map((p) => `<br>ℹ ${escHtml(p)}`).join('');
   }
   _specStatus(msg, false);
   const st = document.getElementById('status');

@@ -1363,6 +1363,8 @@ window.SPSP_I18N.en = {
   'seed.core.s27': 'Pool spec',
   'seed.core.s28': 'Manually adjusting from the conflict-avoidance result. Undo returns to the order before the optimization.',
   'seed.spec.opp_no_wave': '“opposite of …” needs 2 or more waves (set the wave count and load again)',
+  'seed.spec.wave_moved_down': 'Moved {n} players down to honor their wave (up to {max} seeds)',
+  'seed.spec.wave_moved_up': '{n} players were moved up because there was no free seat in their wave below',
   'seed.spec.wave_count_hint': 'The wave count is {w}, so {n} wave specifications could not be applied. Set the pool and wave counts, then load the CSV again',
   'seed.spec.opp_not_found': '{name} in “opposite of {name}” is not among the entrants (use a name or discriminator from the CSV, or the start.gg name)',
   'seed.spec.noseed_count': 'No seed: {n} (placed last).',
