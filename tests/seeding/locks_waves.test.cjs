@@ -734,3 +734,24 @@ test('app: interleaveWaveMap — 既定のウェーブの並びは交互 (篝火
   const last = Array.from({ length: 16 }, (_, i) => waveOfSeed(1536 - i));
   assert.ok(last.includes(0) && last.includes(1));
 });
+
+// 篝火 #14 (64 プール)・#15 (128 プール) の実際の予選プール (ID 順の表示名) と一致すること (2026-11-11)。
+// start.gg にプールがあるとき: ID 順に読めば両方とも全員のプール・ウェーブが一致 (実データで #14 1520/1520・#15 2814/2814)。
+// プールが無いときの既定 (交互): #15 と同じ並び。#14 は最初に B100 を作ったため A・B の名前だけが逆
+test('app: ウェーブ・プールの対応が篝火 #14・#15 と一致', () => {
+  const ctx = extractFns(['wavesFromGroupNodes', 'interleaveWaveMap', 'waveLetter', 'poolLabel']);
+  const kagaribi = (P, first) => {   // ID 順の表示名: #15 = A100, B100, B200, A200, A300, …
+    const other = first === 'A' ? 'B' : 'A';
+    return Array.from({ length: P }, (_, i) => ((Math.floor(i / 2) % 2 === 0) === (i % 2 === 0) ? first : other) + (Math.floor(i / 2) + 1) * 100);
+  };
+  const short = (d) => d.replace(/00$/, '');   // A100 → A1 (ツールの表示)
+  for (const [P, first] of [[64, 'B'], [128, 'A']]) {
+    const names = kagaribi(P, first);
+    const wv = ctx.wavesFromGroupNodes(names.map((d, i) => ({ id: 1000 + i, displayIdentifier: d })));
+    const labels = Array.from({ length: P }, (_, p) => ctx.poolLabel(p, wv.poolToWave));
+    assert.deepStrictEqual(labels, names.map(short), `start.gg のプール (${P}, ${first} から)`);
+  }
+  assert.deepStrictEqual(kagaribi(8, 'A'), ['A100', 'B100', 'B200', 'A200', 'A300', 'B300', 'B400', 'A400']);
+  const def = ctx.interleaveWaveMap(128, 2);
+  assert.deepStrictEqual(Array.from({ length: 128 }, (_, p) => ctx.poolLabel(p, def)), kagaribi(128, 'A').map(short), '既定 = #15');
+});
