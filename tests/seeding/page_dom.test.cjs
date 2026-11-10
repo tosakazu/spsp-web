@@ -310,3 +310,14 @@ test('jsdom: 被り回避を反映した並びから手動調整を続けられ�
   assert.deepStrictEqual(norm(win.eval('MANUAL.base')), [103, 101, 102, 104, 105, 106]);
   assert.deepStrictEqual(norm(win.eval('uids()')), [103, 101, 102, 104, 105, 106]);
 });
+
+test('シード適用前の自動被り回避: 反映した並びから手動調整を続けているときは回し直さない (2026-11-11)', () => {
+  const ens = extractFn(HTML, 'ensureAutoOptimizeForUpload');
+  assert.ok(/if \(S\.APPLIED_ORDER \|\| manualFromOptimized\(\)\) return true;/.test(ens), '手動調整を最適化で崩す');
+  const f = extractFn(HTML, 'manualFromOptimized');
+  const S = { MANUAL: { ops: [{ uid: 1, to: 0 }, { order: [2, 1] }], hpos: 2 } };
+  const fn = new Function('S', f + '; return manualFromOptimized();');
+  assert.strictEqual(fn(S), true);
+  assert.strictEqual(fn({ MANUAL: { ops: S.MANUAL.ops, hpos: 1 } }), false, '元に戻したあとは回す');
+  assert.strictEqual(fn({ MANUAL: null }), false);
+});

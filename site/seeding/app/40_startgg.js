@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
@@ -412,7 +412,7 @@ function openSeedOptPanel() {
 /**
  * シード適用前の自動被り回避。true = そのまま適用に進んでよい。
  * - チェック OFF → 何もしない (true)。
- * - 反映済みの最適化 (APPLIED_ORDER) がある → そのまま使う (true)。
+ * - 反映済みの最適化 (APPLIED_ORDER) がある・その並びから手動調整を続けている → そのまま使う (true)。
  * - 実行中の最適化がある → 止めて false (二重実行しない)。
  * - それ以外 → パネルを開いて最適化を回し、完了 (= 自動反映) を待つ。完了しなければ false。
  */
@@ -422,7 +422,8 @@ async function ensureAutoOptimizeForUpload() {
     alert(i18n('seed.startgg.s33'));
     return false;
   }
-  if (S.APPLIED_ORDER) return true;
+  // 反映済み、または反映した並びから手動調整を続けている (回し直すと手で動かした分が崩れる、2026-11-11)
+  if (S.APPLIED_ORDER || manualFromOptimized()) return true;
   openSeedOptPanel();
   const status = document.getElementById('status');
   clearError();

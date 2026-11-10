@@ -197,6 +197,12 @@ export function manualOrder() {
   for (let k = 0; k < M.hpos; k++) a = manualApplyOp(a, M.ops[k]);
   return _projectSeedLocks(a);
 }
+/** 今の手動順が被り回避の結果から始まっている (並び全体の op が効いている)。シード適用前の自動被り回避を回さない
+ * (回すと最適化後に手で動かした分が崩れる、2026-11-11) */
+export function manualFromOptimized() {
+  const M = S.MANUAL;
+  return !!M && M.ops.slice(0, M.hpos).some((o) => Array.isArray(o.order));
+}
 export function manualMovedSet() {
   const M = /** @type {SpspSeedManual} */ (S.MANUAL);   // 同上
   const out = new Set();
