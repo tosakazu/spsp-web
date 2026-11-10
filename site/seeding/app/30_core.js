@@ -254,7 +254,8 @@ export function manualMovedSet() {
   for (let k = 0; k < M.hpos; k++) {
     const op = M.ops[k];
     const b = manualApplyOp(a, op);
-    if (Array.isArray(op.order)) b.forEach((u, i) => { if (a[i] !== u) out.add(u); });   // 並び全体の op は位置が変わった人
+    if (op.kind === 'reset') out.clear();   // 初期状態に戻した: それまでの移動の印は消す (2026-11-11)
+    else if (Array.isArray(op.order)) b.forEach((u, i) => { if (a[i] !== u) out.add(u); });   // 並び全体の op は位置が変わった人
     else if (op.uid !== undefined) out.add(op.uid);
     a = b;
   }
