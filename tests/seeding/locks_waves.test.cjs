@@ -239,6 +239,38 @@ test('app: buildSpecOrder — 順位ピン・ウェーブ割当・警告', () =>
   assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
 });
 
+test('app: buildSpecOrder — ノーシードは最後尾にまとめる (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  let r = ctx.buildSpecOrder(cur, [], [], 2, [0, 1], poolOf, new Set([2, 5]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 4, 6, 7, 8, 2, 5], 'ノーシードは最後尾 (その中は今の順)');
+  // 最後のシードに順位ピンがあれば、その前の空きに入る
+  r = ctx.buildSpecOrder(cur, [[8, 8]], [], 2, [0, 1], poolOf, new Set([2]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 4, 5, 6, 7, 2, 8]);
+  assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
+});
+
+test('app: ウェーブの「◯◯の逆」・指定しない書き方 (2026-11-11)', () => {
+  const ctx = extractFns(['parseWaveOpposite', 'oppositeWave']);
+  vm.runInContext(APP_SRC.match(/const WAVE_OPPOSITE_RE = [^\n]*/)[0].replace('const ', 'globalThis.'), ctx);
+  ctx.WAVE_OPPOSITE_RE = ctx.WAVE_OPPOSITE_RE;
+  assert.strictEqual(ctx.parseWaveOpposite('さぼてんの逆'), 'さぼてん');
+  assert.strictEqual(ctx.parseWaveOpposite(' Celestia の逆 '), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('opposite of Celestia'), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('not Celestia'), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('B'), null);
+  assert.strictEqual(ctx.oppositeWave(0, 2), 1);
+  assert.strictEqual(ctx.oppositeWave(1, 2), 0);
+  assert.strictEqual(ctx.oppositeWave(0, 4), 2);
+  const none = new RegExp(APP_SRC.match(/const WAVE_NONE_RE = \/(.*)\/i;/)[1], 'i');
+  for (const v of ['指定不可', 'どっちでも', 'どちらでも', 'なし', 'any']) assert.ok(none.test(v), v);
+  assert.ok(!none.test('A'));
+  const noseed = new RegExp(APP_SRC.match(/const NOSEED_RE = \/(.*)\/i;/)[1], 'i');
+  for (const v of ['ノーシード', 'noseed', 'No Seed', 'unseeded']) assert.ok(noseed.test(v), v);
+  assert.ok(!noseed.test('950'));
+});
+
 function csvMatchCtx() {
   const ctx = extractFns(['_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow']);
   ctx.CSV_NAME_COLS = ['player', 'name', 'display', 'tag', 'プレイヤー', '名前'];
@@ -382,7 +414,7 @@ test('静的: 両ページに CSV テンプレート DL と記入例の無視・
   assert.ok(/CSV_TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(APP_SRC), 'seed 側の例名が想定と違う');
   assert.ok(/TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(PRI), '優先枠側の例名が想定と違う');
   for (const src of [APP_SRC, PRI]) {
-    assert.ok(/concat\(\['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato'\]\)/.test(src), '各言語の記入例名の判定が無い');
+    assert.ok(/concat\(\['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato', '田中四郎', 'Shiro Tanaka'\]\)/.test(src), '各言語の記入例名の判定が無い');
   }
   assert.ok(/csvTemplateLines\('source'\)/.test(APP_SRC) && /csvTemplateLines\('spec'\)/.test(APP_SRC), 'テンプレを表示言語で作っていない');
   assert.ok(/comments: CSV_COMMENT/.test(APP_SRC + fs.readFileSync(require('node:path').resolve(__dirname, '../../site/seed-upload/seed_uploader.js'), 'utf8')),

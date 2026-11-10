@@ -417,10 +417,68 @@ test('CSV テンプレート: 表示言語の説明行 (##) と記入例、列�
     assert.ok(notes.some((l) => l.includes('discriminator')) && notes.some((l) => l.includes('Shift_JIS')), notes.join('\n'));
     assert.strictEqual(rest[0], kind === 'spec' ? 'name,discriminator,seed,wave,lock' : 'name,discriminator,seed', '列名は英語のまま');
     assert.ok(rest[1].startsWith('山田太郎,="00000000"'), '日本語では日本語の記入例');
-    assert.strictEqual(rest.length, 4);
+    assert.strictEqual(rest.length, kind === 'spec' ? 5 : 4);
+    if (kind === 'spec') assert.ok(rest[4].includes('ノーシード') && rest[4].includes('山田太郎の逆'), rest[4]);
     const html = c2.csvGuideHtml(kind);
     for (const col of ['discriminator', 'uid', 'seedId', 'name', 'seed']) assert.ok(html.includes('>' + col + '<'), col);
     assert.strictEqual(html.includes('>lock<'), kind === 'spec');
     assert.ok(html.includes('start.gg/user/1a2b3c4d'));
   }
+});
+
+test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-11-11)', { skip: !JSDOM ? 'jsdom 未導入' : false }, () => {
+  const dom = new JSDOM('<!DOCTYPE html><body><input id="so-pools" value="4"><input id="so-waves" value="2"><div id="spec-status"></div><div id="status"></div></body>', { runScripts: 'outside-only' });
+  const win = dom.window;
+  const SO = require('../../site/seeding/seed_optimizer.js');
+  win.SeedOptimizer = SO.default || SO;
+  const constLine = (name) => HTML.match(new RegExp('(?:export )?const ' + name + ' = [^\\n]*'))[0].replace(/^(export )?const /, 'var ');
+  win.eval(`
+    var S = window;
+    var DATA = [];
+    var APPLIED_ORDER = null, PRE_OPT = null, SEEDOPT_RESULT = null, SEED_SPEC = null, MANUAL = null, EVENT_CONTEXT = null, DISCRIMINATORS = null;
+    var pushed = null;
+    function i18n(k, p) { return k + (p ? JSON.stringify(p) : ''); }
+    function escHtml(x) { return String(x); }
+    function _applyCsvSettingColumns() { return []; }
+    function chunkWaveMap(P, W) { var m = []; for (var i = 0; i < P; i++) m.push(Math.floor(i * W / P)); return m; }
+    function canonicalUserId(u) { return u; }
+    function orderedRecs() { return pushed ? pushed.map(function (u) { return DATA.find(function (r) { return r.user_id === u; }); }) : DATA.slice(); }
+    function manualPushOrder(order) { pushed = order.slice(); }
+    function manualOrder() { return pushed.slice(); }
+    function manualParseUid(k) { return Number(k); }
+    function saveManual() {} function render() {} function resetSeedOptResultPanel() {} function dropAppliedOrder() {}
+    function _specStatus(m) { document.getElementById('spec-status').innerHTML = m; }
+    ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
+    ${['currentWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
+       'parseWaveValue', 'parseFixValue', 'parseWaveOpposite', 'oppositeWave', '_specRefKey', 'buildSpecOrder', 'applySpecRows'].map((n) => extractFn(HTML, n)).join('\n')}
+  `);
+  // 16 人・4 プール・2 ウェーブ (A = プール 1・2、B = プール 3・4)。discriminator は d01〜d16
+  for (let i = 1; i <= 16; i++) win.DATA.push({ user_id: i, display: 'P' + i, discriminator: ('0000000' + i.toString(16)).slice(-8).replace(/^0/, 'a'), ranks: { ensemble: i } });
+  const disc = (i) => win.DATA[i - 1].discriminator;
+  const waveOfSeat = (s) => win.eval('chunkWaveMap(4, 2)')[win.SeedOptimizer.poolOfSeed(s, 4)];
+  win.applySpecRows([
+    { name: 'P3', discriminator: disc(3), seed: 'ノーシード', wave: '', lock: '' },
+    { name: 'P5', discriminator: disc(5), seed: 'noseed', wave: '', lock: '' },
+    { name: 'Saboten', discriminator: disc(2), seed: '', wave: '指定不可', lock: '' },   // 指定不可: 警告なしで指定しない
+    { name: 'P7', discriminator: disc(7), seed: '', wave: 'Saboten の逆', lock: '' },  // CSV の name で参照
+    { name: 'P9', discriminator: disc(9), seed: '', wave: 'B', lock: 'wave' },
+    { name: 'P10', discriminator: disc(10), seed: '', wave: 'P9の逆', lock: '' },     // 参照先がウェーブ指定あり → その逆
+    { name: 'P11', discriminator: disc(11), seed: '', wave: 'どっちでも', lock: '' },
+  ], 'test.csv');
+  const order = Array.from(win.eval('pushed'));
+  const st = win.document.getElementById('spec-status').innerHTML;
+  assert.deepStrictEqual(order.slice(-2), [3, 5], 'ノーシードは最後尾: ' + order.join(','));
+  assert.ok(!/⚠/.test(st), '指定不可・どっちでもに警告を出している: ' + st);
+  // Saboten (uid 2) は既定の位置 (seed 2) に固定、P7 はその逆のウェーブ
+  assert.strictEqual(order.indexOf(2), 1, 'Saboten は既定のシード 2 に固定');
+  assert.notStrictEqual(waveOfSeat(order.indexOf(7)), waveOfSeat(1), 'P7 が Saboten と同じウェーブ');
+  // P10 は P9 (B) の逆 = A
+  assert.strictEqual(waveOfSeat(order.indexOf(9)), 1);
+  assert.strictEqual(waveOfSeat(order.indexOf(10)), 0);
+  const spec = win.eval('SEED_SPEC');
+  assert.strictEqual(spec.locks[2].kind, 'wave', 'Saboten をウェーブで固定していない');
+  assert.strictEqual(spec.locks[7].kind, 'wave');
+  assert.strictEqual(spec.locks[10].kind, 'wave');
+  assert.ok(/ノーシード 2 人/.test(st), st);
+  assert.deepStrictEqual(order.slice().sort((a, b) => a - b), Array.from({ length: 16 }, (_, i) => i + 1));
 });

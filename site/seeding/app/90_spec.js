@@ -4,10 +4,10 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, manualMovedSet, manualOrder, manualParseUid, manualPushOrder, orderedRecs, renderManualUI, saveManual } from './30_core.js';
+import { DATA, _csvNormDisc, manualMovedSet, manualOrder, manualParseUid, manualPushOrder, orderedRecs, renderManualUI, saveManual } from './30_core.js';
 import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
-import { CSV_SEAT_COLS, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, csvTemplateLines, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
+import { CSV_SEAT_COLS, _csvMatchRow, _csvNormName, _csvPick, _csvRecLookups, _csvRowLabel, csvTemplateLines, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
 import { decodeCsvBytes } from '../../js/csv_text.js';
@@ -31,6 +31,23 @@ function parseWaveValue(v) {
   const n = parseInt(s, 10);
   return (Number.isFinite(n) && String(n) === s && n >= 1) ? n - 1 : null;
 }
+// 「◯◯の逆」の参照の照合キー (名前の正規化 / discriminator の ="..." を外す)
+/** @param {unknown} v */
+function _specRefKey(v) { return String(v).trim().replace(/^="?|"$/g, '').toLowerCase(); }
+const CSV_NAME_COLS_SPEC = ['player', 'name', 'display', 'tag', 'プレイヤー', '名前', 'hn', 'short gamertag', 'gamertag'];
+// ウェーブ列の「指定しない」の書き方 (警告を出さずに空欄と同じ扱い、2026-11-11)
+const WAVE_NONE_RE = /^(指定不可|指定なし|なし|無し|どっちでも|どちらでも|どれでも|any|either|none|no|n\/a|-|ー|—|×)$/i;
+// ウェーブ列の「◯◯の逆」(◯◯ と別のウェーブ。◯◯ は CSV の name・discriminator か参加者の名前、2026-11-11)
+const WAVE_OPPOSITE_RE = /^(.+?)\s*の逆$|^(?:opposite(?:\s+of)?|not)\s+(.+)$/i;
+// seed 列の「ノーシード」(残りの全員より後ろ = 最後尾にまとめる、2026-11-11)
+const NOSEED_RE = /^(ノーシード|ノシード|シードなし|no[\s_-]?seed|unseeded)$/i;
+/** 「◯◯の逆」の参照先の文字列 (違えば null) @param {unknown} v @returns {string | null} */
+export function parseWaveOpposite(v) {
+  const m = v == null ? null : WAVE_OPPOSITE_RE.exec(String(v).trim());
+  return m ? String(m[1] || m[2]).trim() || null : null;
+}
+/** 逆のウェーブ: 2 つなら他方、3 つ以上なら半周先 @param {number} w @param {number} W */
+export function oppositeWave(w, W) { return W === 2 ? 1 - w : (w + Math.floor(W / 2)) % W; }
 // 固定指定値 → 'pool' | 'wave' | null。明示 (プール/ウェーブ) 優先、
 // 汎用 truthy (1/○/true/固定 …) はウェーブ指定行ならウェーブ固定、それ以外はプール固定。
 /** @param {unknown} v @param {boolean} hasWave @returns {'pool' | 'wave' | null} */
@@ -49,7 +66,7 @@ function parseFixValue(v, hasWave) {
 // ピンはそのシード位置に固定配置し、残りは現在順のまま空き位置へ。ウェーブ指定者は
 // そのウェーブのプールに落ちる最初の空き位置まで待つ (= 現在順位付近に収まる)。
 // 満たせない指定は notes (人が読める説明) で返す (黙って握りつぶさない)。
-function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf) {
+function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   const N = curOrder.length;
   const out = new Array(N).fill(null);
   const notes = [];
@@ -63,10 +80,16 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf) {
     pinned.add(uid);
   }
   const wanted = new Map(waveOf);
-  const queue = curOrder.filter((u) => !pinned.has(u));
+  // ノーシード (2026-11-11): 残りの空き位置の最後にまとめる (その中は今の並びの順)
+  const tail = noSeed ? curOrder.filter((u) => noSeed.has(u) && !pinned.has(u)) : [];
+  const tailSet = new Set(tail);
+  const queue = curOrder.filter((u) => !pinned.has(u) && !tailSet.has(u));
+  const free = out.reduce((n, x) => n + (x == null ? 1 : 0), 0);
+  let seen = 0;
   let waveGaveUp = 0;   // ウェーブの枠が足りず指定を諦めた人数
   for (let s = 0; s < N; s++) {
     if (out[s] != null) continue;
+    if (seen++ >= free - tail.length) { out[s] = /** @type {number} */ (tail.shift()); continue; }
     const wv = waveMap ? waveMap[poolOf(s, P)] : 0;
     let k = -1;
     for (let q = 0; q < queue.length; q++) {
@@ -209,6 +232,11 @@ function applySpecRows(rows, label) {
   let discUnavailable = false;
   let sampleRows = 0;   // テンプレートの記入例が残っていた行 (無視 + 警告)
   let matchedRows = 0;
+  const noSeed = new Set();
+  /** @type {{ u: number, rec: any, ref: string, seat: number | null, fixV: unknown }[]} 「◯◯の逆」(全行を読んでから決める) */
+  const opposites = [];
+  /** CSV の行の名前・discriminator → 参加者 (「◯◯の逆」の参照先。参加者の start.gg の名前と違う呼び方でも引ける) */
+  const csvRef = new Map();
   for (const row of rows) {
     if (isCsvTemplateSample(row)) { sampleRows++; continue; }
     const m = _csvMatchRow(row, lk);
@@ -219,10 +247,15 @@ function applySpecRows(rows, label) {
     if (rec.user_id == null) { problems.push(`${rec.display}${i18n('seed.spec.t12')}`); continue; }
     matchedRows++;
     const u = rec.user_id;
+    for (const key of [_csvPick(row, CSV_NAME_COLS_SPEC), _csvPick(row, ['discriminator', 'disc'])]) {
+      if (key != null && String(key).trim()) csvRef.set(_specRefKey(key), rec);
+    }
     /** @type {number | null} */
     let seat = null;
     const seatV = _csvPick(row, CSV_SEAT_COLS);
-    if (seatV != null) {
+    if (seatV != null && NOSEED_RE.test(String(seatV).trim())) {
+      noSeed.add(u);
+    } else if (seatV != null) {
       const nn = parseInt(seatV, 10);
       if (Number.isFinite(nn) && nn >= 1 && nn <= DATA.length) seat = nn;
       else problems.push(`${rec.display}${i18n('seed.spec.t13')}${seatV})`);
@@ -230,7 +263,13 @@ function applySpecRows(rows, label) {
     /** @type {number | null} */
     let wIdx = null;
     const waveV = _csvPick(row, SPEC_WAVE_COLS);
-    if (waveV != null) {
+    const oppRef = waveV != null ? parseWaveOpposite(waveV) : null;
+    if (oppRef) {
+      // 「◯◯の逆」: 参照先のウェーブは全行を読んでから決める (下の opposites)
+      opposites.push({ u, rec, ref: oppRef, seat, fixV: _csvPick(row, SPEC_FIX_COLS) });
+    } else if (waveV != null && WAVE_NONE_RE.test(String(waveV).trim())) {
+      // 指定不可・どっちでも = 指定しない
+    } else if (waveV != null) {
       wIdx = parseWaveValue(waveV);
       if (wIdx == null || wIdx >= W) { problems.push(`${rec.display}${i18n('seed.spec.t14')}${waveV})`); wIdx = null; }
     }
@@ -243,12 +282,46 @@ function applySpecRows(rows, label) {
     } else if (wIdx != null) {
       waveOf.set(u, wIdx);
     }
-    const fx = parseFixValue(_csvPick(row, SPEC_FIX_COLS), wIdx != null);
+    const fixV = _csvPick(row, SPEC_FIX_COLS);
+    const fx = parseFixValue(fixV, wIdx != null);
     if (fx === 'wave' && W < 2) {
       problems.push(`${rec.display}${i18n('seed.spec.t18')}`);
       locks[u] = 'pool';
     } else if (fx) {
       locks[u] = fx;
+    }
+  }
+  // 「◯◯の逆」: ◯◯ のウェーブ (CSV で指定 > シード番号の指定 > 今の並び) の逆に置く。◯◯ にウェーブの指定が無い
+  // (指定不可・シードが高くて動かせない) ときは、今の並び (既定のランキング) の位置に ◯◯ を固定して、その逆にする (2026-11-11)
+  if (opposites.length) {
+    const curOrder0 = orderedRecs().map((r) => r.user_id);
+    const poolOfS0 = (s0) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s0, P) : 0);
+    for (const o of opposites) {
+      const key = _specRefKey(o.ref);
+      const refRec = csvRef.get(key) || (!lk.dupNames.has(_csvNormName(o.ref)) ? lk.byName.get(_csvNormName(o.ref)) : null)
+        || (lk.byDisc ? lk.byDisc.get(_csvNormDisc(o.ref)) : null) || null;
+      if (W < 2) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_no_wave')}`); continue; }
+      if (!refRec || refRec.user_id == null) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_not_found', { name: o.ref })}`); continue; }
+      const r = refRec.user_id;
+      if (r === o.u) continue;
+      let rw = waveOf.has(r) ? /** @type {number} */ (waveOf.get(r)) : null;
+      if (rw == null && pins.has(r)) rw = waveMap[poolOfS0(pins.get(r) - 1)];
+      if (rw == null) {
+        // ◯◯ を今の並びの位置 (既定のランキングのシード) に固定する
+        const pos = curOrder0.indexOf(r);
+        if (pos < 0) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_not_found', { name: o.ref })}`); continue; }
+        if (!noSeed.has(r)) { pins.set(r, pos + 1); if (!locks[r]) locks[r] = 'wave'; }
+        rw = waveMap[poolOfS0(pos)];
+      }
+      const wIdx = oppositeWave(/** @type {number} */ (rw), W);
+      if (o.seat != null) {
+        if (waveMap[poolOfS0(o.seat - 1)] !== wIdx) problems.push(`${o.rec.display}${i18n('seed.spec.t15')}${o.seat} ${i18n('seed.spec.t16')} ${waveLetter(wIdx)} ${i18n('seed.spec.t17')}`);
+      } else if (!noSeed.has(o.u)) {
+        waveOf.set(o.u, wIdx);
+      }
+      // 「◯◯の逆」はウェーブで固定する (被り回避の最適化でも逆のまま。lock 列に pool と書いてあればそちら)
+      const fx = parseFixValue(o.fixV, true);
+      locks[o.u] = fx || 'wave';
     }
   }
   // discriminator 列があるのに照合データが無い = エラー (黙って名前照合等に劣化させない)。
@@ -269,11 +342,11 @@ function applySpecRows(rows, label) {
     return;
   }
   // 順位/ウェーブ指定があれば現在の出力順を組み直して手動調整 base に取り込む。
-  if (pins.size || waveOf.size) {
+  if (pins.size || waveOf.size || noSeed.size) {
     // 手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
     const curOrder = orderedRecs().map(r => r.user_id);
     const { order, notes } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
-      (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0));
+      (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0), noSeed);
     problems.push(...notes);
     manualPushOrder(order, 'spec');
     if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.spec.s10'));
@@ -287,7 +360,7 @@ function applySpecRows(rows, label) {
   // 配置後の位置のプール/ウェーブ。以後は読み取り時射影が並びを常にこの対象へ寄せる。
   const lockObjs = {};
   if (Object.keys(locks).length) {
-    const placedOrder = (pins.size || waveOf.size)
+    const placedOrder = (pins.size || waveOf.size || noSeed.size)
       ? manualOrder()   // 直前で手動調整に積んだ並び
       : orderedRecs().map(r => r.user_id);
     const poolOfS = (s) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, P) : 0);
@@ -314,7 +387,8 @@ function applySpecRows(rows, label) {
   saveManual();
   render();
   let msg = `✅ ${escHtml(label)}: ${matchedRows}${i18n('seed.spec.t22')} ` +
-    `${i18n('seed.spec.t6')} ${pins.size} ${i18n('seed.spec.t7')} ${waveOf.size} ${i18n('seed.spec.t8')} ${Object.keys(locks).length}${i18n('seed.spec.t23')}`;
+    `${i18n('seed.spec.t6')} ${pins.size} ${i18n('seed.spec.t7')} ${waveOf.size} ${i18n('seed.spec.t8')} ${Object.keys(locks).length}${i18n('seed.spec.t23')}`
+    + (noSeed.size ? ` ${i18n('seed.spec.noseed_count', { n: noSeed.size })}` : '');
   if (settingNotes.length) msg += ` ${i18n('seed.spec.t24')}${settingNotes.join('・')})`;
   if (sampleRows) msg += ` ${i18n('seed.spec.t25')} ${sampleRows}${i18n('seed.spec.t26')}`;
   if (unmatched.length) {

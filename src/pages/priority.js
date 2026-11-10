@@ -295,7 +295,7 @@ function utcOffsetMs(off) {
   // 出力は ASCII 名にする: Shift_JIS 前提で CSV を開くアプリ (Excel for Mac 等) でも
   // 化けないため。判定側は旧テンプレの日本語名も引き続き例として扱う。
   var TPL_OUT_NAMES = ['Taro Yamada', 'Hanako Suzuki'];
-  var TPL_NAMES = TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato']);
+  var TPL_NAMES = TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato', '田中四郎', 'Shiro Tanaka']);
   /** @param {string | null | undefined} disc */
   function isTemplateDisc(disc) { return !!disc && /^0{7}[0-9a-f]$/i.test(disc); }
   /** @param {string[]} row @param {string | null} disc */
