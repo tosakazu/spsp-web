@@ -529,7 +529,7 @@ function vsHtml(m) {
 }
 
 // ── SPSP 順位を表示 (2026-11-11) ──
-// 外すと、結果報告の画面に出る SPSP の順位 (カードの総合評価・都道府県・キャラの順位、パフォーマンス、Rank Update、運営の追加の候補の順位) を ?? にする。
+// 外すと、結果報告の画面に出る SPSP の順位を ? にする: カードの総合評価・都道府県・キャラの順位、Lv、パフォーマンス、Rank Update、大会で取った順位、実績の順位 (大会名は残す)、運営の追加の候補の順位。
 // 既定はオン。見ている人の端末に覚える (localStorage)。置き場所は相手のカードの下 (試合待ちは候補の下)
 const SHOW_RANK_KEY = 'spsp_report_show_rank';
 let SHOW_RANK = (() => { try { return localStorage.getItem(SHOW_RANK_KEY) !== '0'; } catch (e) { return true; } })();

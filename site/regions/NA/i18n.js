@@ -34,6 +34,7 @@ window.SPSP_I18N_REGION.NA = {
     'page.t.description': 'SPSP tournament page: full standings, upsets, placement-rating gains, seed outperformances, head-to-head gains and rank climbs. Data from Smash Ultimate tournaments in North America.',
     'seed.skeleton.t4': 'North America / next 3 weeks',
     'ach.peak_rank.1': '👑 Peak: #1 in North America',
+    'ach.hidden.peak_rank': '🎯 Peak: #? in North America',
     'page.index.keywords': 'Super Smash Bros. Ultimate,SSBU,Smash Ultimate,ranking,seeding,PGR,UltRank,seed,North America,USA,Canada',
   },
   ja: {
@@ -70,6 +71,7 @@ window.SPSP_I18N_REGION.NA = {
     'page.t.description': 'SPSP 大会詳細ページ。全順位表、アップセット/順位評価上昇/シード超え/直対上昇/順位上昇ランキング。北米のスマブラSP大会データ。',
     'seed.skeleton.t4': '北米 / 3週間以内',
     'ach.peak_rank.1': '👑 最高 北米 1 位',
+    'ach.hidden.peak_rank': '🎯 最高 北米 ?位',
     'page.index.keywords': 'スマブラSP,スマブラ,SSBU,Super Smash Bros Ultimate,ランキング,シーディング,PGR,UltRank,seed,北米,North America',
   },
 };
