@@ -213,6 +213,14 @@ test('障害中の報告: D1 に残して (queued) 選手・運営に未反映�
   const a = await e.call({ action: 'report_admin', token: e.admin, code: e.code });
   assert.ok(a.outage);
   assert.strictEqual(a.sets.find((s) => s.set_id === '100').state, 'queued');
+  // トーナメント表: start.gg 未反映でも SPSP の結果 (勝者・スコア) を出す (2026-11-10)
+  const gs = await e.call({ action: 'report_bracket_view', token: e.admin, code: e.code });
+  const gid = gs.groups.find((g) => g.sets > 0).id;
+  const bk = await e.call({ action: 'report_bracket_view', token: e.admin, code: e.code, group: gid });
+  const s100 = bk.sets.find((x) => String(x.i) === '100');
+  assert.ok(s100 && s100.hw, '未反映の勝者');
+  assert.deepStrictEqual(s100.sl.map((x) => x.hs), [2, 0], '未反映のスコア');
+  assert.ok(bk.sets.filter((x) => String(x.i) !== '100').every((x) => x.sl.every((y) => y.hs === undefined)), '報告の無い試合には出さない');
   // 写しにも D1 にも無い試合は確かめられない
   r = await e.submit(13, '102', W2(0));
   assert.strictEqual(r.error.code, 'not_ready');

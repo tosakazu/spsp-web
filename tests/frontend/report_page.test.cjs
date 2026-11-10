@@ -85,6 +85,32 @@ for (const sc of SCENES) {
   });
 }
 
+test('読み込み中は SPSP のロゴ: 開いたとき (最初の画面が出たら消す)。マッチングの演出の中には出さない (2026-11-11)', { skip }, async () => {
+  // 開いたとき: 受付の情報が来るまでロゴ → エラーが出たら消す
+  let answer = null;
+  const p = await open('?c=abcd2345', { api: (b) => (b.action === 'report_info' ? new Promise((r) => { answer = r; }) : null) });
+  assert.ok(await until(() => answer));
+  const ld = p.d.getElementById('rp-loading');
+  assert.ok(!ld.hidden && ld.querySelector('.spsp .spsp__word'), '読み込み中はロゴ');
+  answer({ ok: false, error: { code: 'not_found', message: 'x' } });
+  assert.ok(await until(() => ld.hidden && !ld.querySelector('.spsp')), 'エラーを出したら消す');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+  // マッチングの演出: カードの読み込みが長くても、演出の中にロゴは出さない (演出が始まったら読み込みのロゴは要らない)
+  //   (見本のカードは NO DATA。カードのフォントの読み込みを 1.5 秒かかることにする)
+  const q = await open('?demo=match&anim=cards', { before: (w) => {
+    Object.defineProperty(w.document, 'fonts', { configurable: true, value: { ready: Promise.resolve(), check: () => false, load: () => new Promise((r) => setTimeout(() => r([]), 1500)) } });
+  } });
+  assert.ok(await until(() => q.d.querySelector('.rp-match-ov')));
+  const ov = q.d.querySelector('.rp-match-ov');
+  await sleep(1000);
+  assert.ok(!ov.classList.contains('go') && !q.d.querySelector('.rp-match-ov .spsp'), 'カードを待つあいだもロゴは出さない');
+  assert.ok(await until(() => ov.classList.contains('go'), 4000));
+  assert.ok(!q.d.querySelector('.rp-match-ov .spsp'));
+  assert.deepStrictEqual(q.errs, []);
+  q.close();
+});
+
 test('試合の画面: 幕が先に出て、タップで消える。自分 → 相手 → 台 → 入力欄の順', { skip }, async () => {
   const p = await open('?demo=match&anim=dark');
   assert.ok(await until(() => p.state.first !== null), '試合の画面が出る');
@@ -554,6 +580,53 @@ test('何先: 既定は「設定しない」、start.gg の設定は読めたと
   assert.ok(top.options[top.options.length - 1].value === 'sgg', 'Top 32 も読める');
   assert.deepStrictEqual(p.errs, []);
   p.close();
+});
+
+test('何先の細かく設定: 勝者側・敗者側・グランドファイナルの 3 つ。GF2 は GF と同じか分けられる・保存した設定でも残る (2026-11-10)', { skip }, async () => {
+  const p = await open('?demo=admin');
+  assert.ok(await until(() => p.d.querySelectorAll('#rp-ft-set [data-ft-mode]').length === 2));
+  const [poolsPh, topPh] = [...p.d.querySelectorAll('#rp-ft-set .rp-ft-ph')];
+  const mode = topPh.querySelector('[data-ft-mode]');
+  mode.value = 'split'; mode.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  assert.strictEqual(topPh.querySelectorAll('.rp-ft-side').length, 3, '勝者側・敗者側・GF');
+  assert.ok(!poolsPh.querySelector('[data-ft-g-a]'), 'GF の無いフェーズには出さない');
+  const ga = topPh.querySelector('[data-ft-g-a]'); const gr = topPh.querySelector('[data-ft-g-r]');
+  assert.match(topPh.querySelector('.rp-ft-gf').textContent, /グランドファイナル/);
+  assert.strictEqual(ga.value, '3', '初期値は start.gg の GF (5 本勝負 = 3 先)');
+  assert.strictEqual(gr.value, '', 'GF2 も同じ');
+  const wFrom = [...topPh.querySelectorAll('[data-ft-from="w"] option')].map((o) => o.textContent).join(' / ');
+  assert.ok(!/Grand Final/.test(wFrom) && /Winners Final/.test(wFrom), '勝者側の切り替えに GF を出さない: ' + wFrom);
+  ga.value = '4'; ga.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  gr.value = '2'; gr.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  // 名前をつけて保存 → ほかの設定にしてから呼び出すと、GF・GF2 も戻る
+  p.d.getElementById('rp-preset-name').value = 'GF test';
+  p.d.getElementById('rp-preset-save').click();
+  assert.ok(await until(() => [...p.d.querySelectorAll('#rp-preset-sel option')].some((o) => o.textContent === 'GF test' && o.selected)));
+  mode.value = 'all1'; mode.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  p.d.getElementById('rp-preset-load').click();
+  assert.ok(await until(() => { const m = p.d.querySelectorAll('#rp-ft-set [data-ft-mode]')[1]; return m && m.value === 'split'; }), '呼び出すと細かく設定');
+  const top2 = p.d.querySelectorAll('#rp-ft-set .rp-ft-ph')[1];
+  assert.strictEqual(top2.querySelector('[data-ft-g-a]').value, '4');
+  assert.strictEqual(top2.querySelector('[data-ft-g-r]').value, '2');
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
+test('トーナメント表: start.gg 未反映でも SPSP に報告済みの試合はスコアを出す (2026-11-10)', { skip }, async () => {
+  const p = await open('?demo=bracket&anim=dark', { json: (u) => (/demo_bracket\.json/.test(u) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'site/report/demo_bracket.json'), 'utf8')) : null) });
+  try {
+    // 見本で未反映の結果がある試合はブロック 3518744 にある (最初の読み込みが終わってから切り替える)
+    assert.ok(await until(() => p.d.querySelector('.bk-set'), 8000), '表が出る');
+    const sel = p.d.querySelector('[data-bk-group]');
+    sel.value = '3518744'; sel.dispatchEvent(new p.w.Event('change'));
+    // 札は結果が SPSP にだけある試合 (勝者が分かる) と、SPSP が前の試合から人を入れた試合の両方に付く。結果のほう
+    const heldSet = () => [...p.d.querySelectorAll('.bk-tag.bk-held')].map((x) => x.closest('.bk-set')).find((x) => x.querySelector('.bk-win'));
+    assert.ok(await until(heldSet, 8000), '未反映の結果の試合');
+    const set = heldSet();
+    assert.deepStrictEqual([...set.querySelectorAll('.bk-sc')].map((x) => x.textContent), ['3', '1']);
+    assert.ok(set.querySelector('.bk-win .bk-sc').textContent === '3', '勝った人が 3');
+    assert.deepStrictEqual(p.errs, []);
+  } finally { p.close(); }
 });
 
 test('選手が報告できる範囲 (トップ N): 参加人数より小さいものだけ選べて、人数を出す', { skip }, async () => {

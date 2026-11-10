@@ -4,7 +4,7 @@
  * 選手の画面・運営の画面の下に「トーナメント表」(開いたときだけ読む。開いているあいだは 30 秒ごとに読み直す)。
  *   - 勝者側・敗者側の列 (ラウンドごと)。並びは前の試合をたどった順 (start.gg の表と同じ上下)。不戦勝の試合は出さない
  *   - 総当たりは表 (行の人から見た勝ち負け)
- *   - 札: 対戦中 (start.gg) / start.gg 未反映 (SPSP にだけある結果と、start.gg ではまだ空いている枠に SPSP が前の試合の結果から入れた人。名前に *)
+ *   - 札: 対戦中 (start.gg) / start.gg 未反映 (SPSP にだけある結果 (スコアも出す、2026-11-10) と、start.gg ではまだ空いている枠に SPSP が前の試合の結果から入れた人。名前に *)
  */
 import { escapeHtml } from '../../site/js/html.js';
 
@@ -127,7 +127,8 @@ function setHtml(s, byId, ents, me, t) {
   const mine = s.sl.some((x) => x.e && me.has(x.e));
   const rows = s.sl.map((x) => {
     const cls = ['bk-row', x.e && win === x.e ? 'bk-win' : '', x.e && win && win !== x.e ? 'bk-lose' : '', x.pd ? 'bk-pd' : '', x.e ? '' : 'bk-empty', x.e && me.has(x.e) ? 'bk-me' : ''].filter(Boolean).join(' ');
-    const sc = s.s === 3 && x.sc !== null && x.sc !== undefined ? (x.sc < 0 ? 'DQ' : String(x.sc)) : '';
+    // start.gg に結果が入った試合はそのスコア、未反映でも SPSP に報告済みならそのスコア (hs、2026-11-10)
+    const sc = s.s === 3 && x.sc !== null && x.sc !== undefined ? (x.sc < 0 ? 'DQ' : String(x.sc)) : s.s !== 3 && x.hs !== undefined && x.hs !== null ? String(x.hs) : '';
     return `<div class="${cls}"><span class="bk-name">${escapeHtml(slotLabel(x, byId, ents, t))}</span><span class="bk-sc">${escapeHtml(sc)}</span></div>`;
   }).join('');
   const tags = [
@@ -148,7 +149,9 @@ function rrHtml(sets, ents, me, t) {
     const win = s.w || s.hw;
     if (!win) return `<td class="bk-rr-open">${s.s === 2 ? escapeHtml(t('report.bk.live')) : ''}</td>`;
     const k = s.sl[0].e === a ? 0 : 1;
-    const sc = s.s === 3 && s.sl[k].sc !== null && s.sl[1 - k].sc !== null ? ` ${s.sl[k].sc}-${s.sl[1 - k].sc}` : '';
+    const has = (x) => x !== null && x !== undefined;
+    const sc = s.s === 3 && has(s.sl[k].sc) && has(s.sl[1 - k].sc) ? ` ${s.sl[k].sc}-${s.sl[1 - k].sc}`
+      : s.s !== 3 && has(s.sl[k].hs) && has(s.sl[1 - k].hs) ? ` ${s.sl[k].hs}-${s.sl[1 - k].hs}` : '';
     return `<td class="${win === a ? 'bk-win' : 'bk-lose'}${s.hw ? ' bk-held-cell' : ''}">${escapeHtml((win === a ? t('report.bk.rr_w') : t('report.bk.rr_l')) + sc)}</td>`;
   };
   const wins = (a) => sets.filter((s) => (s.w || s.hw) === a).length;
