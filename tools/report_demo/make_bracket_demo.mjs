@@ -51,7 +51,9 @@ for (const g of groups) {
       const onSgg = real(shown.occ[k]) && !(g === top && x.prereqType === 'seed');
       if (e) ents[e] = name.get(e) || '選手';
       const win = isDone && e && String(s.winnerId) === e;
-      return { e, sc: isDone && e ? (win ? 2 : (Number(e) % 2)) : null, pd: e && !onSgg ? 1 : 0, pt: x.prereqType, pi: x.prereqId == null ? null : String(x.prereqId), pp: x.prereqPlacement };
+      const row = { e, sc: isDone && e ? (win ? 2 : (Number(e) % 2)) : null, pd: e && !onSgg ? 1 : 0, pt: x.prereqType, pi: x.prereqId == null ? null : String(x.prereqId), pp: x.prereqPlacement };
+      if (s === held && e) row.hs = String(held.winnerId) === e ? 3 : 1;   // start.gg 未反映の結果のスコア (2026-11-10)
+      return row;
     });
     return { i: String(s.id), r: s.round, t: roundText(g, s), x: s.identifier, s: isDone ? 3 : s === live ? 2 : 1, w: isDone ? String(s.winnerId) : null,
       st: s === live ? 7 : null, hw: s === held ? String(held.winnerId) : null, sl };

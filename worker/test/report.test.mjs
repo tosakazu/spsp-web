@@ -113,6 +113,20 @@ test('何先: 全部 N 先・勝者側/敗者側でラウンドから切り替�
   assert.ok('result' in parseResult(R(1, G(0), G(1), G(0), G(1), G(1)), 3));    // 3 先で 3-2
 });
 
+test('何先: グランドファイナル (GF・GF2) を勝者側・敗者側と分けて決める (2026-11-10)', () => {
+  const w = { a: 2, from: 4, b: 3 }; const l = { a: 2, from: null, b: 2 };
+  const st = parseSettings({ ft: { 1: { w, l, g: { n: 6, a: 5 } }, 2: { w, l, g: { n: 6, a: 3, r: 2 } }, 3: { w, l, g: { n: 'x', a: 3 } } } });
+  assert.deepStrictEqual(st.ft['1'].g, { n: 6, a: 5, r: 5 });                     // GF2 を指定しなければ GF と同じ
+  assert.strictEqual(st.ft['3'].g, undefined);                                    // 壊れた GF は捨てる (勝者側どおり)
+  assert.strictEqual(ftOf(set0({ phaseKey: '1', round: 5 }), st), 3);              // Winners Final = 勝者側の設定
+  assert.strictEqual(ftOf(set0({ phaseKey: '1', round: 6 }), st), 5);              // GF
+  assert.strictEqual(ftOf(set0({ phaseKey: '1', round: 7 }), st), 5);              // GF2
+  assert.strictEqual(ftOf(set0({ phaseKey: '2', round: 6 }), st), 3);
+  assert.strictEqual(ftOf(set0({ phaseKey: '2', round: 7 }), st), 2);              // GF2 だけ別
+  assert.strictEqual(ftOf(set0({ phaseKey: '2', round: -6 }), st), 2);             // 敗者側は敗者側の設定
+  assert.strictEqual(ftOf(set0({ phaseKey: '3', round: 6 }), st), 3);
+});
+
 test('ブラケットの構造: ラウンドがいちばん多いブロックの rounds と bestOf、試合の名前。Challonge は構造から名前を付ける', () => {
   const list = parsePhaseList({ event: { phases: [{ id: 7, name: 'Top 8', phaseGroups: { nodes: [{ id: 70, rounds: [{ number: 1, bestOf: 3 }] },
     { id: 71, rounds: [{ number: 1, bestOf: 3 }, { number: 2, bestOf: 5 }, { number: -1, bestOf: 3 }, { number: 3 }, { number: -2, bestOf: 5 }] }] } }] } });

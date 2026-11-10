@@ -43,7 +43,10 @@ export interface NSet {
  * 「全部 2 先」= w・l とも { a: 2, from: null, b: 2 }。フェーズごと (キー = phase id、Challonge は 'c') に持つ (2026-10-30)。
  */
 export interface FtSide { a: number; from: number | null; b: number }
-export interface FtRule { w: FtSide; l: FtSide }
+/** グランドファイナル (2026-11-10、「細かく設定」で勝者側・敗者側と分けて決める)。n = GF のラウンド (勝者側の番号。start.gg / Challonge とも GF2 (リセット) は n + 1)、
+ *  a = GF の何先、r = GF2 の何先 (GF と同じなら a と同じ値)。無ければ GF も勝者側の設定どおり */
+export interface FtGf { n: number; a: number; r: number }
+export interface FtRule { w: FtSide; l: FtSide; g?: FtGf }
 export const FT_MAX = 5;
 const FT_PHASES_MAX = 30;
 
@@ -86,6 +89,13 @@ function parseFtSide(v: unknown): FtSide | null {
   if (o.from === null || o.from === undefined || !Number.isInteger(from) || from < 1 || from > 99 || b === null) return { a, from: null, b: a };
   return { a, from, b };
 }
+export function parseFtGf(v: unknown): FtGf | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const n = Number(o.n); const a = ftNum(o.a);
+  if (!Number.isInteger(n) || n < 1 || n > 99 || a === null) return null;
+  return { n, a, r: ftNum(o.r) ?? a };
+}
 export function parseFt(v: unknown): Record<string, FtRule> | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out: Record<string, FtRule> = {};
@@ -94,7 +104,8 @@ export function parseFt(v: unknown): Record<string, FtRule> | null {
     if (!/^[\w-]{1,20}$/.test(k) || !x || typeof x !== 'object') continue;
     const w = parseFtSide((x as Record<string, unknown>).w); const l = parseFtSide((x as Record<string, unknown>).l);
     if (!w || !l) continue;
-    out[k] = { w, l };
+    const g = parseFtGf((x as Record<string, unknown>).g);
+    out[k] = g ? { w, l, g } : { w, l };
     if (++n >= FT_PHASES_MAX) break;
   }
   return n ? out : null;
@@ -105,6 +116,7 @@ export function ftOf(set: NSet, s: ReportSettings): number | null {
   const rule = s.ft && set.phaseKey !== undefined ? s.ft[set.phaseKey] : undefined;
   if (!rule) return null;
   const r = set.round;
+  if (rule.g && r !== null && r !== undefined && (r === rule.g.n || r === rule.g.n + 1)) return r === rule.g.n ? rule.g.a : rule.g.r;   // GF / GF2
   const sd = r !== null && r !== undefined && r < 0 ? rule.l : rule.w;
   if (sd.from === null) return sd.a;
   if (r === null || r === undefined) return null;   // ラウンドが分からないと決められない
@@ -133,7 +145,7 @@ export function parseSettings(v: unknown): ReportSettings {
  * 切り替えのラウンドはラウンド名 (fl) と番号で持つ。大会に当てはめるのは画面 (report.js の presetApply)
  */
 export interface PresetSide extends FtSide { fl: string | null }
-export interface PresetPhase { name: string; i: number; w: PresetSide; l: PresetSide }
+export interface PresetPhase { name: string; i: number; w: PresetSide; l: PresetSide; g?: FtGf }
 export interface ReportPreset { top_cut: number | null; classes_only: boolean; phases: PresetPhase[] }
 export const PRESET_NAME_MAX = 40;
 export const PRESETS_MAX = 20;
@@ -161,7 +173,8 @@ export function parsePreset(v: unknown): ReportPreset | null {
     };
     const w = side(p.w); const l = side(p.l);
     if (!w || !l || !Number.isInteger(i) || i < 0 || i >= FT_PHASES_MAX) continue;
-    phases.push({ name: plainText(p.name, 60) ?? '', i, w, l });
+    const g = parseFtGf(p.g);
+    phases.push(g ? { name: plainText(p.name, 60) ?? '', i, w, l, g } : { name: plainText(p.name, 60) ?? '', i, w, l });
   }
   return { top_cut: base.top_cut, classes_only: base.classes_only, phases };
 }

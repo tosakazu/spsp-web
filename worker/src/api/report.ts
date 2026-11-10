@@ -43,7 +43,7 @@ import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge 
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
 import { managersOf, MANAGERS_MAX } from './report_logic.ts';
 import type { ManagerRole, ReportManager } from './report_logic.ts';
-import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile } from './report_logic.ts';
+import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile, score } from './report_logic.ts';
 import type { Provider } from './report_startgg.ts';
 import { EVENT_QUERY, probeStartBracket, startggProvider } from './report_startgg.ts';
 import { notifyManual, notifyNoshowAdmins, notifyNoshowOpponent, notifyReport, notifyTest, PUSH_SUBS_PER_USER } from './report_notify.ts';
@@ -756,12 +756,14 @@ async function projectedSnap(store: Store, code: string, snap: Snapshot): Promis
 }
 
 const PROJECT_CACHE_MS = 10 * 1000;
-const PROJECT_CACHE = new Map<string, { key: string; at: number; v: { snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string> } }>();
+const PROJECT_CACHE = new Map<string, { key: string; at: number; v: { snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string>; xsc: Record<string, Record<string, number>> } }>();
 /** 計算で埋めた写しと、通過順 (同じ順位が 2 人以上) のブロックごとの並び・運営が確かめたか */
 async function projectedFull(store: Store, code: string, snap: Snapshot):
-  Promise<{ snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string> }> {
+  Promise<{ snap: Snapshot; ties: Record<string, { pl: number; list: string[] }[]>; confirmed: Set<string>; extra: Record<string, string>; xsc: Record<string, Record<string, number>> }> {
   const extra: Record<string, string> = {};
-  const none = { snap, ties: {}, confirmed: new Set<string>(), extra };
+  /** start.gg 未反映の試合のスコア (entrant id → 取ったゲーム数。トーナメント表に出す、2026-11-10)。スコアが分からない報告 (勝敗だけ) は入れない */
+  const xsc: Record<string, Record<string, number>> = {};
+  const none = { snap, ties: {}, confirmed: new Set<string>(), extra, xsc };
   const rows = await store.listReportSets(code);
   const dqRows = (await store.listReportDqs(code)).filter((d) => d.status === 'open');
   const okRows = await store.listReportProgOk(code).catch(() => []);
@@ -780,6 +782,8 @@ async function projectedFull(store: Store, code: string, snap: Snapshot):
     try { slots = JSON.parse(r.slots); } catch (_) { slots = []; }
     const w = slots[res.w];
     if (w && w.id !== undefined && w.id !== null) extra[r.set_id] = String(w.id);
+    const s0 = slots[0]; const s1 = slots[1];
+    if (res.g.length && s0 && s1 && s0.id != null && s1.id != null) { const [a, b] = score(res); xsc[r.set_id] = { [String(s0.id)]: a, [String(s1.id)]: b }; }
   }
   if (!snapHasStructure(snap) || !snap.chk) return none;
   const dqs: HeldDq[] = dqRows.map((d) => ({ entrant: d.entrant_id, scope: d.scope, set_id: d.set_id || undefined }));
@@ -794,7 +798,7 @@ async function projectedFull(store: Store, code: string, snap: Snapshot):
       confirmed = next;
       r = projectFull(snap, extra, dqs, confirmed);
     }
-    const v = { snap: r.snap, ties: r.ties, confirmed, extra };
+    const v = { snap: r.snap, ties: r.ties, confirmed, extra, xsc };
     PROJECT_CACHE.set(code, { key, at: Date.now(), v });
     if (PROJECT_CACHE.size > 50) PROJECT_CACHE.delete(PROJECT_CACHE.keys().next().value as string);
     return v;
@@ -1467,7 +1471,12 @@ export async function handleReportBracketView(cfg: Config, store: Store, fetchFn
   const ents: Record<string, string> = {};
   const sets = Object.values(pj.snap.sets).filter((x) => x.g === gid).map((x) => ({
     i: x.i, r: x.r, t: x.t, x: x.x || '', s: x.s, w: x.w, st: x.st, hw: x.s !== 3 && pj.extra[x.i] ? pj.extra[x.i] : null,
-    sl: x.sl.map((y) => { if (y.e) ents[y.e] = snap.ents[y.e] ? snap.ents[y.e].n : ''; return { e: y.e, sc: y.sc, pd: y.pd || 0, pt: y.pt, pi: y.pi, pp: y.pp }; }),
+    // hs = start.gg 未反映 (SPSP にだけある) 結果のスコア (枠ごと、2026-11-10)
+    sl: x.sl.map((y) => {
+      if (y.e) ents[y.e] = snap.ents[y.e] ? snap.ents[y.e].n : '';
+      const hs = x.s !== 3 && y.e && pj.xsc[x.i] && pj.xsc[x.i][y.e] !== undefined ? pj.xsc[x.i][y.e] : null;
+      return { e: y.e, sc: y.sc, pd: y.pd || 0, pt: y.pt, pi: y.pi, pp: y.pp, ...(hs !== null ? { hs } : {}) };
+    }),
   }));
   return ok({ ...base, group: { id: gid, name: groupName(snap, gid), b: snap.groups[gid].b || null, bad }, sets, ents });
 }

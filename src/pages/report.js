@@ -21,6 +21,7 @@ import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
 import { placementToW2W } from '../../site/js/match.js';
 import SPSPLinks from '../../site/js/links.js';
+import SPSPLogo from '../../site/logo.js';
 import { showVictory, WIN_ANIMS } from './report_win.js';
 import { mountBracketView } from './report_bracket_view.js';
 'use strict';
@@ -599,6 +600,7 @@ function ftSet(m) {
   const rule = ft && m.phaseKey ? ft[m.phaseKey] : null;
   if (!rule) return null;
   const r = m.roundNum;
+  if (rule.g && r !== null && r !== undefined && (r === rule.g.n || r === rule.g.n + 1)) return r === rule.g.n ? rule.g.a : rule.g.r;   // GF / GF2 (worker の ftOf と同じ)
   const sd = r !== null && r !== undefined && r < 0 ? rule.l : rule.w;
   if (sd.from === null || sd.from === undefined) return sd.a;
   if (r === null || r === undefined) return null;
@@ -897,6 +899,15 @@ async function matchAnimation(m) {
   const lines = LINE_ANIMS.includes(anim);
   const cards = anim === 'cards' || lines;
   ov.className = 'rp-match-ov' + (anim !== 'dark' ? ' rp-anim-' + anim : '') + (lines ? ' rp-anim-cards rp-anim-lines' : '');
+  // 読み込み (二つ名・カード) が長いときは SPSP のロゴのアニメーションを出す (2026-11-10)。すぐ読めたときは出さない (線の案は線が走りきる 0.7 秒は待つので、それより後)
+  const ld = document.createElement('div');
+  ld.className = 'rp-match-load';
+  ov.appendChild(ld);
+  const loadT = setTimeout(() => {
+    if (ov.classList.contains('go')) return;
+    ov.classList.add('loading');
+    SPSPLogo.inline(ld, { sub: true });
+  }, lines ? 800 : 400);
   document.body.appendChild(ov);
   let skipped = false;
   let onSkip = () => {};
@@ -907,11 +918,11 @@ async function matchAnimation(m) {
   const side = cards
     ? (slot, title, cls) => `<span class="rp-match-p ${cls}"><span class="rp-match-card pcard"${slot && slot.uid ? ` data-uid="${escapeHtml(String(slot.uid))}"` : ''} data-name="${escapeHtml(slot ? slot.name : '')}"></span></span>`
     : (slot, title, cls) => `<span class="rp-match-p ${cls}">${title ? `<span class="rp-match-t">${escapeHtml(title)}</span>` : ''}<span class="rp-match-n">${escapeHtml(slot ? slot.name : '')}</span></span>`;
-  ov.innerHTML = `${lines ? animFxHtml(anim) : ''}<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
+  ov.insertAdjacentHTML('beforeend', `${lines ? animFxHtml(anim) : ''}<div class="rp-match-title">${escapeHtml(i18n('report.matched'))}</div>
     <div class="rp-match-names">${side(me, tMe, 'rp-match-l')}<span class="rp-match-vs">VS</span>${side(op, tOp, 'rp-match-r')}</div>
     ${ftOf(m) ? `<div class="rp-match-ft">${escapeHtml(i18n('report.ft', { n: ftOf(m) }))}</div>` : ''}
     ${m.station || m.stream ? `<div class="rp-match-station">${m.station ? escapeHtml(i18n('report.station', { n: m.station })) : ''}${m.stream ? ' 📺 ' + escapeHtml(i18n('report.stream')) : ''}</div>` : ''}
-    <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`;
+    <div class="rp-match-skip">${escapeHtml(i18n('report.match_skip'))}</div>`);
   // 案 cards: 二つ名はカードに出ているので、カードそのものを出す (データが無い人は NO DATA のカード)
   // 描き終わる (データ・カードの設定・Web フォント) まで中身は隠し、そろってから動かす (あとから表示がずれないように。最大 3 秒)
   const mounts = [...ov.querySelectorAll('.rp-match-card')].map((el) => {
@@ -924,6 +935,9 @@ async function matchAnimation(m) {
   const cardEls = /** @type {HTMLElement[]} */ ([...ov.querySelectorAll('.rp-match-card')]);
   const ready = Promise.all([Promise.all(mounts).then(() => Promise.all(cardEls.map(cardSettled))), lines ? sleep(700) : null]);
   if (mounts.length) await Promise.race([ready, sleep(3000), skipP]);
+  clearTimeout(loadT);
+  ld.remove();
+  ov.classList.remove('loading');
   ov.classList.add('go');
   // 振動: 飛ばしたときは鳴らさない。ブラウザ (Android の Chrome など) はページに一度も触れていないと振動させない
   // (呼んでも無視される。iPhone の Safari はそもそも無い) ので、触れたことがあるときだけ呼ぶ
@@ -1114,6 +1128,7 @@ function ensureBracketView() {
 function renderPlayer() {
   const root = $('rp-player');
   root.hidden = false;
+  showLoading(false);
   ensureBracketView();
   const cur = currentMatch();
   const waiting = MATCHES.find((m) => m.state === 'waiting');
@@ -1366,11 +1381,17 @@ const ftRoundLabel = (r) => r.label || (r.n > 0 ? i18n('report.ft.round_w', { n:
 function ftModeOf(rule) {
   if (!rule) return '';
   const { w, l } = rule;
+  if (rule.g) return 'split';
   if (w.from == null && l.from == null && w.a === l.a && w.a <= 3) return 'all' + w.a;
   return 'split';
 }
 /** start.gg のラウンドの何本勝負 (bestOf) から、側ごとの { a, from, b } (切り替えが 1 回までのとき)。読めなければ null */
 const boFt = (bo) => (Number.isInteger(bo) && bo > 0 && bo % 2 === 1 ? (bo + 1) / 2 : null);
+/** グランドファイナルのラウンド (勝者側の番号。GF2 = その次)。ラウンド名 (start.gg の fullRoundText・Challonge は SPSP が付ける名前) で見る。無ければ null */
+function gfRoundOf(ph) {
+  const r = (ph.rounds || []).find((x) => x.n > 0 && /grand final/i.test(x.label || '') && !/reset/i.test(x.label || ''));
+  return r ? r.n : null;
+}
 function sggSide(ph, k) {
   const rs = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 : r.n < 0) && boFt(r.bestOf));
   if (!rs.length) return null;
@@ -1392,8 +1413,10 @@ function ftPhaseHtml(ph, rule) {
   const mode = ftModeOf(rule);
   const sgg = sggSummary(ph);
   const nums = (sel) => Array.from({ length: FT_MAX }, (_, i) => `<option value="${i + 1}"${i + 1 === sel ? ' selected' : ''}>${escapeHtml(i18n('report.ft', { n: i + 1 }))}</option>`).join('');
+  const gf = gfRoundOf(ph);
   const side = (k) => {
-    const rounds = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 : r.n < 0));
+    // GF があれば GF・GF2 は別の行で決めるので、勝者側の切り替えの候補には出さない
+    const rounds = (ph.rounds || []).filter((r) => (k === 'w' ? r.n > 0 && !(gf && r.n >= gf) : r.n < 0));
     if (k === 'l' && !rounds.length) return '';
     const sd = rule ? rule[k] : sggSide(ph, k) || { a: 2, from: null, b: 3 };   // 初期値は start.gg の設定
     const from = rounds.map((r) => `<option value="${Math.abs(r.n)}"${sd.from === Math.abs(r.n) ? ' selected' : ''}>${escapeHtml(i18n('report.ft.from', { r: ftRoundLabel(r) }))}</option>`).join('');
@@ -1402,13 +1425,25 @@ function ftPhaseHtml(ph, rule) {
       <select data-ft-from="${k}"><option value="">${escapeHtml(i18n('report.ft.no_change'))}</option>${from}</select>
       <select data-ft-b="${k}"${sd.from == null ? ' hidden' : ''}>${nums(sd.b || 3)}</select></div>`;
   };
+  // グランドファイナル (2026-11-10): GF の何先と、GF2 (リセット) を GF と同じにするか分けるか。初期値は start.gg の設定 → 勝者側の最後と同じ
+  const gfRow = () => {
+    if (!gf) return '';
+    const wsd = rule ? rule.w : sggSide(ph, 'w') || { a: 2, from: null, b: 3 };
+    const rd = (n) => (ph.rounds || []).find((r) => r.n === n);
+    const fromSgg = (n) => { const r = rd(n); return r ? boFt(r.bestOf) : null; };
+    const g = rule && rule.g ? rule.g : (() => { const a = fromSgg(gf) || (wsd.from != null ? wsd.b : wsd.a); const r2 = fromSgg(gf + 1); return { a, r: r2 || a }; })();
+    const reset = Array.from({ length: FT_MAX }, (_, i) => `<option value="${i + 1}"${g.r !== g.a && i + 1 === g.r ? ' selected' : ''}>${escapeHtml(i18n('report.ft.gf2_n', { n: i + 1 }))}</option>`).join('');
+    return `<div class="rp-ft-side rp-ft-gf"><span class="rp-ft-k">${escapeHtml(i18n('report.ft.gf'))}</span>
+      <select data-ft-g-a>${nums(g.a)}</select>
+      <select data-ft-g-r><option value=""${g.r === g.a ? ' selected' : ''}>${escapeHtml(i18n('report.ft.gf2_same'))}</option>${reset}</select></div>`;
+  };
   // 既定は「設定しない」(スコアは勝ち越していればよい)。start.gg の設定はされていないことが多いので、読めたときだけ一番下に
   const modes = [['', i18n('report.ft.unset')], ['all1', i18n('report.ft.all', { n: 1 })], ['all2', i18n('report.ft.all', { n: 2 })], ['all3', i18n('report.ft.all', { n: 3 })], ['split', i18n('report.ft.split')],
     ...(sgg ? [['sgg', i18n('report.ft.use_sgg') + ' (' + sgg + ')']] : [])];
   return `<div class="rp-ft-ph" data-ph="${escapeHtml(ph.key)}">
     <label>${escapeHtml(ph.name || i18n('report.ft.phase_all'))}
       <select data-ft-mode>${modes.map(([v, t]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
-    <div data-ft-split${mode === 'split' ? '' : ' hidden'}>${side('w')}${side('l')}</div>
+    <div data-ft-split${mode === 'split' ? '' : ' hidden'}${gf ? ` data-ft-gf="${gf}"` : ''}>${side('w')}${side('l')}${gfRow()}</div>
   </div>`;
 }
 function wireFt(root) {
@@ -1441,7 +1476,12 @@ function readFt(root) {
       return { a: Number(a.value), from: from ? Number(from) : null, b: from ? b : Number(a.value) };
     };
     const w = sd('w'); const l = sd('l');
-    if (w || l) out[ph.getAttribute('data-ph')] = { w: w || l, l: l || w };
+    if (!w && !l) continue;
+    const rule = { w: w || l, l: l || w };
+    const gfN = Number(ph.querySelector('[data-ft-split]').getAttribute('data-ft-gf'));
+    const ga = ph.querySelector('[data-ft-g-a]'); const gr = ph.querySelector('[data-ft-g-r]');
+    if (gfN && ga) { const a = Number(ga.value); /** @type {any} */ (rule).g = { n: gfN, a, r: gr && gr.value ? Number(gr.value) : a }; }
+    out[ph.getAttribute('data-ph')] = rule;
   }
   return Object.keys(out).length ? out : null;
 }
@@ -1460,7 +1500,7 @@ function presetFrom(settings, ft) {
     const rule = ft && ft[ph.key];
     if (!rule) return;
     const side = (sd, sign) => ({ a: sd.a, from: sd.from, b: sd.b, fl: sd.from ? roundLabelOf(ph, sign * sd.from) : null });
-    phases.push({ name: ph.name || '', i, w: side(rule.w, 1), l: side(rule.l, -1) });
+    phases.push({ name: ph.name || '', i, w: side(rule.w, 1), l: side(rule.l, -1), ...(rule.g ? { g: rule.g } : {}) });
   });
   return { top_cut: settings.top_cut, classes_only: settings.classes_only, phases };
 }
@@ -1478,6 +1518,8 @@ function presetToFt(p) {
       return { a: sd.a, from: r ? Math.abs(r.n) : sd.from, b: sd.b };
     };
     ft[ph.key] = { w: side(pp.w, 1), l: side(pp.l, -1) };
+    const gf = pp.g ? gfRoundOf(ph) : null;   // GF はこの大会の GF のラウンドに当てはめる (無ければ勝者側の設定どおり)
+    if (pp.g && gf) ft[ph.key].g = { n: gf, a: pp.g.a, r: pp.g.r };
   }
   return { ft: Object.keys(ft).length ? ft : null, missed };
 }
@@ -2959,7 +3001,7 @@ let DEMO_PRESETS = [
 const DEMO_PHASES = [
   { key: 'p1', name: 'Pools', rounds: [1, 2, 3, -1, -2, -3].map((n) => ({ n, label: null, bestOf: 3 })) },
   { key: 'p2', name: 'Top 32', rounds: [{ n: 1, label: 'Winners Round 1' }, { n: 2, label: 'Winners Quarter-Final' }, { n: 3, label: 'Winners Semi-Final' }, { n: 4, label: 'Winners Final', bestOf: 5 },
-    { n: 5, label: 'Grand Final', bestOf: 5 }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
+    { n: 5, label: 'Grand Final', bestOf: 5 }, { n: 6, label: 'Grand Final Reset', bestOf: 5 }, { n: -1, label: 'Losers Round 1' }, { n: -2, label: 'Losers Round 2' }, { n: -3, label: 'Losers Round 3' }, { n: -4, label: 'Losers Quarter-Final' },
     { n: -5, label: 'Losers Semi-Final' }, { n: -6, label: 'Losers Final' }] },
 ];
 let DEMO_MGRS = [];
@@ -3164,9 +3206,21 @@ async function runDemo() {
 
 // ── はじめ ─────────────────────────────────────────────────────────
 
+/** 開いたときの読み込み中は SPSP のロゴのアニメーション (2026-11-10)。最初の画面を出したら (ログイン・エラー・選手・運営の画面) 消す @param {boolean} on */
+function showLoading(on) {
+  const el = $('rp-loading');
+  if (!el) return;
+  el.hidden = !on;
+  if (on) SPSPLogo.inline(el, { sub: true }); else el.textContent = '';
+}
+
 async function main() {
   if (DEMO) { await runDemo(); return; }
   if (!CODE) { renderSetup(); return; }
+  showLoading(true);
+  try { await start(); } finally { showLoading(false); }
+}
+async function start() {
   if (sess() && !WANT_ADMIN) warmCards([myUid()]);   // 自分のカード・共通のファイル・フォントは、試合が分かる前から読んでおく
   const info = await api({ action: 'report_info', code: CODE });
   if (!info || !info.ok) { setStatus($('rp-status'), errText(info), 'err'); return; }
@@ -3184,7 +3238,7 @@ async function main() {
   if (!sess()) { $('rp-login').hidden = false; return; }
   if (WANT_ADMIN) { $('rp-to-player').hidden = false; await renderAdmin(); return; }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') poll(true); });
-  poll(true);
+  await poll(true);   // 最初の読み込みが終わるまでロゴを出す
 }
 
 $('rp-login-btn').addEventListener('click', () => { if (!DEMO) SpspLogin.startLogin(location.pathname + location.search); });
