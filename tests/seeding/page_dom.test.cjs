@@ -391,3 +391,36 @@ test('jsdom: CSV の読み込み・初期状態に戻すは手動調整の 1 手
   assert.strictEqual(win.eval('MANUAL.ops.length'), 0);
   assert.deepStrictEqual(norm(win.eval('initialOrder()')), [102, 101, 103, 104, 105], 'シードアップロードの初期状態は CSV の順');
 });
+
+test('CSV テンプレート: 表示言語の説明行 (##) と記入例、列の書き方の表 (2026-11-11)', () => {
+  const vm = require('node:vm');
+  const ja = {};
+  const ctx = { window: {}, globalThis: {} };
+  ctx.window = ctx; vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../site/i18n/ja.js'), 'utf8'), ctx);
+  const dict = (ctx.SPSP_I18N && ctx.SPSP_I18N.ja) || ja;
+  const src = `
+    var CSV_COMMENT = '##';
+    function i18n(k) { return DICT[k] || k; }
+    function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var _tplComment = (s) => CSV_COMMENT + ' ' + String(s).replace(/,/g, '、').replace(/"/g, '\\u201d');
+    ${extractFn(HTML, 'csvTemplateLines')}
+    ${extractFn(HTML, 'csvGuideHtml')}
+  `;
+  const c2 = { DICT: dict }; vm.createContext(c2); vm.runInContext(src, c2);
+  for (const kind of ['spec', 'source']) {
+    const lines = c2.csvTemplateLines(kind);
+    const notes = lines.filter((l) => l.startsWith('## '));
+    const rest = lines.filter((l) => !l.startsWith('## '));
+    assert.ok(notes.length >= 8, '説明行が少ない');
+    assert.ok(notes.every((l) => !l.includes(',') && !l.includes('"')), 'セルが割れる文字が説明行にある');
+    assert.ok(notes.some((l) => l.includes('discriminator')) && notes.some((l) => l.includes('Shift_JIS')), notes.join('\n'));
+    assert.strictEqual(rest[0], kind === 'spec' ? 'name,discriminator,seed,wave,lock' : 'name,discriminator,seed', '列名は英語のまま');
+    assert.ok(rest[1].startsWith('山田太郎,="00000000"'), '日本語では日本語の記入例');
+    assert.strictEqual(rest.length, 4);
+    const html = c2.csvGuideHtml(kind);
+    for (const col of ['discriminator', 'uid', 'seedId', 'name', 'seed']) assert.ok(html.includes('>' + col + '<'), col);
+    assert.strictEqual(html.includes('>lock<'), kind === 'spec');
+    assert.ok(html.includes('start.gg/user/1a2b3c4d'));
+  }
+});

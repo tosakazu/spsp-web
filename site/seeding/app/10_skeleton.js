@@ -304,10 +304,8 @@ const SEED_APP_SKELETON_HTML = `
       <button id="spec-tpl" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.t100')}</button>
       <button id="spec-clear" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.t101')}</button>
     </div>
+    <div id="spec-guide"></div>
     <div style="font-size:11px;color:#6b7280;margin-top:5px;line-height:1.6">
-      ${i18n('seed.skeleton.t102')}<b>uid</b> / <b>discriminator</b> / <b>seedId</b> / <b>name</b>${i18n('seed.skeleton.t103')}
-      <b>seed</b> ${i18n('seed.skeleton.t104')} <b>wave</b> ${i18n('seed.skeleton.t105')}
-      <b>lock</b> ${i18n('seed.skeleton.t106')}
       ${i18n('seed.skeleton.t107')}
       <b>${i18n('seed.skeleton.t108')}</b> ${i18n('seed.skeleton.t109')}
       ${i18n('seed.skeleton.t110')}
@@ -374,8 +372,9 @@ export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_C
       + `<button id="csv-tpl" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.s10')}</button>`
       + '</div>'
       + '<div id="csv-src-status" style="font-size:11px;color:#6b7280;margin-top:5px;line-height:1.5">'
-      + i18n('seed.skeleton.s6')
-      + i18n('seed.skeleton.s11') + '</div>';
+      + i18n('seed.skeleton.s11') + '</div>'
+      // 列の書き方 (タップで開く。中身は 80_csv_source.js の csvGuideHtml、2026-11-11)
+      + `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:#1e40af;font-weight:600">📖 ${i18n('seed.csvguide.open')}</summary><div id="csv-guide"></div></details>`;
     if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(div, anchorEl);
   }
 })();

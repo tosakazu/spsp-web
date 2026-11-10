@@ -377,24 +377,26 @@ test('静的: 両ページに CSV テンプレート DL と記入例の無視・
   // 文言は辞書 (i18n/ja.js の priority.csv.sample_ignored) から引く
   assert.ok(/i18n\('priority\.csv\.sample_ignored', \{ n: sample \}\)/.test(PRI), '優先枠ページの警告が無い');
   // 例の値は両ページで一致していること (テンプレを取り違えても弾ける)。
-  // テンプレ出力は ASCII 名 (Shift_JIS 前提で開くアプリでも化けない)。判定は日本語名も含む。
-  assert.ok(/CSV_TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(APP_SRC), 'seed 側の出力例名が想定と違う');
-  assert.ok(/TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(PRI), '優先枠側の出力例名が想定と違う');
-  assert.ok(/concat\(\['山田太郎', '鈴木花子'\]\)/.test(APP_SRC) && /concat\(\['山田太郎', '鈴木花子'\]\)/.test(PRI),
-    '旧テンプレ (日本語名) の判定が残っていない');
-  // テンプレ本文に非 ASCII を混ぜない (文字化けの余地をなくす)。
-  for (const m of APP_SRC.match(/downloadCsvTemplate\(\[[\s\S]*?\], '[^']+'\)/g) || []) {
-    assert.ok(!/[^\x00-\x7F]/.test(m.replace(/CSV_TPL_OUT_NAMES/g, '')), 'テンプレ出力に非 ASCII: ' + m);
+  // 2026-11-11 からテンプレは表示言語 (説明行 ## と記入例の名前、BOM 付き UTF-8)。読み込みは UTF-8 / Shift_JIS のどちらも読む
+  // (js/csv_text.js)。記入例の判定はどの言語の例名も含む。
+  assert.ok(/CSV_TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(APP_SRC), 'seed 側の例名が想定と違う');
+  assert.ok(/TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(PRI), '優先枠側の例名が想定と違う');
+  for (const src of [APP_SRC, PRI]) {
+    assert.ok(/concat\(\['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato'\]\)/.test(src), '各言語の記入例名の判定が無い');
   }
+  assert.ok(/csvTemplateLines\('source'\)/.test(APP_SRC) && /csvTemplateLines\('spec'\)/.test(APP_SRC), 'テンプレを表示言語で作っていない');
+  assert.ok(/comments: CSV_COMMENT/.test(APP_SRC + fs.readFileSync(require('node:path').resolve(__dirname, '../../site/seed-upload/seed_uploader.js'), 'utf8')),
+    'テンプレの説明行 (##) を読み飛ばしていない');
+  assert.ok(/dropCommentRows\(parseCsv\(text\)\)/.test(PRI), '優先枠ページがテンプレの説明行を読み飛ばしていない');
   // 例の disc 判定は「先頭7桁が 0」で両ページ共通。
   assert.ok(/\^0\{7\}\[0-9a-f\]\$/.test(APP_SRC) && /\^0\{7\}\[0-9a-f\]\$/.test(PRI),
     '例 disc の判定 (先頭7桁が0) が両ページに無い');
   // カラム名は英語 (テンプレ出力)。
   assert.ok(/'name,discriminator,seed,wave,lock'/.test(APP_SRC), '指定CSVテンプレが英語カラムでない');
   assert.ok(/'name,discriminator,seed'/.test(APP_SRC), '基準CSVテンプレが英語カラムでない');
-  // 空欄可の列はサンプル 2 行目を空にして示す。
-  assert.ok(/,="00000001",,,wave/.test(APP_SRC), '指定CSVテンプレに空欄可の例が無い');
-  assert.ok(/,="00000001",`/.test(APP_SRC), '基準CSVテンプレに空欄可の例が無い');
+  // 空欄可の列は記入例の行を空にして示す (指定: 2・3 行目、基準: 3 行目の seed)。
+  assert.ok(/,="00000001",,B,`/.test(APP_SRC) && /,="00000002",,,wave`/.test(APP_SRC), '指定CSVテンプレに空欄可の例が無い');
+  assert.ok(/,="00000002",`/.test(APP_SRC), '基準CSVテンプレに空欄可の例が無い');
   assert.ok(/',="00000001"/.test(PRI) || /,="00000001"/.test(PRI), '優先枠テンプレに空欄可の例が無い');
   // 文字化け対策: Blob の charset を明示。
   assert.ok(/text\/csv;charset=utf-8/.test(APP_SRC) && /text\/csv;charset=utf-8/.test(PRI),

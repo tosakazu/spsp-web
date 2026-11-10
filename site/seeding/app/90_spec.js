@@ -7,9 +7,10 @@ import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
 import { DATA, manualMovedSet, manualOrder, manualParseUid, manualPushOrder, orderedRecs, renderManualUI, saveManual } from './30_core.js';
 import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
-import { CSV_SEAT_COLS, CSV_TPL_OUT_NAMES, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
+import { CSV_SEAT_COLS, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, csvTemplateLines, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
+import { decodeCsvBytes } from '../../js/csv_text.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SeedShare from '../seed_share.js';
 'use strict';
@@ -343,7 +344,7 @@ async function loadSpecSource() {
       } else {
         const res = await fetch(url);
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        text = await res.text();
+        text = decodeCsvBytes(await res.arrayBuffer());   // Shift_JIS の CSV もある (2026-11-11)
         label = 'CSV URL';
       }
     } else {
@@ -678,12 +679,8 @@ export function applySeedLockChoice(uid) {
   const loadBtn = document.getElementById('spec-src-load');
   if (loadBtn) loadBtn.addEventListener('click', () => { loadSpecSource(); });
   const tplBtn = document.getElementById('spec-tpl');
-  // seed / wave / lock はすべて任意 (2 行目が空欄可の例)。
-  if (tplBtn) tplBtn.addEventListener('click', () => downloadCsvTemplate([
-    'name,discriminator,seed,wave,lock',
-    `${CSV_TPL_OUT_NAMES[0]},="00000000",1,A,pool`,
-    `${CSV_TPL_OUT_NAMES[1]},="00000001",,,wave`,
-  ], 'spsp_seed_spec_template.csv'));
+  // テンプレートは表示言語で、使い方の説明行つき (2026-11-11)
+  if (tplBtn) tplBtn.addEventListener('click', () => downloadCsvTemplate(csvTemplateLines('spec'), 'spsp_seed_spec_template.csv'));
   const exportBtn = document.getElementById('spec-export');
   if (exportBtn) exportBtn.addEventListener('click', exportSeedWorkCsv);
   // トーナメントプレビューはメニューから並びを選ぶ (2026-11-10)

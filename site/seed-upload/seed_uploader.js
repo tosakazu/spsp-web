@@ -3,6 +3,7 @@
 // All requests go directly to start.gg from the user's browser. No data is sent anywhere else.
 
 import SPSPI18n from '../js/i18n.js';
+import { CSV_COMMENT, decodeCsvBytes, readCsvText } from '../js/csv_text.js';
 const i18n = (k, p) => SPSPI18n.t(k, p);   // 文言は i18n/<lang>.js
 const global = typeof window !== 'undefined' ? window : globalThis;   // 互換: 移行中は window.SPSPXxx にも置く
 
@@ -106,19 +107,15 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     }
     const r = await fetch(url);
     if (!r.ok) throw new Error(i18n('seed.upload.s7') + r.status + ' ' + r.statusText + ')');
-    return await r.text();
+    return decodeCsvBytes(await r.arrayBuffer());   // 直接の CSV URL は Shift_JIS のこともある (Google Sheets は UTF-8)
   }
 
   /**
    * Read CSV text from a File (e.g. from <input type="file">).
    */
   function readCsvFile(file) {
-    return new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result));
-      fr.onerror = () => reject(new Error(i18n('seed.upload.s8')));
-      fr.readAsText(file, 'utf-8');
-    });
+    // UTF-8 で読めなければ Shift_JIS (Excel で保存し直した CSV の日本語が化けていた、2026-11-11)
+    return readCsvText(file).catch(() => { throw new Error(i18n('seed.upload.s8')); });
   }
 
   /**
@@ -129,7 +126,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     if (typeof Papa === 'undefined') {
       throw new Error(i18n('seed.upload.s9'));
     }
-    const res = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    // テンプレートの説明行 (## で始まる行) は読み飛ばす
+    const res = Papa.parse(csvText, { header: true, skipEmptyLines: true, comments: CSV_COMMENT });
     if (res.errors && res.errors.length) {
       // Non-fatal errors are sometimes returned; surface only the first.
       const e = res.errors[0];
