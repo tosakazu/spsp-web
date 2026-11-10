@@ -1364,6 +1364,7 @@ window.SPSP_I18N.en = {
   'seed.core.s25': ' — click to change',
   'seed.core.s26': 'Pin to a pool / wave (moved to the given slot; conflict avoidance will not move it)',
   'seed.core.s27': 'Pool spec',
+  'seed.core.s28': 'Manually adjusting from the conflict-avoidance result. Undo returns to the order before the optimization.',
   'seed.core.t36': ' players · LOOKBACK',
   'seed.core.t37': ' days ·',
   'seed.core.t38': 'Overview',

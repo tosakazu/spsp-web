@@ -1369,6 +1369,7 @@ window.SPSP_I18N.ja = {
   'seed.core.s25': ' — クリックで変更',
   'seed.core.s26': 'プール/ウェーブを指定して固定する (指定した枠へ移動し、被り回避最適化でも動きません)',
   'seed.core.s27': 'プール指定',
+  'seed.core.s28': '被り回避の結果から手動調整しています。「元に戻す」で最適化前の並びに戻せます。',
   'seed.core.t36': '名 · LOOKBACK',
   'seed.core.t37': '日 ·',
   'seed.core.t38': '概要',

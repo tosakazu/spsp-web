@@ -254,3 +254,59 @@ test('csv モード: 保存済みの手動調整が無ければ、既定の手�
   // 復元した手動調整は CSV で上書きしない (案内だけ)
   assert.ok(/if \(restored && typeof applyCsvOrderIfReady === 'function'\) applyCsvOrderIfReady\(true\)/.test(restore), restore.slice(-500));
 });
+
+test('jsdom: 被り回避を反映した並びから手動調整を続けられる・元に戻すで最適化前に戻る (2026-11-11)', { skip: !JSDOM ? 'jsdom 未導入' : false }, () => {
+  const dom = new JSDOM('<!DOCTYPE html><body><div id="so-report"></div><div id="so-progress"></div></body>', { runScripts: 'outside-only' });
+  const win = dom.window;
+  win.eval(`
+    var S = window;
+    var DATA = [];
+    var APPLIED_ORDER = null, PRE_OPT = null, SEEDOPT_RESULT = null, SEED_SPEC = null;
+    var MANUAL = null;
+    var MANUAL_MAX_OPS = 100;
+    var dropped = 0;
+    function i18n(k) { return k; }
+    function _projectSeedLocks(a) { return a; }
+    function renderManualUI() {}
+    function render() {}
+    function saveManual() {}
+    function showOptCancelBtn() {}
+    function resetSeedOptResultPanel() { SEEDOPT_RESULT = null; }
+    function dropAppliedOrder() { dropped++; APPLIED_ORDER = null; PRE_OPT = null; }
+    ${extractFn(HTML, 'manualApplyOp')}
+    ${extractFn(HTML, 'manualOrder')}
+    ${extractFn(HTML, 'manualMovedSet')}
+    ${extractFn(HTML, 'orderedRecs')}
+    ${extractFn(HTML, 'applySeedOptimize')}
+    ${extractFn(HTML, 'manualUnlock')}
+    ${extractFn(HTML, 'manualPushOp')}
+    function uids() { return orderedRecs().map(function (r) { return r.user_id; }); }
+  `);
+  for (let i = 1; i <= 6; i++) win.DATA.push({ user_id: 100 + i, display: 'P' + i });
+  const norm = (a) => Array.from(a);
+  // 手動調整: 106 を先頭へ (編集中) → 最適化を反映
+  win.eval('MANUAL = { base: [101,102,103,104,105,106], ops: [], hpos: 0, committed: false, editing: true, sel: null }; manualPushOp(106, 0);');
+  assert.deepStrictEqual(norm(win.eval('uids()')), [106, 101, 102, 103, 104, 105]);
+  win.eval('SEEDOPT_RESULT = { seedOrder: [106, 102, 101, 104, 103, 105] }; applySeedOptimize();');
+  assert.deepStrictEqual(norm(win.eval('uids()')), [106, 102, 101, 104, 103, 105]);
+  // 編集を再開: 最適化後の並びのまま手動調整に入る (反映は手動調整が持つ)
+  win.eval('manualUnlock();');
+  assert.strictEqual(win.eval('APPLIED_ORDER'), null);
+  assert.strictEqual(win.eval('MANUAL.editing'), true);
+  assert.deepStrictEqual(norm(win.eval('uids()')), [106, 102, 101, 104, 103, 105], '最適化後の並びが崩れた');
+  assert.ok(win.eval('SEEDOPT_RESULT') !== null, '最適化の結果 (プレビューの「被り回避最適化後」) を消している');
+  assert.ok(/seed.core.s28|元に戻す/.test(win.document.getElementById('so-progress').textContent), '案内が出ていない');
+  assert.deepStrictEqual(norm(win.eval('Array.from(manualMovedSet()).sort()')), [101, 102, 103, 104, 106]);
+  // そこから続けて動かせる
+  win.eval('manualPushOp(105, 0);');
+  assert.deepStrictEqual(norm(win.eval('uids()')), [105, 106, 102, 101, 104, 103]);
+  // 元に戻す 1 回 = 続けた移動、2 回 = 最適化前の手動順
+  win.eval('MANUAL.hpos--;');
+  assert.deepStrictEqual(norm(win.eval('uids()')), [106, 102, 101, 104, 103, 105]);
+  win.eval('MANUAL.hpos--;');
+  assert.deepStrictEqual(norm(win.eval('uids()')), [106, 101, 102, 103, 104, 105]);
+  // 手動調整が無い状態で反映していたときは、最適化後の並びを基準にする
+  win.eval('MANUAL = null; SEEDOPT_RESULT = { seedOrder: [103, 101, 102, 104, 105, 106] }; applySeedOptimize(); manualUnlock();');
+  assert.deepStrictEqual(norm(win.eval('MANUAL.base')), [103, 101, 102, 104, 105, 106]);
+  assert.deepStrictEqual(norm(win.eval('uids()')), [103, 101, 102, 104, 105, 106]);
+});

@@ -133,9 +133,17 @@ function manualEventKey() {
   return `${S.EVENT_CONTEXT.eventId || ''}:${S.EVENT_CONTEXT.phaseId || ''}`;
 }
 export function manualParseUid(s) { const n = Number(s); return Number.isNaN(n) ? s : n; }
-/** @param {number[]} arr @param {{ uid: number, to: number }} op @returns {number[]} */
+/** @param {number[]} arr @param {SpspSeedManualOp} op @returns {number[]} */
 function manualApplyOp(arr, op) {
+  // 並び全体の op (被り回避の結果から手動調整を始めたとき、2026-11-11): その並びにする (並びに無い人は後ろ、今の順のまま)
+  if (Array.isArray(op.order)) {
+    const have = new Set(arr);
+    const head = op.order.filter((u) => have.has(u));
+    const hs = new Set(head);
+    return head.concat(arr.filter((u) => !hs.has(u)));
+  }
   const a = arr.slice();
+  if (op.uid === undefined) return a;
   const i = a.indexOf(op.uid);
   if (i >= 0) {
     a.splice(i, 1);
@@ -191,7 +199,16 @@ export function manualOrder() {
 }
 export function manualMovedSet() {
   const M = /** @type {SpspSeedManual} */ (S.MANUAL);   // 同上
-  return new Set(M.ops.slice(0, M.hpos).map(o => o.uid));
+  const out = new Set();
+  let a = M.base.slice();
+  for (let k = 0; k < M.hpos; k++) {
+    const op = M.ops[k];
+    const b = manualApplyOp(a, op);
+    if (Array.isArray(op.order)) b.forEach((u, i) => { if (a[i] !== u) out.add(u); });   // 並び全体の op は位置が変わった人
+    else if (op.uid !== undefined) out.add(op.uid);
+    a = b;
+  }
+  return out;
 }
 export function saveManual() {
   try {
@@ -288,6 +305,28 @@ function manualPushOp(uid, to) {
   saveManual(); renderManualUI();
 }
 function manualUnlock() {
+  // 被り回避を反映中: 最適化後の並びを手動調整に取り込んで、そこから続けて調整する (2026-11-11 ユーザー要望)。
+  // 並び全体を 1 つの op として積むので、「元に戻す」で最適化前の手動順に戻せる。
+  if (S.APPLIED_ORDER) {
+    const order = S.APPLIED_ORDER.slice();
+    if (!S.MANUAL) {
+      S.MANUAL = { base: order, ops: [], hpos: 0, committed: false, editing: true, sel: null };
+    } else {
+      S.MANUAL.ops = S.MANUAL.ops.slice(0, S.MANUAL.hpos);
+      S.MANUAL.ops.push({ order });
+      if (S.MANUAL.ops.length > MANUAL_MAX_OPS) {
+        S.MANUAL.base = manualApplyOp(S.MANUAL.base, S.MANUAL.ops[0]);
+        S.MANUAL.ops = S.MANUAL.ops.slice(1);
+      }
+      S.MANUAL.hpos = S.MANUAL.ops.length;
+      S.MANUAL.editing = true;
+      S.MANUAL.sel = null;
+    }
+    dropAppliedOrder();   // 並びは手動調整が持つ (最適化の結果・レポートは残す。プレビューの「被り回避最適化後」も選べる)
+    const p = document.getElementById('so-progress'); if (p) p.textContent = i18n('seed.core.s28');
+    saveManual(); renderManualUI();
+    return;
+  }
   if (!S.MANUAL) {
     // 初回: 現在の出力順 (被り回避適用済みならその順序) を基準に取り込む。
     S.MANUAL = { base: orderedRecs().map(r => r.user_id), ops: [], hpos: 0, committed: false, editing: true, sel: null };
