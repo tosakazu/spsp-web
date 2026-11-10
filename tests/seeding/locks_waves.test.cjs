@@ -688,3 +688,25 @@ test('app: wavesFromGroupNodes はプールを ID 順に並べる (ウェーブ�
   assert.deepStrictEqual(Array.from(wv14.letters), ['A', 'B']);
   assert.deepStrictEqual(Array.from(wv14.poolToWave), [1, 0, 0, 1]);
 });
+
+test('app: buildSpecOrder — ウェーブ指定を優先し、シードは下げる方向にだけずらす (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  ctx.i18n = (k, p) => k + (p ? JSON.stringify(p) : '');
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = Array.from({ length: 20 }, (_, i) => i + 1);
+  const waveMap = [0, 0, 1, 1];   // プール 1・2 = A、3・4 = B
+  const waveOfSeat = (s) => waveMap[poolOf(s, 4)];
+  // 13〜16 位が B 指定・17〜20 位がノーシード (下の行は A のプールから埋まるので、前の方法では 2 人が諦めになっていた)
+  const r = ctx.buildSpecOrder(cur, [], [13, 14, 15, 16].map((u) => [u, 1]), 4, waveMap, poolOf, new Set([17, 18, 19, 20]));
+  const order = Array.from(r.order);
+  assert.deepStrictEqual(order.slice().sort((a, b) => a - b), cur);
+  for (const u of [13, 14, 15, 16]) {
+    assert.strictEqual(waveOfSeat(order.indexOf(u)), 1, `uid${u} がウェーブ B にいない`);
+    assert.ok(order.indexOf(u) >= u - 1, `uid${u} のシードが上がった`);
+  }
+  assert.ok(!Array.from(r.notes).some((n) => /seed\.spec\.t4|枠が足りず/.test(n)), '諦めが出ている: ' + Array.from(r.notes).join(' / '));
+  assert.ok(Array.from(r.info).some((n) => /wave_moved_down|下げました/.test(n)), Array.from(r.info).join(' / '));
+  // ノーシードの人どうしの順は今の並びのまま
+  const ns = order.filter((u) => u >= 17);
+  assert.deepStrictEqual(ns, [17, 18, 19, 20]);
+});
