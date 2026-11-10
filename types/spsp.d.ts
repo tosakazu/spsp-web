@@ -223,6 +223,8 @@ declare global {
     pins: Record<string, number>;
     waves: Record<string, number>;
     locks?: Record<string, SpspSeedLock>;
+    /** ノーシード (最後尾にまとめた人、2026-11-11) */
+    noseed?: (number | string)[];
   }
   /** start.gg の phaseGroups から読んだウェーブ情報 (app/85_waves.js)。取得に失敗したときは error だけを持つ */
   interface SpspSeedWaves {

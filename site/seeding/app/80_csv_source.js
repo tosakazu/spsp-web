@@ -28,7 +28,7 @@ export function _csvPick(row, names) {
   return null;
 }
 /** @param {unknown} s @returns {string} */
-function _csvNormName(s) {
+export function _csvNormName(s) {
   const t = String(s).trim().toLowerCase();
   const i = t.lastIndexOf('|');           // チームタグ (zeta | あcola) は最後の | 以降を本体とみなす
   return i >= 0 ? t.slice(i + 1).trim() : t;
@@ -54,7 +54,7 @@ const CSV_DISC_COLS = ['discriminator', 'disc'];
 // 化けないため。判定側は旧テンプレの日本語名も引き続き例として扱う。
 export const CSV_TPL_OUT_NAMES = ['Taro Yamada', 'Hanako Suzuki'];
 // 2026-11-11 からテンプレートは表示言語の名前 (seed.csvtpl.sample1〜3) を使う。どの言語の例も記入例として扱う
-const CSV_TPL_NAMES = CSV_TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato']);
+const CSV_TPL_NAMES = CSV_TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato', '田中四郎', 'Shiro Tanaka']);
 /** @param {Record<string, unknown>} row @returns {boolean} */
 export function isCsvTemplateSample(row) {
   const nm = _csvPick(row, CSV_NAME_COLS);
@@ -393,7 +393,7 @@ const _tplComment = (s) => CSV_COMMENT + ' ' + String(s).replace(/,/g, '、').re
 
 /** テンプレートの行 @param {CsvTplKind} kind @returns {string[]} */
 export function csvTemplateLines(kind) {
-  const n = [i18n('seed.csvtpl.sample1'), i18n('seed.csvtpl.sample2'), i18n('seed.csvtpl.sample3')];
+  const n = [i18n('seed.csvtpl.sample1'), i18n('seed.csvtpl.sample2'), i18n('seed.csvtpl.sample3'), i18n('seed.csvtpl.sample4')];
   const head = [
     _tplComment(kind === 'spec' ? i18n('seed.csvtpl.title_spec') : i18n('seed.csvtpl.title_source')),
     _tplComment(i18n('seed.csvtpl.rows')),
@@ -415,6 +415,7 @@ export function csvTemplateLines(kind) {
       `${n[0]},="00000000",1,,pool`,
       `${n[1]},="00000001",,B,`,
       `${n[2]},="00000002",,,wave`,
+      `${n[3]},="00000003",${i18n('seed.csvtpl.noseed')},${i18n('seed.csvtpl.opposite', { name: n[0] })},`,
     ]);
   }
   return head.concat([
@@ -453,7 +454,8 @@ export function csvGuideHtml(kind) {
   // 表計算ソフトの見た目の記入例 (列ごとに色分け)
   const sample = kind === 'spec'
     ? [['name', 'discriminator', 'seed', 'wave', 'lock'], [i18n('seed.csvtpl.sample1'), '1a2b3c4d', '1', '', 'pool'],
-       [i18n('seed.csvtpl.sample2'), '5e6f7a8b', '', 'B', ''], [i18n('seed.csvtpl.sample3'), '9c0d1e2f', '', '', 'wave']]
+       [i18n('seed.csvtpl.sample2'), '5e6f7a8b', '', 'B', ''], [i18n('seed.csvtpl.sample3'), '9c0d1e2f', '', '', 'wave'],
+       [i18n('seed.csvtpl.sample4'), '3a4b5c6d', i18n('seed.csvtpl.noseed'), i18n('seed.csvtpl.opposite', { name: i18n('seed.csvtpl.sample1') }), '']]
     : [['name', 'discriminator', 'seed'], [i18n('seed.csvtpl.sample1'), '1a2b3c4d', '1'], [i18n('seed.csvtpl.sample2'), '5e6f7a8b', '2'],
        [i18n('seed.csvtpl.sample3'), '9c0d1e2f', '']];
   const roleOf = (/** @type {string} */ h) => (h === 'seed' || h === 'wave' ? 'order' : h === 'lock' ? 'lock' : 'match');

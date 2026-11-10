@@ -140,7 +140,7 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   win.document.getElementById('so-keep-deplace').checked = true;
   win.document.getElementById('so-include-weekday').checked = false;
   // 固定 (SEED_SPEC.locks) の配線: ranking 内 uid のみが params.seedLocks に届く。
-  win.eval("SEED_SPEC = { label: null, pins: {}, waves: {}, locks: { '101': 'pool', '999': 'wave' } };");
+  win.eval("SEED_SPEC = { label: null, pins: { '103': 3, '998': 1 }, waves: {}, locks: { '101': 'pool', '999': 'wave' }, noseed: [108] };");
 
   await win.eval('runSeedOptimize()');
 
@@ -173,6 +173,8 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   assert.strictEqual(p.seedLocks['101'], 'pool');
   assert.ok(!('999' in p.seedLocks), 'ranking 外の uid が seedLocks に残っている');
   assert.strictEqual(p.poolWaves.length, 4);
+  // シード位置の固定: 順位指定 (103) だけが seedFixed に載る (ノーシード 108 は最下位シードなので固定しない・ranking 外の 998 は載らない)
+  assert.deepStrictEqual(Array.from(p.seedFixed), [103]);
   // poolCount / ranking も入力どおり。
   assert.strictEqual(cap.post.input.poolCount, 4);
   assert.deepStrictEqual(Array.from(cap.post.input.ranking), [101, 102, 103, 104, 105, 106, 107, 108]);

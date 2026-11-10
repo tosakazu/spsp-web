@@ -311,8 +311,9 @@ export function restoreManualForEvent() {
             return o;
           };
           const sp = { label: s.spec.label || null, pins: keep(s.spec.pins),
-                       waves: keep(s.spec.waves), locks: keep(s.spec.locks) };
-          if (Object.keys(sp.pins).length || Object.keys(sp.waves).length || Object.keys(sp.locks).length) {
+                       waves: keep(s.spec.waves), locks: keep(s.spec.locks),
+                       noseed: (Array.isArray(s.spec.noseed) ? s.spec.noseed : []).map(manualParseUid).filter((u) => cur.has(u)) };
+          if (Object.keys(sp.pins).length || Object.keys(sp.waves).length || Object.keys(sp.locks).length || sp.noseed.length) {
             S.SEED_SPEC = sp;
           }
         }
