@@ -1,0 +1,25 @@
+name: promo-shots (temporary)
+on:
+  push:
+    branches: [tmp/promo-shots]
+permissions:
+  contents: read
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji >/dev/null
+      - run: cd tools/promo && npm init -y >/dev/null && npm i -s playwright@1.49.1 && npx playwright install --with-deps chromium >/dev/null
+      - run: cd tools/promo && node capture.mjs
+      - run: cd tools/promo && if [ -f compose.mjs ]; then node compose.mjs; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: promo
+          path: |
+            tools/promo/shots
+            tools/promo/out
+          retention-days: 2
