@@ -216,7 +216,7 @@ declare global {
   }
   /** 固定 (📌) の 1 件: 新形式 {kind, target}。旧形式 (localStorage に残っている) は 'pool' | 'wave' の文字列 (対象なし = 移動しない)。
    *  文字列側を交差型にしてあるのは、読む側が `l.kind || l` / `l.target` と書けるように (文字列では undefined になる) */
-  type SpspSeedLock = { kind: 'pool' | 'wave'; target: number } | (('pool' | 'wave') & { kind?: undefined; target?: undefined });
+  type SpspSeedLock = { kind: 'pool' | 'wave'; target: number } | { kind: 'seed'; target: null } | (('pool' | 'wave') & { kind?: undefined; target?: undefined });
   /** シード指定・固定 (app/90_spec.js)。キーは uid (文字列化)。locks は「固定を解除」で delete される */
   interface SpspSeedSpec {
     label: string | null;

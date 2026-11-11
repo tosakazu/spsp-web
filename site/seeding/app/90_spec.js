@@ -50,13 +50,15 @@ export function parseWaveOpposite(v) {
 export function oppositeWave(w, W) { return W === 2 ? 1 - w : (w + Math.floor(W / 2)) % W; }
 // 固定指定値 → 'pool' | 'wave' | null。明示 (プール/ウェーブ) 優先、
 // 汎用 truthy (1/○/true/固定 …) はウェーブ指定行ならウェーブ固定、それ以外はプール固定。
-/** @param {unknown} v @param {boolean} hasWave @returns {'pool' | 'wave' | null} */
+/** @param {unknown} v @param {boolean} hasWave @returns {'pool' | 'wave' | 'seed' | null} */
 function parseFixValue(v, hasWave) {
   if (v == null) return null;
   const s = String(v).trim().toLowerCase();
   if (!s || s === '0' || s === 'no' || s === 'false' || s === 'none' || s === '-' || s === '×') return null;
   if (s === 'wave' || s === 'ウェーブ' || s === 'w') return 'wave';
   if (s === 'pool' || s === 'プール' || s === 'p') return 'pool';
+  // シード固定 (2026-11-11): 被り回避の最適化でもシード番号を動かさない
+  if (s === 'seed' || s === 'シード' || s === 'シード固定' || s === 's') return 'seed';
   return hasWave ? 'wave' : 'pool';
 }
 
@@ -135,6 +137,7 @@ export function enforceSeedLocks(order, locks, P, waveMap, poolOf) {
     const l = locks[u];
     if (!l) continue;
     const kind = l.kind || l;
+    if (kind === 'seed') continue;   // シード固定: 並びの位置そのものを固定 (最適化で動かさないだけ。射影では寄せない)
     const target = (l && l.target != null) ? l.target : null;
     if (target == null) continue;   // 旧形式/対象なし: 現位置のまま (移動しない)
     need.set(u, kind === 'pool' ? { pool: target } : { wave: target });
@@ -393,6 +396,7 @@ function applySpecRows(rows, label) {
     for (const k in locks) {
       const u = manualParseUid(k);
       const kind = locks[k];
+      if (kind === 'seed') { lockObjs[u] = { kind, target: null }; continue; }
       let target;
       if (kind === 'wave' && waveOf.has(u)) {
         target = waveOf.get(u);
@@ -761,7 +765,7 @@ export function applySeedLockChoice(uid) {
   // 固定バーは表 (行の直下) にある。以前の manual-bar 内も一応拾えるよう document 全体で探す。
   const kindEl = /** @type {HTMLSelectElement | null} */ (document.querySelector('[data-mn-lock-kind]'));
   const targetEl = /** @type {HTMLSelectElement | null} */ (document.querySelector('[data-mn-lock-target]'));
-  const kind = /** @type {'none' | 'pool' | 'wave'} */ (kindEl ? kindEl.value : 'none');   // select の option 値 (30_core.js manualLockBarHtml)
+  const kind = /** @type {'none' | 'pool' | 'wave' | 'seed'} */ (kindEl ? kindEl.value : 'none');   // select の option 値 (30_core.js manualLockBarHtml)
   if (kind === 'none') {
     if (S.SEED_SPEC && S.SEED_SPEC.locks) delete S.SEED_SPEC.locks[uid];
     _pruneSeedSpec();
@@ -769,7 +773,8 @@ export function applySeedLockChoice(uid) {
     const target = targetEl ? parseInt(targetEl.value, 10) : 0;
     if (!S.SEED_SPEC) S.SEED_SPEC = { label: null, pins: {}, waves: {}, locks: {} };
     if (!S.SEED_SPEC.locks) S.SEED_SPEC.locks = {};
-    S.SEED_SPEC.locks[uid] = { kind, target: Number.isFinite(target) ? target : 0 };
+    if (kind === 'seed') S.SEED_SPEC.locks[uid] = { kind, target: null };
+    else S.SEED_SPEC.locks[uid] = { kind, target: Number.isFinite(target) ? target : 0 };
   }
   const manual = /** @type {SpspSeedManual} */ (S.MANUAL);   // 固定バーは手動調整の編集中にしか出ない
   manual.lockSel = null;

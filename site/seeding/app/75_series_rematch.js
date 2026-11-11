@@ -335,13 +335,17 @@ export async function runSeedOptimize() {
   const rankingSet = new Set(ranking);
   /** @type {Record<string, string>} */
   const seedLocks = {};
+  /** @type {(number | string)[]} */
+  const seedFixed = [];
   if (S.SEED_SPEC && S.SEED_SPEC.locks) {
     for (const k in S.SEED_SPEC.locks) {
       const u = manualParseUid(k);
       if (!rankingSet.has(u)) continue;
       const v = S.SEED_SPEC.locks[k];
+      const kind = (v && v.kind) || v;
+      if (kind === 'seed') { seedFixed.push(u); continue; }   // シード固定は seedFixed へ (下)
       // optimizer へは種別のみ渡す ('pool'|'wave')。対象は射影済みの基準位置に反映済み。
-      seedLocks[u] = (v && v.kind) || v;
+      seedLocks[u] = kind;
     }
   }
   const lockUids = Object.keys(seedLocks);
@@ -349,14 +353,9 @@ export async function runSeedOptimize() {
     params.seedLocks = seedLocks;
     params.poolWaves = waveMap;
   }
-  // シード位置の固定 (2026-11-11): 📌 シード指定 CSV で seed を指定した人 (「◯◯の逆」の ◯◯ を含む) は
-  // 最適化しても今の位置から動かさない (プール/ウェーブ固定だけだとプールの中で動いていた)。
-  // ノーシードは「最下位のシード」なので固定しない (ほかの下位の人と同じく最適化で動いてよい。ユーザー判断)
-  if (S.SEED_SPEC) {
-    const fixed = Object.keys(S.SEED_SPEC.pins || {})
-      .map(manualParseUid).filter((u) => rankingSet.has(u));
-    if (fixed.length) params.seedFixed = [...new Set(fixed)];
-  }
+  // シード固定 (2026-11-11): 固定の種類「シード」(📌 の固定・CSV の lock=seed) を付けた人だけ、最適化しても今の位置から
+  // 動かさない。CSV の seed 列や手動調整で置いただけの人は、ほかの人と同じく被り回避で動いてよい (ユーザー判断)
+  if (seedFixed.length) params.seedFixed = [...new Set(seedFixed)];
   // undefined のキーは optimizer 既定に任せる（明示的に消す）。
   Object.keys(params).forEach(k => { if (params[k] === undefined) delete params[k]; });
   // シードズレ上限の昇順チェック (optimizer でも throw するが、取得前にわかりやすく弾く)。
