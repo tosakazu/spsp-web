@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji >/dev/null
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-cjk-extra fonts-noto-color-emoji >/dev/null && mkdir -p ~/.config/fontconfig && cp tools/promo/fonts.conf ~/.config/fontconfig/fonts.conf && fc-cache -f >/dev/null && fc-match sans-serif:lang=ja && fc-match "Hiragino Sans"
       - run: cd tools/promo && npm init -y >/dev/null && npm i -s playwright@1.49.1 && npx playwright install --with-deps chromium >/dev/null
       - run: cd tools/promo && node capture.mjs
       - run: cd tools/promo && if [ -f compose.mjs ]; then node compose.mjs; fi
