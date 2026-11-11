@@ -205,6 +205,8 @@ test('app: parseWaveValue / parseFixValue', () => {
   assert.strictEqual(ctx.parseWaveValue('0'), null);
   assert.strictEqual(ctx.parseFixValue('プール', false), 'pool');
   assert.strictEqual(ctx.parseFixValue('wave', false), 'wave');
+  assert.strictEqual(ctx.parseFixValue('seed', true), 'seed');   // シード固定 (2026-11-11)
+  assert.strictEqual(ctx.parseFixValue('シード固定', false), 'seed');
   assert.strictEqual(ctx.parseFixValue('1', false), 'pool');   // 汎用 truthy
   assert.strictEqual(ctx.parseFixValue('1', true), 'wave');    // ウェーブ指定行なら wave
   assert.strictEqual(ctx.parseFixValue('0', true), null);
@@ -468,7 +470,7 @@ test('静的: 手動調整バーからプール数/ウェーブ数を指定で�
   assert.ok(/tbody\.insertBefore\(lr,/.test(APP_SRC), '固定バーを行の直下に挿入していない');
   // 行のボタン/バッジは 📌 ではなくテキスト表記 (MANUAL_COL の cell 内)。
   const colBlock = APP_SRC.slice(APP_SRC.indexOf('const MANUAL_COL'), APP_SRC.indexOf('const SEED_BASE_COLUMNS'));
-  assert.ok(/プール指定/.test(colBlock), 'ボタンが「プール指定」表記でない');
+  assert.ok(/'固定'/.test(colBlock), 'ボタンが「固定」表記でない');   // 2026-11-11 シード固定を足して「プール指定」から改名
   assert.ok(!/📌/.test(colBlock), '手動列に📌マークが残っている');
   assert.ok(/'固定'/.test(colBlock) || /固定'/.test(colBlock), 'バッジが「〜固定」表記でない');
 });
@@ -754,4 +756,12 @@ test('app: ウェーブ・プールの対応が篝火 #14・#15 と一致', () =
   assert.deepStrictEqual(kagaribi(8, 'A'), ['A100', 'B100', 'B200', 'A200', 'A300', 'B300', 'B400', 'A400']);
   const def = ctx.interleaveWaveMap(128, 2);
   assert.deepStrictEqual(Array.from({ length: 128 }, (_, p) => ctx.poolLabel(p, def)), kagaribi(128, 'A').map(short), '既定 = #15');
+});
+
+test('app: enforceSeedLocks — シード固定 (kind seed) は並びを寄せない (最適化で動かさないだけ、2026-11-11)', () => {
+  const ctx = extractFns(['enforceSeedLocks']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const r = ctx.enforceSeedLocks([1, 2, 3, 4, 5, 6, 7, 8], { 3: { kind: 'seed', target: null } }, 4, [0, 0, 1, 1], poolOf);
+  assert.deepStrictEqual(arr(r.order), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepStrictEqual(arr(r.overflow), []);
 });

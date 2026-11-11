@@ -126,7 +126,8 @@ const MANUAL_MAX_OPS = 100;
 // シード指定・固定 (spec-panel の CSV / 行の📌ボタン)。MANUAL と同じ localStorage に保存。
 //   pins:  {uid: seat1}      … 順位指定 (base 組み直しに使用済みの記録)
 //   waves: {uid: waveIdx0}   … ウェーブ指定 (同上)
-//   locks: {uid: 'pool'|'wave'} … 被り回避最適化のハード制約 (optimizer の seedLocks へ)
+//   locks: {uid: {kind:'pool'|'wave', target} | {kind:'seed'}} … 被り回避最適化のハード制約 (pool/wave は optimizer の seedLocks、
+//          seed は seedFixed へ。seed 列・手動調整で置いただけの人は最適化で動いてよい、2026-11-11)
 
 function manualEventKey() {
   if (!S.EVENT_CONTEXT) return null;
@@ -454,7 +455,7 @@ function manualBarHtml() {
     + `</div>`
     + `</div>`;
 }
-// 「プール/ウェーブ指定」バー (「プール指定」ボタンで対象行の直下に表示)。
+// 固定バー (行の「固定」ボタンで対象行の直下に表示。シード/プール/ウェーブ)。
 // 現在と違うプール/ウェーブを選んで適用すると、その中の最寄り位置へ行を移動 (通常の手動 op =
 // undo 可) してから固定する。「固定しない」で解除。
 function manualLockBarHtml() {
@@ -478,6 +479,7 @@ function manualLockBarHtml() {
     + `<option value="none"${kind === 'none' ? ' selected' : ''}>${i18n('seed.core.t22')}</option>`
     + `<option value="pool"${kind === 'pool' ? ' selected' : ''}>${i18n('seed.core.t23')}</option>`
     + (W >= 2 ? `<option value="wave"${kind === 'wave' ? ' selected' : ''}>${i18n('seed.core.t24')}</option>` : '')
+    + `<option value="seed"${kind === 'seed' ? ' selected' : ''}>${i18n('seed.core.lock_seed')}</option>`
     + `</select>`;
   let targetSel = '';
   if (kind === 'pool') {
@@ -724,14 +726,17 @@ const MANUAL_COL = {
     let lkTitle = null;
     if (lkKind) {
       const tgt = (lkRaw && lkRaw.target != null) ? lkRaw.target : null;
-      if (lkKind === 'pool') {
+      if (lkKind === 'seed') {
+        lkLabel = i18n('seed.core.lock_seed');
+        lkTitle = i18n('seed.core.lock_seed_title');
+      } else if (lkKind === 'pool') {
         lkLabel = tgt != null && _mnPoolCtx ? poolLabel(tgt, _mnPoolCtx.waveMap) + i18n('seed.core.s12') : i18n('seed.core.s13');
         lkTitle = i18n('seed.core.s13') + (tgt != null && _mnPoolCtx ? ` (${poolLabel(tgt, _mnPoolCtx.waveMap)})` : '');
       } else {
         lkLabel = tgt != null ? i18n('seed.core.s1') + waveLetter(tgt) + i18n('seed.core.s12') : i18n('seed.core.s14');
         lkTitle = i18n('seed.core.s14') + (tgt != null ? ` (${waveLetter(tgt)})` : '');
       }
-      lkTitle += i18n('seed.core.s15');
+      if (lkKind !== 'seed') lkTitle += i18n('seed.core.s15');
     }
     if (S.MANUAL && S.MANUAL.editing) {
       const isLockSel = S.MANUAL.lockSel === u;

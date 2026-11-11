@@ -412,7 +412,7 @@ export function csvTemplateLines(kind) {
   if (kind === 'spec') {
     return head.concat([
       'name,discriminator,seed,wave,lock',
-      `${n[0]},="00000000",1,,pool`,
+      `${n[0]},="00000000",1,,seed`,
       `${n[1]},="00000001",,B,`,
       `${n[2]},="00000002",,,wave`,
       `${n[3]},="00000003",${i18n('seed.csvtpl.noseed')},${i18n('seed.csvtpl.opposite', { name: n[0] })},`,
@@ -445,7 +445,7 @@ export function csvGuideHtml(kind) {
   if (kind === 'spec') {
     cols.push(['seed', 'order', i18n('seed.csvguide.seed_spec'), '1'],
       ['wave', 'order', i18n('seed.csvguide.wave'), 'B'],
-      ['lock', 'lock', i18n('seed.csvguide.lock'), 'pool / wave']);
+      ['lock', 'lock', i18n('seed.csvguide.lock'), 'seed / pool / wave']);
   } else {
     cols.push(['seed', 'order', i18n('seed.csvguide.seed_source'), '1']);
   }
