@@ -27,9 +27,9 @@ h1 em{font-style:normal;color:#dc2626}
 <div class="brand">SPSP</div>
 <h1>SPSP から<em>結果報告</em><br>できるようになりました</h1>
 <p class="sub">start.gg のトーナメントの結果を<br>選手がスマホから報告できます</p>
-${scr('match_f3400.png', 30, 615, 310, 780, 110)}
+${scr('match_f3400.png', 30, 628, 310, 780, 110)}
 ${lab(1, '対戦相手と台番号が出る', 780, 64)}
-${scr('match_full.png', 628, 892, 400, 1130, 110)}
+${scr('match_full.png', 628, 918, 400, 1130, 110)}
 ${lab(2, 'スコアを選んで送信', 1130, 64)}
 ${scr('admin_full.png', 2200, 2545, 400, 1130, 480)}
 ${lab(3, '運営は一覧で確認・修正', 1130, 434)}
