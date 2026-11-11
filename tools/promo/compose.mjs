@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { heroHtml } from './hero.mjs';
 const SH = path.resolve('shots');
 const OUT = path.resolve('out');
 fs.mkdirSync(OUT, { recursive: true });
@@ -113,4 +114,5 @@ for (const sl of SLIDES) {
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(OUT, `${sl.who === PL ? 'player' : 'organizer'}_${sl.n}.png`) });
 }
+{ const f = path.join(OUT, 'hero.html'); fs.writeFileSync(f, heroHtml(SH)); await page.goto('file://' + f, { waitUntil: 'networkidle' }); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(300); await page.screenshot({ path: path.join(OUT, 'main.png') }); }
 await browser.close();
