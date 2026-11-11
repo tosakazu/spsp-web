@@ -47,6 +47,11 @@ const SLIDES = [
     screens: [{ f: 'admin_outage_full.png', y0: 2420, y1: 3270, x: 770, y: 50, w: 365 }, { f: 'admin_outage_full.png', y0: 1770, y1: 2170, x: 1170, y: 250, w: 380 }] },
 ];
 
+// 文言の差し替え (texts.json)
+const TX = fs.existsSync('texts.json') ? JSON.parse(fs.readFileSync('texts.json', 'utf8')) : null;
+if (TX) for (const sl of SLIDES) { const t = TX.slides[sl.id]; if (!t) continue; for (const k of ['title', 'lead', 'steps', 'note', 'bullets']) { if (t[k] !== undefined) sl[k] = t[k] || undefined; } }
+const EP = TX ? TX.ENTRY_P : ENTRY_P, EO = TX ? TX.ENTRY_O : ENTRY_O;
+
 function screenHtml(s) {
   const k = s.w / 390, h = Math.round((s.y1 - s.y0) * k);
   const hl = (s.hl || []).map(([x, y, w, hh, lab]) => `<i class="hl" style="left:${x * k}px;top:${(y - s.y0) * k}px;width:${w * k}px;height:${hh * k}px">${lab ? `<b>${esc(lab)}</b>` : ''}</i>`).join('');
@@ -74,11 +79,11 @@ body{font-family:"IBM Plex Sans JP","Noto Sans CJK JP",sans-serif;color:#111827;
 .chip{margin-top:26px;align-self:flex-start;font-weight:700;font-size:22px;color:#fff;padding:6px 16px;display:flex;gap:14px;align-items:baseline}
 .chip.p{background:#dc2626}.chip.o{background:#111827}
 .chip span{font-family:"Zalando Sans Expanded",sans-serif;font-size:16px;opacity:.85}
-h1{margin-top:22px;font-size:54px;line-height:1.25;font-weight:700;letter-spacing:.01em}
+h1{margin-top:22px;font-size:48px;line-height:1.25;font-weight:700;letter-spacing:.01em}
 .lead{margin-top:22px;font-size:23px;line-height:1.6;color:#374151;font-weight:500}
 ul{margin-top:28px;list-style:none}
-li{position:relative;padding-left:30px;font-size:24px;line-height:1.5;font-weight:600;margin-bottom:16px}
-li::before{content:"";position:absolute;left:0;top:13px;width:13px;height:13px;background:#dc2626}
+li{position:relative;padding-left:28px;font-size:23px;line-height:1.5;font-weight:600;margin-bottom:12px}
+li::before{content:"";position:absolute;left:0;top:12px;width:13px;height:13px;background:#dc2626}
 .steps{margin-top:22px;border-left:5px solid #dc2626;padding:4px 0 4px 20px}
 .steps h3{font-size:20px;color:#dc2626;font-weight:700;margin-bottom:8px}
 .st{display:flex;gap:12px;font-size:22px;line-height:1.5;font-weight:600;margin-bottom:8px}
@@ -93,7 +98,7 @@ li::before{content:"";position:absolute;left:0;top:13px;width:13px;height:13px;b
 </style></head><body>
 <div class="band2"></div><div class="band"></div>
 <div class="col"><div class="brand">SPSP <small>結果報告</small></div>${chip}${title}${lead}${bl}${st}${note}
-<div class="foot"><b>spsp.games</b>${esc(P ? ENTRY_P : ENTRY_O)}</div></div>
+<div class="foot"><b>spsp.games</b>${esc(P ? EP : EO)}</div></div>
 ${sl.screens.map(screenHtml).join('')}
 </body></html>`;
 }
