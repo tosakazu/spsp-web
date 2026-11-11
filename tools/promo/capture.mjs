@@ -27,7 +27,7 @@ const S = [
 // 入口: トップの結果報告の帯 (見本) と、ナビの「大会運営支援」メニュー
 const ENTRY = [['top_notice', 'https://spsp.games/jp/?demo=report_notice', null], ['nav_menu', BASE + '?demo=setup', 'nav_open']];
 const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--lang=ja-JP'] });
 const ctx = await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 3, locale: 'ja-JP', timezoneId: 'Asia/Tokyo' });
 const meta = {};
 for (const [name, q, frames, click] of S) {
@@ -42,6 +42,12 @@ for (const [name, q, frames, click] of S) {
   }
   if (click) { const ov = await page.$('.rp-match-ov'); if (ov) await ov.click().catch(() => {}); }
   await page.waitForTimeout(6000);
+  if (/^(match|noshow)$/.test(name)) {   // スコアを入れた状態 (2-1)
+    const sels = await page.$$('.rp-sum-row select');
+    if (sels[0]) await sels[0].selectOption('2').catch(() => {});
+    if (sels[1]) await sels[1].selectOption('1').catch(() => {});
+    await page.waitForTimeout(300);
+  }
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${OUT}/${name}_view.png` });
   await page.screenshot({ path: `${OUT}/${name}_full.png`, fullPage: true });
