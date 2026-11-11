@@ -1,4 +1,4 @@
-// 告知ツイート本体の 1 枚 (1600×900): 見出し + 選手の流れ 3 画面
+// 告知ツイート本体の 1 枚 (1600×900): 見出し + 選手の画面 2 つ + 運営の一覧
 import path from 'node:path';
 export function heroHtml(SH) {
   const scr = (f, y0, y1, w, x, y) => { const k = w / 390; return `<div class="scr" style="left:${x}px;top:${y}px;width:${w}px;height:${Math.round((y1 - y0) * k)}px"><img src="file://${path.join(SH, f)}" style="width:${w}px;margin-top:${-y0 * k}px"></div>`; };
@@ -31,8 +31,8 @@ ${scr('match_f3400.png', 30, 615, 330, 770, 96)}
 ${lab(1, '対戦相手と台番号が出る', 770, 50)}
 ${scr('match_full.png', 628, 905, 400, 1150, 250)}
 ${lab(2, 'スコアを選んで送信', 1150, 204)}
-${scr('win_view.png', 50, 600, 330, 1190, 500)}
-${lab(3, '勝ったら画像つきで共有', 1190, 454)}
+${scr('admin_full.png', 2200, 2545, 400, 1150, 560)}
+${lab(3, '運営は一覧で確認・修正', 1150, 514)}
 <div class="foot"><span>運営は「大会運営支援」→「結果報告管理」から受付を始められます</span><br><span>Discord で結果報告していた大会にオススメです</span></div>
 </body></html>`;
 }
