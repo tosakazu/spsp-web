@@ -48,7 +48,8 @@ for (const [name, q, frames, click] of S) {
     if (sels[1]) await sels[1].selectOption('1').catch(() => {});
     await page.waitForTimeout(300);
   }
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => { scrollTo(0, 0); return document.fonts.ready; });
+  await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/${name}_view.png` });
   await page.screenshot({ path: `${OUT}/${name}_full.png`, fullPage: true });
   meta[name] = await page.evaluate(() => {
