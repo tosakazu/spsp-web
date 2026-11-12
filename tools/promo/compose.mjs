@@ -14,10 +14,10 @@ const CARD = { x0: 25, x1: 365, y0: 131, y1: 355 };
 const SLIDES = [
   { n: 1, title: '大会のシールを\nカードの裏に貼れます', lead: '大会に出るとその大会のシールがもらえます',
     bullets: ['カードを横にはじくと裏返ります', 'ゆっくり動かすと傾いてシールが光ります', '最初は順位評価の高い 20 大会が並んでいます'],
-    screens: [{ raw: '2.png', x: 815, y: 190, w: 372 }, { raw: '4.png', x: 1203, y: 190, w: 372 }, { raw: '3.png', x: 815, y: 455, w: 372 }, { raw: '1.png', x: 1203, y: 455, w: 372 }] },
+    bandY: 640, screens: [{ raw: '2.png', x: 64, y: 640, w: 466 }, { raw: '4.png', x: 550, y: 640, w: 466 }, { raw: '3.png', x: 64, y: 960, w: 466 }, { raw: '1.png', x: 550, y: 960, w: 466 }] },
   { n: 2, title: 'シールがもらえる\n大会と色の条件',
     bullets: ['参加 8 人以上のオフライン大会が対象です', 'その大会で 1 試合でもした人がもらえます', '下位クラスはクラスごとに別のシールです'],
-    panel: { x: 810, y: 60, w: 760, head: '上の色を取ると下の色も全部もらえます', rows: [
+    bandY: 620, panel: { x: 64, y: 590, w: 952, head: '上の色を取ると下の色も全部もらえます', rows: [
       ['虹', 'r', [['', '優勝']]],
       ['金', 'g', [['予選プールのある大会', 'Top 8'], ['予選のない大会', '上位 1/4 以内（最大 Top 8）']]],
       ['銀', 's', [['予選プールのある大会', '予選突破'], ['予選のない大会', '上位半分（最大 Top 16）　49 人以上は Top 24']]],
@@ -26,14 +26,14 @@ const SLIDES = [
   { n: 3, title: 'シールは編集ページの\n「裏」で貼ります',
     steps: [['貼り方', null], ['①', 'カードを押して「編集」を開きます'], ['②', '「裏」のタブを選びます'], ['③', '一覧の大会を押すと貼られます'], ['④', '下の色を押すと色を選べます']],
     note: '編集には start.gg でのログインが必要です',
-    screens: [{ f: `p_${M}_ov.png`, ...CARD, x: 810, y: 60, w: 390, hl: [[231, 145, 36, 36, '①']] },
-      { f: 'e_view.png', x0: 8, x1: 382, y0: 98, y1: 152, x: 810, y: 350, w: 390, hl: [[197, 108, 174, 34, '②']] },
-      { f: 'e_tray.png', x0: 8, x1: 382, y0: 62, y1: 560, x: 1150, y: 250, w: 420, hl: [[139, 190, 113, 113, '③'], [139, 490, 113, 32, '④']] }] },
+    screens: [{ f: `p_${M}_ov.png`, ...CARD, x: 64, y: 690, w: 430, hl: [[231, 145, 36, 36, '①']] },
+      { f: 'e_view.png', x0: 8, x1: 382, y0: 98, y1: 152, x: 64, y: 1020, w: 430, hl: [[197, 108, 174, 34, '②']] },
+      { f: 'e_tray.png', x0: 8, x1: 382, y0: 62, y1: 560, x: 576, y: 670, w: 440, hl: [[139, 190, 113, 113, '③'], [139, 490, 113, 32, '④']] }] },
   { n: 4, title: '場所や大きさを決めて\n「適用」で保存します',
     bullets: ['ドラッグで動かせます', '角の ↻ で回転と大きさを変えられます', '形や重なり順も変えられます', '「適用」を押すと保存されます'],
-    screens: [{ f: 'e_sel.png', x0: 8, x1: 382, y0: 145, y1: 560, x: 800, y: 50, w: 440 },
-      { f: 'e_sel.png', x0: 0, x1: 390, y0: BAR[1], y1: BAR[1] + BAR[3], x: 800, y: 570, w: 440, hl: [[APPLY[0], APPLY[1], APPLY[2], APPLY[3], null]] },
-      { f: 'e_menu.png', x0: 176, x1: 380, y0: 185, y1: 598, x: 1265, y: 250, w: 305 }] },
+    screens: [{ f: 'e_sel.png', x0: 8, x1: 382, y0: 145, y1: 560, x: 64, y: 600, w: 480 },
+      { f: 'e_sel.png', x0: 0, x1: 390, y0: BAR[1], y1: BAR[1] + BAR[3], x: 64, y: 1160, w: 480, hl: [[APPLY[0], APPLY[1], APPLY[2], APPLY[3], null]] },
+      { f: 'e_menu.png', x0: 176, x1: 380, y0: 185, y1: 598, x: 640, y: 600, w: 330 }] },
 ];
 function panelHtml(p) {
   if (!p) return '';
@@ -61,52 +61,52 @@ function slideHtml(sl) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@500;600;700&display=swap">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1600px;height:900px;overflow:hidden;background:#fff}
+html,body{width:1080px;height:1350px;overflow:hidden;background:#fff}
 body{font-family:"IBM Plex Sans JP","Noto Sans CJK JP",sans-serif;color:#111827;position:relative}
-.band{position:absolute;left:820px;top:-40px;width:1000px;height:1000px;background:#dc2626;transform:skewX(-10deg)}
-.band2{position:absolute;left:770px;top:-40px;width:14px;height:1000px;background:#111827;transform:skewX(-10deg)}
-.col{position:absolute;left:72px;top:64px;width:640px;height:780px;display:flex;flex-direction:column}
-.brand{font-family:"Zalando Sans Expanded",sans-serif;font-weight:700;font-size:22px;letter-spacing:.06em;display:flex;align-items:center;gap:14px}
-.brand small{font-family:"IBM Plex Sans JP",sans-serif;font-weight:700;font-size:18px;letter-spacing:.02em;color:#dc2626}
-.chip{margin-top:26px;align-self:flex-start;font-weight:700;font-size:22px;color:#fff;padding:6px 16px;display:flex;gap:14px;align-items:baseline;background:#dc2626}
+.band{position:absolute;left:-100px;top:${sl.bandY || 600}px;width:1300px;height:1000px;background:#dc2626;transform:skewY(-3deg)}
+.band2{position:absolute;left:-100px;top:${(sl.bandY || 600) - 26}px;width:1300px;height:12px;background:#111827;transform:skewY(-3deg)}
+.col{position:absolute;left:64px;top:52px;width:952px;display:flex;flex-direction:column}
+.brand{font-family:"Zalando Sans Expanded",sans-serif;font-weight:700;font-size:26px;letter-spacing:.06em;display:flex;align-items:center;gap:14px}
+.brand small{font-family:"IBM Plex Sans JP",sans-serif;font-weight:700;font-size:21px;letter-spacing:.02em;color:#dc2626}
+.chip{margin-top:22px;align-self:flex-start;font-weight:700;font-size:25px;color:#fff;padding:6px 16px;display:flex;gap:14px;align-items:baseline;background:#dc2626}
 .chip span{font-family:"Zalando Sans Expanded",sans-serif;font-size:16px;opacity:.85}
-h1{margin-top:22px;font-size:46px;line-height:1.25;font-weight:700;letter-spacing:.01em}
-.lead{margin-top:22px;font-size:23px;line-height:1.6;color:#374151;font-weight:500}
-ul{margin-top:28px;list-style:none}
-li{position:relative;padding-left:28px;font-size:23px;line-height:1.5;font-weight:600;margin-bottom:12px}
-li::before{content:"";position:absolute;left:0;top:12px;width:13px;height:13px;background:#dc2626}
+h1{margin-top:20px;font-size:58px;line-height:1.25;font-weight:700;letter-spacing:.01em}
+.lead{margin-top:18px;font-size:28px;line-height:1.6;color:#374151;font-weight:500}
+ul{margin-top:22px;list-style:none}
+li{position:relative;padding-left:32px;font-size:29px;line-height:1.5;font-weight:600;margin-bottom:10px}
+li::before{content:"";position:absolute;left:0;top:15px;width:15px;height:15px;background:#dc2626}
 ul.sm{margin-top:22px}ul.sm li{font-size:21px;margin-bottom:9px}ul.sm li::before{top:10px}
 .steps{margin-top:22px;border-left:5px solid #dc2626;padding:4px 0 4px 20px}
-.steps h3{font-size:20px;color:#dc2626;font-weight:700;margin-bottom:8px}
-.st{display:flex;gap:12px;font-size:22px;line-height:1.5;font-weight:600;margin-bottom:8px}
+.steps h3{font-size:23px;color:#dc2626;font-weight:700;margin-bottom:8px}
+.st{display:flex;gap:12px;font-size:28px;line-height:1.5;font-weight:600;margin-bottom:8px}
 .st em{font-style:normal;color:#dc2626;font-weight:700;flex:none}
-.note{margin-top:14px;font-size:19px;color:#6b7280;font-weight:500}
-.foot{margin-top:auto;font-size:19px;font-weight:700;color:#111827;background:#f3f4f6;border-left:5px solid #111827;padding:10px 16px;line-height:1.45}
+.note{margin-top:12px;font-size:22px;color:#6b7280;font-weight:500}
+.foot{position:absolute;left:64px;right:64px;bottom:22px;font-size:20px;font-weight:700;color:#111827;background:#f3f4f6;border-left:5px solid #111827;padding:7px 16px;line-height:1.45}
 .foot b{font-family:"Zalando Sans Expanded",sans-serif;color:#dc2626;margin-right:12px}
 .scr{position:absolute;overflow:hidden;background:#fff;border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.35);border:3px solid #111827}
 .scr img{display:block;max-width:none}
 .cap{position:absolute;font-size:17px;font-weight:700;color:#fff;background:#111827;padding:3px 12px;border-radius:6px 6px 0 0;line-height:1.5}
 .panel{position:absolute;background:#fff;border:3px solid #111827;border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.35);padding:22px 26px 10px}
-.ph{font-size:21px;font-weight:700;margin-bottom:14px}
+.ph{font-size:26px;font-weight:700;margin-bottom:14px}
 .prow{display:flex;gap:20px;align-items:center;padding:16px 0;border-top:2px solid #e5e7eb}
 .pc{flex:none;width:86px;height:86px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
 .pc-r{background:linear-gradient(135deg,#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa)}.pc-g{background:#c9a227}.pc-s{background:#8b95a5}.pc-n{background:#fff;color:#111827;border:3px solid #d1d5db;text-shadow:none}
 .pi{flex:1;min-width:0}
-.pit{font-size:22px;line-height:1.45;font-weight:600;margin:5px 0}
-.pk{display:block;font-size:17px;font-weight:700;color:#dc2626}
+.pit{font-size:27px;line-height:1.45;font-weight:600;margin:5px 0}
+.pk{display:block;font-size:20px;font-weight:700;color:#dc2626}
 .pv{display:block}
 .hl{position:absolute;border:4px solid #facc15;border-radius:8px;box-shadow:0 0 0 3px rgba(17,24,39,.6)}
 .hl b{position:absolute;left:-46px;top:50%;margin-top:-18px;width:36px;height:36px;border-radius:50%;background:#facc15;color:#111827;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;font-style:normal;box-shadow:0 0 0 3px rgba(17,24,39,.6)}
 </style></head><body>
 <div class="band2"></div><div class="band"></div>
 <div class="col"><div class="brand">SPSP <small>プレイヤーカード</small></div>${chip}${title}${lead}${bl}${st}${note}
-<div class="foot"><b>spsp.games</b>${esc(ENTRY)}</div></div>
+</div><div class="foot"><b>spsp.games</b>${esc(ENTRY)}</div>
 ${sl.screens.map(screenHtml).join('')}${panelHtml(sl.panel)}
 </body></html>`;
 }
 
 const browser = await chromium.launch({ args: ['--lang=ja-JP'] });
-const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1.5 });
+const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 2 });
 for (const sl of SLIDES) {
   const f = path.join(OUT, `s${sl.n}.html`);
   fs.writeFileSync(f, slideHtml(sl));
