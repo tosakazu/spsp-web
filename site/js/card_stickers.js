@@ -8,7 +8,7 @@
 //          動かしてから、全体の置き方 (text_xy・text_r・text_s) をまとめてかける。既定 (0・0・0°・1 倍) の値と部品は書かない)
 //   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
 //   back が無い人 (裏面を編集したことがない人) には、表示のときに初期配置 (defaultBack: 順位評価の高い 20 大会、名前シールを上に) を出す。
-//   保存はしない (シールが増えれば変わる)。置き方は選手とシールごとに決まっていて、開き直しても同じ
+//   保存はしない (シールが増えれば変わる)。置き方は選手と貼る大会から決まっていて、開き直しても同じ
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜J>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
@@ -178,23 +178,14 @@ function seededRandom(str) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-/** 初期配置の 1 枚: 大きさ・場所・角度・形は選手と大会から決まる (編集の「ランダムに貼る」と同じ幅: 標準の 0.75〜1.35 倍、
- * 半分より多くはカードの外に出ない所、±40°)。ほかのシールには左右されない (シールが増えても、前からのシールは動かない)
- * @param {number | string} uid @param {string} e シールのキー @returns {Sticker} */
-export function defaultSticker(uid, e) {
-  const rnd = seededRandom(`${uid}:${e.slice(0, e.lastIndexOf(':'))}`);
-  const size = S_DEF * Math.exp(Math.log(0.75) + rnd() * Math.log(1.35 / 0.75)), h = size / 2;
-  const seen = (/** @type {number} */ c, /** @type {number} */ L) => (Math.min(L, c + h) - Math.max(0, c - h)) / size;
-  let x = CARD_W / 2, y = CARD_H / 2;
-  for (let i = 0; i < 50; i++) {
-    const tx = -h + rnd() * (CARD_W + size), ty = -h + rnd() * (CARD_H + size);
-    if (seen(tx, CARD_W) * seen(ty, CARD_H) >= 0.5) { x = tx; y = ty; break; }
-  }
-  const r = Math.round((rnd() * 2 - 1) * 40);
-  return /** @type {Sticker} */ (normSticker({ e, x, y, s: size, r, k: DEFAULT_SHAPES[Math.floor(rnd() * DEFAULT_SHAPES.length)], c: 1 }));
-}
 /** 初期配置: 持っているシール (大会ごとに一番上の色、アイコンのある大会だけ) を順位評価のポイント (大会記録の tjpr_raw) の高い順に
- * DEFAULT_BACK_N 大会。高いものほど上に重ね、名前シール (白フチ) をいちばん上に。1 枚も無ければ null (= 何も貼っていない裏面)
+ * DEFAULT_BACK_N 大会。高いものほど上に重ね、名前シール (白フチ) をいちばん上に。1 枚も無ければ null (= 何も貼っていない裏面)。
+ * 置き方は選手と大会から決まる (同じ大会記録なら何度作っても同じ = 開き直しても変わらない):
+ *   大きさ = 枚数に合わせる (20 枚で一辺 85px 前後、少なければ大きく。±15% のばらつき)
+ *   場所   = 大会キーの順に 1 枚ずつ、その大会の乱数で出した候補 16 か所のうち、もう置いたシールからいちばん離れた所
+ *            (ばらばらに置くと 20 枚のうち半分以上が下に隠れていた。2026-11-12)。カードの外には 1/4 までしか出さない
+ *   角度 ±30°、形は四角か角丸
+ * 貼る大会の顔ぶれが変わると (新しい大会が上位に入る等)、ほかのシールの場所も変わることがある
  * @param {number | string} uid @param {any[]} tours @param {Record<string, string>} owned @param {{ f: string[], e: Record<string, number> } | null} tbl
  * @returns {CardBack | null} */
 export function defaultBack(uid, tours, owned, tbl) {
@@ -211,9 +202,30 @@ export function defaultBack(uid, tours, owned, tbl) {
     cand.push({ e, k, pts: Number(t.tjpr_raw) || 0 });
   }
   if (!cand.length) return null;
-  cand.sort((a, b) => b.pts - a.pts || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+  const byKey = (/** @type {{ k: string }} */ a, /** @type {{ k: string }} */ b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);
+  cand.sort((a, b) => b.pts - a.pts || byKey(a, b));
+  const pick = cand.slice(0, DEFAULT_BACK_N);
+  // 一辺の基準: カードの面積の 9 割を枚数で分ける (20 枚で約 88px。少ないときも大きすぎないように)
+  const base = Math.max(80, Math.min(S_DEF * 1.1, Math.sqrt(0.9 * CARD_W * CARD_H / pick.length)));
+  /** @type {Map<string, Sticker>} */
+  const placed = new Map();
+  for (const c of pick.slice().sort(byKey)) {
+    const rnd = seededRandom(`${uid}:${c.k}`);
+    const size = base * (0.85 + rnd() * 0.3), m = size / 4;
+    const r = Math.round((rnd() * 2 - 1) * 30);
+    const k = DEFAULT_SHAPES[Math.floor(rnd() * DEFAULT_SHAPES.length)];
+    let best = { x: CARD_W / 2, y: CARD_H / 2, d: -Infinity };
+    for (let i = 0; i < 16; i++) {
+      const x = m + rnd() * (CARD_W - 2 * m), y = m + rnd() * (CARD_H - 2 * m);
+      let d = Infinity;
+      for (const q of placed.values()) d = Math.min(d, Math.hypot(q.x - x, q.y - y) - (q.s + size) / 2);
+      if (d > best.d) best = { x, y, d };
+      if (!placed.size) break;   // 1 枚目は最初の候補
+    }
+    placed.set(c.e, /** @type {Sticker} */ (normSticker({ e: c.e, x: best.x, y: best.y, s: size, r, k, c: 1 })));
+  }
   // 配列の後ろが前面 = ポイントの高いものを後ろに
-  const stickers = cand.slice(0, DEFAULT_BACK_N).reverse().map(c => defaultSticker(uid, c.e));
+  const stickers = pick.slice().reverse().map(c => /** @type {Sticker} */ (placed.get(c.e)));
   return { stickers, text_top: true, outline: false, sticker_text: true };
 }
 
@@ -223,4 +235,4 @@ export function iconUrl(eid, tbl = icons) {
   return k != null && tbl && tbl.f[k] ? IMG_BASE + tbl.f[k] : null;
 }
 
-export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, defaultSticker, defaultBack, DEFAULT_BACK_N, parseKey, tourKey, ownedStickers, hasStickerData, loadOwnedStickers, isOwned, iconsNow, loadIcons, iconUrl };
+export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, defaultBack, DEFAULT_BACK_N, parseKey, tourKey, ownedStickers, hasStickerData, loadOwnedStickers, isOwned, iconsNow, loadIcons, iconUrl };
