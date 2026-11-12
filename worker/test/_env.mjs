@@ -23,6 +23,17 @@ const CHAR_EMOJI_DEFAULT = {
 const PLAYER_DEFAULT = { status: 200, body: { user_id: 4242, characters: [] } };
 
 /** JST の ISO 8601 / yyyy-MM-dd。 */
+/**
+ * 「当日 N 件」のテスト用: 時計を今日 (日本時間) の正午に固定して fn を実行する。
+ * 数分前の行を並べるテストは、日本時間 0:00〜0:12 に走ると行が前日に入って数えられず落ちていた (2026-11-13 0:00 の push で発生)。
+ */
+export async function atNoonJst(fn) {
+  const real = Date.now;
+  const J = 9 * 3600 * 1000, D = 24 * 3600 * 1000;
+  const noon = Math.floor((real() + J) / D) * D - J + 12 * 3600 * 1000;
+  Date.now = () => noon;
+  try { return await fn(); } finally { Date.now = real; }
+}
 export function jst(ms, dateOnly) {
   const iso = new Date(ms + 9 * 3600 * 1000).toISOString();
   return dateOnly ? iso.slice(0, 10) : iso.slice(0, 19) + '+09:00';

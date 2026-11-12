@@ -1,7 +1,7 @@
 // キャラ投票 (action: vote)。gas_vote.test.cjs を移植。
 import test from 'node:test';
 import assert from 'node:assert';
-import { makeEnv, post, jst, loginToken, OK_TOKEN, OK_USER } from './_env.mjs';
+import { makeEnv, post, jst, loginToken, OK_TOKEN, OK_USER, atNoonJst } from './_env.mjs';
 import { voteCandidates } from '../src/api/vote.ts';
 import { DOUBLE_MAIN_PCT_GAP } from '../src/config.ts';
 
@@ -140,14 +140,14 @@ test('vote: 60 秒未満の連投は rate_limited', async () => {
   assert.strictEqual(env.store.votes.length, 1);
 });
 
-test('vote: 当日 10 件で rate_limited', async () => {
+test('vote: 当日 10 件で rate_limited', () => atNoonJst(async () => {
   const now = Date.now();
   const rows = [];
   for (let i = 0; i < 10; i++) rows.push([jst(now - (120 + i * 60) * 1000), '4242', 'user/abcd1234', 'Toko', '1271', 'ベヨネッタ', 'pending']);
   const env = makeEnv({ token: OK_TOKEN, user: OK_USER, voteRows: rows });
   const token = await loginToken(env);
   assert.strictEqual((await post(env, { action: 'vote', token, charId: '1305' })).error.code, 'rate_limited');
-});
+}));
 
 test('vote: 同時投票で条件付き INSERT が弾いた場合も rate_limited', async () => {
   const env = makeEnv({ token: OK_TOKEN, user: OK_USER });
