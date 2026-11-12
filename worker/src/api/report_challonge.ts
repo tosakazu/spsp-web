@@ -14,7 +14,7 @@ import { score } from './report_logic.ts';
 import type { Provider, ProviderResult } from './report_startgg.ts';
 import type { Store } from '../store.ts';
 import {
-  REPORT_CH_BASE_MS, REPORT_CH_DIRTY_MS, REPORT_CH_DONE_STOP_MS, REPORT_CH_EXT_MS, REPORT_CH_EXT_WINDOW_MS, REPORT_CH_FAIL_MS, REPORT_CH_FORCE_MIN_MS,
+  REPORT_CH_BASE_MS, REPORT_CH_DIRTY_MS, REPORT_CH_DONE_STOP_MS, REPORT_CH_STALE_STOP_MS, REPORT_CH_EXT_MS, REPORT_CH_EXT_WINDOW_MS, REPORT_CH_FAIL_MS, REPORT_CH_FORCE_MIN_MS,
   REPORT_CH_FRESH_MS, REPORT_CH_IDLE_AFTER_MS, REPORT_CH_IDLE_MS, REPORT_CH_LIMIT_MS, REPORT_CH_PRESTART_MS,
 } from '../config.ts';
 
@@ -242,6 +242,7 @@ export function mirrorDue(mi: Mirror | null, now: number, mode?: 'force' | 'fres
   const done = mi.m.every((x) => x.attributes.state === 'complete');
   const idle = now - mi.chg_ms;
   if (done && idle >= REPORT_CH_DONE_STOP_MS) return null;
+  if (idle >= REPORT_CH_STALE_STOP_MS) return null;   // 終わらせていないトナメをいつまでも読みに行かない
   if (mi.ext_ms && now - mi.ext_ms < REPORT_CH_EXT_WINDOW_MS) return age >= REPORT_CH_EXT_MS ? 'matches' : null;
   if (done || idle >= REPORT_CH_IDLE_AFTER_MS) return age >= REPORT_CH_IDLE_MS ? 'matches' : null;
   return age >= REPORT_CH_BASE_MS ? 'matches' : null;
