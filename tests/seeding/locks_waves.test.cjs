@@ -279,6 +279,40 @@ test('app: buildSpecOrder — ノーシード + ウェーブ指定はそのウ�
   assert.deepStrictEqual(arr(r3.order).slice().sort((x, y) => x - y), cur);
 });
 
+test('app: buildSpecOrder — DQ はノーシードより下 = いちばん下 (2026-11-12)', () => {
+  const ctx = extractFns(['buildSpecOrder', 'parseFixValue']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  let r = ctx.buildSpecOrder(cur, [], [], 2, [0, 1], poolOf, new Set([2]), new Set([7, 4]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 5, 6, 8, 2, 4, 7], 'DQ は最後 (その中は今の順)、ノーシードはその上');
+  // ノーシード + ウェーブ指定の人は、DQ の枠を除いた中でそのウェーブのいちばん下
+  r = ctx.buildSpecOrder(cur, [], [[2, 0]], 2, [0, 1], poolOf, new Set([2]), new Set([7, 4]));
+  const o = arr(r.order);
+  assert.deepStrictEqual(o.slice(-2), [4, 7], o.join(','));
+  const seatsA = [0, 1, 2, 3, 4, 5].filter((k) => [0, 1][poolOf(k, 2)] === 0);
+  assert.strictEqual(o.indexOf(2), Math.max(...seatsA), o.join(','));
+  assert.deepStrictEqual(o.slice().sort((x, y) => x - y), cur);
+  assert.strictEqual(ctx.parseFixValue('DQ', false), 'dq');
+  assert.strictEqual(ctx.parseFixValue('dq', true), 'dq');
+});
+
+test('app: dropFromCollisions — DQ の人を被りの計算から外す (2026-11-12)', () => {
+  const ctx = extractFns(['dropFromCollisions']);
+  const bundle = {
+    prefByUid: { 1: 'tokyo', 2: 'tokyo', 3: 'osaka' }, prefCounts: { tokyo: 2, osaka: 1 },
+    recentPair: { '1:2': 0.5, '2:3': 0.2, '1:3': 0.1 }, recentMeta: { '1:2': {}, '1:3': {} }, seriesPair: { '2:3': 1 },
+  };
+  const n = vm.runInContext('(b, u) => dropFromCollisions(b, u)', ctx)(bundle, [2]);
+  assert.strictEqual(n, 3);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(bundle)), {
+    prefByUid: { 1: 'tokyo', 3: 'osaka' }, prefCounts: { tokyo: 1, osaka: 1 },
+    recentPair: { '1:3': 0.1 }, recentMeta: { '1:3': {} }, seriesPair: {},
+  });
+  assert.strictEqual(vm.runInContext('(b, u) => dropFromCollisions(b, u)', ctx)(bundle, []), 0);
+  // 最適化には seedFixed として渡し、被りの計算から外す
+  assert.ok(/if \(kind === 'dq'\) dqUids\.push\(u\)/.test(APP_SRC) && /dropFromCollisions\(bundle, dqUids\)/.test(APP_SRC));
+});
+
 test('app: ウェーブの「◯◯の逆」・指定しない書き方 (2026-11-11)', () => {
   const ctx = extractFns(['parseWaveOpposite', 'oppositeWave']);
   vm.runInContext(APP_SRC.match(/const WAVE_OPPOSITE_RE = [^\n]*/)[0].replace('const ', 'globalThis.'), ctx);

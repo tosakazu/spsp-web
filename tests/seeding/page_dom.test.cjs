@@ -453,7 +453,7 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
     function manualParseUid(k) { return Number(k); }
     function saveManual() {} function render() {} function resetSeedOptResultPanel() {} function dropAppliedOrder() {}
     function _specStatus(m) { document.getElementById('spec-status').innerHTML = m; }
-    ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
+    ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'DQ_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
     ${['currentWaveMap', 'waveOrderReversed', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
        'parseWaveValue', 'parseFixValue', 'parseWaveOpposite', 'oppositeWave', '_specRefKey', 'buildSpecOrder', 'applySpecRows'].map((n) => extractFn(HTML, n)).join('\n')}
   `);
@@ -510,6 +510,19 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
   assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave');
   assert.ok(!/⚠/.test(win.document.getElementById('spec-status').innerHTML), win.document.getElementById('spec-status').innerHTML);
+  // seed 列の「DQ」(2026-11-12): ノーシードより下 = いちばん下に置き、固定の種類 dq を付ける。ウェーブ・lock 列は見ない
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: 'ノーシード', wave: '', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: 'DQ', wave: 'A', lock: 'wave' },
+    { name: 'P2', discriminator: disc(2), seed: 'dq', wave: '', lock: '' },
+  ], 'test.csv');
+  const orderD = Array.from(win.eval('pushed'));
+  assert.deepStrictEqual(orderD.slice(-3), [4, 2, 6], 'DQ はノーシードより下: ' + orderD.join(','));
+  assert.deepStrictEqual([win.eval('SEED_SPEC').locks[6], win.eval('SEED_SPEC').locks[2]].map((l) => [l.kind, l.target]), [['dq', null], ['dq', null]]);
+  assert.strictEqual(win.eval('SEED_SPEC').locks[4], undefined);
+  const stD = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/DQ 2 人/.test(stD) && !/⚠/.test(stD), stD);
   // ウェーブ数を入れ忘れた (1 のまま): ノーシードは効き、ウェーブはまとめて案内する。注意は省略しない
   win.document.getElementById('so-waves').value = '1';
   win.eval('pushed = null;');
