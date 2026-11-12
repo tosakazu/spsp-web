@@ -993,10 +993,10 @@ function _lockKindChangeHandler(e) {
 }
 if (manualBarEl) manualBarEl.addEventListener('change', _lockKindChangeHandler);
 if (ranktableEl) ranktableEl.addEventListener('change', _lockKindChangeHandler);
-// 手動調整バーの「ウェーブの並び」→ 被り回避パネルの so-wave-order に反映 (2026-11-12)
+// 手動調整バーの「ウェーブの並び」→ so-wave-order (値を持つだけの欄) に反映 (2026-11-12)
 if (manualBarEl) manualBarEl.addEventListener('change', (e) => {
   const src = /** @type {HTMLSelectElement | null} */ (/** @type {Element} */ (e.target).closest('[data-mn-wave-order]'));
-  const dst = /** @type {HTMLSelectElement | null} */ (document.getElementById('so-wave-order'));
+  const dst = /** @type {HTMLInputElement | null} */ (document.getElementById('so-wave-order'));
   if (!src || !dst) return;
   dst.value = src.value;
   renderManualUI();
