@@ -414,6 +414,13 @@ function manualBarHtml() {
     `<span style="font-size:11px;color:#6b7280;white-space:nowrap" title="${i18n('seed.core.t43')}">`
     + `${i18n('seed.core.t15')} <input type="number" data-mn-pools min="1" max="128" step="1" value="${_pv('so-pools', 1)}" style="width:56px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
     + ` ${i18n('seed.core.t16')} <input type="number" data-mn-waves min="1" max="26" step="1" value="${_pv('so-waves', 1)}" style="width:52px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
+    // ウェーブの並び (被り回避パネルの so-wave-order と同じ値、2026-11-12)。ウェーブが 2 つ以上のときだけ出す
+    + (_pv('so-waves', 1) >= 2
+      ? ` <select data-mn-wave-order title="${escHtml(i18n('seed.skeleton.wave_order_title'))}" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;font-family:inherit;background:#fff">`
+        + [['', i18n('seed.skeleton.wave_order_a')], ['rev', i18n('seed.skeleton.wave_order_b')]].map(([v, label]) =>
+          `<option value="${v}"${(/** @type {{ value?: any }} */ (document.getElementById('so-wave-order') || {}).value || '') === v ? ' selected' : ''}>${escHtml(label)}</option>`).join('')
+        + `</select>`
+      : '')
     + `</span>`;
   // 初期状態に戻す (今の並びが初期状態と違うときだけ押せる、2026-11-11)
   const atInit = orderedRecs().map((r) => r.user_id).join(',') === _projectSeedLocks(initialOrder()).join(',');
