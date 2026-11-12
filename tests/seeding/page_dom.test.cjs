@@ -229,6 +229,11 @@ test('jsdom: 手動調整バーは MANUAL が無くてもプール数/ウェー�
   assert.ok(off.includes('data-mn-pools'), off);
   assert.ok(off.includes('data-mn-waves'), off);
   assert.ok(off.includes('value="8"') && off.includes('value="2"'), off);
+  // ウェーブが 2 つ以上なら「ウェーブの並び」も出る (2026-11-12)。1 つなら出ない
+  assert.ok(off.includes('data-mn-wave-order') && /<option value=""[^>]* selected/.test(off), off);
+  win.document.getElementById('so-waves').value = '1';
+  assert.ok(!win.manualBarHtml().includes('data-mn-wave-order'));
+  win.document.getElementById('so-waves').value = '2';
   // 編集中・確定後も同じく出る
   win.MANUAL = { base: [], ops: [], hpos: 0, committed: false, editing: true, sel: null };
   assert.ok(win.manualBarHtml().includes('data-mn-pools'));
