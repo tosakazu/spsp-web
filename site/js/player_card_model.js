@@ -344,8 +344,9 @@ export function loadCardShared() {
   }
   return SHARED;
 }
-/** @param {number} uid @returns {Promise<CardData | null>} 選手がいなければ null */
-export async function loadCardData(uid) {
+/** @param {number} uid @param {{ readings?: boolean }} [opts] readings: false = 裏面の英字名に使う読みの表を待たない
+ *   (表だけ先に描く所: 結果報告。裏面を描く前に loadCardReadings で読む) @returns {Promise<CardData | null>} 選手がいなければ null */
+export async function loadCardData(uid, opts = {}) {
   const base = /** @type {string} */ (S.data);
   const sharedP = loadCardShared();
   const [player, shared] = await Promise.all([SPSPPlayerData.load(base, uid), sharedP]);
@@ -353,8 +354,18 @@ export async function loadCardData(uid) {
   const { meta, overseas, charIdx, charEmoji, prefs, subranks } = shared;
   const p = /** @type {any} */ (player);
   // 漢字の名前だけ、裏面の英字名に使う読みの表を読む (js/latin_name.js)
-  const readings = hasKanji(SPSPFormat.shortName(p.display || '')) ? await loadReadings() : null;
+  const readings = opts.readings !== false && hasKanji(SPSPFormat.shortName(p.display || '')) ? await loadReadings() : null;
   return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji, readings };
+}
+
+/** 裏面の英字名に使う読みの表を data に足す (漢字の名前だけ。loadCardData を readings: false で読んだとき用)。要らない・読めたら true
+ * @param {CardData} data @returns {Promise<boolean>} */
+export async function loadCardReadings(data) {
+  const d = /** @type {any} */ (data);
+  if (d.readings || !hasKanji(SPSPFormat.shortName((d.rec && d.rec.display) || (d.player && d.player.display) || ''))) return true;
+  const r = await loadReadings().catch(() => null);
+  if (r) d.readings = r;
+  return !!r;
 }
 
 // ── 設定の保存 (ブラウザの localStorage。選手ごと) ──
@@ -432,5 +443,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardReadings, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };

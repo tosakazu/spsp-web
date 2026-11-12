@@ -146,6 +146,31 @@ test('初参加の相手 (SPSP にデータが無い): NO DATA のカード', { 
   p.close();
 });
 
+test('VS のカードは裏返せる枠に入る (裏面はあとから)。マッチングの演出のカードは表だけ。裏面を読み終えるまでは押しても裏返らない (2026-11-12)', { skip }, async () => {
+  const rows = Array.from({ length: 20 }, (_, i) => [1000 + i, 'P' + (i + 1), i + 1, i + 1, i + 1, 3, 0, 0, null, null, 0, 0]);
+  const index = { format: 1, columns: ['uid', 'name', 'ens', 'tjpr', 'bt', 'lv', 'prov', 'ovs', 'char', 'pref', 'last', 'b'], rows };
+  const p = await open('?demo=match&anim=cards&p1=r3&p2=r10', { json: (u) => (/players_index\.json$/.test(u) ? index : null) });
+  await until(() => p.d.querySelector('.rp-match-ov .rp-match-card'));
+  assert.strictEqual(p.d.querySelector('.rp-match-ov .pcard-back'), null, '演出に裏面は無い');
+  assert.strictEqual(p.d.querySelector('.rp-match-ov .rp-flip'), null);
+  p.d.querySelector('.rp-match-ov').click();
+  await until(() => p.d.querySelector('.rp-current .rp-flip'));
+  const wrap = p.d.querySelector('.rp-current .rp-flip');
+  assert.ok(wrap.querySelector('.pcard-flip > .rp-vs-card') && wrap.querySelector('.pcard-flip > .pcard-back'), '表と裏');
+  assert.strictEqual(wrap.querySelector('[data-flip]').hidden, true, '読み終えるまでボタンは出さない');
+  wrap.querySelector('.rp-vs-card').dispatchEvent(new p.w.MouseEvent('click', { bubbles: true }));
+  assert.strictEqual(wrap.classList.contains('flipped'), false);
+  // 読み終えた印が付けば、カードでもボタンでも裏返る
+  wrap.classList.add('rp-flip-ok');
+  wrap.querySelector('.rp-vs-card').dispatchEvent(new p.w.MouseEvent('click', { bubbles: true }));
+  assert.strictEqual(wrap.classList.contains('flipped'), true);
+  wrap.querySelector('[data-flip]').dispatchEvent(new p.w.MouseEvent('click', { bubbles: true }));
+  assert.strictEqual(wrap.classList.contains('flipped'), false);
+  assert.ok(!p.fetched.some((u) => /holo_badge|name_readings|event_icons/.test(u)), '裏面の物は読んでいない: ' + p.fetched.filter((u) => /holo|readings|icons/.test(u)).join(' '));
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
 test('カードのリンクは押せない (画面が移らない)', { skip }, async () => {
   const p = await open('?demo=match&anim=dark');
   await until(() => p.d.querySelector('.rp-match-ov'));

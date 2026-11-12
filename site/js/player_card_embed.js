@@ -1,6 +1,8 @@
 // @ts-check
 // player_card_embed.js — プレイヤーページと同じプレイヤーカードを、ほかのページ (結果報告など) に置く (2026-10-30)。
 //   mountPlayerCard(el, uid, opts)  el (.pcard を付ける) に uid のカードを描く。データ・設定・二つ名・フォントはプレイヤーページと同じ
+//                                   opts.back (裏面を描く .pcard) を渡すと、表が落ち着いてから裏面 (英字名・大会シール) を描き、
+//                                   描き終わったら opts.onBack を呼ぶ (裏返せるようにする合図)。表を出すのは裏面を待たない
 //   cardDataOf(uid) / appliedOf(uid) 読んだものはページの中で使い回す (同じ選手を何度も読まない)
 //   cardTitleOf(uid)                カードに出る二つ名の文字 (前半 + 後半、既定の「スマブラSPプレイヤー」も含む)。選手のデータが無ければ ''
 //   mountNoDataCard(el, name)        SPSP にデータが無い人のカード (既定の見た目・名前だけ・NO DATA)
@@ -11,7 +13,7 @@
 import SPSPPlayerCard, { cardSettled, shownTitle } from './player_card.js';
 export { cardSettled };
 import SPSPViews from './views.js';
-import { buildCardModel, fetchAppliedCard, hideCardRanks, loadCardData, loadCardShared, noDataCardModel } from './player_card_model.js';
+import { buildCardModel, fetchAppliedCard, hideCardRanks, loadCardData, loadCardReadings, loadCardShared, noDataCardModel } from './player_card_model.js';
 
 /** SPSP の順位を隠して描く (結果報告の「SPSP 順位を表示」、2026-11-11)。変えたら描いたカードを redrawCards で描き直す */
 let HIDE_RANKS = false;
@@ -26,7 +28,7 @@ export function redrawCards(root) {
 }
 
 /** p/index.html・p/edit.html と同じフォント (変えるときは 3 か所とも) */
-export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:wght@400;500;600&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
+export const CARD_FONTS_URL = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@500;600;700&family=Zalando+Sans+Expanded:ital,wght@0,400;0,500;0,600;0,700;1,800&family=Zalando+Sans:ital,wght@0,500..900;1,900&display=swap';
 
 /** ページにあるカードのフォントの <link> (属性セレクタは URL の記号で引けないことがあるので、href を比べる) */
 function fontsLink() {
@@ -86,7 +88,7 @@ const APPLIED = new Map();
 export function cardDataOf(uid) {
   if (!DATA.has(uid)) {
     DATA.set(uid, (async () => {
-      const d = await loadCardData(Number(uid));
+      const d = await loadCardData(Number(uid), { readings: false });   // 読みの表 (裏面の英字名) は裏面を描くときに
       if (!d) return null;
       if (!(d.player && d.player.display && d.player.ranks)) {
         const row = (await SPSPViews.rowsByUids([Number(uid)], { plain: true }).catch(() => []))[0];
@@ -113,29 +115,79 @@ export async function cardTitleOf(uid) {
   return t ? t.pre + t.post : '';
 }
 
+/** 裏面のある地域か (region/config.js features.cardBack。北米は大会シールのデータができてから) */
+export function cardBackOn() {
+  const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP;
+  return !(S && S.site && S.site.features && S.site.features.cardBack === false);
+}
+
+/** @type {Promise<void> | null} */
+let backCss = null;
+/** 裏面のシールの CSS (css/holo_badge.css、約 110KB) を読む。裏面を描く前にだけ (ページの <head> には書かない: 表を出すのを遅らせない)。
+ * 場所は player_card.css の隣 (js/holo_badge.js も、この <link> からホロの素材の場所を求める) */
+function ensureBackCss() {
+  if (backCss) return backCss;
+  if (document.querySelector('link[rel="stylesheet"][href*="holo_badge"]')) return (backCss = Promise.resolve());
+  const pc = /** @type {HTMLLinkElement | null} */ (document.querySelector('link[rel="stylesheet"][href*="player_card.css"]'));
+  const S = /** @type {any} */ (window).SPSP;
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = pc ? new URL('holo_badge.css', pc.href).href : ((S && S.root) || '../') + 'css/holo_badge.css';
+  backCss = new Promise(r => { l.addEventListener('load', () => r(undefined), { once: true }); l.addEventListener('error', () => r(undefined), { once: true }); setTimeout(r, 8000); });
+  document.head.appendChild(l);
+  return backCss;
+}
+
+/** 手が空くまで待つ (裏面は急がない。表の描画や入力の邪魔をしない) */
+const idle = () => new Promise(r => {
+  const ric = /** @type {any} */ (typeof window !== 'undefined' ? window : {}).requestIdleCallback;
+  if (typeof ric === 'function') ric(() => r(undefined), { timeout: 1500 }); else setTimeout(r, 300);
+});
+
 /**
  * el にカードを描く。プレイヤーページと同じく、設定は 2 秒まで待ち (遅ければ既定で描いて、届いたら描き直す)。
  * 戻り値: 描けたら true、選手のデータが無ければ false (el は触らない。呼ぶ側が「読み込めませんでした」などを出す)
- * @param {HTMLElement} el @param {string} uid
+ * opts.back: 裏面を描く要素。表が落ち着いて (設定も届いて) から、読みの表・シールの絵を読んで描く。描き終わったら opts.onBack
+ * (読めないものがあっても呼ぶ = 裏返せる)。戻り値の Promise は裏面を待たない
+ * @param {HTMLElement} el @param {string} uid @param {{ back?: HTMLElement | null, onBack?: () => void }} [opts]
  */
-export async function mountPlayerCard(el, uid) {
+export async function mountPlayerCard(el, uid, opts = {}) {
   ensureCardFonts();
   el.classList.add('pcard');
   const data = await cardDataOf(uid);
   if (!data || !el.isConnected) return !!data;
   const settingsP = appliedOf(uid);
+  const back = opts.back && cardBackOn() ? opts.back : null;
   let drawn = false;
+  let backDrawn = false;
+  const model = (/** @type {any} */ x) => {
+    const m = buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
+    return HIDE_RANKS ? hideCardRanks(m) : m;
+  };
   const draw = (/** @type {any} */ x) => {
     if (!el.isConnected) return;
     drawn = true;
-    const m = buildCardModel(data, x ? x.settings : null, x ? x.titleText : null);
-    SPSPPlayerCard.render(el, HIDE_RANKS ? hideCardRanks(m) : m);
+    SPSPPlayerCard.render(el, model(x));
+    if (back && backDrawn && back.isConnected) SPSPPlayerCard.renderBack(back, model(x));   // 描き直し (順位を隠す切り替え)
     /** @type {any} */ (el).__pcardRedraw = () => draw(x);
   };
   const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
   const x = await settingsP;
   clearTimeout(timer);
   if (!drawn || (x && x.settings)) draw(x);
+  if (back) {
+    // 裏面はあとから (待たない): 表が落ち着く → 手が空く → 読みの表 → 描く → シールの絵を読み終える
+    (async () => {
+      await Promise.race([cardSettled(el), new Promise(r => setTimeout(r, 3000))]);
+      await idle();
+      await Promise.all([loadCardReadings(data), ensureBackCss()]);
+      if (!el.isConnected || !back.isConnected) return;
+      backDrawn = true;
+      SPSPPlayerCard.renderBack(back, model(x));
+      await SPSPPlayerCard.ready(back);
+      if (back.isConnected && opts.onBack) opts.onBack();
+    })().catch(() => { /* 裏返せないだけ */ });
+  }
   return true;
 }
 
@@ -146,4 +198,4 @@ export function mountNoDataCard(el, name) {
   SPSPPlayerCard.render(el, noDataCardModel(name));
 }
 
-export default { mountPlayerCard, mountNoDataCard, setCardRanksHidden, redrawCards, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, warmCards, CARD_FONTS_URL };
+export default { mountPlayerCard, mountNoDataCard, cardBackOn, setCardRanksHidden, redrawCards, cardDataOf, appliedOf, cardTitleOf, ensureCardFonts, warmCards, CARD_FONTS_URL };
