@@ -8,7 +8,7 @@
 //          動かしてから、全体の置き方 (text_xy・text_r・text_s) をまとめてかける。既定 (0・0・0°・1 倍) の値と部品は書かない)
 //   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
-//   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜E>")
+//   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜J>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
 //   絵は大会のアイコン (データの data/event_icons.json = { f: ファイル名の一覧, e: { event_id: f の番号 } }。
 //   ビルドの deploy/build_event_icons.py が毎回作る)
@@ -26,7 +26,7 @@ export const TEXT_S_MIN = 0.5, TEXT_S_MAX = 2;
 export const TEXT_PARTS = /** @type {const} */ (['name', 'title', 'rank']);
 /** 色の記号 → holo_badge.js の variant (0 虹・1 金・2 銀・3 素) */
 export const TIERS = /** @type {const} */ (['r', 'g', 's', 'n']);
-export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
+export const STICKER_KEY = /^[1-9]\d{0,11}[A-J]?:[rgsn]$/;
 export const IMG_BASE = 'https://data.spsp.games/images/tournament/h/';
 
 /** @typedef {{ e: string, x: number, y: number, s: number, r: number, k: string, c: number }} Sticker */
@@ -96,7 +96,7 @@ export function normParts(v) {
 
 /** シールのキー → { 大会の event_id (下位クラスは親), クラスの文字, variant } @param {string} e */
 export function parseKey(e) {
-  const m = /^(\d+)([A-E]?):([rgsn])$/.exec(e);
+  const m = /^(\d+)([A-J]?):([rgsn])$/.exec(e);
   if (!m) return null;
   return { eid: Number(m[1]), cls: m[2] || null, variant: TIERS.indexOf(/** @type {any} */ (m[3])) };
 }

@@ -42,8 +42,8 @@ export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline:
 export type CardTextParts = Partial<Record<'name' | 'title' | 'rank', { x?: number; y?: number; r?: number; s?: number }>>;
 /** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
 export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
-/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜E) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
-export const STICKER_KEY = /^[1-9]\d{0,11}[A-E]?:[rgsn]$/;
+/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜J) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
+export const STICKER_KEY = /^[1-9]\d{0,11}[A-J]?:[rgsn]$/;
 const STICKER_SHAPES = ['square', 'round', 'circle', 'hex', 'diamond'];
 
 /** 裏面を確かめて正規化 (数値は小数 1 桁 / 切り取りは 2 桁に丸める)。形が違えば undefined、何も無ければ null */

@@ -593,13 +593,13 @@ export async function mountBackEditor(o) {
     if (room <= 0) { toast(i18n('card_back.toast.max', { n: MAX_STICKERS })); return; }
     // ランダムに選ぶのは大会 (下位クラスも同じ大会)。その大会のシールは、まだ貼っていないものの中で一番上のもの:
     // 色 (虹 > 金 > 銀 > 素)、同じ色なら本戦 > 下位クラス (B > C > …)
-    const rank = (/** @type {Badge} */ b) => b.variant * 10 + (b.cls ? ' ABCDE'.indexOf(b.cls) : 0);
+    const rank = (/** @type {Badge} */ b) => b.variant * 20 + (b.cls ? ' ABCDEFGHIJ'.indexOf(b.cls) : 0);
     // 大会ごとに、まだ貼っていないシールを上から並べる
     /** @type {Map<string, Badge[]>} */
     const byTour = new Map();
     for (const b of badges) {
       if (stickers.some(s => s.e === b.e)) continue;
-      const t = b.e.replace(/[A-E]?:.*$/, '');
+      const t = b.e.replace(/[A-J]?:.*$/, '');
       const l = byTour.get(t);
       if (l) l.push(b); else byTour.set(t, [b]);
     }
