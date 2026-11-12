@@ -102,6 +102,7 @@ export const REPORT_CH_EXT_WINDOW_MS = 20 * 60 * 1000;
 export const REPORT_CH_IDLE_AFTER_MS = 60 * 60 * 1000;    //   これだけ動きが無ければ REPORT_CH_IDLE_MS ごと
 export const REPORT_CH_IDLE_MS = 30 * 60 * 1000;
 export const REPORT_CH_DONE_STOP_MS = 2 * 3600 * 1000;    //   全試合が終わってこれだけ動きが無ければ読まない
+export const REPORT_CH_STALE_STOP_MS = 6 * 3600 * 1000;   //   終わっていなくても、これだけ動きが無ければ読まない (運営の読み直しボタンでは読む)
 export const REPORT_CH_FRESH_MS = 60 * 1000;              // 報告された試合が写しに無いときの読み直し
 export const REPORT_CH_FORCE_MIN_MS = 30 * 1000;          // 運営の「Challonge から読み直す」
 export const REPORT_CH_FAIL_MS = 60 * 1000;               // 読めなかった後に読みに行かない時間

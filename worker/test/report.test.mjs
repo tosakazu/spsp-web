@@ -718,6 +718,13 @@ test('Challonge を読む回数: 運営が Challonge で直接直した分は 10
   rf = await e.call({ action: 'report_refresh', token: await e.tok(4242), code: e.code });
   assert.strictEqual(rf.ok, true);
   assert.strictEqual(fake.gets(), 6, '30 秒以内の 2 回目は読まない');
+  // 終わっていなくても、6 時間動きが無ければ読まない。運営のボタンでは読む
+  e.tick(6 * 60 * MIN);
+  await e.view(11); e.tick(31 * MIN); await e.view(11);
+  assert.strictEqual(fake.gets(), 6, '6 時間動きが無ければ読まない');
+  rf = await e.call({ action: 'report_refresh', token: await e.tok(4242), code: e.code });
+  assert.strictEqual(rf.ok, true);
+  assert.strictEqual(fake.gets(), 8);
 });
 
 test('Challonge を読む回数: 始まる前は試合だけを 2 分ごと、始まったら参加者をもう一度だけ。全試合が終わって 2 時間動きが無ければ読まない', async () => {
