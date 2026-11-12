@@ -11,13 +11,18 @@ const CARD = { x0: 25, x1: 365, y0: 131, y1: 355 };
 // 画面の切り抜き: f = 画像 / x0..x1, y0..y1 = 画面上の位置 (CSS px) / x,y,w = スライド上の位置と幅 / hl = 強調する枠 [x,y,w,h,番号] / cap = 上のラベル
 const SLIDES = [
   { n: 1, title: '大会のシールを\nカードの裏に貼れます', lead: '大会に出ると、その大会のシールがもらえます',
-    bullets: ['シールの色は 虹 = 優勝、金・銀 = 上位、素 = 参加 の 4 種類です', '取った色より下の色のシールも使えます', 'まだ編集していない人のカードには、順位評価の高い 20 大会のシールが最初から並びます', 'シールになるのはアイコンのある大会だけです'],
-    screens: [{ f: `p_${M}_back.png`, ...CARD, x: 820, y: 80, w: 720, cap: '最初から並ぶ配置の例' }, { f: `p_${S2}_back.png`, ...CARD, x: 1110, y: 590, w: 440, cap: '自分で並べた例' }] },
-  { n: 2, title: 'カードを裏返すと\nシールが見られます',
-    bullets: ['プレイヤーページのカードを横にはじくと裏返ります', 'カードを押すと出る「裏返す」ボタンでも裏返せます', 'ゆっくり動かすとカードが傾いてシールが光ります', '結果報告の対戦カードも同じように裏返せます'],
-    screens: [{ f: `p_${M}_tilt_c.png`, x0: 13, x1: 367, y0: 122, y1: 362, x: 810, y: 60, w: 560, cap: '傾けたところ' },
-      { f: `p_${M}_ov.png`, ...CARD, x: 1170, y: 470, w: 390, hl: [[273, 145, 36, 36, null]], cap: 'カードを押すと出るボタン' },
-      { f: 'r_vs.png', x0: 20, x1: 370, y0: 70, y1: 525, x: 810, y: 480, w: 300, cap: '結果報告の対戦カード' }] },
+    bullets: ['プレイヤーページのカードを横にはじくと裏返ります', 'カードを押すと出る「裏返す」ボタンでも裏返せます', 'ゆっくり動かすとカードが傾いてシールが光ります', 'まだ編集していない人のカードには、順位評価の高い 20 大会のシールが最初から並びます', '結果報告の対戦カードも同じように裏返せます'], small: true,
+    screens: [{ f: `p_${M}_back.png`, ...CARD, x: 820, y: 70, w: 720, cap: 'カードの裏（最初から並ぶ配置の例）' },
+      { f: `p_${M}_ov.png`, ...CARD, x: 800, y: 610, w: 370, hl: [[273, 145, 36, 36, null]], cap: 'カードを押すと出る「裏返す」' },
+      { f: `p_${M}_tilt_c.png`, x0: 13, x1: 367, y0: 122, y1: 362, x: 1200, y: 600, w: 370, cap: '傾けたところ' }] },
+  { n: 2, title: 'シールがもらえる\n大会と色の条件', small: true,
+    bullets: ['参加 8 人以上のオフライン大会で、SPSP の集計対象の大会が対象です', '平日の大会も対象です', '特殊ルールの大会・身内の大会・終わっていない大会は対象外です', 'その大会で 1 試合でもした人がもらえます（DQ だけの人はもらえません）', '下位クラス（B クラスなど）はクラスごとに別のシールです', 'カードに出るのはアイコンのある大会のシールだけです'],
+    panel: { x: 810, y: 60, w: 760, head: '色の条件（上の色を取ると、下の色も全部もらえます）', rows: [
+      ['虹', 'r', [['', '優勝']]],
+      ['金', 'g', [['予選プールのある大会', 'Top 8（予選突破が 8 人未満なら Top 4、4 人未満なら 2 位まで）'], ['予選のない大会', '上位 1/4 以内（最低 2 位まで、最大 Top 8）']]],
+      ['銀', 's', [['予選プールのある大会', '予選突破'], ['予選のない大会', '48 人以下なら上位半分（最大 Top 16）、49 人以上なら Top 24']]],
+      ['素', 'n', [['', '参加（ホロなし）']]]] },
+    screens: [] },
   { n: 3, title: 'シールは編集ページの\n「裏」で貼ります',
     steps: [['貼り方', null], ['①', '自分のプレイヤーページでカードを押して「編集」を開きます'], ['②', '上のタブで「裏」を選びます'], ['③', '一覧で大会を押すと、その大会のシールが貼られます'], ['④', '大会の下の色を押すと、その色のシールを貼れます']],
     note: '自分のカードの編集には start.gg のアカウントでのログインが必要です',
@@ -30,6 +35,11 @@ const SLIDES = [
       { f: 'e_sel.png', x0: 0, x1: 390, y0: 599, y1: 664, x: 800, y: 570, w: 440, hl: [[145, 610, 229, 44, null]] },
       { f: 'e_menu.png', x0: 168, x1: 380, y0: 185, y1: 598, x: 1265, y: 250, w: 305 }] },
 ];
+function panelHtml(p) {
+  if (!p) return '';
+  const rows = p.rows.map(([name, c, items]) => `<div class="prow"><div class="pc pc-${c}">${esc(name)}</div><div class="pi">${items.map(([k, v]) => `<div class="pit">${k ? `<span class="pk">${esc(k)}</span>` : ''}<span class="pv">${esc(v)}</span></div>`).join('')}</div></div>`).join('');
+  return `<div class="panel" style="left:${p.x}px;top:${p.y}px;width:${p.w}px"><div class="ph">${esc(p.head)}</div>${rows}</div>`;
+}
 const ENTRY = '自分のプレイヤーページのカードを押して「編集」';
 
 function screenHtml(s) {
@@ -74,13 +84,22 @@ ul.sm{margin-top:22px}ul.sm li{font-size:21px;margin-bottom:9px}ul.sm li::before
 .scr{position:absolute;overflow:hidden;background:#fff;border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.35);border:3px solid #111827}
 .scr img{display:block;max-width:none}
 .cap{position:absolute;font-size:17px;font-weight:700;color:#fff;background:#111827;padding:3px 12px;border-radius:6px 6px 0 0;line-height:1.5}
+.panel{position:absolute;background:#fff;border:3px solid #111827;border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.35);padding:22px 26px 10px}
+.ph{font-size:21px;font-weight:700;margin-bottom:14px}
+.prow{display:flex;gap:20px;align-items:center;padding:16px 0;border-top:2px solid #e5e7eb}
+.pc{flex:none;width:86px;height:86px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.pc-r{background:linear-gradient(135deg,#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa)}.pc-g{background:#c9a227}.pc-s{background:#8b95a5}.pc-n{background:#fff;color:#111827;border:3px solid #d1d5db;text-shadow:none}
+.pi{flex:1;min-width:0}
+.pit{font-size:22px;line-height:1.45;font-weight:600;margin:5px 0}
+.pk{display:block;font-size:17px;font-weight:700;color:#dc2626}
+.pv{display:block}
 .hl{position:absolute;border:4px solid #facc15;border-radius:8px;box-shadow:0 0 0 3px rgba(17,24,39,.6)}
 .hl b{position:absolute;left:-46px;top:50%;margin-top:-18px;width:36px;height:36px;border-radius:50%;background:#facc15;color:#111827;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;font-style:normal;box-shadow:0 0 0 3px rgba(17,24,39,.6)}
 </style></head><body>
 <div class="band2"></div><div class="band"></div>
 <div class="col"><div class="brand">SPSP <small>プレイヤーカード</small></div>${chip}${title}${lead}${bl}${st}${note}
 <div class="foot"><b>spsp.games</b>${esc(ENTRY)}</div></div>
-${sl.screens.map(screenHtml).join('')}
+${sl.screens.map(screenHtml).join('')}${panelHtml(sl.panel)}
 </body></html>`;
 }
 
