@@ -1,7 +1,7 @@
 // 投稿 (action: post)。gas.test.cjs を移植。
 import test from 'node:test';
 import assert from 'node:assert';
-import { makeEnv, post, rawPost, jst, OK_TOKEN, OK_USER } from './_env.mjs';
+import { makeEnv, post, rawPost, jst, OK_TOKEN, OK_USER, atNoonJst } from './_env.mjs';
 import { sanitizeBody } from '../src/api/post.ts';
 
 test('happy path: currentUser の値で 1 行 append され pending が付く', async () => {
@@ -136,7 +136,7 @@ test('連投: 60 秒以上空いていれば通る / 別ユーザーには引っ
   assert.strictEqual((await post(b, { action: 'post', code: 'C', body: 'x' })).ok, true);
 });
 
-test('当日 10 件で rate_limited、9 件なら通る', async () => {
+test('当日 10 件で rate_limited、9 件なら通る', () => atNoonJst(async () => {
   const now = Date.now();
   const mk = (n) => {
     const rows = [];
@@ -150,7 +150,7 @@ test('当日 10 件で rate_limited、9 件なら通る', async () => {
   assert.strictEqual(res.error.code, 'rate_limited');
   assert.match(res.error.message, /10件/);
   assert.strictEqual(ten.store.posts.length, 10);
-});
+}));
 
 test('前日の投稿は当日カウントに入らない', async () => {
   const now = Date.now();
