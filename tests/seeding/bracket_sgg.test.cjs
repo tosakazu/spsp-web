@@ -81,3 +81,44 @@ test('CSV 保存・読み込みで start.gg のフェーズと構造 (sgg / sgg_
   // データ版 (突き合わせ用) は構造で変わらない
   assert.strictEqual(S.payloadVersion(payload), S.payloadVersion({ ...payload, sggData: undefined }));
 });
+
+// 2026-11-12: 開始前の後ろのフェーズ (start.gg がシードを返さない) は、試合の枠のシード ID からシード順を割り出す
+test('deriveSeedGs: 開始前の後ろのフェーズのシード順を試合の構造から割り出す (検算つき)', () => {
+  const fx = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'fixtures/sgg_later_phases.json'), 'utf8'));
+  const [top48, top8] = fx.phases;
+  // TOP 48 = 前のフェーズ 2 ブロックからの通過 (勝者側 16 + 敗者側 32)
+  const d48 = G.deriveSeedGs(top48.sets, top48.prevGroups);
+  assert.ok(d48 && d48.M === 48);
+  assert.deepStrictEqual([...d48.seedGs.values()].sort((a, b) => a - b), Array.from({ length: 48 }, (_, i) => i + 1));
+  // 勝者側 1 回戦は 1-16, 2-15, … (和が 17)
+  for (const s of top48.sets) {
+    if (!(s.r > 0)) continue;
+    const v = s.sl.filter((x) => x[0] === 'seed').map((x) => d48.seedGs.get(String(x[1])));
+    if (v.length === 2) assert.strictEqual(v[0] + v[1], 17);
+  }
+  const sg48 = G.deFromSgg(top48.sets, d48.seedGs, 48);
+  assert.ok(sg48 && sg48.lbStart === 32, '敗者側スタート 32 人');
+  const base48 = C.poolDoubleElim(48, 8, 32);
+  const al48 = G.alignToApp(base48, sg48);
+  assert.ok(al48, '表の形に揃えられる');
+  // 敗者側 1 回戦は start.gg の並び (同じブロックから来た人を離す) で、従来の推定とは違う
+  assert.notDeepStrictEqual(al48.losers[0].map((m) => [m.a, m.b]), base48.losers[0].map((m) => [m.a, m.b]));
+  for (const m of al48.losers[0]) assert.ok(m.a > 16 && m.b > 16, '敗者側 1 回戦は敗者側スタートの人どうし');
+  // TOP 8 (勝者側 4 + 敗者側 4)
+  const d8 = G.deriveSeedGs(top8.sets, top8.prevGroups);
+  assert.ok(d8 && d8.M === 8);
+  assert.ok(G.alignToApp(C.poolDoubleElim(8, 0, 4), G.deFromSgg(top8.sets, d8.seedGs, 8)));
+  // 前のフェーズのブロック数が違う (ID の並びの読み方が合わない) と検算が合わず null = 推定のまま
+  assert.strictEqual(G.deriveSeedGs(top48.sets, 5), null);
+  assert.strictEqual(G.deriveSeedGs([], 2), null);
+});
+
+test('bracket_sgg.js: 管理者のトークンを先に試す・フェーズごとの反映状況を出す (配線)', () => {
+  const src = fs.readFileSync(path.resolve(__dirname, '../../src/pages/bracket_sgg.js'), 'utf8');
+  assert.ok(/SpspStartggManager\.load\(\)/.test(src) && /kind: 'manager'/.test(src));
+  assert.ok(src.indexOf("kind: 'manager'") < src.indexOf("kind: 'identity'"), '管理者のトークンが先');
+  assert.ok(/loginFromBracket\(\{ manager: /.test(src));
+  assert.ok(/bracket\.sgg\.applied_all/.test(src) && /bracket\.sgg\.estimated_phase/.test(src));
+  const ret = fs.readFileSync(path.resolve(__dirname, '../../src/pages/bracket_login_return.js'), 'utf8');
+  assert.ok(/SpspStartggManager\.start/.test(ret));
+});

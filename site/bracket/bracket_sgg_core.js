@@ -18,6 +18,34 @@
 const mk = (a, b, extra) => Object.assign({ a, b, w: a == null ? b : b == null ? a : Math.min(a, b), l: a != null && b != null ? Math.max(a, b) : null }, extra || null);
 
 /**
+ * 後ろのフェーズ (前のフェーズからの通過で埋まる) は、開始前だと start.gg がシードを返さない (管理者のトークンでも 0 件)。
+ * 試合の枠にはシードの ID だけ入っているので、ID からシード番号を割り出す (2026-11-12):
+ *   ID は通過の並び (順位の行ごとに、前のフェーズのブロック順) で連番。シード番号は行ごとにブロックの向きを折り返す (スネーク)。
+ *   篝火 #15 の終了後のデータ (ID・シード番号・通過元が全部ある) でこの対応を確かめ、篝火 #16 の開始前のデータでは
+ *   勝者側 1 回戦が全部「上位 + 下位 = 一定」になることを確かめた。
+ * 検算 (勝者側 1 回戦の和が一定) が合わないときは null (= そのフェーズは従来の推定のまま)。
+ * @param {any[]} sets 1 ブロック分の試合  @param {number} G 前のフェーズのブロック数
+ * @returns {{ seedGs: Map<string, number>, M: number } | null}
+ */
+export function deriveSeedGs(sets, G) {
+  const ids = [...new Set(sets.flatMap((s) => s.sl.filter((x) => x[0] === 'seed' && /^\d+$/.test(String(x[1]))).map((x) => Number(x[1]))))].sort((a, b) => a - b);
+  if (ids.length < 2 || !(G >= 1)) return null;
+  const min = ids[0];
+  const seedNum = (/** @type {number} */ id) => { const r = id - min, row = Math.floor(r / G), col = r % G; return row * G + (row % 2 === 0 ? col : G - 1 - col) + 1; };
+  const order = ids.slice().sort((a, b) => seedNum(a) - seedNum(b));
+  const seedGs = new Map(order.map((id, i) => [String(id), i + 1]));
+  // 検算: 勝者側でシードどうしが当たる最初の試合は、どれも和が同じ (1 と最下位、2 と下から 2 番目、…)
+  const sums = new Set();
+  for (const s of sets) {
+    if (!(s.r > 0)) continue;
+    const v = s.sl.filter((x) => x[0] === 'seed').map((x) => seedGs.get(String(x[1])));
+    if (v.length === 2 && v[0] != null && v[1] != null) sums.add(v[0] + v[1]);
+  }
+  if (sums.size !== 1) return null;
+  return { seedGs, M: ids.length };
+}
+
+/**
  * @param {SimSet[]} sets  1 ブロック分の試合
  * @param {Map<string, number | null>} seedGs  シード ID → ブロック内のシード順
  * @param {number} M  このブロックの人数
@@ -217,5 +245,5 @@ export function alignToApp(app, sg) {
 }
 
 
-const API = { deFromSgg, alignToApp };
+const API = { deFromSgg, alignToApp, deriveSeedGs };
 export default API;
