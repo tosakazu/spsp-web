@@ -17,7 +17,7 @@ const meta = {};
 const snap = async (page, name, sels = []) => {
   await page.screenshot({ path: `${OUT}/${name}.png` });
   meta[name] = await page.evaluate((sels) => {
-    const o = {};
+    const o = { vw: document.documentElement.clientWidth };
     for (const s of sels) { const el = document.querySelector(s); if (!el) continue; const r = el.getBoundingClientRect(); if (!r.width && !r.height) continue; o[s] = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }
     return o;
   }, sels);
@@ -70,12 +70,22 @@ for (const uid of [MAIN, SUB]) {
   await page.evaluate((y) => scrollTo(0, y - 70), top);
   await page.waitForTimeout(3000);
   await snap(page, 'e_tray', [...E, '#bz-tray > *:nth-child(1)', '#bz-tray > *:nth-child(2)', '#bz-tray > *:nth-child(3)', '#bz-tray > *:nth-child(4)', '#bz-tray > *:nth-child(5)', '#bz-tray > *:nth-child(6)']);
-  // まだ貼っていない大会を 1 つ押して貼る (一覧の絵の所)
-  const idx = await page.evaluate(() => { const l = [...document.querySelectorAll('#bz-tray > *')]; const i = l.findIndex((el, n) => n < 9 && !el.querySelector('.on, [aria-pressed="true"]') && !/✓/.test(el.textContent || '')); return i < 0 ? 0 : i; });
-  meta.e_tray.picked = idx;
-  const it = (await page.$$('#bz-tray > *'))[idx];
-  if (it) { const b = await it.boundingBox(); await page.touchscreen.tap(b.x + b.width / 2, b.y + b.width / 2).catch((e) => { log.tap = e.message.slice(0, 100); }); }
-  await page.waitForTimeout(1800);
+  // 貼ってあるシールのうち、カードの中に全部入っているものを 1 枚選び、形を変える (= 適用していない変更がある状態。適用は押さない)
+  await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(600);
+  const pick = await page.evaluate(() => {
+    const st = document.getElementById('bz-stage').getBoundingClientRect();
+    const l = [...document.querySelectorAll('#bz-layer > *')];
+    for (let i = l.length - 1; i >= 0; i--) { const r = l[i].getBoundingClientRect(); if (r.left > st.left + 30 && r.right < st.right - 30 && r.top > st.top + 30 && r.bottom < st.bottom - 14) return i; }
+    return l.length - 1;
+  });
+  const sk = (await page.$$('#bz-layer > *'))[pick];
+  if (sk) await sk.click({ force: true }).catch((e) => { log.sk = e.message.slice(0, 100); });
+  await page.waitForTimeout(900);
+  for (const k of ['circle', 'round', 'hex']) {
+    const b = await page.$(`#bz-shapes button[data-k="${k}"]:not(.on):not([disabled])`);
+    if (b) { await b.click().catch(() => {}); break; }
+  }
+  await page.waitForTimeout(1200);
   await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(600);
   await snap(page, 'e_sel', E);
   meta.e_sel.n = await page.evaluate(() => document.querySelectorAll('#bz-layer > *').length);

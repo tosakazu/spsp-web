@@ -7,6 +7,8 @@ const OUT = path.resolve('out');
 fs.mkdirSync(OUT, { recursive: true });
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const M = process.env.MAIN || '932356', S2 = process.env.SUB || '1002311';
+const META = JSON.parse(fs.readFileSync(path.join(SH, 'meta.json'), 'utf8'));
+const BAR = META.e_sel['.ce-bar'], APPLY = META.e_sel['#ce-apply'];
 const CARD = { x0: 25, x1: 365, y0: 131, y1: 355 };
 // 画面の切り抜き: f = 画像 / x0..x1, y0..y1 = 画面上の位置 (CSS px) / x,y,w = スライド上の位置と幅 / hl = 強調する枠 [x,y,w,h,番号] / cap = 上のラベル
 const SLIDES = [
@@ -32,7 +34,7 @@ const SLIDES = [
   { n: 4, title: '場所や大きさを決めて\n「適用」で保存します', small: true,
     bullets: ['貼ったシールはドラッグで動かせます', 'シールを押して選ぶと、角の ↻ で回転と大きさを変えられます', '下の欄で形・重なり順・切り取りも変えられます', '裏面の名前は英字です（大会で使われることがあるので正確に）', '「…」のメニューには「ランダムに 5 枚貼る」と「初期配置に戻す」もあります', '「適用」を押すまでカードには反映されません'],
     screens: [{ f: 'e_sel.png', x0: 8, x1: 382, y0: 145, y1: 560, x: 800, y: 50, w: 440 },
-      { f: 'e_sel.png', x0: 0, x1: 390, y0: 599, y1: 664, x: 800, y: 570, w: 440, hl: [[145, 610, 229, 44, null]] },
+      { f: 'e_sel.png', x0: 0, x1: 390, y0: BAR[1], y1: BAR[1] + BAR[3], x: 800, y: 570, w: 440, hl: [[APPLY[0], APPLY[1], APPLY[2], APPLY[3], null]] },
       { f: 'e_menu.png', x0: 176, x1: 380, y0: 185, y1: 598, x: 1265, y: 250, w: 305 }] },
 ];
 function panelHtml(p) {
@@ -46,7 +48,7 @@ function screenHtml(s) {
   const k = s.w / (s.x1 - s.x0), h = Math.round((s.y1 - s.y0) * k);
   const hl = (s.hl || []).map(([x, y, w, hh, lab]) => `<i class="hl" style="left:${(x - s.x0) * k}px;top:${(y - s.y0) * k}px;width:${w * k}px;height:${hh * k}px">${lab ? `<b>${esc(lab)}</b>` : ''}</i>`).join('');
   const cap = s.cap ? `<div class="cap" style="left:${s.x}px;top:${s.y - 34}px">${esc(s.cap)}</div>` : '';
-  return `${cap}<div class="scr" style="left:${s.x}px;top:${s.y}px;width:${s.w}px;height:${h}px"><img src="file://${SH}/${s.f}" style="width:${390 * k}px;margin-top:${-s.y0 * k}px;margin-left:${-s.x0 * k}px">${hl}</div>`;
+  return `${cap}<div class="scr" style="left:${s.x}px;top:${s.y}px;width:${s.w}px;height:${h}px"><img src="file://${SH}/${s.f}" style="width:${((META[s.f.replace('.png', '')] || {}).vw || 390) * k}px;margin-top:${-s.y0 * k}px;margin-left:${-s.x0 * k}px">${hl}</div>`;
 }
 function slideHtml(sl) {
   const chip = `<div class="chip p">大会シール<span>${sl.n}/4</span></div>`;
