@@ -196,6 +196,22 @@ export function enforceSeedLocks(order, locks, P, waveMap, poolOf) {
     }
   });
   const overflowByKey = new Map(overflow.map((o) => [o.kind + ':' + o.target, o]));
+  // 枠に入りきらない人 (今の並びで後ろの人から) と、対象が今の設定に無い人 (枠 0。ウェーブ数を 1 に戻した・プール数を減らした) は
+  // 固定なしとして今の位置のまま流す (2026-11-12)。以前は置ける席を最後まで待たせていたので、ウェーブ数が 1 に戻ると
+  // ウェーブ固定の全員がいちばん下に落ちていた
+  if (overflow.length) {
+    const seen = new Map();
+    for (const u of order) {
+      const nd = need.get(u);
+      if (!nd) continue;
+      const key = nd.pool != null ? 'pool:' + nd.pool : 'wave:' + nd.wave;
+      const o = overflowByKey.get(key);
+      if (!o) continue;
+      const k = (seen.get(key) || 0) + 1;
+      seen.set(key, k);
+      if (k > o.cap) { need.delete(u); o.dropped.push(u); }
+    }
+  }
   const out = new Array(N).fill(null);
   // シード固定・DQ の人は今の席のまま (2026-11-12)。以前はほかの人と同じに前へ詰めていたので、枠待ちの固定者が
   // 居ると席がずれ、DQ (最下位のはず) より下に枠待ちの人が来ることがあった
@@ -232,8 +248,6 @@ export function enforceSeedLocks(order, locks, P, waveMap, poolOf) {
     }
     out[s] = picked;
   }
-  // 対象が存在しない (cap 0) 場合は全員が指定を反映できていない。
-  for (const o of overflow) if (o.cap === 0) o.dropped = o.uids.slice();
   return { order: out, overflow };
 }
 

@@ -262,6 +262,24 @@ export function manualMovedSet() {
   }
   return out;
 }
+/** 画面のプール数・ウェーブ数・ウェーブの並び (作業状態と一緒に保存する) */
+function _uiPoolWaveSettings() {
+  if (typeof document === 'undefined') return null;
+  const v = (/** @type {string} */ id) => /** @type {{ value?: any }} */ (document.getElementById(id) || {}).value;
+  const p = parseInt(v('so-pools'), 10), w = parseInt(v('so-waves'), 10);
+  return { pools: Number.isFinite(p) ? p : null, waves: Number.isFinite(w) ? w : null, wave_order: v('so-wave-order') === 'rev' ? 'rev' : 'a' };
+}
+/** 保存してあった設定を戻す。start.gg から取れている項目 (プール数・全プールのウェーブ) はそちらを使う */
+function _restoreUiPoolWaveSettings(/** @type {any} */ ui) {
+  if (!ui || typeof document === 'undefined') return;
+  const ctx = S.EVENT_CONTEXT;
+  const set = (/** @type {string} */ id, /** @type {string} */ val) => { const el = /** @type {HTMLInputElement | null} */ (document.getElementById(id)); if (el) el.value = val; };
+  if (!(ctx && Number.isFinite(ctx.poolCount) && /** @type {number} */ (ctx.poolCount) >= 1) && Number.isFinite(ui.pools) && ui.pools >= 1) set('so-pools', String(ui.pools));
+  if (!(ctx && ctx.waves && Array.isArray(ctx.waves.poolToWave))) {
+    if (Number.isFinite(ui.waves) && ui.waves >= 1) set('so-waves', String(ui.waves));
+    if (ui.wave_order === 'rev' || ui.wave_order === 'a') set('so-wave-order', ui.wave_order === 'rev' ? 'rev' : '');
+  }
+}
 export function saveManual() {
   try {
     if (!S.MANUAL && !S.SEED_SPEC) { localStorage.removeItem(MANUAL_LS_KEY); return; }
@@ -272,6 +290,9 @@ export function saveManual() {
       src: (S.MANUAL && S.MANUAL.src) || null,
       method: S.currentMethod, random_seed: S.currentMethod === 'random' ? S.RANDOM_SEED : null,   // 基準の並び (ランダムは種まで)
       spec: S.SEED_SPEC,   // 指定・固定 (MANUAL と独立に保持)
+      // プール数・ウェーブ数・ウェーブの並び (2026-11-12): 固定の対象 (ウェーブ B など) はこの設定で決まる。start.gg から読み直すと
+      // ウェーブ数が 1 に戻り、ウェーブ固定が全部満たせなくなっていた
+      ui: _uiPoolWaveSettings(),
       ts: Date.now(),
     }));
   } catch (e) { /* 容量超過等は無視 (保存はベストエフォート) */ }
@@ -299,6 +320,7 @@ export function restoreManualForEvent() {
             committed: !!s.committed, editing: false, sel: null, src: s.src || null,
           };
         }
+        _restoreUiPoolWaveSettings(s.ui);
         // 指定・固定の復元 (現在の参加者に居る uid の分だけ)。
         if (s.spec && typeof s.spec === 'object') {
           /** @param {Record<string, any> | null | undefined} obj @returns {Record<string, any>} */

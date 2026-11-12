@@ -870,3 +870,29 @@ test('app: enforceSeedLocks はシード固定・DQ の席を動かさない (�
   const ok = [1, 2, 3, 4, 91];
   assert.deepStrictEqual(arr(ctx.enforceSeedLocks(ok, { 2: { kind: 'wave', target: 1 }, 91: { kind: 'dq', target: null } }, 2, [0, 1], poolOf).order), ok);
 });
+
+test('app: enforceSeedLocks は満たせない固定 (対象が無い・枠を超えた分) の人を今の位置のまま流す (2026-11-12)', () => {
+  const ctx = extractFns(['enforceSeedLocks']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  // ウェーブ数が 1 に戻った (waveMap が全部 0): ウェーブ B (1) に固定した 2・5 は動かさない。以前は 2 人ともいちばん下に落ちていた
+  const order = [1, 2, 3, 4, 5, 6, 7, 8];
+  const r = ctx.enforceSeedLocks(order, { 2: { kind: 'wave', target: 1 }, 5: { kind: 'wave', target: 1 } }, 2, [0, 0], poolOf);
+  assert.deepStrictEqual(arr(r.order), order);
+  assert.strictEqual(r.overflow.length, 1);
+  assert.strictEqual(r.overflow[0].cap, 0);
+  assert.deepStrictEqual(arr(r.overflow[0].dropped), [2, 5]);
+  // 枠を超えた分: プール 2 (index 1) の枠は 2 つ。3 人固定すると、後ろの 1 人 (6) だけ諦めて今の位置のまま
+  const r2 = ctx.enforceSeedLocks([1, 2, 3, 4, 5, 6], { 1: { kind: 'pool', target: 1 }, 4: { kind: 'pool', target: 1 }, 6: { kind: 'pool', target: 1 } }, 3, [0, 0, 0], poolOf);
+  const o2 = arr(r2.order);
+  assert.strictEqual(poolOf(o2.indexOf(1), 3), 1);
+  assert.strictEqual(poolOf(o2.indexOf(4), 3), 1);
+  assert.deepStrictEqual(arr(r2.overflow[0].dropped), [6]);
+  assert.strictEqual(o2.indexOf(6), 5, '諦めた人が下に落ちた/動いた: ' + o2.join(','));
+});
+
+test('app: プール数・ウェーブ数・ウェーブの並びを作業状態と一緒に保存して、読み直しで戻す (2026-11-12)', () => {
+  assert.ok(/ui: _uiPoolWaveSettings\(\)/.test(APP_SRC));
+  assert.ok(/_restoreUiPoolWaveSettings\(s\.ui\)/.test(APP_SRC));
+  // start.gg から全プールのウェーブが取れているときは上書きしない
+  assert.ok(/if \(!\(ctx && ctx\.waves && Array\.isArray\(ctx\.waves\.poolToWave\)\)\)/.test(APP_SRC));
+});
