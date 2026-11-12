@@ -26,7 +26,7 @@
  */
 import type { Config } from '../config.ts';
 import {
-  REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_CHALLONGE_CACHE_S, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
+  REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
   REPORT_GRANT_MS, REPORT_MIN_OPEN_MS,
 } from '../config.ts';
 import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, ReportStartRow, Store } from '../store.ts';
@@ -38,8 +38,8 @@ import { checkSnap, projectFull, snapHasStructure } from './report_bracket.ts';
 import type { HeldDq } from './report_bracket.ts';
 import { exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
 import { openJson, sealJson } from './report_crypto.ts';
-import type { CData, CMatch } from './report_challonge.ts';
-import { cSetOf, challongeProvider, parseMatch, parseParticipant, readChallonge } from './report_challonge.ts';
+import type { CData, CMatch, ChCtx } from './report_challonge.ts';
+import { cSetOf, challongeData, challongeProvider } from './report_challonge.ts';
 import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
 import { managersOf, MANAGERS_MAX } from './report_logic.ts';
 import type { ManagerRole, ReportManager } from './report_logic.ts';
@@ -350,9 +350,18 @@ async function openEvent(cfg: Config, store: Store, fetchFn: FetchFn, code: unkn
   return { ok: true, ev, token: s.at };
 }
 
-function providerOf(fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }): Provider {
-  return o.ev.kind === 'challonge' ? challongeProvider(fetchFn, o.token, o.ev.target_id, parseSettings(o.ev.settings).double === true)
-    : startggProvider(fetchFn, o.token, o.ev.target_id);
+const chCtx = (store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, now: number): ChCtx =>
+  ({ store, fetchFn, token: o.token, tid: o.ev.target_id, code: o.ev.code, now });
+
+/**
+ * start.gg / Challonge を呼ぶ口 (障害の判定つき)。
+ * Challonge は読むのを写し (report_challonge.ts) から: phases・readSet は Challonge を呼ばないことが多いので障害の判定に通さない
+ * (写しがあれば Challonge が止まっていても・回数の上限でも読める)。書く (apply・reset) のは通す。
+ */
+function guarded(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow; token: string }, health: Health, now: number): Provider {
+  if (o.ev.kind !== 'challonge') return guardProvider(startggProvider(fetchFn, o.token, o.ev.target_id), health, now);
+  const p = challongeProvider(chCtx(store, fetchFn, o, now), parseSettings(o.ev.settings).double === true);
+  return { ...guardProvider(p, health, now), phases: p.phases, readSet: p.readSet };
 }
 
 // ── 試合ごとの判定と反映 ───────────────────────────────────────────────
@@ -704,7 +713,7 @@ async function maintain(store: Store, fetchFn: FetchFn, o: { ev: ReportEventRow;
   const queued = rows.some(isQueuedRow) || manualOpen.some((m) => m.updated_ms === m.created_ms || now - m.updated_ms >= MANUAL_RECHECK_MS) || dqDue || startsDue.length > 0;
   const snapDue = ev.kind === 'startgg' && now - seenMs(loaded) >= (!loaded.full ? SNAP_FIRST_MIN_MS : fast ? SNAP_FAST_MS : SNAP_MIN_MS);
   if (!queued && !snapDue) return loaded;
-  if (health.down() && now - health.row.last_fail_ms < PROBE_GAP_MS) return loaded;
+  if (health.down() && now - health.row.last_fail_ms < health.probeGap()) return loaded;
   if (!(await store.claimReportSnapshot(ev.code, now, 25 * 1000).catch(() => false))) return loaded;
   let wrote = false;
   let out = loaded;
@@ -916,7 +925,7 @@ export async function handleReportSubmit(cfg: Config, store: Store, fetchFn: Fet
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   const health = await Health.load(store, o.ev.kind);
-  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const p = guarded(store, fetchFn, o, health, now);
   const got = await setForReport(store, p, o.ev, setId);
   if ('res' in got) return got.res;
   setId = got.set.id;
@@ -988,33 +997,6 @@ async function setView(store: Store, row: ReportSetRow, uid: string | null) {
   return { code: row.code, set_id: row.set_id, state: row.state, note: row.note === SENDING ? '' : row.note, applied: parseApplied(row.applied), slots, reports: latest, updated_ms: row.updated_ms };
 }
 
-/** Challonge の参加者・試合 (Worker の cache に 15 秒) */
-async function challongeData(fetchFn: FetchFn, token: string, tid: string): Promise<{ ok: true; data: CData } | { ok: false; note: string }> {
-  const cache = typeof caches !== 'undefined' ? (caches as unknown as { default: Cache }).default : null;
-  const key = new Request('https://spsp-report.internal/challonge/' + tid);
-  if (cache) {
-    const hit = await cache.match(key).catch(() => undefined);
-    if (hit) {
-      const j = await hit.json() as { p: unknown[]; m: unknown[] };
-      const participants = new Map();
-      for (const x of j.p) { const q = parseParticipant(x); if (q) participants.set(q.id, q); }
-      return { ok: true, data: { participants, matches: j.m.map(parseMatch).filter((x): x is CMatch => !!x) } };
-    }
-  }
-  const r = await readChallonge(fetchFn, token, tid);
-  if (r.ok && cache) {
-    const p = Array.from(r.data.participants.values()).map((x) => ({ id: x.id, attributes: { name: x.name, misc: x.uid ? 'startgg:' + x.uid : '', seed: x.seed } }));
-    const m = r.data.matches.map((x) => ({ id: x.id, attributes: {
-      state: x.state, round: x.round, identifier: x.identifier, player1_id: x.p[0], player2_id: x.p[1],
-      player1_prereq_match_id: x.prereq[0], player2_prereq_match_id: x.prereq[1],
-      player1_is_prereq_match_loser: x.prereqLoser[0], player2_is_prereq_match_loser: x.prereqLoser[1], winner_id: x.winner,
-      points_by_participant: Object.entries(x.points).map(([k, v]) => ({ participant_id: k, scores: [v] })), completed_at: x.completedAt,
-    } }));
-    await cache.put(key, new Response(JSON.stringify({ p, m }), { headers: { 'Cache-Control': 'max-age=' + REPORT_CHALLONGE_CACHE_S } })).catch(() => undefined);
-  }
-  return r;
-}
-
 /** Challonge の自分の試合 (画面用)。start.gg はブラウザが本人のトークンで読む */
 function challongeMine(d: CData, uid: string, double: boolean) {
   const me = Array.from(d.participants.values()).find((p) => p.uid === uid) || null;
@@ -1039,7 +1021,7 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   const health = await Health.load(store, o.ev.kind);
-  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const p = guarded(store, fetchFn, o, health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
   const none: Kept = { snap: null, syncedMs: 0, checkedMs: 0, full: false, sets: 0, manual: 0 };
   // 写しで描いている選手 (fallback: 本人のトークンが無い・ブラウザから読めない) が来ているあいだは、変わった試合を短い間隔で読む
@@ -1066,8 +1048,9 @@ export async function handleReportView(cfg: Config, store: Store, fetchFn: Fetch
     out.playing = snap ? Array.from(new Set(Object.values(snap.sets).filter((s) => s.s === 2).flatMap((s) => s.sl.map((x) => x.e).filter((e): e is string => !!e)))) : [];
   }
   if (o.ev.kind === 'challonge') {
-    const d = await challongeData(fetchFn, o.token, o.ev.target_id);
-    out.challonge = d.ok ? challongeMine(d.data, sess.id, parseSettings(o.ev.settings).double === true) : { error: d.note };
+    const d = await challongeData(chCtx(store, fetchFn, o, now));
+    // at = Challonge から試合を読んだ時刻 (写し。SPSP に入った報告はすぐ出るが、次の試合の相手が出るのは読み直した後)
+    out.challonge = d.ok ? { ...challongeMine(d.data, sess.id, parseSettings(o.ev.settings).double === true), at: d.at, stale: d.stale || undefined } : { error: d.note };
   }
   return ok(out);
 }
@@ -1206,7 +1189,7 @@ export async function handleReportAdmin(cfg: Config, store: Store, fetchFn: Fetc
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
   const health = await Health.load(store, o.ev.kind);
-  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const p = guarded(store, fetchFn, o, health, now);
   await flushPending(store, p, o.ev, now).catch(() => 0);
   const kept = await maintain(store, fetchFn, o, p, health, now).catch((): Kept => ({ snap: null, syncedMs: 0, checkedMs: 0, full: false, sets: 0, manual: 0 }));
   const sets = [];
@@ -1329,6 +1312,21 @@ export async function handleReportStartBracket(cfg: Config, store: Store, fetchF
   return ok({ steps: r.steps, more: r.more });
 }
 
+/**
+ * action: "report_refresh" — { token, code } 運営が Challonge から読み直す (Challonge の画面で直接直した後、すぐ SPSP に出したいとき)。
+ * 普段は Challonge を読む回数を抑えていて (report_challonge.ts の写し)、Challonge で直した分が出るまで最長 10 分かかるため。
+ * REPORT_CH_FORCE_MIN_MS に 1 回まで (それより短ければ今の写しのまま返す)。start.gg の大会では何もしない
+ */
+export async function handleReportRefresh(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const o = await adminOpen(cfg, store, fetchFn, req, now);
+  if (!o.ok) return o.res;
+  if (o.ev.kind !== 'challonge') return ok({ at: null });
+  const d = await challongeData(chCtx(store, fetchFn, o, now), 'force');
+  if (!d.ok) return err('provider_error', providerMessage('challonge', d.note), d.note);
+  if (d.stale) return err('provider_error', providerMessage('challonge', d.stale), d.stale);
+  return ok({ at: d.at, matches: d.data.matches.length });
+}
+
 /** action: "report_phases" — 何先の設定に使うフェーズとラウンド。受付の前 (受付を始める画面) は { token, event } で、運営のログインのトークンで読む */
 export async function handleReportPhases(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   if (req.code === undefined && req.event !== undefined) {
@@ -1349,7 +1347,7 @@ export async function handleReportPhases(cfg: Config, store: Store, fetchFn: Fet
   }
   const o = await adminOpen(cfg, store, fetchFn, req, now);
   if (!o.ok) return o.res;
-  const r = await guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now).phases(req.light === true);
+  const r = await guarded(store, fetchFn, o, await Health.load(store, o.ev.kind), now).phases(req.light === true);
   if (!r.ok) return err('provider_error', providerMessage(o.ev.kind, r.note), r.note);
   return ok({ phases: r.phases, entrants: r.entrants ?? null });
 }
@@ -1379,7 +1377,7 @@ export async function handleReportAdminFix(cfg: Config, store: Store, fetchFn: F
   const act = await store.reportSubmissionActivity(uid, now - DAY);
   if (act.count >= REPORT_ADMIN_MAX_PER_DAY) return err('rate_limited', '今日はこれ以上直せません。', 'rate');
   const health = await Health.load(store, o.ev.kind);
-  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const p = guarded(store, fetchFn, o, health, now);
   const got = await setForReport(store, p, o.ev, setId);
   if ('res' in got) return got.res;
   const { set, offline, before } = got;
@@ -1637,7 +1635,7 @@ export async function handleReportNoshow(cfg: Config, store: Store, fetchFn: Fet
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   const health = await Health.load(store, o.ev.kind);
-  const got = await setForReport(store, guardProvider(providerOf(fetchFn, o), health, now), o.ev, setId0);
+  const got = await setForReport(store, guarded(store, fetchFn, o, health, now), o.ev, setId0);
   if ('res' in got) return got.res;
   const set = got.set;
   if (!set.slots[0] || !set.slots[1]) return err('not_ready', 'まだ対戦相手が決まっていません。', 'not_ready');
@@ -1673,7 +1671,7 @@ export async function handleReportStart(cfg: Config, store: Store, fetchFn: Fetc
   const o = await openEvent(cfg, store, fetchFn, req.code, now);
   if (!o.ok) return o.res;
   const health = await Health.load(store, o.ev.kind);
-  const p = guardProvider(providerOf(fetchFn, o), health, now);
+  const p = guarded(store, fetchFn, o, health, now);
   const got = await setForReport(store, p, o.ev, setId0);
   if ('res' in got) return got.res;
   const set = got.set;
@@ -1718,7 +1716,7 @@ export async function handleReportPlayerSets(cfg: Config, store: Store, fetchFn:
   if (!eid) return err('bad_request', '参加者の指定が正しくありません。', 'bad:entrant');
   const { snap } = await loadSnap(store, o.ev.code);
   const name = (id: string | null) => (id && snap && snap.ents[id] ? snap.ents[id].n : '');
-  const p = guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now);
+  const p = guarded(store, fetchFn, o, await Health.load(store, o.ev.kind), now);
   let list: { id: string; state: number; round: number | null; entrants: (string | null)[] }[] = [];
   let fromSnap = false;
   const live = p.setsOf ? await p.setsOf(eid) : { ok: false as const, note: 'none' };
@@ -1760,7 +1758,7 @@ export async function handleReportDq(cfg: Config, store: Store, fetchFn: FetchFn
   const row: ReportDqRow = { code: o.ev.code, entrant_id: eid, name: snap.ents[eid].n, scope, set_id: target, status: 'open', done_sets: '', note: '', created_by: o.uid as string, created_ms: now, updated_ms: now };
   row.id = await store.insertReportDq(row);
   // すぐ試す (相手が決まっている試合があればその場で DQ に)
-  if (o.ev.kind === 'startgg') await applyDqs(store, guardProvider(providerOf(fetchFn, o), await Health.load(store, o.ev.kind), now), o.ev, now, [row]).catch(() => 0);
+  if (o.ev.kind === 'startgg') await applyDqs(store, guarded(store, fetchFn, o, await Health.load(store, o.ev.kind), now), o.ev, now, [row]).catch(() => 0);
   const saved = (await store.listReportDqs(o.ev.code)).find((d) => d.id === row.id) || row;
   return ok({ dq: saved });
 }

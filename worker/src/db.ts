@@ -585,6 +585,12 @@ export class D1Store implements Store {
        ON CONFLICT (code) DO UPDATE SET data = ?2, synced_ms = ?3, lock_ms = 0, m_full = ?4, m_sets = ?5, checked_ms = 0`).bind(code, data, syncedMs, full, sets).run();
   }
 
+  async casReportSnapshot(code: string, data: string, syncedMs: number, prevSyncedMs: number): Promise<boolean> {
+    if (prevSyncedMs === 0) await this.db.prepare("INSERT OR IGNORE INTO report_snapshots (code, data, synced_ms, lock_ms) VALUES (?, '{}', 0, 0)").bind(code).run();
+    const res = await this.db.prepare('UPDATE report_snapshots SET data = ?1, synced_ms = ?2, lock_ms = 0 WHERE code = ?3 AND synced_ms = ?4').bind(data, syncedMs, code, prevSyncedMs).run();
+    return (res.meta?.changes ?? 0) > 0;
+  }
+
   async claimReportSnapshot(code: string, nowMs: number, holdMs: number): Promise<boolean> {
     await this.db.prepare("INSERT OR IGNORE INTO report_snapshots (code, data, synced_ms, lock_ms) VALUES (?, '{}', 0, 0)").bind(code).run();
     const res = await this.db.prepare('UPDATE report_snapshots SET lock_ms = ? WHERE code = ? AND lock_ms < ?').bind(nowMs, code, nowMs - holdMs).run();

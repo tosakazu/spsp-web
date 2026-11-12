@@ -12,6 +12,11 @@ import { challongeApi } from './challonge.ts';
 import type { NSet, NSlot, Result, Side } from './report_logic.ts';
 import { score } from './report_logic.ts';
 import type { Provider, ProviderResult } from './report_startgg.ts';
+import type { Store } from '../store.ts';
+import {
+  REPORT_CH_BASE_MS, REPORT_CH_DIRTY_MS, REPORT_CH_DONE_STOP_MS, REPORT_CH_EXT_MS, REPORT_CH_EXT_WINDOW_MS, REPORT_CH_FAIL_MS, REPORT_CH_FORCE_MIN_MS,
+  REPORT_CH_FRESH_MS, REPORT_CH_IDLE_AFTER_MS, REPORT_CH_IDLE_MS, REPORT_CH_LIMIT_MS, REPORT_CH_PRESTART_MS,
+} from '../config.ts';
 
 export interface CParticipant { id: string; name: string; uid: string | null; seed: number | null }
 export interface CMatch {
@@ -164,7 +169,182 @@ async function getAll(fetchFn: FetchFn, token: string, path: string): Promise<{ 
   return { ok: true, items: out };
 }
 
-/** トーナメントの参加者と試合をまとめて読む */
+// ── 写し (D1 の report_snapshots) ────────────────────────────────────────
+// Challonge の API は使える回数が少ない (SPSP のアプリ全体で月あたりの上限。2026-11-10 に 429 が返るようになった)。
+// 以前は画面が読みに来るたび (15 秒ごと・Cloudflare の拠点ごと) に参加者と試合を読み、報告のたびにもう一度読んでいた。
+// 今は参加者・試合を D1 に 1 つ持ち、全員がそれを見る。Challonge を読むのは次のときだけ (mirrorDue):
+//   - まだ写しが無い (参加者 1 回 + 試合 1 回)
+//   - トーナメントが始まる前 (試合が 0 件): 試合だけを REPORT_CH_PRESTART_MS ごと。始まったら参加者をもう一度だけ読む
+//   - SPSP が結果を送った・取り消した後 (dirty): 次の試合の 2 人が決まるので試合だけを 1 回 (前に読んでから REPORT_CH_DIRTY_MS 以上あけて。
+//     続けて何件か送られても 1 回で済む)。送った試合そのものは、読み直す前に写しを書き換える
+//   - 運営が Challonge の画面で直接直したのに気づくため: REPORT_CH_BASE_MS ごと (気づいた後しばらくは REPORT_CH_EXT_MS ごと、
+//     1 時間動きが無ければ REPORT_CH_IDLE_MS ごと、全試合が終わって 2 時間動きが無ければ読まない)
+//   - 運営が「Challonge から読み直す」を押した (report_refresh、REPORT_CH_FORCE_MIN_MS に 1 回まで)
+// 参加者は始まった後は読まない (写しに無い参加者が試合に出てきたときだけ読む)。読めなかったら前の写しのまま返し、しばらく読みに行かない
+// (429 は REPORT_CH_LIMIT_MS)。誰も画面を開いていなければ何も読まない。
+
+interface Packed { id: string; attributes: Record<string, unknown> }
+/** 写し。p・m は parseParticipant / parseMatch が読める形 (使う項目だけ)。時刻は ms、0 = まだ */
+export interface Mirror {
+  v: 1;
+  p: Packed[]; m: Packed[];
+  p_ms: number;      // 参加者を読んだ
+  m_ms: number;      // 試合を読んだ
+  w_ms: number;      // SPSP が最後に Challonge に書いた
+  chg_ms: number;    // 最後に変わった (SPSP が書いた・読んだら違っていた)
+  ext_ms: number;    // SPSP 以外の変更 (運営が Challonge で直接直した) に気づいた
+  dirty: boolean;    // SPSP が書いたので、次の試合を読み直す
+  fail_ms: number; fail_note: string;   // 最後に読めなかった時刻と理由 ('' = 読めている)
+}
+export interface ChCtx { store: Store; fetchFn: FetchFn; token: string; tid: string; code: string; now: number }
+
+const packP = (x: CParticipant): Packed => ({ id: x.id, attributes: { name: x.name, misc: x.uid ? 'startgg:' + x.uid : '', seed: x.seed } });
+const packM = (x: CMatch): Packed => ({ id: x.id, attributes: {
+  state: x.state, round: x.round, identifier: x.identifier, player1_id: x.p[0], player2_id: x.p[1],
+  player1_prereq_match_id: x.prereq[0], player2_prereq_match_id: x.prereq[1],
+  player1_is_prereq_match_loser: x.prereqLoser[0], player2_is_prereq_match_loser: x.prereqLoser[1], winner_id: x.winner,
+  points_by_participant: Object.entries(x.points).map(([k, v]) => ({ participant_id: k, scores: [v] })), completed_at: x.completedAt,
+  underway_at: x.underway ? '1' : null,
+} });
+
+export function parseMirror(s: string): Mirror | null {
+  let j: Partial<Mirror> | null = null;
+  try { j = JSON.parse(s) as Partial<Mirror>; } catch (_) { j = null; }
+  if (!j || j.v !== 1 || !Array.isArray(j.p) || !Array.isArray(j.m)) return null;
+  const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return { v: 1, p: j.p, m: j.m, p_ms: n(j.p_ms), m_ms: n(j.m_ms), w_ms: n(j.w_ms), chg_ms: n(j.chg_ms), ext_ms: n(j.ext_ms), dirty: j.dirty === true,
+    fail_ms: n(j.fail_ms), fail_note: typeof j.fail_note === 'string' ? j.fail_note : '' };
+}
+
+export function mirrorData(mi: Mirror): CData {
+  const participants = new Map<string, CParticipant>();
+  for (const x of mi.p) { const q = parseParticipant(x); if (q) participants.set(q.id, q); }
+  return { participants, matches: mi.m.map(parseMatch).filter((x): x is CMatch => !!x) };
+}
+
+/** 見比べ用 (試合の状態・2 人・勝者・スコア。時刻は入れない) */
+const sig = (m: Packed[]): string => JSON.stringify(m.map((x) => [x.id, x.attributes.state, x.attributes.player1_id, x.attributes.player2_id, x.attributes.winner_id,
+  x.attributes.points_by_participant, x.attributes.underway_at]).sort((a, b) => (String(a[0]) < String(b[0]) ? -1 : 1)));
+
+/**
+ * 今 Challonge を読むか。'all' = 参加者と試合、'matches' = 試合だけ、null = 読まない (写しのまま)。
+ * mode: 'force' = 運営が読み直しを押した / 'fresh' = 報告された試合が写しに無い・相手が空き (写しが古いかもしれない)
+ */
+export function mirrorDue(mi: Mirror | null, now: number, mode?: 'force' | 'fresh'): 'all' | 'matches' | null {
+  if (!mi) return 'all';
+  const age = now - mi.m_ms;
+  if (mode === 'force') return !mi.m_ms || age >= REPORT_CH_FORCE_MIN_MS ? 'all' : null;
+  if (mi.fail_ms && now - mi.fail_ms < (/http_429/.test(mi.fail_note) ? REPORT_CH_LIMIT_MS : REPORT_CH_FAIL_MS)) return null;
+  if (!mi.m_ms) return 'all';
+  if (!mi.m.length) return age >= REPORT_CH_PRESTART_MS ? 'matches' : null;   // まだ始まっていない
+  if (mi.dirty) return age >= REPORT_CH_DIRTY_MS ? 'matches' : null;
+  if (mode === 'fresh') return age >= REPORT_CH_FRESH_MS ? 'matches' : null;
+  const done = mi.m.every((x) => x.attributes.state === 'complete');
+  const idle = now - mi.chg_ms;
+  if (done && idle >= REPORT_CH_DONE_STOP_MS) return null;
+  if (mi.ext_ms && now - mi.ext_ms < REPORT_CH_EXT_WINDOW_MS) return age >= REPORT_CH_EXT_MS ? 'matches' : null;
+  if (done || idle >= REPORT_CH_IDLE_AFTER_MS) return age >= REPORT_CH_IDLE_MS ? 'matches' : null;
+  return age >= REPORT_CH_BASE_MS ? 'matches' : null;
+}
+
+interface Loaded { mi: Mirror | null; synced: number }
+async function loadMirror(store: Store, code: string): Promise<Loaded> {
+  const r = await store.getReportSnapshot(code).catch(() => null);
+  return { mi: r ? parseMirror(r.data) : null, synced: r ? Number(r.synced_ms) || 0 : 0 };
+}
+/** 写しを書く (読んだ後にほかの要求が書いていたら書かずに null)。書けたら新しい synced_ms */
+async function saveMirror(store: Store, code: string, mi: Mirror, prev: number, now: number): Promise<number | null> {
+  const s = Math.max(now, prev + 1);
+  return (await store.casReportSnapshot(code, JSON.stringify(mi), s, prev).catch(() => false)) ? s : null;
+}
+/** 写しの一部を書き換える (SPSP が Challonge に書いた後)。写しが無ければ何もしない */
+async function changeMirror(store: Store, code: string, now: number, f: (mi: Mirror) => void): Promise<void> {
+  for (let i = 0; i < 4; i++) {
+    const cur = await loadMirror(store, code);
+    if (!cur.mi) return;
+    f(cur.mi);
+    if ((await saveMirror(store, code, cur.mi, cur.synced, now)) !== null) return;
+  }
+}
+
+const EMPTY = (): Mirror => ({ v: 1, p: [], m: [], p_ms: 0, m_ms: 0, w_ms: 0, chg_ms: 0, ext_ms: 0, dirty: false, fail_ms: 0, fail_note: '' });
+const CLAIM_MS = 25 * 1000;
+
+/** Challonge を読んで写しを書き直す。読む役は 1 つの要求だけ (ほかは今の写しのまま) */
+async function refreshMirror(ctx: ChCtx, cur: Loaded, what: 'all' | 'matches'): Promise<Loaded> {
+  const { store, code, now } = ctx;
+  if (!(await store.claimReportSnapshot(code, now, CLAIM_MS).catch(() => false))) return cur;
+  let saved = false;
+  try {
+    const again = await loadMirror(store, code);
+    if (again.synced !== cur.synced) return again;   // 役を取るまでにほかの要求が書いた
+    const old = cur.mi;
+    const failed = async (note: string): Promise<Loaded> => {
+      const next: Mirror = { ...(old || EMPTY()), fail_ms: now, fail_note: note.replace(/[^\x20-\x7e]/g, '').slice(0, 80) };
+      const s = await saveMirror(store, code, next, cur.synced, now);
+      if (s === null) return loadMirror(store, code);
+      saved = true;
+      return { mi: next, synced: s };
+    };
+    const ms = await getAll(ctx.fetchFn, ctx.token, '/tournaments/' + ctx.tid + '/matches.json');
+    if (!ms.ok) return await failed('matches:' + ms.note);
+    const matches = ms.items.map(parseMatch).filter((x): x is CMatch => !!x);
+    const known = new Set((old ? old.p : []).map((x) => String(x.id)));
+    const needP = what === 'all' || !old || !old.p_ms || (!old.m.length && matches.length > 0)
+      || matches.some((m) => m.p.some((id) => !!id && !known.has(id)));
+    let p = old ? old.p : [];
+    let pMs = old ? old.p_ms : 0;
+    if (needP) {
+      const ps = await getAll(ctx.fetchFn, ctx.token, '/tournaments/' + ctx.tid + '/participants.json');
+      if (!ps.ok) return await failed('participants:' + ps.note);
+      p = ps.items.map(parseParticipant).filter((x): x is CParticipant => !!x).map(packP);
+      pMs = now;
+    }
+    const m = matches.map(packM);
+    const had = !!old && old.m_ms > 0;
+    const changed = !had || sig(old!.m) !== sig(m);
+    const next: Mirror = {
+      v: 1, p, m, p_ms: pMs, m_ms: now, w_ms: old ? old.w_ms : 0, chg_ms: changed || !old ? now : old.chg_ms,
+      // SPSP が書いていないのに変わった = 運営が Challonge で直した (始まった瞬間は数えない)
+      ext_ms: changed && had && old!.m.length > 0 && !old!.dirty ? now : old ? old.ext_ms : 0,
+      dirty: false, fail_ms: 0, fail_note: '',
+    };
+    let s = await saveMirror(store, code, next, cur.synced, now);
+    if (s === null) {
+      // 読んでいる間に SPSP が書いた: 読んだ中身はそれより前かもしれないので、もう一度読むことにして書く
+      const l = await loadMirror(store, code);
+      next.dirty = true; next.ext_ms = l.mi ? l.mi.ext_ms : next.ext_ms; next.w_ms = l.mi ? l.mi.w_ms : next.w_ms; next.chg_ms = now;
+      s = await saveMirror(store, code, next, l.synced, now);
+      if (s === null) return loadMirror(store, code);
+    }
+    saved = true;
+    return { mi: next, synced: s };
+  } finally {
+    if (!saved) await store.releaseReportSnapshot(code).catch(() => undefined);
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * トーナメントの参加者と試合 (写し。必要なときだけ Challonge を読む)。
+ * at = 試合を Challonge から読んだ時刻、stale = 最後に読めなかった理由 ('' = 読めている)
+ */
+export async function challongeData(ctx: ChCtx, mode?: 'force' | 'fresh'):
+  Promise<{ ok: true; data: CData; at: number; stale: string; read: boolean } | { ok: false; note: string }> {
+  let cur = await loadMirror(ctx.store, ctx.code);
+  const what = mirrorDue(cur.mi, ctx.now, mode);
+  const before = cur.mi ? cur.mi.m_ms : 0;
+  if (what) {
+    cur = await refreshMirror(ctx, cur, what);
+    // 最初の 1 回をほかの要求が読んでいる最中: 少し待って写しを見る
+    for (let i = 0; i < 4 && !cur.mi; i++) { await sleep(500); cur = await loadMirror(ctx.store, ctx.code); }
+  }
+  if (cur.mi && cur.mi.m_ms) return { ok: true, data: mirrorData(cur.mi), at: cur.mi.m_ms, stale: cur.mi.fail_note, read: cur.mi.m_ms !== before };
+  return { ok: false, note: (cur.mi && cur.mi.fail_note) || 'not_ready' };
+}
+
+/** 互換: 写しを通さずに読む (テスト・確認用) */
 export async function readChallonge(fetchFn: FetchFn, token: string, tid: string): Promise<{ ok: true; data: CData } | { ok: false; note: string }> {
   const ps = await getAll(fetchFn, token, '/tournaments/' + tid + '/participants.json');
   if (!ps.ok) return { ok: false, note: 'participants:' + ps.note };
@@ -175,24 +355,38 @@ export async function readChallonge(fetchFn: FetchFn, token: string, tid: string
   return { ok: true, data: { participants, matches: ms.items.map(parseMatch).filter((x): x is CMatch => !!x) } };
 }
 
-export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, double = false): Provider {
-  const path = (mid: string) => '/tournaments/' + tid + '/matches/' + mid;
-  const call = async (p: string, body: unknown): Promise<ProviderResult> => {
-    const r = await challongeApi(fetchFn, token, p, body, 'PUT');
+/** 読むのは写しから (phases・readSet は Challonge を呼ばないことが多い)。書いたら写しの試合を書き換えて、次の試合を読み直す印を付ける */
+export function challongeProvider(ctx: ChCtx, double = false): Provider {
+  const path = (mid: string) => '/tournaments/' + ctx.tid + '/matches/' + mid;
+  const call = async (p: string, body: unknown, patch: (a: Record<string, unknown>, mi: Mirror) => void, setId: string): Promise<ProviderResult> => {
+    const r = await challongeApi(ctx.fetchFn, ctx.token, p, body, 'PUT');
+    await changeMirror(ctx.store, ctx.code, ctx.now, (mi) => {
+      mi.dirty = true;
+      if (!r.ok) return;   // 送れなかった (入ったかどうか分からないこともある): 中身は変えずに読み直すだけ
+      mi.w_ms = ctx.now; mi.chg_ms = ctx.now;
+      const m = mi.m.find((x) => String(x.id) === setId);
+      if (m) patch(m.attributes, mi);
+    }).catch(() => undefined);
     return r.ok ? { ok: true } : { ok: false, note: r.note + (r.message ? ':' + r.message.replace(/[^\x20-\x7e]/g, '').slice(0, 60) : '') };
   };
+  const find = (d: CData, setId: string) => d.matches.find((x) => x.id === setId);
   return {
     async phases() {
-      const r = await readChallonge(fetchFn, token, tid);
+      const r = await challongeData(ctx);
       if (!r.ok) return { ok: false, note: r.note };
       const ns = [...new Set(r.data.matches.map((x) => x.round).filter((n): n is number => n !== null && n !== 0))];
       ns.sort((a, b) => (a > 0) === (b > 0) ? Math.abs(a) - Math.abs(b) : b - a);
       return { ok: true, phases: [{ key: 'c', name: '', rounds: ns.map((n) => ({ n, label: cRoundLabel(r.data, n, double), bestOf: null })) }], entrants: r.data.participants.size || null };
     },
     async readSet(setId) {
-      const r = await readChallonge(fetchFn, token, tid);
+      let r = await challongeData(ctx);
       if (!r.ok) return { ok: false, code: 'provider_error', note: r.note };
-      const m = r.data.matches.find((x) => x.id === setId);
+      let m = find(r.data, setId);
+      if (!m || (m.state !== 'complete' && (!m.p[0] || !m.p[1]))) {
+        // 写しに無い・相手が空き: 写しが古いかもしれないので読み直す (REPORT_CH_FRESH_MS に 1 回まで)
+        const f = r.read ? r : await challongeData(ctx, 'fresh');
+        if (f.ok) { r = f; m = find(f.data, setId); }
+      }
       if (!m) return { ok: false, code: 'not_found', note: 'match_not_found' };
       return { ok: true, set: cSetOf(r.data, m, double) };
     },
@@ -203,10 +397,19 @@ export function challongeProvider(fetchFn: FetchFn, token: string, tid: string, 
       return call(path(set.id) + '.json', { data: { type: 'Match', attributes: { match: [
         { participant_id: s0.id, score_set: String(a), advancing: r.w === 0 },
         { participant_id: s1.id, score_set: String(b), advancing: r.w === 1 },
-      ], tie: false } } });
+      ], tie: false } } }, (at, mi) => {
+        at.state = 'complete'; at.winner_id = r.w === 0 ? s0.id : s1.id;
+        at.player1_id = s0.id; at.player2_id = s1.id;
+        at.points_by_participant = [{ participant_id: s0.id, scores: [a] }, { participant_id: s1.id, scores: [b] }];
+        // 今終わった試合がいちばん新しい (cDownstreamDone は時刻の文字列を比べる。Challonge の書式に合わせず、写しのどれよりも後にする)
+        const last = mi.m.map((x) => String(x.attributes.completed_at || '')).sort().pop() || '';
+        at.completed_at = last ? last + '~' : new Date(ctx.now).toISOString();
+      }, set.id);
     },
     reset(set) {
-      return call(path(set.id) + '/change_state.json', { data: { type: 'MatchState', attributes: { state: 'reopen' } } });
+      return call(path(set.id) + '/change_state.json', { data: { type: 'MatchState', attributes: { state: 'reopen' } } }, (at) => {
+        at.state = 'open'; at.winner_id = null; at.points_by_participant = []; at.completed_at = ''; at.underway_at = null;
+      }, set.id);
     },
   };
 }

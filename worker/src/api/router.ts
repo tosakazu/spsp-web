@@ -30,7 +30,7 @@ import { handleExportErrors, handleExportVotes } from './export.ts';
 import { handleLogin, handleLoginHandoff, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
 import { handleToolLog } from './tool_log.ts';
 import {
-  handleReportAdmin, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportProgression, handleReportProgressionOk, handleReportBracketView, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportAdmin, handleReportRefresh, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportProgression, handleReportProgressionOk, handleReportBracketView, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
   handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
 } from './report.ts';
 import type { FetchFn } from './oauth.ts';
@@ -139,6 +139,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleReportSubmit(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'report_start_bracket':
         res = await handleReportStartBracket(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_refresh':
+        return (await handleReportRefresh(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_phases':
         return (await handleReportPhases(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
       case 'report_admin':

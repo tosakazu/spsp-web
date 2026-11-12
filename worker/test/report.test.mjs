@@ -8,7 +8,7 @@ import { openJson, sealJson } from '../src/api/report_crypto.ts';
 import { adminDecision, ftOf, mergeResults, parseFt, parseResult, parseSettings, playerGate, reconcile, sameOutcome } from '../src/api/report_logic.ts';
 import { reportExpiry } from '../src/api/report.ts';
 import { downstreamDoneOf, gameDataOf, parsePhaseList, parseStartggSet, phaseInfoOf } from '../src/api/report_startgg.ts';
-import { cLPlacement, cRoundLabel, cSetOf, losersPlace, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
+import { cLPlacement, cRoundLabel, cSetOf, losersPlace, mirrorDue, parseMatch, parseParticipant } from '../src/api/report_challonge.ts';
 import { MemStore } from './_mem_store.mjs';
 
 const G = (w, c0 = null, c1 = null, s = null) => ({ w, c: [c0, c1], s });
@@ -593,6 +593,216 @@ test('Challonge の下位クラス: 作った本人が受付 → 選手の報告
   assert.deepStrictEqual([r.state, r.op], ['conflict', 'reset']);
   assert.strictEqual(fake.matches[50].state, 'open');
   assert.ok(fake.calls.every((c) => !c.includes('application')), 'TO のトークンで /tournaments を使う');
+});
+
+// ── Challonge の API を呼ぶ回数 (写し、report_challonge.ts。2026-11-12) ──
+/** 4 人のシングル (50: P1-P4、51: P2-P3、52: 決勝)。結果が入ると決勝の 2 人が決まる。limit = true の間は GET が 429 */
+function fakeChallonge4() {
+  const st = { calls: [], limit: false, started: true, extra: [] };
+  const M = (round, p1, p2) => ({ state: p1 && p2 ? 'open' : 'pending', round, player1_id: p1, player2_id: p2, winner_id: null, points_by_participant: [] });
+  st.matches = { 50: M(1, 1, 4), 51: M(1, 2, 3), 52: M(2, null, null) };
+  const advance = () => {
+    const f = st.matches[52];
+    if (f.state === 'complete') return;
+    f.player1_id = st.matches[50].winner_id; f.player2_id = st.matches[51].winner_id;
+    f.state = f.player1_id && f.player2_id ? 'open' : 'pending';
+  };
+  st.gets = () => st.calls.filter((c) => c.startsWith('GET ') && /participants|matches/.test(c)).length;
+  st.count = (re) => st.calls.filter((c) => re.test(c)).length;
+  st.fetch = async (url, init) => {
+    const u = new URL(url); const m = init.method || 'GET';
+    st.calls.push(m + ' ' + u.pathname);
+    const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s });
+    if (u.hostname === 'api.start.gg') {
+      const { query } = JSON.parse(init.body);
+      if (query.includes('SpspCurrentUser')) return j({ data: { currentUser: { id: 4242 } } });
+      return j({ data: {} });
+    }
+    if (/\/tournaments\/77\.json$/.test(u.pathname)) return j({ data: { id: '77', attributes: { name: 'Bクラス', full_challonge_url: 'https://challonge.com/x', tournament_type: 'single elimination' } } });
+    if (st.limit) return j({ errors: [{ detail: 'Rate limit exceeded' }] }, 429);
+    if (/participants\.json$/.test(u.pathname)) return j({ data: [1, 2, 3, 4].concat(st.extra).map((i) => ({ id: String(i), attributes: { name: 'P' + i, misc: 'startgg:' + (10 + i), seed: i } })) });
+    if (/matches\.json$/.test(u.pathname) && m === 'GET') return j({ data: st.started ? Object.entries(st.matches).map(([id, a]) => ({ id, attributes: a })) : [] });
+    const mm = /matches\/(\d+)\.json$/.exec(u.pathname);
+    if (mm && m === 'PUT') {
+      const b = JSON.parse(init.body).data.attributes.match;
+      const a = st.matches[mm[1]];
+      a.state = 'complete'; a.winner_id = Number(b.find((x) => x.advancing).participant_id);
+      a.points_by_participant = b.map((x) => ({ participant_id: Number(x.participant_id), scores: [Number(x.score_set)] }));
+      advance();
+      return j({ data: {} });
+    }
+    const cs = /matches\/(\d+)\/change_state\.json$/.exec(u.pathname);
+    if (cs) { const a = st.matches[cs[1]]; a.state = 'open'; a.winner_id = null; a.points_by_participant = []; advance(); return j({ data: {} }); }
+    return j({}, 404);
+  };
+  return st;
+}
+
+async function classEnabled(fake) {
+  const e = await envWith(fake);
+  e.store.classes.push({ id: 3, parent_event_id: 9, challonge_id: 77, registered_by: '4242', status: 'waiting' });
+  e.store.getClassBracket = async (id) => e.store.classes.find((c) => c.id === id) || null;
+  const en = await e.call({ action: 'report_enable_class', startgg_token: 'K', challonge_token: 'CT', challonge_exp: Date.now() + 86400e3, class_id: 3, settings: { top_cut: null } });
+  assert.strictEqual(en.ok, true, JSON.stringify(en));
+  const view = async (uid) => { const v = await e.call({ action: 'report_view', token: await e.tok(uid), code: en.report.code }); assert.strictEqual(v.ok, true, JSON.stringify(v)); return v; };
+  const submit = async (uid, setId, w) => e.call({ action: 'report_submit', token: await e.tok(uid), code: en.report.code, set_id: setId, result: { w, g: [{ w }, { w }] } });
+  return { ...e, code: en.report.code, view, submit };
+}
+const S = 1000; const MIN = 60 * S;
+
+test('Challonge を読む回数: 全員が 15 秒ごとに見ても読むのは最初の 2 回だけ。報告では読まず、送った後に試合を 1 回だけ読み直す', async () => {
+  const fake = fakeChallonge4();
+  const e = await classEnabled(fake);
+  // 4 人が 15 秒ごとに 5 分見る (以前は 15 秒ごとに参加者 + 試合 = 2 回ずつ)
+  for (let i = 0; i < 20; i++) { for (const u of [11, 12, 13, 14]) await e.view(u); e.tick(15 * S); }
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [1, 1]);
+  let v = await e.view(11);
+  assert.deepStrictEqual(v.challonge.matches.map((m) => [m.id, m.state]), [['50', 'open']]);
+  // 報告: Challonge には書くだけ (読まない)
+  let r = await e.submit(11, '50', 0);
+  assert.deepStrictEqual([r.state, r.op], ['reported', 'report'], JSON.stringify(r));
+  assert.strictEqual(fake.gets(), 2, '報告のときは読まない');
+  assert.strictEqual(fake.count(/^PUT /), 1);
+  // 送った試合は、読み直す前から写しに入っている。その次に画面が見に来たら試合だけ 1 回読む (次の試合の 2 人が決まるので)
+  v = await e.view(14);
+  assert.deepStrictEqual(v.challonge.matches.map((m) => [m.id, m.state, m.winner]), [['50', 'complete', 0]]);
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [1, 2]);
+  // 続けて送っても、前に読んでから 20 秒たつまでは読まない (まとめて 1 回)
+  e.tick(5 * S);
+  r = await e.submit(12, '51', 0);
+  assert.strictEqual(r.op, 'report', JSON.stringify(r));
+  for (const u of [11, 12, 13, 14]) await e.view(u);
+  assert.strictEqual(fake.count(/GET .*matches\.json/), 2);
+  e.tick(20 * S);
+  v = await e.view(11);
+  assert.strictEqual(fake.count(/GET .*matches\.json/), 3);
+  assert.deepStrictEqual(v.challonge.matches.map((m) => [m.id, m.state]), [['50', 'complete'], ['52', 'open']], '決勝の相手が出る');
+  assert.deepStrictEqual(v.challonge.matches[1].slots.map((s) => s.id), ['1', '2']);
+  // 相手と食い違う報告 (取り消し) も読まずに判定できる: 直前に送った試合は次の試合が始まっていない
+  r = await e.submit(13, '51', 1);
+  assert.deepStrictEqual([r.state, r.op], ['conflict', 'reset'], JSON.stringify(r));
+  assert.strictEqual(fake.count(/GET .*matches\.json/), 3);
+  assert.strictEqual(fake.count(/GET .*participants/), 1, '参加者は始まった後は読まない');
+});
+
+test('Challonge を読む回数: 運営が Challonge で直接直した分は 10 分ごとの読み直しで気づく (気づいた後は 2 分ごと)。運営は「読み直す」ですぐ読める', async () => {
+  const fake = fakeChallonge4();
+  const e = await classEnabled(fake);
+  await e.view(11);
+  assert.strictEqual(fake.gets(), 2);
+  // 運営が Challonge の画面で 50 の結果を入れた
+  Object.assign(fake.matches[50], { state: 'complete', winner_id: 4, points_by_participant: [{ participant_id: 1, scores: [0] }, { participant_id: 4, scores: [2] }] });
+  e.tick(9 * MIN);
+  let v = await e.view(11);
+  assert.strictEqual(fake.gets(), 2, '10 分たつまでは読まない');
+  assert.strictEqual(v.challonge.matches[0].state, 'open');
+  e.tick(1 * MIN);
+  v = await e.view(11);
+  assert.strictEqual(fake.gets(), 3);
+  assert.deepStrictEqual([v.challonge.matches[0].state, v.challonge.matches[0].winner], ['complete', 1]);
+  // 気づいた後の 20 分は 2 分ごと
+  e.tick(1 * MIN); await e.view(11); assert.strictEqual(fake.gets(), 3);
+  e.tick(1 * MIN); await e.view(11); assert.strictEqual(fake.gets(), 4);
+  // 運営の「Challonge から読み直す」: すぐ読む (参加者も)。30 秒に 1 回まで。選手は使えない
+  Object.assign(fake.matches[51], { state: 'complete', winner_id: 2, points_by_participant: [{ participant_id: 2, scores: [2] }, { participant_id: 3, scores: [1] }] });
+  fake.matches[52].player1_id = 4; fake.matches[52].player2_id = 2; fake.matches[52].state = 'open';
+  e.tick(40 * S);
+  let rf = await e.call({ action: 'report_refresh', token: await e.tok(11), code: e.code });
+  assert.strictEqual(rf.ok, false);
+  rf = await e.call({ action: 'report_refresh', token: await e.tok(4242), code: e.code });
+  assert.strictEqual(rf.ok, true, JSON.stringify(rf));
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [2, 4]);
+  v = await e.view(12);
+  assert.deepStrictEqual(v.challonge.matches.map((m) => [m.id, m.state]), [['51', 'complete'], ['52', 'open']]);
+  e.tick(10 * S);
+  rf = await e.call({ action: 'report_refresh', token: await e.tok(4242), code: e.code });
+  assert.strictEqual(rf.ok, true);
+  assert.strictEqual(fake.gets(), 6, '30 秒以内の 2 回目は読まない');
+});
+
+test('Challonge を読む回数: 始まる前は試合だけを 2 分ごと、始まったら参加者をもう一度だけ。全試合が終わって 2 時間動きが無ければ読まない', async () => {
+  const fake = fakeChallonge4();
+  fake.started = false;
+  const e = await classEnabled(fake);
+  let v = await e.view(15);
+  assert.strictEqual(v.challonge.participant, null);
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [1, 1]);
+  for (let i = 0; i < 8; i++) { e.tick(15 * S); await e.view(15); }   // 2 分
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [1, 2]);
+  // 運営が 1 人足してから始めた
+  fake.extra = [5]; fake.started = true;
+  e.tick(2 * MIN);
+  v = await e.view(15);
+  assert.deepStrictEqual([fake.count(/GET .*participants/), fake.count(/GET .*matches\.json/)], [2, 3]);
+  assert.strictEqual(v.challonge.participant.id, '5');
+  // 全部終わる
+  assert.strictEqual((await e.submit(11, '50', 0)).op, 'report');
+  e.tick(30 * S);
+  assert.strictEqual((await e.submit(12, '51', 0)).op, 'report');
+  e.tick(30 * S); await e.view(11);
+  assert.strictEqual((await e.submit(11, '52', 0)).op, 'report');
+  e.tick(30 * S); v = await e.view(11);
+  assert.deepStrictEqual(v.challonge.matches.map((m) => m.state), ['complete', 'complete']);
+  const n = fake.gets();
+  // 終わった後は 30 分ごと、2 時間動きが無ければ読まない (タブを開いたままでも減らない)
+  for (let i = 0; i < 12; i++) { e.tick(10 * MIN); await e.view(11); }   // 2 時間
+  assert.ok(fake.gets() - n <= 4, '終わった後の 2 時間で ' + (fake.gets() - n) + ' 回');
+  const n2 = fake.gets();
+  for (let i = 0; i < 30; i++) { e.tick(30 * MIN); await e.view(11); }   // さらに 15 時間
+  assert.strictEqual(fake.gets(), n2);
+});
+
+test('Challonge が 429 (回数の上限): 写しで画面は出し続け、15 分は読みに行かない。報告は取り込み待ちに残し、5 分おきにしか送り直さない', async () => {
+  const fake = fakeChallonge4();
+  const e = await classEnabled(fake);
+  await e.view(11);
+  fake.limit = true;
+  e.tick(10 * MIN);
+  let v = await e.view(11);
+  assert.strictEqual(v.challonge.matches[0].id, '50', '読めなくても前の写しを出す');
+  assert.match(v.challonge.stale, /http_429/);
+  const n = fake.calls.length;
+  for (let i = 0; i < 40; i++) { e.tick(15 * S); for (const u of [11, 12, 13, 14]) await e.view(u); }   // 10 分
+  assert.strictEqual(fake.calls.length, n, '429 の後 15 分は読みに行かない');
+  // 報告: Challonge には入らないが受け付けて残す
+  const r = await e.submit(11, '50', 0);
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.state, 'queued', JSON.stringify(r));
+  const r2 = await e.submit(12, '51', 0);
+  assert.strictEqual(r2.state, 'queued', JSON.stringify(r2));
+  const puts = fake.count(/^PUT /);
+  for (let i = 0; i < 16; i++) { e.tick(15 * S); for (const u of [11, 12, 13, 14]) await e.view(u); }   // 4 分
+  assert.ok(fake.count(/^PUT /) - puts <= 1, '送り直しは 5 分おき: ' + (fake.count(/^PUT /) - puts));
+  // 戻ったら送る
+  fake.limit = false;
+  e.tick(6 * MIN); await e.view(11);
+  e.tick(6 * MIN); await e.view(11);
+  assert.deepStrictEqual([fake.matches[50].state, fake.matches[51].state], ['complete', 'complete']);
+});
+
+test('写しを読む条件 (mirrorDue)', () => {
+  const t = 1e12;
+  const M = (o) => ({ v: 1, p: [], m: [{ id: '1', attributes: { state: 'open' } }], p_ms: t, m_ms: t, w_ms: 0, chg_ms: t, ext_ms: 0, dirty: false, fail_ms: 0, fail_note: '', ...o });
+  assert.strictEqual(mirrorDue(null, t), 'all');
+  assert.strictEqual(mirrorDue(M({}), t + 9 * MIN), null);
+  assert.strictEqual(mirrorDue(M({}), t + 10 * MIN), 'matches');
+  assert.strictEqual(mirrorDue(M({ dirty: true }), t + 19 * S), null);
+  assert.strictEqual(mirrorDue(M({ dirty: true }), t + 20 * S), 'matches');
+  assert.strictEqual(mirrorDue(M({ m: [] }), t + 119 * S), null);
+  assert.strictEqual(mirrorDue(M({ m: [] }), t + 120 * S), 'matches');
+  assert.strictEqual(mirrorDue(M({}), t + 59 * S, 'fresh'), null);
+  assert.strictEqual(mirrorDue(M({}), t + 60 * S, 'fresh'), 'matches');
+  assert.strictEqual(mirrorDue(M({}), t + 29 * S, 'force'), null);
+  assert.strictEqual(mirrorDue(M({}), t + 30 * S, 'force'), 'all');
+  // 読めなかった後: 1 分 (429 は 15 分) は読みに行かない。運営の読み直しは別
+  assert.strictEqual(mirrorDue(M({ dirty: true, fail_ms: t + 30 * S, fail_note: 'matches:http_500' }), t + 60 * S), null);
+  assert.strictEqual(mirrorDue(M({ dirty: true, fail_ms: t + 30 * S, fail_note: 'matches:http_500' }), t + 91 * S), 'matches');
+  assert.strictEqual(mirrorDue(M({ dirty: true, fail_ms: t, fail_note: 'matches:http_429' }), t + 14 * MIN), null);
+  assert.strictEqual(mirrorDue(M({ dirty: true, fail_ms: t, fail_note: 'matches:http_429' }), t + 14 * MIN, 'force'), 'all');
+  assert.strictEqual(mirrorDue(M({ m_ms: 0, p_ms: 0, m: [], fail_ms: t, fail_note: 'matches:http_429' }), t + 5 * MIN), null, '最初の 1 回が 429 でも繰り返さない');
+  // 1 時間動きが無ければ 30 分ごと
+  assert.strictEqual(mirrorDue(M({ m_ms: t + 60 * MIN }), t + 80 * MIN), null);
+  assert.strictEqual(mirrorDue(M({ m_ms: t + 60 * MIN }), t + 90 * MIN), 'matches');
 });
 
 // ── 2 人がほぼ同時に送る (1 人目が start.gg に送っている最中に 2 人目) ──
