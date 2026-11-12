@@ -233,7 +233,7 @@ export function _applyCsvSettingColumns(rows) {
   }
   // ウェーブの並び (wave_order 列がある CSV だけ。rev = 逆から、空 = A から)
   const orderRow = rows.find((r) => _csvPick(r, ['pools']) != null || _csvPick(r, ['waves']) != null);
-  const orderEl = /** @type {HTMLSelectElement | null} */ (document.getElementById('so-wave-order'));
+  const orderEl = /** @type {HTMLInputElement | null} */ (document.getElementById('so-wave-order'));
   if (orderEl && orderRow && rows.some((r) => Object.keys(r).some((k) => String(k).trim().toLowerCase() === 'wave_order'))) {
     const v = String(_csvPick(orderRow, ['wave_order']) || '').trim().toLowerCase() === 'rev' ? 'rev' : '';
     if (v !== orderEl.value) {
@@ -820,6 +820,4 @@ export function applySeedLockChoice(uid) {
   if (poolsEl) poolsEl.addEventListener('input', () => renderManualUI());
   const wavesEl = document.getElementById('so-waves');
   if (wavesEl) wavesEl.addEventListener('input', () => renderManualUI());
-  const waveOrderEl = document.getElementById('so-wave-order');
-  if (waveOrderEl) waveOrderEl.addEventListener('change', () => renderManualUI());
 })();

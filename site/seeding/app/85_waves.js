@@ -97,7 +97,7 @@ export function currentWaveMap(P) {
   }
   return interleaveWaveMap(P, W, waveOrderReversed());
 }
-/** ウェーブの並びを「逆から」(B, A, A, B, B, …) にしているか (被り回避パネルの so-wave-order) */
+/** ウェーブの並びを「逆から」(B, A, A, B, B, …) にしているか (手動調整バーのウェーブ数の横で選ぶ。値は so-wave-order) */
 export function waveOrderReversed() {
   return /** @type {{ value?: any }} */ (document.getElementById('so-wave-order') || {}).value === 'rev';
 }
