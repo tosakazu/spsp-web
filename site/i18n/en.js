@@ -1009,6 +1009,7 @@ window.SPSP_I18N.en = {
   'seed.rematch.s5': 'Round robin',
   'seed.rematch.s6': '(auto: no waves)',
   'seed.rematch.s7': '(auto-fetch failed → set manually)',
+  'seed.rematch.waves_partial': '(waves on start.gg are only set for {n} of {p} pools; ignoring them and using the wave order setting here)',
   'seed.rematch.s8': '(no auto-fetch → can be set manually)',
   'seed.rematch.s9': '⚠ Winners-bracket optimization only supports double elimination.',
   'seed.rematch.s10': '⚠ Conflict avoidance only supports 1 pool × double elimination.',

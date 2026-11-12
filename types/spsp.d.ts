@@ -233,6 +233,10 @@ declare global {
     poolToWave?: number[];
     letters?: string[];
     identifiers?: string[];
+    /** start.gg でウェーブの設定が途中 (一部のプールだけウェーブあり)。poolToWave は無い */
+    partial?: boolean;
+    /** partial のとき、ウェーブが付いているプールの数 */
+    assigned?: number;
     error?: string;
   }
   /** フェーズ連鎖の 1 段 (app/40_startgg.js buildPhasesConfig → bracket/ プレビューの初期構成) */

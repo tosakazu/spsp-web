@@ -159,6 +159,10 @@ export function initSeedOptPanel() {
       wavesLbl.textContent = got.waveCount >= 2
         ? `${i18n('seed.rematch.t3')} ${got.identifiers[0]}〜${got.identifiers[got.identifiers.length - 1]} / ${got.poolCount}${i18n('seed.rematch.t4')}`
         : i18n('seed.rematch.s6');
+    } else if (wv && wv.partial) {
+      // start.gg でウェーブの設定が途中: 対応は使わず、ウェーブ数だけ既定にして画面の並びの設定で割り当てる
+      wavesEl.value = String(Math.max(2, wv.waveCount || 1));
+      wavesLbl.textContent = i18n('seed.rematch.waves_partial', { n: wv.assigned || 0, p: wv.poolCount || 0 });
     } else {
       wavesEl.value = '1';
       wavesLbl.textContent = (wv && wv.error)

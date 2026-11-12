@@ -23,6 +23,7 @@ const PHASE_GROUPS_QUERY = `
 
 // phaseGroup ノード配列 → ウェーブ情報 (純関数)。
 // 返り値: {poolCount, waveCount, poolToWave, letters, identifiers} または null (プールなし)。
+// 設定の途中 (一部のプールだけウェーブあり) は {poolCount, waveCount, partial: true, assigned, letters, identifiers} (poolToWave なし)。
 // ウェーブ文字は wave.identifier 優先、無ければ displayIdentifier の先頭アルファベット。
 // どのプールにも文字が無い (= "1","2",… のみ) ならウェーブ分けなし (waveCount=1)。
 /** @param {any[]} nodes @returns {SpspSeedWaves | null} */
@@ -56,6 +57,14 @@ function wavesFromGroupNodes(nodes) {
   if (!letters.length) {
     return { poolCount: parsed.length, waveCount: 1, poolToWave: parsed.map(() => 0),
              letters: [], identifiers: parsed.map(p => p.disp) };
+  }
+  // ウェーブが付いているプールと付いていないプールが混ざっている = start.gg で設定の途中 (2026-11-12)。付いていないプールを
+  // A として数えると B の枠が足りなくなり、ウェーブ指定の人が大きく下がる。対応は使わず (poolToWave を返さない)、
+  // 画面のウェーブ数・並びの設定で割り当てる
+  const assigned = parsed.filter((p) => p.letter != null).length;
+  if (assigned < parsed.length) {
+    return { poolCount: parsed.length, waveCount: letters.length, partial: true, assigned,
+             letters, identifiers: parsed.map(p => p.disp) };
   }
   const li = new Map(letters.map((l, i) => [l, i]));
   return {

@@ -1012,6 +1012,7 @@ window.SPSP_I18N.ja = {
   'seed.rematch.s5': '総当たり',
   'seed.rematch.s6': '（自動取得: ウェーブ分けなし）',
   'seed.rematch.s7': '（自動取得失敗 → 手動設定してください）',
+  'seed.rematch.waves_partial': '（start.gg のウェーブ設定が途中: {p} プール中 {n} プールだけ。start.gg の対応は使わず、ウェーブの並びの設定で割り当てます）',
   'seed.rematch.s8': '（自動取得なし → 手動設定可）',
   'seed.rematch.s9': '⚠ 勝者側ブラケット最適化はダブルイリミネーションのみ対応です。',
   'seed.rematch.s10': '⚠ 1プール×ダブルイリミネーション以外は被り回避非対応です。',
