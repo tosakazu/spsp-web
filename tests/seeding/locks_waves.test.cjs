@@ -478,6 +478,7 @@ test('静的: 手動調整バーからプール数/ウェーブ数を指定で�
 test('静的: ウェーブ数 UI と optimizer への固定の配線がある', () => {
   assert.ok(/id="so-waves"/.test(APP_SRC), 'so-waves が無い');
   assert.ok(/id="so-waves-label"/.test(APP_SRC), 'so-waves-label が無い');
+  assert.ok(/id="so-wave-order" value="rev"/.test(APP_SRC), 'ウェーブの並びの既定が「逆から」でない (2026-11-12)');
   assert.ok(/params\.seedLocks = seedLocks/.test(APP_SRC), 'params.seedLocks の配線が無い');
   assert.ok(/params\.poolWaves = waveMap/.test(APP_SRC), 'params.poolWaves の配線が無い');
   assert.ok(/fetchPhaseWaves\(token, phaseId\)/.test(APP_SRC), 'performSeedFetch がウェーブを自動取得していない');

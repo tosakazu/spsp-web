@@ -417,7 +417,7 @@ function manualBarHtml() {
     // ウェーブの並び (値は so-wave-order に持つ、2026-11-12)。選ぶのはここだけ。ウェーブが 2 つ以上のときだけ出す
     + (_pv('so-waves', 1) >= 2
       ? ` <select data-mn-wave-order title="${escHtml(i18n('seed.skeleton.wave_order_title'))}" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;font-family:inherit;background:#fff">`
-        + [['', i18n('seed.skeleton.wave_order_a')], ['rev', i18n('seed.skeleton.wave_order_b')]].map(([v, label]) =>
+        + [['rev', i18n('seed.skeleton.wave_order_b')], ['', i18n('seed.skeleton.wave_order_a')]].map(([v, label]) =>
           `<option value="${v}"${(/** @type {{ value?: any }} */ (document.getElementById('so-wave-order') || {}).value || '') === v ? ' selected' : ''}>${escHtml(label)}</option>`).join('')
         + `</select>`
       : '')

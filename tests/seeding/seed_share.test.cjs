@@ -108,6 +108,7 @@ test('作業状況 CSV の wave_order = rev: ウェーブは逆から (B, A, A, 
     + `1,a,,1000070,,B1,4,2,${order}\r\n2,b,,1000071,,A1,,,\r\n3,c,,1000214,,A2,,,\r\n4,d,,1000865,,B2,,,\r\n`;
   assert.deepStrictEqual(S.workCsvToPayload(rows('rev'), { ev: 't' }).payload.wv, [1, 0, 0, 1]);
   assert.deepStrictEqual(S.workCsvToPayload(rows(''), { ev: 't' }).payload.wv, [0, 1, 1, 0]);
+  assert.deepStrictEqual(S.workCsvToPayload(rows('a'), { ev: 't' }).payload.wv, [0, 1, 1, 0]);
   assert.deepStrictEqual(S.interleaveWaveMap(8, 2, true), [1, 0, 0, 1, 1, 0, 0, 1]);
 });
 
@@ -123,7 +124,7 @@ test('作業状況 CSV → ペイロード (uid/名前/プール数/ウェーブ
   assert.strictEqual(payload.names['0'], 'Shu, ton');
   assert.strictEqual(payload.names['1'], 'NoDB プレイヤー');
   assert.strictEqual(payload.phases[0].pools, 4);
-  assert.deepStrictEqual(payload.wv, [0, 1, 1, 0]);   // 既定のウェーブの並びは交互 (2026-11-11)
+  assert.deepStrictEqual(payload.wv, [1, 0, 0, 1]);   // 既定のウェーブの並びは交互・逆から (wave_order 列が無い CSV、2026-11-12)
   assert.strictEqual(payload.src, 'csv');
 });
 

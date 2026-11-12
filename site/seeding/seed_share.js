@@ -374,7 +374,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     uid: ['uid'],
     pools: ['pools', 'プール数'],
     waves: ['waves', 'ウェーブ数'],
-    wave_order: ['wave_order'],   // rev = ウェーブの並びが逆から (B, A, A, B, …)。1 行目のみ
+    wave_order: ['wave_order'],   // ウェーブの並び: rev = 逆から (B, A, A, B, …、既定) / a = A から。1 行目のみ
     // プレビューの保存 CSV 用の拡張列 (1行目のみ。シードページの作業状況 CSV には無い)
     event: ['event', 'イベント'],
     phases: ['phases'],
@@ -411,7 +411,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const warnings = [];
     const entries = [];
     /** @type {number | null} */ let P = null, /** @type {number | null} */ W = null;
-    let waveRev = false;
+    /** @type {boolean | null} */ let waveRev = null;   // 列が無い CSV は既定 (逆から)。列があれば rev = 逆から、それ以外 (a・空) = A から
     /** @type {string | null} */ let evName = null, /** @type {string | null} */ phasesJson = null;
     /** @type {string | null} */ let wvJson = null, /** @type {string | null} */ viewStr = null;
     /** @type {string | null} */ let sggJson = null, /** @type {string | null} */ sggDataJson = null;
@@ -421,7 +421,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       const pv = get('pools'), wvv = get('waves');
       if (P == null && /^\d+$/.test(pv)) P = parseInt(pv, 10);
       if (W == null && /^\d+$/.test(wvv)) W = parseInt(wvv, 10);
-      if (get('wave_order').toLowerCase() === 'rev') waveRev = true;
+      if (waveRev == null && cols.wave_order != null && (pv || wvv)) waveRev = get('wave_order').toLowerCase() === 'rev';
       if (evName == null && get('event')) evName = get('event');
       if (phasesJson == null && get('phases')) phasesJson = get('phases');
       if (wvJson == null && get('wv')) wvJson = get('wv');
@@ -481,7 +481,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       ev: evName || opts.ev || i18n('seed.share.s26'),
       src: 'csv',
       phases: withFinalPhase(phases || [{ name: P >= 2 ? i18n('seed.share.s27') : i18n('seed.share.s28'), pools: P, adv: 2 }], uids.length),
-      wv: wvArr || interleaveWaveMap(P, Math.max(1, W), waveRev),   // 既定は交互 (seeding/app/85_waves.js と同じ、2026-11-11)
+      wv: wvArr || interleaveWaveMap(P, Math.max(1, W), waveRev == null ? true : waveRev),   // 交互・既定は逆から (シード作成と同じ、2026-11-12)
       uids,
       names,
     };

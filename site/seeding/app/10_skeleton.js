@@ -169,8 +169,8 @@ const SEED_APP_SKELETON_HTML = `
         <input type="number" id="so-waves" value="1" min="1" max="26" step="1"
           style="display:block;width:80px;padding:5px 6px;border:1px solid #d1d5db;border-radius:5px;font-size:13px">
       </label>
-      <!-- ウェーブの並び ('' = A から / 'rev' = 逆から)。選ぶのは手動調整バーのウェーブ数の横 (30_core.js)。ここは値を持つだけ -->
-      <input type="hidden" id="so-wave-order" value="">
+      <!-- ウェーブの並び ('rev' = 逆から (既定、2026-11-12) / '' = A から)。選ぶのは手動調整バーのウェーブ数の横 (30_core.js)。ここは値を持つだけ -->
+      <input type="hidden" id="so-wave-order" value="rev">
       <span id="so-waves-label" style="font-size:11px;color:#9ca3af"></span>
       <span id="so-format-label" style="font-size:11px;color:#9ca3af"></span>
       <span style="display:inline-flex;align-items:center;gap:4px"><button id="so-run" style="background:#2563eb;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t32')}</button></span>
