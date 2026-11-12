@@ -45,6 +45,9 @@ test('シールを置く: 場所・大きさ・回転、アイコンの無いシ
   ], text_top: false, outline: false }));
   const sks = [...el.querySelectorAll('.pcb-sk')];
   assert.strictEqual(sks.length, 2);
+  // 絵は透過かどうかが分かってから描く (.jpg はすぐ。ここの .png は読めないので、待ち時間 1.5 秒のあと透過なしで)
+  assert.strictEqual(sks[0].querySelector('.hb'), null, '判定の前は描かない');
+  await new Promise(r => setTimeout(r, 1700));
   assert.match(sks[0].getAttribute('style'), /left:100px;top:50px;width:120px;height:120px;transform:translate\(-50%,-50%\) rotate\(-10deg\)/);
   const hb = sks[0].querySelector('.hb');
   assert.ok(hb && /hb-k-circle/.test(hb.className) && /hb-v0/.test(hb.className), hb && hb.className);

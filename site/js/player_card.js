@@ -864,8 +864,12 @@ function paintBackStickers(root, m) {
     const holder = document.createElement('div');
     el.appendChild(holder);
     const draw = (/** @type {boolean} */ tr) => renderBadge(holder, { src, variant: p.variant, transparent: tr, cls: p.cls, shape: s.k, crop: s.c });
-    draw(false);
-    isTransparent(src).then(tr => { if (tr && holder.isConnected) draw(true); });
+    // 透過かどうかが分かってから描く (先に透過なしで描くと、透過のアイコンが一度 四角・角丸の絵 (背景つき) で出て、
+    // 使わない方のホロの素材まで読んでいた。裏面は準備 (preloadBadge、同じ判定を待つ) ができるまで見せないので待ってよい)
+    // 判定が遅ければ (1.5 秒) 透過なしで描いておき、分かったら描き直す
+    let known = false;
+    const late = setTimeout(() => { if (!known && holder.isConnected) draw(false); }, 1500);
+    isTransparent(src).then(tr => tr, () => false).then(tr => { known = true; clearTimeout(late); if (holder.isConnected) draw(tr); });
   }
 }
 
