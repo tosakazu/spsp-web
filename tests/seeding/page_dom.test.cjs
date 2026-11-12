@@ -510,6 +510,16 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
   assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave');
   assert.ok(!/⚠/.test(win.document.getElementById('spec-status').innerHTML), win.document.getElementById('spec-status').innerHTML);
+  // 「◯◯の逆」の ◯◯ が見つからない (名前の書き間違い): その人の注意を出し、ウェーブは指定しない。ほかの行は効く
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: '', wave: 'だれでもない人の逆', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: 'ノーシード', wave: '', lock: '' },
+  ], 'test.csv');
+  const stX = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/⚠/.test(stX) && stX.includes('だれでもない人') && stX.includes(win.DATA[3].display), stX);
+  assert.strictEqual((win.eval('SEED_SPEC').locks || {})[4], undefined, '参照先が無いのにウェーブ固定が付いた');
+  assert.strictEqual(Array.from(win.eval('pushed')).slice(-1)[0], 6);
   // seed 列の「DQ」(2026-11-12): ノーシードより下 = いちばん下に置き、固定の種類 dq を付ける。ウェーブ・lock 列は見ない
   win.eval('pushed = null; SEED_SPEC = null;');
   win.applySpecRows([
