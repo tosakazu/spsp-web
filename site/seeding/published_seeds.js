@@ -9,6 +9,7 @@ import { earliestMeetRound, nextPow2, pairKey, slotOfSeedMap } from './seed_opti
 
 // 対象にする期間 (日)。ほかの大会が本大会より前なら BEFORE_DAYS まで、後なら AFTER_DAYS まで。
 // 100 人以上の大会は後 AFTER_DAYS_BIG まで (データは取得時点から 21 日先までしか無い)。2026-10-28 決定
+// 100 人以上の大会が本大会より前なら日数の制限なし (データにある分は全部見る)。2026-11-12 決定
 export const BEFORE_DAYS = 3;
 export const AFTER_DAYS = 3;
 export const AFTER_DAYS_BIG = 21;
@@ -111,7 +112,8 @@ export function selectPublishedEvents(up, opts) {
     const nent = Number(ev.num_entrants) || ev.entrants.length;
     const dayDiff = jstDay(ev.start_at) - day0;
     const base = { eventId: String(eid), name: String(ev.tournament_name || ''), date: jstDate(ev.start_at), dayDiff, nent, common };
-    const inRange = dayDiff < 0 ? -dayDiff <= BEFORE_DAYS : dayDiff <= (nent >= BIG_NENT ? AFTER_DAYS_BIG : AFTER_DAYS);
+    const big = nent >= BIG_NENT;
+    const inRange = dayDiff < 0 ? (big || -dayDiff <= BEFORE_DAYS) : dayDiff <= (big ? AFTER_DAYS_BIG : AFTER_DAYS);
     if (!inRange) { skipped.push({ ...base, reason: 'range' }); continue; }
     if (opts.excludeWeekday && ev.is_weekend === false) { skipped.push({ ...base, reason: 'weekday' }); continue; }
     if (!sharing) { skipped.push({ ...base, reason: 'nopair' }); continue; }

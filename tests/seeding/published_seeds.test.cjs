@@ -25,13 +25,13 @@ const upOf = (...evs) => ({ generated_at: T0 - 3600, events: Object.fromEntries(
 const ATT = [1, 2, 3, 4, 5, 6, 7, 8];
 const sel = (up, o) => P.selectPublishedEvents(up, Object.assign({ targetEventId: 100, targetStartAt: T0, attendees: ATT }, o || {}));
 
-test('範囲: 前後 3 日。100 人以上は後 21 日まで (前は 3 日のまま)', () => {
+test('範囲: 前後 3 日。100 人以上は前は制限なし・後 21 日まで', () => {
   const up = upOf(
     ev(1, -3, 30, [[1, 2]]), ev(2, -4, 30, [[1, 2]]), ev(3, 3, 30, [[1, 2]]), ev(4, 4, 30, [[1, 2]]),
-    ev(5, 21, 100, [[1, 2]]), ev(6, 22, 100, [[1, 2]]), ev(7, -4, 150, [[1, 2]]), ev(8, 0, 20, [[1, 2]]));
+    ev(5, 21, 100, [[1, 2]]), ev(6, 22, 100, [[1, 2]]), ev(7, -4, 150, [[1, 2]]), ev(8, 0, 20, [[1, 2]]), ev(9, -40, 100, [[1, 2]]), ev(10, -4, 99, [[1, 2]]));
   const r = sel(up);
-  assert.deepStrictEqual(r.used.map((e) => e.eventId).sort(), ['1', '3', '5', '8']);
-  assert.deepStrictEqual(r.skipped.filter((e) => e.reason === 'range').map((e) => e.eventId).sort(), ['2', '4', '6', '7']);
+  assert.deepStrictEqual(r.used.map((e) => e.eventId).sort(), ['1', '3', '5', '7', '8', '9']);
+  assert.deepStrictEqual(r.skipped.filter((e) => e.reason === 'range').map((e) => e.eventId).sort(), ['10', '2', '4', '6']);
 });
 
 test('本大会そのもの・公開前 (bracket なし)・共通の出場者が 1 人以下の大会は一覧にも出さない', () => {

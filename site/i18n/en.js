@@ -1373,7 +1373,7 @@ window.SPSP_I18N.en = {
   'seed.skeleton.t40': 'Include weekday tournaments',
   'seed.skeleton.t41': 'Avoid same-series rematches more strongly',
   'seed.published.toggle': 'Avoid pairings from other events’ published seeding',
-  'seed.published.help': 'Uses published seeding of nearby events (up to 21 days ahead for 100+ entrants) to keep players who share a pool there apart early',
+  'seed.published.help': 'Uses published seeding of nearby events (for 100+ entrants: all earlier ones, and up to 21 days ahead) to keep players who share a pool there apart early',
   'seed.published.loading': 'Checking published seeding…',
   'seed.published.error': '⚠ Could not fetch upcoming events (published seeding is not used): ',
   'seed.published.nodate': 'Not available: the event date is unknown',

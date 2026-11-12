@@ -1376,7 +1376,7 @@ window.SPSP_I18N.ja = {
   'seed.skeleton.t40': '平日大会を含む',
   'seed.skeleton.t41': '同シリーズの再戦を強めに避ける',
   'seed.published.toggle': '公開済みのほかの大会のシードと被らないようにする',
-  'seed.published.help': '前後の日 (100 人以上の大会は 21 日先まで) の大会で公開済みのシードを見て、そこで同じプールの 2 人を早い回戦で当てないようにします',
+  'seed.published.help': '前後の日 (100 人以上の大会は、前は全部・後は 21 日先まで) の大会で公開済みのシードを見て、そこで同じプールの 2 人を早い回戦で当てないようにします',
   'seed.published.loading': '公開済みのシードを確認中…',
   'seed.published.error': '⚠ 参加予定の大会を取得できませんでした (公開済みのシードは使いません): ',
   'seed.published.nodate': '本大会の開催日が分からないため使えません',
