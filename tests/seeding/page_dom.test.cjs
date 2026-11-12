@@ -520,6 +520,42 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.ok(/⚠/.test(stX) && stX.includes('だれでもない人') && stX.includes(win.DATA[3].display), stX);
   assert.strictEqual((win.eval('SEED_SPEC').locks || {})[4], undefined, '参照先が無いのにウェーブ固定が付いた');
   assert.strictEqual(Array.from(win.eval('pushed')).slice(-1)[0], 6);
+  // 「◯◯の逆」を discriminator で書く (2026-11-12): そのまま・="…" つき・# つき・大文字。CSV に行が無い参加者でも引ける
+  for (const ref of [disc(9), '="' + disc(9) + '"', '#' + disc(9), disc(9).toUpperCase()]) {
+    win.eval('pushed = null; SEED_SPEC = null;');
+    win.applySpecRows([
+      { name: 'P4', discriminator: disc(4), seed: '', wave: ref + 'の逆', lock: '' },
+      ...(ref === disc(9) ? [{ name: 'べつの呼び名', discriminator: disc(9), seed: '', wave: 'A', lock: '' }] : []),
+    ], 'test.csv');
+    const o = Array.from(win.eval('pushed'));
+    const stR = win.document.getElementById('spec-status').innerHTML;
+    assert.ok(!/⚠/.test(stR), ref + ': ' + stR);
+    assert.notStrictEqual(waveOfSeat(o.indexOf(4)), waveOfSeat(o.indexOf(9)), ref + ': ' + o.join(','));
+    assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
+  }
+  // 「◯◯の逆」の ◯◯ が同じ名前で複数 (2026-11-12): 選ばずにエラー。discriminator で書けば通る
+  // (1) CSV の name が同じ 2 行
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'おなじ', discriminator: disc(9), seed: '', wave: 'A', lock: '' },
+    { name: 'おなじ', discriminator: disc(10), seed: '', wave: 'B', lock: '' },
+    { name: 'P4', discriminator: disc(4), seed: '', wave: 'おなじの逆', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: '', wave: disc(10) + 'の逆', lock: '' },
+  ], 'test.csv');
+  let stA = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/⚠/.test(stA) && /同じ名前の人が複数/.test(stA) && stA.includes(win.DATA[3].display), stA);
+  assert.strictEqual((win.eval('SEED_SPEC').locks || {})[4], undefined, '決められないのにウェーブ固定が付いた');
+  assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave', 'discriminator で書いた方は通る');
+  assert.strictEqual(waveOfSeat(Array.from(win.eval('pushed')).indexOf(6)), 0, 'P6 は P10 (B) の逆 = A');
+  // (2) 参加者の start.gg の名前が同じ 2 人
+  const savedName = win.DATA[10].display;
+  win.DATA[10].display = win.DATA[9].display;
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([{ name: 'P4', discriminator: disc(4), seed: '', wave: win.DATA[9].display + 'の逆', lock: '' }], 'test.csv');
+  stA = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/同じ名前の人が複数/.test(stA), stA);
+  assert.strictEqual((win.eval('SEED_SPEC') || {}).locks ? win.eval('SEED_SPEC').locks[4] : undefined, undefined);
+  win.DATA[10].display = savedName;
   // seed 列の「DQ」(2026-11-12): ノーシードより下 = いちばん下に置き、固定の種類 dq を付ける。ウェーブ・lock 列は見ない
   win.eval('pushed = null; SEED_SPEC = null;');
   win.applySpecRows([

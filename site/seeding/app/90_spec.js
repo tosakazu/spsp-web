@@ -296,6 +296,10 @@ function applySpecRows(rows, label) {
   const opposites = [];
   /** CSV の行の名前・discriminator → 参加者 (「◯◯の逆」の参照先。参加者の start.gg の名前と違う呼び方でも引ける) */
   const csvRef = new Map();
+  /** CSV の name が同じで別の人を指している行がある名前 (「◯◯の逆」では使えない = エラーにする、2026-11-12) */
+  const csvRefAmb = new Set();
+  /** CSV の discriminator → 参加者 (「◯◯の逆」を discriminator で書いたとき) */
+  const csvDiscRef = new Map();
   for (const row of rows) {
     if (isCsvTemplateSample(row)) { sampleRows++; continue; }
     const m = _csvMatchRow(row, lk);
@@ -306,9 +310,13 @@ function applySpecRows(rows, label) {
     if (rec.user_id == null) { problems.push(`${rec.display}${i18n('seed.spec.t12')}`); continue; }
     matchedRows++;
     const u = rec.user_id;
-    for (const key of [_csvPick(row, CSV_NAME_COLS_SPEC), _csvPick(row, ['discriminator', 'disc'])]) {
-      if (key != null && String(key).trim()) csvRef.set(_specRefKey(key), rec);
+    const refName = _csvPick(row, CSV_NAME_COLS_SPEC), refDisc = _csvPick(row, ['discriminator', 'disc']);
+    if (refName != null && String(refName).trim()) {
+      const k = _specRefKey(refName);
+      if (csvRef.has(k) && csvRef.get(k).user_id !== rec.user_id) csvRefAmb.add(k);
+      else csvRef.set(k, rec);
     }
+    if (refDisc != null && String(refDisc).trim()) csvDiscRef.set(_csvNormDisc(refDisc), rec);
     /** @type {number | null} */
     let seat = null;
     const seatV = _csvPick(row, CSV_SEAT_COLS);
@@ -361,10 +369,14 @@ function applySpecRows(rows, label) {
     const curOrder0 = orderedRecs().map((r) => r.user_id);
     const poolOfS0 = (s0) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s0, P) : 0);
     for (const o of opposites) {
-      const key = _specRefKey(o.ref);
-      const refRec = csvRef.get(key) || (!lk.dupNames.has(_csvNormName(o.ref)) ? lk.byName.get(_csvNormName(o.ref)) : null)
-        || (lk.byDisc ? lk.byDisc.get(_csvNormDisc(o.ref)) : null) || null;
+      // ◯◯ の探し方: discriminator (一意) → CSV の name → 参加者の start.gg の名前。名前が複数の人に当たるときは
+      // 選ばずにエラー (どちらの逆か決められない。discriminator で書いてもらう、2026-11-12)
+      const key = _specRefKey(o.ref), disc = _csvNormDisc(o.ref), nm = _csvNormName(o.ref);
+      const byDiscRec = csvDiscRef.get(disc) || (lk.byDisc ? lk.byDisc.get(disc) : null) || null;
+      const ambiguousRef = !byDiscRec && (csvRefAmb.has(key) || (!csvRef.has(key) && lk.dupNames.has(nm)));
+      const refRec = byDiscRec || (ambiguousRef ? null : (csvRef.get(key) || lk.byName.get(nm) || null));
       if (W < 2) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_no_wave')}`); continue; }
+      if (ambiguousRef) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_ambiguous', { name: o.ref })}`); continue; }
       if (!refRec || refRec.user_id == null) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_not_found', { name: o.ref })}`); continue; }
       const r = refRec.user_id;
       if (r === o.u) continue;
