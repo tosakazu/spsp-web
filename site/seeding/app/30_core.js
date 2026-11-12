@@ -414,6 +414,13 @@ function manualBarHtml() {
     `<span style="font-size:11px;color:#6b7280;white-space:nowrap" title="${i18n('seed.core.t43')}">`
     + `${i18n('seed.core.t15')} <input type="number" data-mn-pools min="1" max="128" step="1" value="${_pv('so-pools', 1)}" style="width:56px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
     + ` ${i18n('seed.core.t16')} <input type="number" data-mn-waves min="1" max="26" step="1" value="${_pv('so-waves', 1)}" style="width:52px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
+    // ウェーブの並び (値は so-wave-order に持つ、2026-11-12)。選ぶのはここだけ。ウェーブが 2 つ以上のときだけ出す
+    + (_pv('so-waves', 1) >= 2
+      ? ` <select data-mn-wave-order title="${escHtml(i18n('seed.skeleton.wave_order_title'))}" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;font-family:inherit;background:#fff">`
+        + [['rev', i18n('seed.skeleton.wave_order_b')], ['', i18n('seed.skeleton.wave_order_a')]].map(([v, label]) =>
+          `<option value="${v}"${(/** @type {{ value?: any }} */ (document.getElementById('so-wave-order') || {}).value || '') === v ? ' selected' : ''}>${escHtml(label)}</option>`).join('')
+        + `</select>`
+      : '')
     + `</span>`;
   // 初期状態に戻す (今の並びが初期状態と違うときだけ押せる、2026-11-11)
   const atInit = orderedRecs().map((r) => r.user_id).join(',') === _projectSeedLocks(initialOrder()).join(',');
@@ -480,6 +487,7 @@ function manualLockBarHtml() {
     + `<option value="pool"${kind === 'pool' ? ' selected' : ''}>${i18n('seed.core.t23')}</option>`
     + (W >= 2 ? `<option value="wave"${kind === 'wave' ? ' selected' : ''}>${i18n('seed.core.t24')}</option>` : '')
     + `<option value="seed"${kind === 'seed' ? ' selected' : ''}>${i18n('seed.core.lock_seed')}</option>`
+    + `<option value="dq"${kind === 'dq' ? ' selected' : ''}>${i18n('seed.core.lock_dq')}</option>`
     + `</select>`;
   let targetSel = '';
   if (kind === 'pool') {
@@ -729,6 +737,9 @@ const MANUAL_COL = {
       if (lkKind === 'seed') {
         lkLabel = i18n('seed.core.lock_seed');
         lkTitle = i18n('seed.core.lock_seed_title');
+      } else if (lkKind === 'dq') {
+        lkLabel = i18n('seed.core.lock_dq');
+        lkTitle = i18n('seed.core.lock_dq_title');
       } else if (lkKind === 'pool') {
         lkLabel = tgt != null && _mnPoolCtx ? poolLabel(tgt, _mnPoolCtx.waveMap) + i18n('seed.core.s12') : i18n('seed.core.s13');
         lkTitle = i18n('seed.core.s13') + (tgt != null && _mnPoolCtx ? ` (${poolLabel(tgt, _mnPoolCtx.waveMap)})` : '');
@@ -736,7 +747,7 @@ const MANUAL_COL = {
         lkLabel = tgt != null ? i18n('seed.core.s1') + waveLetter(tgt) + i18n('seed.core.s12') : i18n('seed.core.s14');
         lkTitle = i18n('seed.core.s14') + (tgt != null ? ` (${waveLetter(tgt)})` : '');
       }
-      if (lkKind !== 'seed') lkTitle += i18n('seed.core.s15');
+      if (lkKind !== 'seed' && lkKind !== 'dq') lkTitle += i18n('seed.core.s15');
     }
     if (S.MANUAL && S.MANUAL.editing) {
       const isLockSel = S.MANUAL.lockSel === u;

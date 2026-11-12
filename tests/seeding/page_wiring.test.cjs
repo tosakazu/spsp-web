@@ -110,7 +110,7 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
       buildRegionGroups: function (o) { captured.regionGroups = o; return { stub: true }; },
       buildSeedData: async function (ranking, opts) {
         captured.buildOpts = opts;
-        return { prefByUid: {}, prefCounts: {}, recentPair: {}, recentMeta: {},
+        return { prefByUid: { 101: 'tokyo', 106: 'tokyo' }, prefCounts: { tokyo: 2 }, recentPair: { '101:106': 1, '101:102': 0.5 }, recentMeta: {},
                  meta: { attendees: ranking.length, prefIdentified: 0, missing: [], errors: [], prefsError: null } };
       },
     };
@@ -121,6 +121,7 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
     }
     ${extractFn(HTML, 'cachedFetchers')}
     ${extractFn(HTML, 'regionGroupToggleId')}
+    ${extractFn(HTML, 'dropFromCollisions')}
     ${extractFn(HTML, 'runSeedOptimize')}
   `;
   win.eval(setup);
@@ -140,7 +141,7 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   win.document.getElementById('so-keep-deplace').checked = true;
   win.document.getElementById('so-include-weekday').checked = false;
   // 固定 (SEED_SPEC.locks) の配線: ranking 内 uid のみが params.seedLocks に届く。
-  win.eval("SEED_SPEC = { label: null, pins: { '103': 3, '998': 1 }, waves: {}, locks: { '101': 'pool', '999': 'wave', '105': { kind: 'seed', target: null }, '997': { kind: 'seed', target: null } }, noseed: [108] };");
+  win.eval("SEED_SPEC = { label: null, pins: { '103': 3, '998': 1 }, waves: {}, locks: { '101': 'pool', '999': 'wave', '105': { kind: 'seed', target: null }, '106': { kind: 'dq', target: null }, '997': { kind: 'seed', target: null } }, noseed: [108] };");
 
   await win.eval('runSeedOptimize()');
 
@@ -175,7 +176,11 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   assert.strictEqual(p.poolWaves.length, 4);
   // シード固定: lock の種類 seed (105) だけが seedFixed に載り、seedLocks には入らない。順位指定 (103) だけ・ノーシード (108)
   // は固定しない (被り回避で動いてよい、2026-11-11)。ranking 外の 997 は載らない
-  assert.deepStrictEqual(Array.from(p.seedFixed), [105]);
+  assert.deepStrictEqual(Array.from(p.seedFixed), [105, 106]);
+  // DQ (106): シード固定に加えて、被りの計算から外す (居住地・その人を含むペア、2026-11-12)
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(cap.post.input.prefByUid)), { 101: 'tokyo' });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(cap.post.input.prefCounts)), { tokyo: 1 });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(cap.post.input.recentPair)), { '101:102': 0.5 });
   assert.ok(!('105' in p.seedLocks), 'シード固定が seedLocks に入っている');
   // poolCount / ranking も入力どおり。
   assert.strictEqual(cap.post.input.poolCount, 4);
@@ -224,6 +229,7 @@ test('jsdom: 地域OFF なら prefsOptional=true で buildSeedData に渡る', {
     function Worker() { captured.worker = this; this.postMessage = function () {}; this.terminate = function () {}; }
     ${extractFn(HTML, 'cachedFetchers')}
     ${extractFn(HTML, 'regionGroupToggleId')}
+    ${extractFn(HTML, 'dropFromCollisions')}
     ${extractFn(HTML, 'runSeedOptimize')}
   `;
   win.eval(setup);
@@ -289,6 +295,7 @@ test('jsdom: 同シリーズ再マッチの設定が buildSeedData / worker へ�
     function Worker() { captured.worker = this; this.postMessage = function (m) { captured.post = m; }; this.terminate = function () {}; }
     ${extractFn(HTML, 'cachedFetchers')}
     ${extractFn(HTML, 'regionGroupToggleId')}
+    ${extractFn(HTML, 'dropFromCollisions')}
     ${extractFn(HTML, 'runSeedOptimize')}
   `;
   win.eval(setup);
@@ -594,7 +601,7 @@ function settingsSetup(HTML) {
     var SHIFT_LIMIT_IDS = ['so-shift0', 'so-shift1', 'so-shift2', 'so-shift3', 'so-shift4', 'so-shift5'];
     var _lastShiftPrefill = null;
     var SEEDOPT_SETTINGS_KEY = 'spsp_seedopt_settings_v1';
-    var SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-series-select']);
+    var SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-wave-order', 'so-series-select']);
     var SEEDOPT_DEFAULTS = null;
     var modeDefaultsCalls = 0;
     function applyModeDefaults() { modeDefaultsCalls++; document.getElementById('so-restarts').value = '15'; }

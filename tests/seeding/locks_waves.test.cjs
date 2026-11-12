@@ -253,6 +253,66 @@ test('app: buildSpecOrder — ノーシードは最後尾にまとめる (2026-1
   assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
 });
 
+test('app: buildSpecOrder — ノーシード + ウェーブ指定はそのウェーブでいちばん低いシード (2026-11-12)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  const waveOfSeat = (s0) => [0, 1][poolOf(s0, 2)];
+  const lowest = (w) => Math.max(...cur.map((_, k) => k).filter((k) => waveOfSeat(k) === w));
+  for (const w of [0, 1]) {
+    const r = ctx.buildSpecOrder(cur, [], [[2, w]], 2, [0, 1], poolOf, new Set([2]));
+    assert.strictEqual(arr(r.order).indexOf(2), lowest(w), `ウェーブ ${w}: ` + arr(r.order).join(','));
+    assert.deepStrictEqual(arr(r.order).filter((u) => u !== 2), [1, 3, 4, 5, 6, 7, 8], 'ほかの人の順はそのまま');
+    assert.deepStrictEqual(arr(r.notes), []);
+  }
+  // 同じウェーブに 2 人: 今の並びで後ろの人が下。ウェーブ指定の無いノーシードは残りの最後尾
+  const r2 = ctx.buildSpecOrder(cur, [], [[2, 0], [5, 0]], 2, [0, 1], poolOf, new Set([2, 5, 3]));
+  const o2 = arr(r2.order);
+  const seatsA = cur.map((_, k) => k).filter((k) => waveOfSeat(k) === 0);
+  assert.deepStrictEqual([o2.indexOf(2), o2.indexOf(5)], seatsA.slice(-2), o2.join(','));
+  assert.strictEqual(o2.indexOf(3), Math.max(...cur.map((_, k) => k).filter((k) => ![2, 5].includes(o2[k]))), o2.join(','));
+  assert.deepStrictEqual(o2.slice().sort((x, y) => x - y), cur);
+  // そのウェーブの枠が順位の指定で埋まっていれば、諦めて最後尾 (注意を出す)
+  const pinsA = seatsA.map((k, i) => [[1, 3, 4, 6][i], k + 1]);
+  const r3 = ctx.buildSpecOrder(cur, pinsA, [[2, 0]], 2, [0, 1], poolOf, new Set([2]));
+  assert.strictEqual(arr(r3.notes).length, 1);
+  assert.deepStrictEqual(arr(r3.order).slice().sort((x, y) => x - y), cur);
+});
+
+test('app: buildSpecOrder — DQ はノーシードより下 = いちばん下 (2026-11-12)', () => {
+  const ctx = extractFns(['buildSpecOrder', 'parseFixValue']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  let r = ctx.buildSpecOrder(cur, [], [], 2, [0, 1], poolOf, new Set([2]), new Set([7, 4]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 5, 6, 8, 2, 4, 7], 'DQ は最後 (その中は今の順)、ノーシードはその上');
+  // ノーシード + ウェーブ指定の人は、DQ の枠を除いた中でそのウェーブのいちばん下
+  r = ctx.buildSpecOrder(cur, [], [[2, 0]], 2, [0, 1], poolOf, new Set([2]), new Set([7, 4]));
+  const o = arr(r.order);
+  assert.deepStrictEqual(o.slice(-2), [4, 7], o.join(','));
+  const seatsA = [0, 1, 2, 3, 4, 5].filter((k) => [0, 1][poolOf(k, 2)] === 0);
+  assert.strictEqual(o.indexOf(2), Math.max(...seatsA), o.join(','));
+  assert.deepStrictEqual(o.slice().sort((x, y) => x - y), cur);
+  assert.strictEqual(ctx.parseFixValue('DQ', false), 'dq');
+  assert.strictEqual(ctx.parseFixValue('dq', true), 'dq');
+});
+
+test('app: dropFromCollisions — DQ の人を被りの計算から外す (2026-11-12)', () => {
+  const ctx = extractFns(['dropFromCollisions']);
+  const bundle = {
+    prefByUid: { 1: 'tokyo', 2: 'tokyo', 3: 'osaka' }, prefCounts: { tokyo: 2, osaka: 1 },
+    recentPair: { '1:2': 0.5, '2:3': 0.2, '1:3': 0.1 }, recentMeta: { '1:2': {}, '1:3': {} }, seriesPair: { '2:3': 1 },
+  };
+  const n = vm.runInContext('(b, u) => dropFromCollisions(b, u)', ctx)(bundle, [2]);
+  assert.strictEqual(n, 3);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(bundle)), {
+    prefByUid: { 1: 'tokyo', 3: 'osaka' }, prefCounts: { tokyo: 1, osaka: 1 },
+    recentPair: { '1:3': 0.1 }, recentMeta: { '1:3': {} }, seriesPair: {},
+  });
+  assert.strictEqual(vm.runInContext('(b, u) => dropFromCollisions(b, u)', ctx)(bundle, []), 0);
+  // 最適化には seedFixed として渡し、被りの計算から外す
+  assert.ok(/if \(kind === 'dq'\) dqUids\.push\(u\)/.test(APP_SRC) && /dropFromCollisions\(bundle, dqUids\)/.test(APP_SRC));
+});
+
 test('app: ウェーブの「◯◯の逆」・指定しない書き方 (2026-11-11)', () => {
   const ctx = extractFns(['parseWaveOpposite', 'oppositeWave']);
   vm.runInContext(APP_SRC.match(/const WAVE_OPPOSITE_RE = [^\n]*/)[0].replace('const ', 'globalThis.'), ctx);
@@ -478,6 +538,7 @@ test('静的: 手動調整バーからプール数/ウェーブ数を指定で�
 test('静的: ウェーブ数 UI と optimizer への固定の配線がある', () => {
   assert.ok(/id="so-waves"/.test(APP_SRC), 'so-waves が無い');
   assert.ok(/id="so-waves-label"/.test(APP_SRC), 'so-waves-label が無い');
+  assert.ok(/id="so-wave-order" value="rev"/.test(APP_SRC), 'ウェーブの並びの既定が「逆から」でない (2026-11-12)');
   assert.ok(/params\.seedLocks = seedLocks/.test(APP_SRC), 'params.seedLocks の配線が無い');
   assert.ok(/params\.poolWaves = waveMap/.test(APP_SRC), 'params.poolWaves の配線が無い');
   assert.ok(/fetchPhaseWaves\(token, phaseId\)/.test(APP_SRC), 'performSeedFetch がウェーブを自動取得していない');
@@ -631,7 +692,7 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
     'work-bar の表示切替が無い');
   assert.ok(/function exportSeedWorkCsv\(/.test(APP_SRC), 'exportSeedWorkCsv が無い');
   // インポート側の列と一致するヘッダを出す。
-  assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves'/.test(APP_SRC), 'エクスポート列が想定と違う');
+  assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves,wave_order'/.test(APP_SRC), 'エクスポート列が想定と違う');
   // 被り回避の反映中に編集を再開したら、最適化後の並びを手動調整の 1 手 ({ order }) として積む (base には畳み込まない。
   // 「元に戻す」で最適化前に戻せる、2026-11-11)。
   const unlock = APP_SRC.slice(APP_SRC.indexOf('function manualUnlock('), APP_SRC.indexOf('function manualCommit('));
@@ -729,6 +790,10 @@ test('app: interleaveWaveMap — 既定のウェーブの並びは交互 (篝火
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(8, 2)), [0, 1, 1, 0, 0, 1, 1, 0]);
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3)), [0, 1, 2, 2, 1, 0]);
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1)), [0, 0, 0, 0]);
+  // 逆から (2026-11-12): シード 1 のプールから B, A, A, B, B, A, A, B, …
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(11, 2, true)), [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3, true)), [2, 1, 0, 0, 1, 2]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1, true)), [0, 0, 0, 0]);
   // プール 16・ウェーブ 2: シードは 1 つごとに A, B, B, A, …、一番下の段にも両方のウェーブが来る
   const wm = arr(ctx.interleaveWaveMap(16, 2));
   const waveOfSeed = (s1) => wm[SO.poolOfSeed(s1 - 1, 16)];

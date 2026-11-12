@@ -337,13 +337,19 @@ export async function runSeedOptimize() {
   const seedLocks = {};
   /** @type {(number | string)[]} */
   const seedFixed = [];
+  /** @type {(number | string)[]} 固定の種類「DQ」の人: シード固定 + 被りの計算に入れない */
+  const dqUids = [];
   if (S.SEED_SPEC && S.SEED_SPEC.locks) {
     for (const k in S.SEED_SPEC.locks) {
       const u = manualParseUid(k);
       if (!rankingSet.has(u)) continue;
       const v = S.SEED_SPEC.locks[k];
       const kind = (v && v.kind) || v;
-      if (kind === 'seed') { seedFixed.push(u); continue; }   // シード固定は seedFixed へ (下)
+      if (kind === 'seed' || kind === 'dq') {   // シード固定・DQ は seedFixed へ (下)
+        seedFixed.push(u);
+        if (kind === 'dq') dqUids.push(u);
+        continue;
+      }
       // optimizer へは種別のみ渡す ('pool'|'wave')。対象は射影済みの基準位置に反映済み。
       seedLocks[u] = kind;
     }
@@ -429,6 +435,8 @@ export async function runSeedOptimize() {
       pubNote = ' ' + i18n('seed.published.note', { e: res.used.length, p: n });
     }
   }
+  // DQ の人は被り (地域・直近対戦・同シリーズ・公開済みシード) の計算に入れない (2026-11-12)。公開済みシードを足した後に外す
+  const nDqIgnored = dropFromCollisions(bundle, dqUids);
   // 取得状況（同意なきフォールバック禁止 → missing/errors を明示）。
   const m = bundle.meta;
   let note = `${i18n('seed.rematch.t10')} ${m.prefIdentified}/${m.attendees} ${i18n('seed.rematch.t11')}`;
@@ -445,6 +453,7 @@ export async function runSeedOptimize() {
       ? i18n('seed.rematch.s26')
       : i18n('seed.rematch.s27');
   }
+  if (dqUids.length) note += ` ${i18n('seed.rematch.dq_note', { n: dqUids.length, p: nDqIgnored })}`;
   if (lockUids.length) {
     const nPool = lockUids.filter(u => seedLocks[u] === 'pool').length;
     const nWave = lockUids.length - nPool;
@@ -507,6 +516,35 @@ export async function runSeedOptimize() {
     progress.textContent = i18n('seed.rematch.s18') + /** @type {any} */ (e).message;
     cleanupSeedOptWorker();
   }
+}
+
+/**
+ * DQ の人を被りの計算から外す: 居住地 (prefByUid・県ごとの人数) と、その人を含むペア (直近対戦・同シリーズ) を消す。
+ * 最適化はこの人たちを「誰とも被らない人」として扱い、レポートにも出ない。戻り値 = 消したペアの数
+ * @param {{ prefByUid?: Record<string, any>, prefCounts?: Record<string, number>, recentPair?: Record<string, any>, recentMeta?: Record<string, any>, seriesPair?: Record<string, any> }} bundle
+ * @param {(number | string)[]} uids
+ */
+export function dropFromCollisions(bundle, uids) {
+  if (!bundle || !uids || !uids.length) return 0;
+  const set = new Set(uids.map(String));
+  for (const u of set) {
+    const p = bundle.prefByUid ? bundle.prefByUid[u] : null;
+    if (p && bundle.prefCounts && bundle.prefCounts[p] > 0) {
+      bundle.prefCounts[p] -= 1;
+      if (bundle.prefCounts[p] <= 0) delete bundle.prefCounts[p];
+    }
+    if (bundle.prefByUid) delete bundle.prefByUid[u];
+  }
+  let n = 0;
+  for (const name of /** @type {const} */ (['recentPair', 'recentMeta', 'seriesPair'])) {
+    const obj = bundle[name];
+    if (!obj || typeof obj !== 'object') continue;
+    for (const key of Object.keys(obj)) {
+      const [a, b] = key.split(':');
+      if (set.has(a) || set.has(b)) { delete obj[key]; if (name !== 'recentMeta') n++; }
+    }
+  }
+  return n;
 }
 
 export function stopSeedOptimize() {

@@ -229,6 +229,11 @@ test('jsdom: 手動調整バーは MANUAL が無くてもプール数/ウェー�
   assert.ok(off.includes('data-mn-pools'), off);
   assert.ok(off.includes('data-mn-waves'), off);
   assert.ok(off.includes('value="8"') && off.includes('value="2"'), off);
+  // ウェーブが 2 つ以上なら「ウェーブの並び」も出る (2026-11-12)。1 つなら出ない
+  assert.ok(off.includes('data-mn-wave-order') && /<option value=""[^>]* selected/.test(off), off);
+  win.document.getElementById('so-waves').value = '1';
+  assert.ok(!win.manualBarHtml().includes('data-mn-wave-order'));
+  win.document.getElementById('so-waves').value = '2';
   // 編集中・確定後も同じく出る
   win.MANUAL = { base: [], ops: [], hpos: 0, committed: false, editing: true, sel: null };
   assert.ok(win.manualBarHtml().includes('data-mn-pools'));
@@ -448,14 +453,23 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
     function manualParseUid(k) { return Number(k); }
     function saveManual() {} function render() {} function resetSeedOptResultPanel() {} function dropAppliedOrder() {}
     function _specStatus(m) { document.getElementById('spec-status').innerHTML = m; }
-    ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
-    ${['currentWaveMap', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
+    ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'DQ_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
+    ${['currentWaveMap', 'waveOrderReversed', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
        'parseWaveValue', 'parseFixValue', 'parseWaveOpposite', 'oppositeWave', '_specRefKey', 'buildSpecOrder', 'applySpecRows'].map((n) => extractFn(HTML, n)).join('\n')}
   `);
   // 16 人・4 プール・2 ウェーブ (既定は交互: プール 1 = A, 2 = B, 3 = B, 4 = A)。discriminator は d01〜d16
   for (let i = 1; i <= 16; i++) win.DATA.push({ user_id: i, display: 'P' + i, discriminator: ('0000000' + i.toString(16)).slice(-8).replace(/^0/, 'a'), ranks: { ensemble: i } });
   const disc = (i) => win.DATA[i - 1].discriminator;
   const waveOfSeat = (s) => win.eval('interleaveWaveMap(4, 2)')[win.SeedOptimizer.poolOfSeed(s, 4)];
+  // ウェーブの並び (so-wave-order、2026-11-12): 逆から = シード 1 のプールから B, A, A, B
+  assert.deepStrictEqual(Array.from(win.eval('currentWaveMap(4)')), [0, 1, 1, 0]);
+  const orderSel = win.document.createElement('select');
+  orderSel.id = 'so-wave-order';
+  orderSel.innerHTML = '<option value=""></option><option value="rev"></option>';
+  win.document.body.appendChild(orderSel);
+  orderSel.value = 'rev';
+  assert.deepStrictEqual(Array.from(win.eval('currentWaveMap(4)')), [1, 0, 0, 1]);
+  orderSel.remove();
   win.applySpecRows([
     { name: 'P3', discriminator: disc(3), seed: 'ノーシード', wave: '', lock: '' },
     { name: 'P5', discriminator: disc(5), seed: 'noseed', wave: '', lock: '' },
@@ -481,6 +495,80 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.strictEqual(spec.locks[10].kind, 'wave');
   assert.ok(/ノーシード 2 人/.test(st), st);
   assert.deepStrictEqual(order.slice().sort((a, b) => a - b), Array.from({ length: 16 }, (_, i) => i + 1));
+  // ノーシード + ウェーブ指定 / ノーシード + 「◯◯の逆」(2026-11-12): ウェーブを優先して、そのウェーブでいちばん低いシード
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: 'ノーシード', wave: 'A', lock: 'wave' },
+    { name: 'P6', discriminator: disc(6), seed: 'ノーシード', wave: 'P4の逆', lock: '' },
+    { name: 'P8', discriminator: disc(8), seed: 'ノーシード', wave: '', lock: '' },
+  ], 'test.csv');
+  const orderN = Array.from(win.eval('pushed'));
+  const lowestOf = (w) => Math.max(...orderN.map((_, k) => k).filter((k) => waveOfSeat(k) === w));
+  assert.strictEqual(orderN.indexOf(4), lowestOf(0), 'P4 (ノーシード・A) が A のいちばん下でない: ' + orderN.join(','));
+  assert.strictEqual(orderN.indexOf(6), lowestOf(1), 'P6 (ノーシード・P4 の逆 = B) が B のいちばん下でない: ' + orderN.join(','));
+  assert.ok(orderN.indexOf(8) >= 13, 'ウェーブ指定の無いノーシードは残りの最後尾: ' + orderN.join(','));
+  assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
+  assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave');
+  assert.ok(!/⚠/.test(win.document.getElementById('spec-status').innerHTML), win.document.getElementById('spec-status').innerHTML);
+  // 「◯◯の逆」の ◯◯ が見つからない (名前の書き間違い): その人の注意を出し、ウェーブは指定しない。ほかの行は効く
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: '', wave: 'だれでもない人の逆', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: 'ノーシード', wave: '', lock: '' },
+  ], 'test.csv');
+  const stX = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/⚠/.test(stX) && stX.includes('だれでもない人') && stX.includes(win.DATA[3].display), stX);
+  assert.strictEqual((win.eval('SEED_SPEC').locks || {})[4], undefined, '参照先が無いのにウェーブ固定が付いた');
+  assert.strictEqual(Array.from(win.eval('pushed')).slice(-1)[0], 6);
+  // 「◯◯の逆」を discriminator で書く (2026-11-12): そのまま・="…" つき・# つき・大文字。CSV に行が無い参加者でも引ける
+  for (const ref of [disc(9), '="' + disc(9) + '"', '#' + disc(9), disc(9).toUpperCase()]) {
+    win.eval('pushed = null; SEED_SPEC = null;');
+    win.applySpecRows([
+      { name: 'P4', discriminator: disc(4), seed: '', wave: ref + 'の逆', lock: '' },
+      ...(ref === disc(9) ? [{ name: 'べつの呼び名', discriminator: disc(9), seed: '', wave: 'A', lock: '' }] : []),
+    ], 'test.csv');
+    const o = Array.from(win.eval('pushed'));
+    const stR = win.document.getElementById('spec-status').innerHTML;
+    assert.ok(!/⚠/.test(stR), ref + ': ' + stR);
+    assert.notStrictEqual(waveOfSeat(o.indexOf(4)), waveOfSeat(o.indexOf(9)), ref + ': ' + o.join(','));
+    assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
+  }
+  // 「◯◯の逆」の ◯◯ が同じ名前で複数 (2026-11-12): 選ばずにエラー。discriminator で書けば通る
+  // (1) CSV の name が同じ 2 行
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'おなじ', discriminator: disc(9), seed: '', wave: 'A', lock: '' },
+    { name: 'おなじ', discriminator: disc(10), seed: '', wave: 'B', lock: '' },
+    { name: 'P4', discriminator: disc(4), seed: '', wave: 'おなじの逆', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: '', wave: disc(10) + 'の逆', lock: '' },
+  ], 'test.csv');
+  let stA = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/⚠/.test(stA) && /同じ名前の人が複数/.test(stA) && stA.includes(win.DATA[3].display), stA);
+  assert.strictEqual((win.eval('SEED_SPEC').locks || {})[4], undefined, '決められないのにウェーブ固定が付いた');
+  assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave', 'discriminator で書いた方は通る');
+  assert.strictEqual(waveOfSeat(Array.from(win.eval('pushed')).indexOf(6)), 0, 'P6 は P10 (B) の逆 = A');
+  // (2) 参加者の start.gg の名前が同じ 2 人
+  const savedName = win.DATA[10].display;
+  win.DATA[10].display = win.DATA[9].display;
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([{ name: 'P4', discriminator: disc(4), seed: '', wave: win.DATA[9].display + 'の逆', lock: '' }], 'test.csv');
+  stA = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/同じ名前の人が複数/.test(stA), stA);
+  assert.strictEqual((win.eval('SEED_SPEC') || {}).locks ? win.eval('SEED_SPEC').locks[4] : undefined, undefined);
+  win.DATA[10].display = savedName;
+  // seed 列の「DQ」(2026-11-12): ノーシードより下 = いちばん下に置き、固定の種類 dq を付ける。ウェーブ・lock 列は見ない
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: 'ノーシード', wave: '', lock: '' },
+    { name: 'P6', discriminator: disc(6), seed: 'DQ', wave: 'A', lock: 'wave' },
+    { name: 'P2', discriminator: disc(2), seed: 'dq', wave: '', lock: '' },
+  ], 'test.csv');
+  const orderD = Array.from(win.eval('pushed'));
+  assert.deepStrictEqual(orderD.slice(-3), [4, 2, 6], 'DQ はノーシードより下: ' + orderD.join(','));
+  assert.deepStrictEqual([win.eval('SEED_SPEC').locks[6], win.eval('SEED_SPEC').locks[2]].map((l) => [l.kind, l.target]), [['dq', null], ['dq', null]]);
+  assert.strictEqual(win.eval('SEED_SPEC').locks[4], undefined);
+  const stD = win.document.getElementById('spec-status').innerHTML;
+  assert.ok(/DQ 2 人/.test(stD) && !/⚠/.test(stD), stD);
   // ウェーブ数を入れ忘れた (1 のまま): ノーシードは効き、ウェーブはまとめて案内する。注意は省略しない
   win.document.getElementById('so-waves').value = '1';
   win.eval('pushed = null;');

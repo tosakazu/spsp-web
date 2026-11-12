@@ -990,7 +990,7 @@ import SeedShare from '../seeding/seed_share.js';
       // 予選プール数が変わったら wv を同じウェーブ数で作り直す。並びはシード作成の既定と同じ交互 (篝火 #15 式、2026-11-11)
       const oldWv = STATE.payload.wv || [0];
       const W = oldWv.reduce((m, w) => Math.max(m, w), 0) + 1;
-      STATE.payload.wv = S.interleaveWaveMap(phases[0].pools, W);
+      STATE.payload.wv = S.interleaveWaveMap(phases[0].pools, W, W >= 2 && oldWv[0] === W - 1);   // 逆から (B, A, A, B, …) で作ってあればそのまま
     }
     STATE.blob = await S.encodePayload(STATE.payload);
     STATE.poolAgg.clear();
