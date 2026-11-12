@@ -4,20 +4,22 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, manualSrc, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
 import { escapeHtml } from '../../js/html.js';
 import SPSPRankingTable from '../../ranking-table.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
+import SpspStartggManager from '../../js/startgg_manager.js';
+import SpspToolLog from '../../js/tool_log.js';
 'use strict';
 
 /** start.gg API のエラー。rawError = 生の応答 (showError の details に出す) */
 /** @typedef {Error & { rawError?: string }} StartggError */
 /** start.gg の event (EVENT_QUERY の応答。phases は phase 未作成なら空) */
 /** @typedef {{ id: number | string, name: string, slug?: string | null, numEntrants?: number,
- *              tournament?: { id?: number | string, name: string, slug?: string } | null, phases?: any[] | null, [k: string]: any }} StartggEvent */
+ *              tournament?: { id?: number | string, name: string, slug?: string, startAt?: number | null } | null, phases?: any[] | null, [k: string]: any }} StartggEvent */
 /** 参加者 1 人分 (seeds / entrants のノードから。phase 未作成なら seedId / originalSeed は null) */
 /** @typedef {{ seedId: number | string | null, originalSeed: number | null, userId: number | null | undefined, display: string,
  *              discriminator: string | null, entrantId: number | null }} SeedInfo */
@@ -207,7 +209,7 @@ async function fetchTournament(token, tournamentSlug) {
 }
 
 /** @param {string} token @param {number | string} phaseId @param {(got: number, tot: number) => void} [progressFn] @returns {Promise<any[]>} */
-async function fetchAllSeeds(token, phaseId, progressFn) {
+export async function fetchAllSeeds(token, phaseId, progressFn) {
   const all = [];
   let page = 1;
   const perPage = 64;
@@ -273,7 +275,7 @@ function entrantNodeToInfo(node) {
 }
 
 /** @param {Record<string, any>} seedNode @returns {SeedInfo} */
-function seedNodeToInfo(seedNode) {
+export function seedNodeToInfo(seedNode) {
   const sid = seedNode.id;
   const sn = seedNode.seedNum;
   const ent = seedNode.entrant || {};
@@ -358,30 +360,17 @@ export function filterAndRerank(seedInfos) {
 export function downloadCsv() {
   if (!DATA.length) return;
   if (!S.EVENT_CONTEXT) return;
-  const methodLabel = {
-    ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
-  }[S.currentMethod] || i18n('seed.startgg.s12');
   // Sort by current method's rank (or 被り回避適用順), then assign phaseseed 1..N
+  // 列は phaseseed,seedId,player,discriminator だけ (2026-11-03 ユーザー指定: スコア・original_seed・user_id 以降は出さない)。
+  // discriminator は start.gg の参加者データ、無ければ discriminators.json (uid → disc)。シードアップロードはこの列で照合できる
   const recs = orderedRecs();
-  const lines = ['phaseseed,seedId,player,user_id,method,banzuke_rank,avg_rank,score,original_seed'];
+  const lines = ['phaseseed,seedId,player,discriminator'];
   recs.forEach((r, i) => {
     const phaseseed = i + 1;
     const sid = r.seedId != null ? r.seedId : '';
     const player = (r.display || '').replace(/"/g, '""');
-    const uid = r.user_id != null ? r.user_id : '';
-    let bRank = '', avgR = '', score = '';
-    if (!r.unranked) {
-      bRank = r.ranks[S.currentMethod];
-      const ar = r.scores.ensemble_avg_rank;
-      avgR = ar != null ? ar.toFixed(2) : '';
-      const sc = (S.currentMethod === 'tjpr') ? r.scores.tjpr_elo
-                : (S.currentMethod === 'bt_gated') ? r.scores.bt_gated_elo
-                : (r.scores.ensemble_avg_score != null ? r.scores.ensemble_avg_score
-                  : (r.scores.tjpr_elo + r.scores.bt_gated_elo) / 2);
-      score = typeof sc === 'number' ? sc.toFixed(2) : '';
-    }
-    const origSeed = r.original_seed != null ? r.original_seed : '';
-    lines.push([phaseseed, sid, `"${player}"`, uid, methodLabel, bRank, avgR, score, origSeed].join(','));
+    const disc = r.discriminator || (r.user_id != null && S.DISCRIMINATORS ? S.DISCRIMINATORS[String(r.user_id)] : '') || '';
+    lines.push([phaseseed, sid, `"${player}"`, String(disc).replace(/[",\r\n]/g, '')].join(','));
   });
   const csv = '\uFEFF' + lines.join('\r\n') + '\r\n';
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -391,18 +380,20 @@ export function downloadCsv() {
   a.href = url;
   // ファイル名に出力順の由来を付ける (手動調整 / 被り回避適用)。
   const orderTag = (S.MANUAL ? '_manual' : '') + (S.APPLIED_ORDER ? '_opt' : '');
-  a.download = `spsp_seed_${tName}_${S.currentMethod}${orderTag}.csv`;
+  a.download = `spsp_seed_${tName}_${S.currentMethod}${S.currentMethod === 'random' ? '_' + S.RANDOM_SEED : ''}${orderTag}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // 適用の confirm に出す「何の順か」。被り回避・手動調整の反映があれば添える。
 function uploadOrderLabel() {
-  const base = {
+  const csvBase = manualSrc() === 'csv';   // シードアップロード: 読み込んだ CSV の順が基準
+  const base = csvBase ? i18n('seed.startgg.order_csv') : {
     ensemble: i18n('seed.startgg.s12'), tjpr: i18n('seed.startgg.s13'), bt_gated: i18n('seed.startgg.s14'),
+    random: i18n('seed.random.label_with_seed', { n: S.RANDOM_SEED != null ? S.RANDOM_SEED : '' }),
   }[S.currentMethod] || i18n('seed.startgg.s12');
   const extra = [];
-  if (S.MANUAL) extra.push(i18n('seed.startgg.s31'));
+  if (S.MANUAL && S.MANUAL.hpos > 0) extra.push(i18n('seed.startgg.s31'));   // 手動調整は取得後いつも開いている。実際に動かしたときだけ
   if (S.APPLIED_ORDER) extra.push(i18n('seed.startgg.s32'));
   return extra.length ? i18n('seed.startgg.order_applied', { base: base, extra: extra.join(i18n('seed.startgg.order_applied_sep')) }) : base;
 }
@@ -421,7 +412,7 @@ function openSeedOptPanel() {
 /**
  * シード適用前の自動被り回避。true = そのまま適用に進んでよい。
  * - チェック OFF → 何もしない (true)。
- * - 反映済みの最適化 (APPLIED_ORDER) がある → そのまま使う (true)。
+ * - 反映済みの最適化 (APPLIED_ORDER) がある・その並びから手動調整を続けている → そのまま使う (true)。
  * - 実行中の最適化がある → 止めて false (二重実行しない)。
  * - それ以外 → パネルを開いて最適化を回し、完了 (= 自動反映) を待つ。完了しなければ false。
  */
@@ -431,7 +422,8 @@ async function ensureAutoOptimizeForUpload() {
     alert(i18n('seed.startgg.s33'));
     return false;
   }
-  if (S.APPLIED_ORDER) return true;
+  // 反映済み、または反映した並びから手動調整を続けている (回し直すと手で動かした分が崩れる、2026-11-11)
+  if (S.APPLIED_ORDER || manualFromOptimized()) return true;
   openSeedOptPanel();
   const status = document.getElementById('status');
   clearError();
@@ -512,9 +504,26 @@ export async function uploadToStartgg() {
   const r = await SmashSeed.uploadSeeding(S.EVENT_CONTEXT.phaseId, token, mapping);
   if (r.ok) {
     if (status) status.textContent = `${i18n('seed.startgg.t8')}${r.count} ${i18n('seed.startgg.t9')}`;
+    logSeedingUse(token, S.EVENT_CONTEXT.phaseId, r.count, methodLabel, false);
+    appliedPreviewButton(status, token, S.EVENT_CONTEXT.phaseId);
   } else {
     showError(r.error || 'unknown error');
   }
+}
+
+/**
+ * 適用のあとに「適用後のトーナメントをプレビュー」(2026-11-05): start.gg から適用後のシード順を読み直してトーナメントプレビューを開く (90_spec.js)。
+ * @param {HTMLElement | null} status @param {string} token @param {number | string} phaseId
+ */
+function appliedPreviewButton(status, token, phaseId) {
+  if (!status) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn';
+  b.style.marginLeft = '8px';
+  b.textContent = i18n('seed.startgg.applied_preview');
+  b.addEventListener('click', () => document.dispatchEvent(new CustomEvent('spsp:preview-applied', { detail: { token, phaseId } })));
+  status.append(' ', b);
 }
 
 const UPSERT_PHASE_MUTATION = `
@@ -604,6 +613,8 @@ async function createPhaseThenUpload(token) {
   const r = await SmashSeed.uploadSeeding(phase.id, token, mapping);
   if (r.ok) {
     status.textContent = `${i18n('seed.startgg.t20')}${r.count} ${i18n('seed.startgg.t9')}`;
+    logSeedingUse(token, phase.id, r.count, uploadOrderLabel(), true);
+    appliedPreviewButton(status, token, phase.id);
     const metaInfo = document.getElementById('meta-info');
     if (metaInfo) metaInfo.textContent = `${S.EVENT_CONTEXT.eventName} (phase ${phase.id})`;
     // phase はもう存在するので自動作成の設定 UI は閉じる
@@ -614,9 +625,43 @@ async function createPhaseThenUpload(token) {
   }
 }
 
-function getToken() {
-  // 保存は 💾 ボタンを押したときだけ (以前は読むたび sessionStorage に書いていて、UI の「💾 を押した場合のみ保存」と矛盾していた)
-  return /** @type {HTMLInputElement} */ (document.getElementById('token')).value.trim();   // 骨格 (10_skeleton.js) に必ずある
+/**
+ * シードを書き込んだ記録を SPSP に送る (js/tool_log.js → D1 tool_logs)。機能 (シード作成 / シードアップロード)・大会・人数と、
+ * 並びの決め方 (基準・被り回避の設定と反映・手動の並べ替え・シード指定と固定) を detail に入れる。待たない・失敗しても何もしない
+ * @param {string} token @param {unknown} phaseId @param {number | undefined} count @param {string} orderLabel @param {boolean} phaseCreated
+ */
+function logSeedingUse(token, phaseId, count, orderLabel, phaseCreated) {
+  const ctx = S.EVENT_CONTEXT;
+  if (!ctx) return;
+  /** @type {Record<string, unknown>} */
+  const options = {};
+  for (const el of /** @type {NodeListOf<HTMLInputElement | HTMLSelectElement>} */ (document.querySelectorAll('input[id^="so-"], select[id^="so-"]'))) {
+    options[el.id] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value;
+  }
+  const m = S.MANUAL, sp = S.SEED_SPEC;
+  const manualOps = m ? m.hpos : 0;   // 手動調整は取得後いつも開いているので、効いている移動の数 (取り消した分は数えない) で見る
+  const n = (/** @type {Record<string, unknown> | null | undefined} */ o) => (o ? Object.keys(o).length : 0);
+  const detail = {
+    method: SEED_APP_CONFIG.mode === 'csv' ? 'csv' : S.currentMethod,
+    order_label: orderLabel,
+    random_seed: S.currentMethod === 'random' ? S.RANDOM_SEED : undefined,
+    csv: SEED_APP_CONFIG.mode === 'csv' && S.CSV_SOURCE ? { label: S.CSV_SOURCE.label, rows: S.CSV_SOURCE.rows.length } : undefined,
+    optimize: { applied: !!S.APPLIED_ORDER, options },
+    manual: { used: manualOps > 0, ops: manualOps },
+    spec: { used: !!sp && (n(sp.pins) + n(sp.waves) + n(sp.locks)) > 0, label: sp ? sp.label : null, pins: n(sp && sp.pins), waves: n(sp && sp.waves), locks: n(sp && sp.locks) },
+    phase_created: phaseCreated,
+  };
+  SpspToolLog.logSeeding(token, {
+    tool: SEED_APP_CONFIG.mode === 'csv' ? 'seed_upload' : 'seed',
+    tournament_id: ctx.tournamentId, tournament_slug: ctx.tournamentSlug || '', tournament_name: ctx.tournamentName,
+    event_id: ctx.eventId, event_name: ctx.eventName, phase_id: phaseId, count, detail,
+  });
+}
+
+/** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
+export function getToken() {
+  // API キーの保存は 💾 ボタンを押したときだけ (以前は読むたび sessionStorage に書いていて、UI の「💾 を押した場合のみ保存」と矛盾していた)
+  return SpspStartggManager.pick(/** @type {HTMLInputElement} */ (document.getElementById('token')).value);   // 骨格 (10_skeleton.js) に必ずある
 }
 
 // method-tabs / 検索 / CSV / upload ボタンを参加者取得後だけ表示する.
@@ -803,6 +848,21 @@ function buildPhasesConfig(ev, phaseId) {
   return out.length >= 2 ? out : null;
 }
 
+/** 選んだ phase から通過でつながる phase の id (予選から順)。@param {StartggEvent} ev @param {number | string} phaseId @returns {string[]} */
+function phaseChainIds(ev, phaseId) {
+  const all = (ev && ev.phases) || [];
+  const byId = new Map(all.map((p) => [String(p.id), p]));
+  if (!byId.has(String(phaseId))) return [];
+  const chain = [byId.get(String(phaseId))];
+  while (chain.length < 8) {
+    const cur = chain[chain.length - 1];
+    const next = all.find((q) => (q.progressingInData || []).some((d) => String(d.origin) === String(cur.id)));
+    if (!next || chain.includes(next)) break;
+    chain.push(next);
+  }
+  return chain.map((p) => String(p.id));
+}
+
 /** @param {string} token @param {StartggEvent} ev @param {number | string} phaseId */
 async function performSeedFetch(token, ev, phaseId) {
   const status = /** @type {HTMLElement} */ (document.getElementById('status'));   // 骨格 (10_skeleton.js) に必ずある
@@ -828,11 +888,15 @@ async function performSeedFetch(token, ev, phaseId) {
   S.EVENT_CONTEXT = {
     phaseId, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
+    tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
+    startAt: ev.tournament && ev.tournament.startAt ? Number(ev.tournament.startAt) : null,   // 開催日 (公開済みシードとの被り回避の範囲)
     bracketType: _phase ? _phase.bracketType : null,
     poolCount: (_phase && _phase.groupCount) ? _phase.groupCount : null,  // 取得できたプール数
     waves,   // {poolCount, waveCount, poolToWave, letters, identifiers} | {error} | null
     // start.gg のフェーズ連鎖 (選択 phase 起点)。トーナメントプレビューの初期構成に使う。
     phasesConfig: buildPhasesConfig(ev, phaseId),   // [{name, pools, adv?}] | null
+    // 同じ連鎖の phase id (トーナメントプレビューが start.gg の構造をそのまま読む。2026-11-05)
+    phaseChain: phaseChainIds(ev, phaseId),
   };
   dropAppliedOrder({ render: false });   // 新規取得で被り回避の反映をリセット
   // Repopulate DATA in place (preserve reference)
@@ -871,6 +935,8 @@ async function performEntrantsFetch(token, ev) {
   S.EVENT_CONTEXT = {
     phaseId: null, eventName: ev.name,
     eventId: ev.id, tournamentName: ev.tournament ? ev.tournament.name : '',
+    tournamentId: ev.tournament ? ev.tournament.id : null, tournamentSlug: ev.tournament ? ev.tournament.slug : '',
+    startAt: ev.tournament && ev.tournament.startAt ? Number(ev.tournament.startAt) : null,   // 開催日 (公開済みシードとの被り回避の範囲)
     bracketType: null,   // phase 未作成 → 形式不明 → 既定 DE 想定
     poolCount: null,     // phase 未作成 → プール数不明
     waves: null,         // phase 未作成 → ウェーブ不明 (手動設定可)
@@ -903,6 +969,9 @@ function formatAvgRank(rec, _method) {
 }
 
 export function render() {
+  // ランダム: 新しく取った記録 (ranks.random が無い) には種を作り直して振る
+  if (S.currentMethod === 'random' && DATA.some((r) => !r.ranks || r.ranks.random == null)) assignRandomRanks(DATA, newRandomSeed());
+  renderRandomTab();
   const tbl = ensureTable();
   tbl.setRows(DATA);
   tbl.setMethod(S.currentMethod);

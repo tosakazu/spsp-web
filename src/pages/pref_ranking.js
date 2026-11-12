@@ -10,6 +10,7 @@ import '../../site/js/player_data.js';
 import '../../site/js/format.js';
 import '../../site/js/tags.js';
 import '../../site/ranking-table.js';
+import SPSPRankingTable from '../../site/ranking-table.js';
 import '../../site/player-detail.js';
 import SPSPRankingPage from '../../site/js/ranking_page.js';
 import '../../site/nav.js';
@@ -35,6 +36,7 @@ const STATE = {
   sortKey: 'rank',
   sortDir: 'asc',
   searchText: '',
+  showProvisional: false,      // 「計測中プレイヤーを表示」(既定は出さない。順位も出す人だけで付け直す)
 };
 
 // escapeHtml は ../js/html.js (サイト共通)。表の骨格 (列・配線・行の展開・読み込み) は ../js/ranking_page.js
@@ -46,6 +48,7 @@ function buildData() {
   const prefMap = STATE.prefMap;   // init で読んでから呼ばれる。data/views/ 読みのとき (null) は masterMap がこの都道府県の行だけ
   for (const [uid, src] of STATE.masterMap) {
     if (prefMap && prefMap[String(uid)] !== STATE.pref) continue;
+    if (!STATE.showProvisional && SPSPRankingTable.isProvisional(src)) continue;
     ranked.push(RP.cloneWithGlobalRanks(src));
   }
   return RP.rerankByGlobalEnsemble(ranked);
@@ -86,12 +89,23 @@ function render() {
 function setupEvents() {
   RP.bindSearch(text => {
     STATE.searchText = text;
-    if (TABLE) TABLE.setFilterText(STATE.searchText);
+    if (TABLE) TABLE.setFilterText(STATE.searchText, RP.searchById());
   });
   RP.bindMethodTabs(method => {
     STATE.method = method;
     if (TABLE) TABLE.setMethod(STATE.method);
   });
+  const provCb = /** @type {HTMLInputElement | null} */ (document.getElementById('show-provisional'));
+  if (provCb) {
+    provCb.checked = false;   // 戻るで来たときの前の状態は捨てる (表は既定 = 隠すで描く)
+    provCb.addEventListener('change', () => {
+      STATE.showProvisional = provCb.checked;
+      STATE.data = buildData();
+      if (TABLE) TABLE.setRows(STATE.data); else if (STATE.data.length) render();
+      const status = document.getElementById('status');
+      if (status) status.textContent = i18n('char_ranking.status.people', { n: STATE.data.length });
+    });
+  }
 }
 
 async function init() {

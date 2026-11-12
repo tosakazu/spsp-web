@@ -13,9 +13,14 @@ import SPSPI18n from '../../site/js/i18n.js';
 import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspOAuthState from '../../site/js/oauth_state.js';
+import SpspStartggManager from '../../site/js/startgg_manager.js';
+import SpspToolLog from '../../site/js/tool_log.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPSeedOptimizer from '../../site/seeding/seed_optimizer.js';
 import SPSPSeedData from '../../site/seeding/seed_data.js';
+import SPSPPublishedSeeds from '../../site/seeding/published_seeds.js';
+import SPSPPublishedSeedsUI from '../../site/seeding/published_seeds_ui.js';
+import { isAdminTournament, readAdminTournaments } from '../../site/js/my_tournaments.js';
 import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
 
 'use strict';
@@ -26,8 +31,8 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 const STARTGG_API = 'https://api.start.gg/gql/alpha';
 const FORM_KEY = 'spsp_class_form';
 /** Challonge のログインでページを離れる間も残す入力 (キーは残さない) */
-const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-counted'];
-const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday'];
+const FORM_IDS = ['cb-event', 'cb-letter', 'cb-format', 'cb-seeding', 'cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-av-published', 'cb-counted'];
+const AV_IDS = ['cb-av-region', 'cb-av-recent', 'cb-av-main', 'cb-av-weekday', 'cb-av-published'];
 /** 本戦で当たった組の罰則 = 本戦の規模の重み (log2 人数) × この倍率。シード機能の同シリーズ再戦 (×3) に合わせる */
 const MAIN_REMATCH_MULT = 3;
 /** 1 つの下位クラスの最大人数 (Worker の class_create と同じ上限) */
@@ -69,7 +74,7 @@ async function sgg(token, query, variables = {}) {
  *   order = 作成に使う並び (外した人を除く。被り回避は「作成」を押したときにだけかける)、display = 表の並び (外した人もその場に残す)、
  *   touched = 手でオン・オフした人 (DQ の人は最初は外すが、手で入れたら設定を変えても外さない)、
  *   avoid = 被り回避の材料 (null = 使わない)、mainPairs = 本戦で当たった組 (必要になったら取る)、rngSeed = 同率の並びを設定を変えても保つための乱数の種
- * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string } }, standings: ClassEntrant[], off: Set<number>,
+ * @type {null | { token: string, event: { id: number, name: string, tournament: { id: number, name: string, startAt?: number | null } }, standings: ClassEntrant[], off: Set<number>,
  *   targets: ClassEntrant[], seeded: ClassEntrant[], order: ClassEntrant[], display: ClassEntrant[],
  *   avoid: null | { prefByUid: Record<string, string | null>, recentPair: Record<string, number>, params: Record<string, unknown> },
  *   mainPairs: Set<string> | null, rngSeed: number, touched: Set<number>, extras: ClassEntrant[] }} */
@@ -195,7 +200,8 @@ async function refreshAvoid() {
   if (!loaded) return;
   const L = loaded;
   const region = !!$('cb-av-region').checked, recent = !!$('cb-av-recent').checked, main = !!$('cb-av-main').checked;
-  if (!region && !recent && !main) { L.avoid = null; return; }
+  const published = !!$('cb-av-published').checked;
+  if (!region && !recent && !main && !published) { L.avoid = null; return; }
   /** @type {Record<string, boolean>} */
   const groups = {};
   for (const el of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('#cb-av-groups input[data-group]'))) groups[String(el.dataset.group)] = el.checked;
@@ -217,11 +223,40 @@ async function refreshAvoid() {
     const w = MAIN_REMATCH_MULT * Math.log2(Math.max(2, L.standings.length));
     for (const k of L.mainPairs) recentPair[k] = Math.max(recentPair[k] || 0, w);
   }
+  // 公開済みのほかの大会のシードで同じプールの組 (§6.2.2)。実際の対戦歴・本戦の組とは大きい方
+  if (published) {
+    const res = await selectPublished();
+    if (!('error' in res)) {
+      const uids = L.targets.map(p => p.userId);
+      SPSPPublishedSeeds.mergePublished({ recentPair, recentMeta: {} }, SPSPPublishedSeeds.publishedPairs(res.used, uids));
+    }
+  }
   L.avoid = {
     prefByUid: region && data ? data.prefByUid : {},
     recentPair,
-    params: { avoidRegion: region, avoidRecent: recent || main },
+    params: { avoidRegion: region, avoidRecent: recent || main || published },
   };
+}
+
+/** 公開済みシードの対象の大会を選び、チェックの下の欄に出す。本大会 (本戦) そのものは外す。開催日は本戦の大会の開始 (無ければ今)
+ * @returns {Promise<import('../../site/seeding/published_seeds_ui.js').PublishedSel>} */
+async function selectPublished() {
+  const box = $('cb-av-published-box');
+  if (!loaded) return { error: 'nodate' };
+  const L = loaded;
+  const res = await SPSPPublishedSeedsUI.select({
+    dataRoot: SPSP.data, eventId: L.event.id, startAt: L.event.tournament.startAt || null, fallbackStartAt: Math.floor(Date.now() / 1000),
+    attendees: L.targets.map(p => p.userId), excludeWeekday: !$('cb-av-weekday').checked,
+  });
+  if (loaded === L && $('cb-av-published').checked) { box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res); box.hidden = false; }
+  return res;
+}
+/** チェックの付け外し・対象の変更で欄を出し直す (チェックが外れていれば隠す) */
+function updatePublishedBox() {
+  const box = $('cb-av-published-box');
+  if (!loaded || !$('cb-av-published').checked) { box.hidden = true; return; }
+  if (!box.innerHTML) { box.textContent = i18n('seed.published.loading'); box.hidden = false; }
+  selectPublished().catch(() => {});
 }
 
 /** 設定 (対象の順位・シード・DQ・被り回避) から対象と並びを作り直す。本戦のデータは取り直さない
@@ -243,6 +278,7 @@ async function recompute() {
   L.seeded = seedOrder(L.targets, method, rankOf, seededRand(L.rngSeed));
   buildOrder();
   renderList();
+  updatePublishedBox();
   if (L.targets.length < 2) createStatus(i18n('class.err.too_few'), 'error');
   else if (L.order.length <= MAX_PARTICIPANTS) createStatus('');
 }
@@ -305,13 +341,13 @@ async function load() {
   $('cb-settings').hidden = true;
   $('cb-preview').hidden = true;
   $('cb-done').hidden = true;
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   if (!parseStartggUrl($('cb-event').value)) return status(i18n('class.err.url'), 'error');
   if (!token) return status(i18n('class.err.startgg_key'), 'error');
   const slug = await resolveEventSlug(token);
   if (!slug) return;
 
-  const ev = (await sgg(token, 'query($slug: String) { event(slug: $slug) { id name tournament { id name owner { id } } } }', { slug })).event;
+  const ev = (await sgg(token, 'query($slug: String) { event(slug: $slug) { id name tournament { id name startAt owner { id } } } }', { slug })).event;
   if (!ev) return status(i18n('class.err.event'), 'error');
   // 1. 管理者か。「管理している大会から選ぶ」の一覧にある大会なら確認済みとして飛ばす (作成時に Worker がもう一度確かめる)
   if (!(MY_TOURNAMENTS.token === token && MY_TOURNAMENTS.ids.has(String(ev.tournament.id)))) {
@@ -324,15 +360,8 @@ async function load() {
       admins = (a.tournament && a.tournament.admins) || [];
     } catch (e) { /* admins は admin でないと読めない: 読めなければ owner だけで判断 */ }
     let isTo = myId != null && ((ev.tournament.owner && ev.tournament.owner.id === myId) || admins.some((/** @type {any} */ x) => x && x.id === myId));
-    // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る
-    for (let page = 1; !isTo && page <= 4; page++) {
-      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-        pageInfo { totalPages } nodes { id } } } }`, { page });
-      const ts = d.currentUser && d.currentUser.tournaments;
-      const nodes = (ts && ts.nodes) || [];
-      if (nodes.some((/** @type {any} */ n) => n && String(n.id) === String(ev.tournament.id))) isTo = true;
-      if (!nodes.length || !ts.pageInfo || page >= ts.pageInfo.totalPages) break;
-    }
+    // スタッフの役割によっては admins が null になる (管理できる大会でも)。自分が管理する大会の一覧も見る (新しい順に、この大会より前まで)
+    if (!isTo) isTo = await isAdminTournament((q, v) => sgg(token, q, v), ev.tournament.id, ev.tournament.startAt);
     if (!isTo) return status(i18n('class.err.not_admin'), 'error');
   }
 
@@ -489,8 +518,9 @@ async function create() {
     // 被り回避 (設定が ON なら) はここで 1 回だけ。並べ替えた順で作る
     await optimizeForCreate();
     createStatus(i18n('class.step.create'));
+    const log = await classLog(loaded.token);
     const r = await SpspLogin.api({
-      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken,
+      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken, log,
       parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
       format: $('cb-format').value, counted,   // 確認で見せた値をそのまま送る
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
@@ -600,6 +630,7 @@ $('cb-create').addEventListener('click', () => {
 });
 $('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
+for (const id of ['cb-av-published', 'cb-av-weekday']) $(id).addEventListener('change', () => { updatePublishedBox(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
 $('cb-search').addEventListener('input', () => { renderList(); });
 // 本戦に出ていない人を追加 / 消す
@@ -653,23 +684,28 @@ let MY_TOURNAMENTS = { token: '', ids: /** @type {Set<string>} */ (new Set()) };
 /** キーで管理できる大会 (tournamentView admin) を、開催中 → これから → 最近終わった の順に選択欄へ。
  * 取れなければ欄は出さない (URL を入れればよい) */
 async function loadMyTournaments() {
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   const row = $('cb-tour-pick-row');
   if (!token) { row.hidden = true; return; }
-  /** @type {any[]} */
-  let all = [];
-  try {
-    for (let page = 1; page <= 4; page++) {
-      const d = await sgg(token, `query($page: Int!) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: "admin" } }) {
-        nodes { id name slug startAt endAt } } } }`, { page });
-      const nodes = (d.currentUser && d.currentUser.tournaments && d.currentUser.tournaments.nodes) || [];
-      all = all.concat(nodes);
-      if (nodes.length < 50) break;
-    }
-  } catch (e) { row.hidden = true; return; }
-  MY_TOURNAMENTS = { token, ids: new Set(all.filter(x => x && x.id != null).map(x => String(x.id))) };
   const now = Date.now() / 1000;
   const DAY = 86400;
+  // 新しい順に読み、開始が 7 日より前の大会まで来たら止める (それより前に終わった大会は出さない)。読んだページの分から先に出す
+  let any = false;
+  try {
+    await readAdminTournaments((q, v) => sgg(token, q, v), {
+      fields: 'name slug endAt', sinceSec: now - 7 * DAY, perPage: 20,
+      onPage: (all, done) => { if (sggToken() !== token) return true; any = fillTourPick(token, all, now, done) || any; return false; },
+    });
+  } catch (e) { /* 読めた分だけ */ }
+  if (!any && sggToken() === token) row.hidden = true;
+}
+
+/** 読んだところまでの大会を選択欄に (開催中 → これから → 最近終わった)。出したら true
+ * @param {string} token @param {any[]} all @param {number} now @param {boolean} done */
+function fillTourPick(token, all, now, done) {
+  const row = $('cb-tour-pick-row');
+  const DAY = 86400;
+  MY_TOURNAMENTS = { token, ids: new Set(all.filter(x => x && x.id != null).map(x => String(x.id))) };
   const rank = (/** @type {any} */ t) => {
     const s = t.startAt || 0, e = t.endAt || s;
     if (s <= now + DAY / 2 && e >= now - DAY / 2) return [0, -s];   // 開催中 (前後半日)
@@ -680,13 +716,15 @@ async function loadMyTournaments() {
     .map(t => ({ t, k: rank(t) }))
     .sort((x, y) => (x.k[0] - y.k[0]) || (x.k[1] - y.k[1]))
     .slice(0, 30);
-  if (!list.length) { row.hidden = true; return; }
+  if (!list.length) return false;
   const fmt = (/** @type {number} */ s) => new Date(s * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  const keep = $('cb-tour-pick').value;   // 読んでいる途中に選んだものは残す
   $('cb-tour-pick').innerHTML = `<option value="">${escapeHtml(i18n('class.tour_pick_none'))}</option>` + list.map(({ t, k }) =>
     `<option value="${escapeHtml(t.slug)}">${k[0] === 0 ? escapeHtml(i18n('class.tour_live')) + ' ' : ''}${escapeHtml(t.name)}${t.startAt ? ` (${fmt(t.startAt)})` : ''}</option>`).join('');
-  // 開催中が 1 つだけなら、URL が空のときはそれを選んでおく
+  if (keep && list.some(x => x.t.slug === keep)) $('cb-tour-pick').value = keep;
+  // 開催中が 1 つだけなら、URL が空のときはそれを選んでおく (読み終えてから)
   const live = list.filter(x => x.k[0] === 0);
-  if (live.length === 1 && !String($('cb-event').value || '').trim()) {
+  if (done && live.length === 1 && !String($('cb-event').value || '').trim()) {
     $('cb-tour-pick').value = live[0].t.slug;
     $('cb-event').value = 'https://www.start.gg/' + live[0].t.slug;
   }
@@ -705,6 +743,27 @@ $('cb-sgg-key').addEventListener('change', () => { loadMyTournaments(); loadMine
 
 // start.gg のキー: シード機能と同じ (👁 で表示、💾 を押したときだけブラウザに保存。保存場所も共通なのでどちらで保存しても使える)
 const SGG_TOKEN_KEY = 'spsp_startgg_token';
+/**
+ * 使用記録 (Worker が tool_logs に書く) に添える欄: ログインか API キーか・名前・大会とイベントの名前。ユーザーは Worker が start.gg で確かめる
+ * @param {string} token @returns {Promise<Record<string, unknown>>}
+ */
+async function classLog(token) {
+  try {
+    const who = await SpspToolLog.userFields(token);
+    const p = parseStartggUrl($('cb-event').value);
+    const ev = loaded && loaded.event;
+    return {
+      auth: who.auth, gamer_tag: who.gamer_tag || '',
+      tournament_id: ev ? ev.tournament.id : null, tournament_name: ev ? ev.tournament.name : '',
+      tournament_slug: ev && p ? 'tournament/' + p.tournamentSlug : '', event_name: ev ? ev.name : '',
+    };
+  } catch (e) { return {}; }   // 記録の欄が作れなくても作成・削除は止めない
+}
+
+/** start.gg に送るトークン: 認証の欄で「start.gg でログイン」ならそのアクセストークン、「API キー」なら API キー欄 (js/startgg_manager.js) */
+function sggToken() {
+  return SpspStartggManager.pick($('cb-sgg-key').value);
+}
 function updateKeyHint() {
   const v = String($('cb-sgg-key').value || '').trim();
   $('cb-sgg-hint').textContent = v ? `${i18n('seed.boot.t1')} ${v.slice(-4)} (${v.length} ${i18n('seed.boot.t2')}` : '';
@@ -728,11 +787,13 @@ $('cb-sgg-save').addEventListener('click', () => {
   b.disabled = true;
   setTimeout(() => { b.textContent = orig; b.disabled = false; }, 1500);
 });
+// start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインはシード作成・シードアップロードと共通)
+SpspStartggManager.mount({ root: $('cb-sgg-auth'), keyBlock: $('cb-sgg-keyblock'), beforeLogin: saveForm, onChange: () => { loadMyTournaments(); loadMine(); } });
 loadMyTournaments();
 
 /** 作成した下位クラス (class_mine)。間違えて作ったものは削除できる (取り込み済みは不可)。まだ API が無い環境では出さない */
 async function loadMine() {
-  const token = String($('cb-sgg-key').value || '').trim();
+  const token = sggToken();
   const box = $('cb-mine');
   if (!token || !SpspLogin.apiAvailable()) { box.hidden = true; return; }
   const r = await SpspLogin.api({ action: 'class_mine', startgg_token: token });
@@ -746,6 +807,7 @@ async function loadMine() {
       <div class="cb-mine-meta">${escapeHtml(fmt(it.created_at))} · ${escapeHtml(i18n('class.mine.entrants', { n: it.entrant_count }))} · ${escapeHtml(stateText(it))}</div>
     </div>
     <button type="button" class="cb-sub-btn cb-copy-btn" data-copy="${escapeHtml(String(it.challonge_url || ''))}">${escapeHtml(i18n('class.copy'))}</button>
+    <button type="button" class="cb-sub-btn" data-report="${Number(it.id)}">${escapeHtml(i18n('class.report'))}</button>
     <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
   </li>`).join('');
   box.hidden = false;
@@ -785,13 +847,31 @@ function mineStatus(msg, kind = '') {
 $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) => {
   const cp = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-copy]'));
   if (cp) { copyText(String(cp.dataset.copy || ''), cp); return; }
+  // 選手の結果報告の受付 (report/、Challonge のトークンは Worker が暗号化して預かる)。設定は報告ページの運営の画面で変える
+  const rb = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-report]'));
+  if (rb) {
+    const chToken = challongeToken();
+    if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
+    if (!confirm(i18n('class.report_confirm'))) return;
+    let exp = null;
+    try { exp = (JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null') || {}).exp || null; } catch (e2) { exp = null; }
+    rb.disabled = true;
+    const r = await SpspLogin.api({ action: 'report_enable_class', startgg_token: sggToken(), challonge_token: chToken, challonge_exp: exp, class_id: Number(rb.dataset.report) });
+    rb.disabled = false;
+    if (r && r.ok && r.report) {
+      const S = /** @type {any} */ (window).SPSP || {};
+      location.href = (S.langRoot || '') + (typeof S.pageHref === 'function' ? S.pageHref('report/index.html') : 'report/') + '?c=' + encodeURIComponent(r.report.code) + '&admin=1';
+      return;
+    }
+    return mineStatus(i18n('class.err.report', { message: (r && r.error && r.error.message) || 'unknown' }), 'error');
+  }
   const b = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-id]'));
   if (!b || b.disabled) return;
   const chToken = challongeToken();
   if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
   if (!confirm(i18n('class.del_confirm', { name: b.dataset.name || '' }))) return;
   b.disabled = true;
-  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: String($('cb-sgg-key').value || '').trim(), challonge_token: chToken, id: Number(b.dataset.id) });
+  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: chToken, id: Number(b.dataset.id), log: await classLog(sggToken()) });
   if (r && r.ok) { mineStatus(i18n('class.del_done'), 'ok'); loadMine(); return; }
   b.disabled = false;
   const code = (r && r.error && r.error.code) || 'unknown';

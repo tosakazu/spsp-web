@@ -258,3 +258,31 @@ test('checkStateToken: 期限ちょうどは通り、1 ms 過ぎたら expired',
   assert.ok('payload' in await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs));
   assert.deepStrictEqual(await checkStateToken(e.cfg, e.store, st, false, now + e.cfg.stateTtlMs + 1), { reason: 'expired' });
 });
+
+test('login: start.gg のトークン (user.identity) をブラウザに返し、ログインの記録 (ユーザー ID・時刻・flow) を 1 行足す', async () => {
+  const e = makeEnv({ token: { status: 200, body: { access_token: 'AT-1', expires_in: 604800, refresh_token: 'RT-1' } }, user: OK_USER });
+  e.nowMs = 1793000000000;
+  const r = await post(e, { action: 'login', code: 'C' });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.startgg, { access_token: 'AT-1', expires_in: 604800, refresh_token: 'RT-1' });
+  assert.deepStrictEqual(e.store.logins, [{ user_id: '4242', ts_ms: 1793000000000, flow: 'login' }]);
+  assert.ok(!JSON.stringify(e.store.logins).includes('AT-1') && !JSON.stringify(e.store.logins).includes('RT-1'));
+});
+
+test('startgg_refresh: /oauth/refresh に grant_type=refresh_token で送り、新しいトークンを返す。無ければ bad_request', async () => {
+  const e = makeEnv({ token: { status: 200, body: { access_token: 'AT-2', expires_in: 604800, refresh_token: 'RT-2' } } });
+  const r = await rawPost(e, { action: 'startgg_refresh', refresh_token: 'RT-1' });
+  assert.deepStrictEqual(r, { ok: true, access_token: 'AT-2', expires_in: 604800, refresh_token: 'RT-2' });
+  const f = e.fetches.find((x) => x.url.indexOf('/oauth/refresh') !== -1);
+  assert.ok(f, 'refresh の URL に送っていない');
+  const body = JSON.parse(f.init.body);
+  assert.strictEqual(body.grant_type, 'refresh_token');
+  assert.strictEqual(body.refresh_token, 'RT-1');
+  assert.strictEqual(body.scope, 'user.identity');
+  const bad = await rawPost(e, { action: 'startgg_refresh' });
+  assert.strictEqual(bad.ok, false);
+  assert.strictEqual(bad.error.code, 'bad_request');
+  const ng = await rawPost(makeEnv({ token: { status: 400, body: { error: 'invalid_grant' } } }), { action: 'startgg_refresh', refresh_token: 'RT-x' });
+  assert.strictEqual(ng.ok, false);
+  assert.strictEqual(ng.error.code, 'auth_failed');
+});

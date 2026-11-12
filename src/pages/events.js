@@ -100,7 +100,7 @@ function render() {
       tags.push(SPSPTags.dayTag(e, { wk: 'tag tag-wk', wd: 'tag tag-wd' }));
       tags.push(...SPSPTags.flagTags(e, { pre: 'tag tag-pre', res: 'tag tag-restr', lc: 'tag tag-low', uchi: 'tag tag-uchi', special: 'tag tag-special', small: 'tag tag-small' }));
       const seriesLink = e.series
-        ? SPSPLinks.a(SPSPLinks.seriesRankingHref(SPSP.langRoot, e.series), escapeHtml(e.series), ' onclick="event.stopPropagation()"')
+        ? SPSPLinks.a(SPSPLinks.seriesRankingHref(SPSP.langRoot, e.series), escapeHtml(e.series))
         : '';
       const evtSuffix = e.event_name && !/^Singles\s*$|^Ultimate Singles\s*$|^1on1\s*$/i.test(e.event_name)
         ? `<span class="event-suffix">/ ${escapeHtml(e.event_name)}</span>` : '';
@@ -112,7 +112,7 @@ function render() {
         ? `<div class="top-players">${e.top_players.map((p, i) => {
             const m = medalEmoji[Math.min(i, 2)];
             const nameLink = p.display
-              ? SPSPLinks.playerLink(SPSP.langRoot, p.uid, escapeHtml(p.display), ' onclick="event.stopPropagation()"')
+              ? SPSPLinks.playerLink(SPSP.langRoot, p.uid, escapeHtml(p.display))
               : `<span style="color:#9ca3af">(uid: ${p.uid})</span>`;
             const rankPart = (p.rank != null) ? `<span class="rank">#${p.rank}</span>` : '';
             return `<span><span class="place">${m}</span>${nameLink}${rankPart}</span>`;

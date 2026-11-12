@@ -16,6 +16,8 @@ import SpspOAuthState from './oauth_state.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソースなし。INV-8)
 import SpspLogin from './login.js';
+import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
+import SpspStartggIdentity from './startgg_identity.js';   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
 import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
@@ -182,6 +184,7 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     var st = S.decodeState(state);
     // 単回使用。ここで取り出したら保存側は消える。
     var stored = S.takeNonce();
+    var hadNonce = !!stored;   // 下で stored を別の値に使い回すので、ここで取っておく
 
     // 照合の本体は GAS 側の署名検証に移した (アプリ内ブラウザ→別ブラウザで
     // 戻される経路では、保存領域が引き継がれず必ず失敗するため)。
@@ -222,11 +225,36 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }
 
     if (intent === 'login') {
-      runLogin(code, state, back);
+      // 普段のログインは、アプリ内ブラウザから別のブラウザに戻される経路があるので nonce が無くても続けられるようにする。
+      // ただし nonce が無いときはボタンを押してから (セキュリティ製品の自動ブラウザが先に開いても押さないので code は残る。2026-10-28)
+      if (!hadNonce) {
+        reportError('state_missing', 'login ' + S.browserTag(navigator.userAgent));
+        confirmLogin(code, state, back);
+        return;
+      }
+      // ログインを始めた画面で戻ってきた: 引き継ぎは要らない (始めた画面が取りに行かないよう消す)
+      try { localStorage.removeItem('spsp_login_handoff'); } catch (_) { /* 何もしない (キーは js/login.js の HANDOFF_KEY) */ }
+      runLogin(code, state, back, false);
+      return;
+    }
+    // 大会運営ツールのログイン (Challonge・start.gg の運営用) は、ログインを始めたブラウザ (照合用の nonce を持っている) でだけ処理する。
+    // URL を先に開いて確かめるセキュリティ製品の自動ブラウザが、本人より先に code を使ってしまうため (2026-10-28)。
+    // 自動ブラウザは nonce を持たないので、ここで止まって code は使われずに残る
+    if ((intent === 'challonge' || intent === 'manager' || intent === 'reporter') && !hadNonce) {
+      reportError('state_missing', intent + ' ' + S.browserTag(navigator.userAgent));
+      show('error', i18n(intent === 'challonge' ? 'callback.challonge_title' : intent === 'reporter' ? 'callback.reporter_title' : 'callback.manager_title'), i18n('callback.no_nonce'), back);
       return;
     }
     if (intent === 'challonge') {
       runChallonge(code, state, back);
+      return;
+    }
+    if (intent === 'manager') {
+      runManager(code, state, back);
+      return;
+    }
+    if (intent === 'reporter') {
+      runReporter(code, state, back);
       return;
     }
 
@@ -271,21 +299,49 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     });
   }
 
+  /** nonce の無いブラウザ (別のブラウザに戻された・自動ブラウザ): ボタンを押したらログインを続ける */
+  function confirmLogin(code, state, back) {
+    var root = document.getElementById('cb-root');
+    root.className = 'cb';
+    root.textContent = '';
+    var h = document.createElement('p');
+    h.className = 'cb-title';
+    h.textContent = i18n('callback.confirm_login_title');
+    var d = document.createElement('p');
+    d.className = 'cb-detail';
+    d.textContent = i18n('callback.confirm_login');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cb-retry';
+    b.textContent = i18n('callback.confirm_login_btn');
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      h.textContent = i18n('callback.busy_login');   // 処理中 (ロゴの枠は消したので文字だけ)
+      d.textContent = '';
+      // 別のブラウザで戻ってきた: 結果をログインを始めた画面にも引き継ぐ (Worker が置き、始めた画面が取りに行く)
+      runLogin(code, state, back, true);
+    });
+    root.appendChild(h);
+    root.appendChild(d);
+    root.appendChild(b);
+  }
+
   /**
    * login フロー: code をセッショントークンに替えて localStorage に保存し、
    * 元のページに ?login=1 で戻る。シートには何も書かれない。
    */
-  function runLogin(code, state, back) {
+  function runLogin(code, state, back, handoff) {
     fetch(CFG.GAS_ENDPOINT, {
       method: 'POST',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'login', code: code, state: state }),
+      body: JSON.stringify({ action: 'login', code: code, state: state, handoff: !!handoff }),
     }).then(function (res) {
       return res.json();
     }).then(function (json) {
       if (json && json.ok && json.token && json.user) {
         AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        if (json.startgg) SpspStartggIdentity.save(json.startgg, json.user.id);
         location.replace(S.withFlag(back, 'login'));
         return;
       }
@@ -332,6 +388,67 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).catch(function () {
       reportError('network', 'challonge fetch failed');
       show('error', i18n('callback.challonge_title'), i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * manager フロー (大会運営用の start.gg ログイン): Worker が code を運営用の scope で交換し、start.gg のアクセストークンと
+   * 普段のセッションを返す。アクセストークンはこのブラウザ (startgg_manager.js) にだけ置き、元のページに ?login=1 で戻る。
+   */
+  function runManager(code, state, back) {
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'manager_login', code: code, state: state }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.access_token && json.token && json.user) {
+        AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        if (SpspStartggManager.save(json)) {
+          location.replace(S.withFlag(back, 'login'));
+          return;
+        }
+      }
+      var errCode = (json && json.error && json.error.code) || (json && json.ok ? 'storage' : 'unknown');
+      reportError('manager_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.manager_failed'));
+      show('error', i18n('callback.manager_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'manager fetch failed');
+      show('error', i18n('callback.manager_title'), i18n('callback.s28'), back);
+    });
+  }
+
+  /**
+   * reporter フロー (試合結果の報告の受付、src/pages/report.js): 運営のログインを先にする (2026-10-30)。Worker が code を報告用の scope で交換して
+   * 暗号化して預かり (受付を始めるまで)、普段のセッションを返す。ブラウザには運営のトークンは返らない。
+   * 報告ページ (受付を始める画面) に戻り、管理している大会の一覧から選んで受付を始める
+   */
+  function runReporter(code, state, back) {
+    fetch(CFG.GAS_ENDPOINT, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'report_login', code: code, state: state }),
+    }).then(function (res) {
+      return res.json();
+    }).then(function (json) {
+      if (json && json.ok && json.token && json.user) {
+        AUTH.save({ token: json.token, user: json.user, exp: json.exp });
+        location.replace(back);
+        return;
+      }
+      var errCode = (json && json.error && json.error.code) || 'unknown';
+      reportError('reporter_failed', errCode);
+      var msg = errCode === 'state_invalid' ? i18n('callback.state_invalid')
+        : ((json && json.error && json.error.message) || i18n('callback.reporter_failed'));
+      show('error', i18n('callback.reporter_title'), msg, back);
+    }).catch(function () {
+      reportError('network', 'reporter fetch failed');
+      show('error', i18n('callback.reporter_title'), i18n('callback.s28'), back);
     });
   }
 

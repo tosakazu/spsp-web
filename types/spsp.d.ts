@@ -201,9 +201,11 @@ declare global {
 declare global {
   /** 手動調整 (app/30_core.js)。base = 基準の並び (uid)、ops = 移動の履歴、hpos = undo 位置、sel = 選択中の uid。
    *  lockSel / lockKind は固定バー (📌) の編集中の状態 (app/40_startgg.js, app/90_spec.js) */
+  /** 手動調整の 1 手: 1 人の移動、または並び全体 (被り回避の結果から手動調整を始めたとき、2026-11-11) */
+  type SpspSeedManualOp = { uid: number; to: number; order?: undefined; kind?: undefined } | { order: number[]; kind?: "opt" | "csv" | "spec" | "reset"; uid?: undefined; to?: undefined };
   interface SpspSeedManual {
     base: number[];
-    ops: { uid: number; to: number }[];
+    ops: SpspSeedManualOp[];
     hpos: number;
     committed: boolean;
     editing: boolean;
@@ -214,13 +216,15 @@ declare global {
   }
   /** 固定 (📌) の 1 件: 新形式 {kind, target}。旧形式 (localStorage に残っている) は 'pool' | 'wave' の文字列 (対象なし = 移動しない)。
    *  文字列側を交差型にしてあるのは、読む側が `l.kind || l` / `l.target` と書けるように (文字列では undefined になる) */
-  type SpspSeedLock = { kind: 'pool' | 'wave'; target: number } | (('pool' | 'wave') & { kind?: undefined; target?: undefined });
+  type SpspSeedLock = { kind: 'pool' | 'wave'; target: number } | { kind: 'seed'; target: null } | (('pool' | 'wave') & { kind?: undefined; target?: undefined });
   /** シード指定・固定 (app/90_spec.js)。キーは uid (文字列化)。locks は「固定を解除」で delete される */
   interface SpspSeedSpec {
     label: string | null;
     pins: Record<string, number>;
     waves: Record<string, number>;
     locks?: Record<string, SpspSeedLock>;
+    /** ノーシード (最後尾にまとめた人、2026-11-11) */
+    noseed?: (number | string)[];
   }
   /** start.gg の phaseGroups から読んだウェーブ情報 (app/85_waves.js)。取得に失敗したときは error だけを持つ */
   interface SpspSeedWaves {
@@ -239,10 +243,16 @@ declare global {
     eventName: string;
     eventId: number | string;
     tournamentName: string;
+    tournamentId?: number | string | null;
+    tournamentSlug?: string;
+    /** 大会の開始 (unix 秒)。公開済みシードとの被り回避 (seeding/published_seeds.js) の範囲に使う */
+    startAt?: number | null;
     bracketType: string | null;
     poolCount: number | null;
     waves: SpspSeedWaves | null;
     phasesConfig?: SpspSeedPhaseConfig[] | null;
+    /** start.gg のフェーズの id (選んだ phase から通過でつながる順) */
+    phaseChain?: string[];
   }
   /** csv モードの基準順位ソース (app/80_csv_source.js)。rows = seed_uploader.js parseCsv の行 (列名 → 値) */
   interface SpspSeedCsvSource { rows: Record<string, string>[]; label: string }

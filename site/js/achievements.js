@@ -56,7 +56,7 @@ export function parseLegacyLabel(label) {
     var name = m[1], cm;
     /** @type {string | null} */
     var cls = null;
-    if ((cm = /^(.*) ([BCDE])クラス$/.exec(name))) { name = cm[1]; cls = cm[2]; }
+    if ((cm = /^(.*) ([B-J])クラス$/.exec(name))) { name = cm[1]; cls = cm[2]; }   // 下位クラスは B〜J
     else if ((cm = /^(.*) カジュアル$/.exec(name))) { name = cm[1]; cls = 'casual'; }
     if (m[3]) return { kind: 'tour_series', params: { series: name, bucket: BUCKET_CODE[m[2]], cls: cls, count: Number(m[3]) } };
     return { kind: 'tour', params: { name: name, bucket: BUCKET_CODE[m[2]], cls: cls } };
@@ -96,7 +96,34 @@ export function achievementLabel(item) {
   }
 }
 
-var api = { achievementLabel: achievementLabel, parseLegacyLabel: parseLegacyLabel };
+/**
+ * SPSP の順位を隠すときの実績の文字 (結果報告の「SPSP 順位を表示」を外したとき、2026-11-11)。
+ * 大会の成績は大会名を残して順位を「?位」に (印も順位が分からないものに)、最高順位・最高 Lv・ランクの上昇は数字を ? に。ほかはそのまま
+ * @param {AchievementItem | string} item
+ */
+export function achievementLabelHidden(item) {
+  if (!item || typeof item !== 'object') return typeof item === 'string' ? item : '';
+  if (!item.kind && item.label) {
+    var parsed = parseLegacyLabel(item.label);
+    if (parsed) item = { label: item.label, cls: item.cls, kind: parsed.kind, params: parsed.params };
+  }
+  var p = item.params || {};
+  var t = function (key, params) { return SPSPI18n.has(key) ? SPSPI18n.t(key, params) : ''; };
+  switch (item.kind) {
+    case 'peak_rank': return t('ach.hidden.peak_rank');
+    case 'peak_tier': return t('ach.hidden.peak_tier');
+    case 'climb': return t('ach.climb', { n: '?' });
+    case 'trend': { var trend = p.days + (p.surge ? '.surge' : ''); return t('ach.trend.' + trend, { n: '?' }); }
+    case 'tour': case 'tour_series': {
+      var name = String(item.kind === 'tour' ? p.name : p.series);
+      if (p.cls) name += ' ' + t('ach.class.' + p.cls);
+      return t('ach.tour', { icon: '🎮', name: name, bucket: t('ach.hidden.place'), count: p.count > 1 ? t('ach.tour_count', { n: p.count }) : '' });
+    }
+    default: return achievementLabel(item);
+  }
+}
+
+var api = { achievementLabel: achievementLabel, achievementLabelHidden: achievementLabelHidden, parseLegacyLabel: parseLegacyLabel };
 var global = typeof window !== 'undefined' ? window : globalThis;
 global.SPSPAchievements = api;   // 公開面 (テストの built() もこれを見る)
 (global.SPSP = global.SPSP || {}).achievements = api;

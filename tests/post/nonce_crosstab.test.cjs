@@ -217,6 +217,10 @@ test('decodeState が flow を返す', () => {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
   assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'login' }) + '.SIG').f, 'login');
   assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'post' }) + '.SIG').f, 'post');
+  // 結果報告の運営ログイン・Challonge も state だけで分かる (別のタブで戻って保存領域が無くても投稿扱いにしない、2026-11-01)
+  assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'reporter' }) + '.SIG').f, 'reporter');
+  assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'challonge' }) + '.SIG').f, 'challonge');
+  assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'manager' }) + '.SIG').f, 'manager');
   // 知らない値は無効にする (勝手な分岐を作らせない)
   assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/', f: 'x' }) + '.SIG').f, null);
   assert.strictEqual(S.decodeState(b64({ n: 'N', r: '/' }) + '.SIG').f, null);

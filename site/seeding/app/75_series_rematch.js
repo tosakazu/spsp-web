@@ -13,6 +13,8 @@ import { escapeHtml } from '../../js/html.js';
 import SeedData from '../seed_data.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
+import SPSPPublishedSeeds from '../published_seeds.js';
+import SPSPPublishedSeedsUI from '../published_seeds_ui.js';
 'use strict';
 
 // ── 同シリーズ再マッチ: 対象シリーズの判定 ────────────────────────────
@@ -88,6 +90,32 @@ export async function updateSeriesToggleState() {
   populateSeriesSelect(SeedData.detectSeries(SERIES_INDEX, ctx.eventId, ctx.tournamentName || ''));
 }
 
+// ── 公開済みシードとの被り回避 (§6.2.2、既定 ON) ─────────────────────────
+// data/upcoming_entrants.json (参加予定の大会。公開済みならプールとシードも入る) を見て、前後の日の大会で
+// 同じプールにいる 2 人を直近対戦の罰則に足す。対象・対象外の大会は欄に出す (黙って使わない・黙って外さない)。
+/** 対象の大会を選ぶ (取得の失敗は { error })。本大会の開催日は start.gg の大会の開始 (無ければ参加予定のファイルの同じ event)
+ * @param {number[]} attendees @param {boolean} excludeWeekday */
+function selectPublished(attendees, excludeWeekday) {
+  /** @type {Partial<SpspSeedEventContext>} */
+  const ctx = S.EVENT_CONTEXT || {};
+  return SPSPPublishedSeedsUI.select({ dataRoot: SPSP.data, eventId: ctx.eventId != null ? ctx.eventId : null, startAt: ctx.startAt || null,
+    attendees, excludeWeekday, index: S.MASTER_INDEX || null });
+}
+/** チェックの状態に応じて欄を出し入れし、対象の大会を出す (大会の読み込み時・チェックの切り替え時) */
+export async function updatePublishedToggleState() {
+  const cb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-published'));
+  const box = document.getElementById('so-published-box');
+  if (!cb || !box) return;
+  box.style.display = cb.checked && DATA.length ? '' : 'none';
+  if (!cb.checked || !DATA.length) return;
+  const recentCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-recent'));
+  if (recentCb && !recentCb.checked) { box.textContent = i18n('seed.published.norecent'); return; }
+  box.textContent = i18n('seed.published.loading');
+  const weekdayCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-include-weekday'));
+  const res = await selectPublished(DATA.map((r) => r.user_id).filter((u) => u != null), !(weekdayCb && weekdayCb.checked));
+  box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res);
+}
+
 // 「プール内変動」トグルは 2プール以上のときだけ指定可能。
 // 1プール×DE では intra が唯一の被り回避なので常に実行＝チェックは固定・無効表示。
 export function updateIntraToggleState() {
@@ -151,6 +179,7 @@ export function initSeedOptPanel() {
   // 非同期 (大会一覧のロードを伴うことがある)。失敗は欄の注記に出るので、
   // ここでは unhandled rejection にしないためだけに握る。
   Promise.resolve(updateSeriesToggleState()).catch(() => {});
+  Promise.resolve(updatePublishedToggleState()).catch(() => {});
   S.SEEDOPT_RESULT = null;
 }
 
@@ -306,13 +335,17 @@ export async function runSeedOptimize() {
   const rankingSet = new Set(ranking);
   /** @type {Record<string, string>} */
   const seedLocks = {};
+  /** @type {(number | string)[]} */
+  const seedFixed = [];
   if (S.SEED_SPEC && S.SEED_SPEC.locks) {
     for (const k in S.SEED_SPEC.locks) {
       const u = manualParseUid(k);
       if (!rankingSet.has(u)) continue;
       const v = S.SEED_SPEC.locks[k];
+      const kind = (v && v.kind) || v;
+      if (kind === 'seed') { seedFixed.push(u); continue; }   // シード固定は seedFixed へ (下)
       // optimizer へは種別のみ渡す ('pool'|'wave')。対象は射影済みの基準位置に反映済み。
-      seedLocks[u] = (v && v.kind) || v;
+      seedLocks[u] = kind;
     }
   }
   const lockUids = Object.keys(seedLocks);
@@ -320,6 +353,9 @@ export async function runSeedOptimize() {
     params.seedLocks = seedLocks;
     params.poolWaves = waveMap;
   }
+  // シード固定 (2026-11-11): 固定の種類「シード」(📌 の固定・CSV の lock=seed) を付けた人だけ、最適化しても今の位置から
+  // 動かさない。CSV の seed 列や手動調整で置いただけの人は、ほかの人と同じく被り回避で動いてよい (ユーザー判断)
+  if (seedFixed.length) params.seedFixed = [...new Set(seedFixed)];
   // undefined のキーは optimizer 既定に任せる（明示的に消す）。
   Object.keys(params).forEach(k => { if (params[k] === undefined) delete params[k]; });
   // シードズレ上限の昇順チェック (optimizer でも throw するが、取得前にわかりやすく弾く)。
@@ -378,6 +414,21 @@ export async function runSeedOptimize() {
     inputEl('so-run').disabled = false;
     return;
   }
+  // 公開済みシードとの被り回避 (§6.2.2): 対象の大会で同じプールのペアを直近対戦の罰則に足す (直近対戦を避けるときだけ)
+  let pubNote = '';
+  const pubCb = /** @type {HTMLInputElement | null} */ (document.getElementById('so-avoid-published'));
+  if (avoidRecent && pubCb && pubCb.checked) {
+    const res = await selectPublished(ranking, excludeWeekday);
+    const box = document.getElementById('so-published-box');
+    if (box) { box.style.display = ''; box.innerHTML = SPSPPublishedSeedsUI.boxHtml(res); }
+    if ('error' in res) {
+      pubNote = ' ' + SPSPPublishedSeedsUI.errorText(res);
+    } else {
+      const pairs = SPSPPublishedSeeds.publishedPairs(res.used, ranking);
+      const n = SPSPPublishedSeeds.mergePublished(bundle, pairs, { recentAgg, sizeWeight: SeedData.sizeWeightFn(sizeWeight) });
+      pubNote = ' ' + i18n('seed.published.note', { e: res.used.length, p: n });
+    }
+  }
   // 取得状況（同意なきフォールバック禁止 → missing/errors を明示）。
   const m = bundle.meta;
   let note = `${i18n('seed.rematch.t10')} ${m.prefIdentified}/${m.attendees} ${i18n('seed.rematch.t11')}`;
@@ -385,6 +436,7 @@ export async function runSeedOptimize() {
   if (m.missing.length) note += ` ${i18n('seed.rematch.t14')} ${m.missing.length} ${i18n('seed.rematch.t15')}`;
   if (m.errors.length) note += ` ${i18n('seed.rematch.t16')} ${m.errors.length} ${i18n('seed.rematch.t11')}`;
   if (m.prefsError) note += ` ${i18n('seed.rematch.t17')}`;
+  note += pubNote;
   if (m.targetSeries) {
     note += ` ${i18n('seed.rematch.t18')}${m.targetSeries}${i18n('seed.rematch.t19')} ${m.seriesPairs} ${i18n('seed.rematch.t20')}`;
     if (m.seriesIndexError) note += ` ${i18n('seed.rematch.t21')}`;
@@ -593,6 +645,14 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
     `${m.tournament ? escHtml(m.tournament) : i18n('seed.rematch.s32')}` +
     `${m.nent != null ? `〈${m.nent}${i18n('seed.rematch.t53')}` : ''}</div>`;
 
+  // 公開済みのほかの大会のシードで同じプールのペア (§6.2.2): 印と履歴の行
+  const pubTag = (c) => (Array.isArray(c.published) && c.published.length)
+    ? `<span style="color:#1d4ed8;font-weight:600">${escHtml(i18n('seed.published.tag'))}</span> ` : '';
+  const pubLine = (x) => {
+    const p = { date: x.date, name: x.tournament, nent: x.nent, pool: x.pool || '?', round: x.round };
+    return `<div style="color:#1d4ed8">${escHtml(x.round <= 3 ? i18n('seed.published.hist', p) : i18n('seed.published.hist_late', p))}</div>`;
+  };
+  const histHtml = (c) => [...(Array.isArray(c.published) ? c.published.map(pubLine) : []), ...(Array.isArray(c.matches) ? c.matches.map(histLine) : [])].join('');
   // 直近対戦セルの描画。
   function recentCell(recent, withRound) {
     let h = `<div style="margin-top:5px;font-size:11px;color:#374151">${i18n('seed.rematch.t54')} <strong>${recent.pairs}</strong> ${i18n('seed.rematch.t20')}${recent.top.length ? i18n('seed.rematch.s33') : ''}</div>`;
@@ -604,10 +664,9 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
       const t = c.lastTournament
         ? ` ${escHtml(c.lastTournament)}${c.lastNent != null ? `〈${c.lastNent}${i18n('seed.rematch.t53')}` : ''}`
         : '';
-      const line = `${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（P${c.pool + 1}${withRound ? ' / ' + c.round + i18n('seed.rematch.s31') : ''} / ${c.count}${i18n('seed.rematch.t52')}${c.lastDate}${t}）`;
-      const ms = Array.isArray(c.matches) ? c.matches : [];
-      if (!ms.length) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
-      const hist = ms.map(histLine).join('');
+      const line = `${pubTag(c)}${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（P${c.pool + 1}${withRound ? ' / ' + c.round + i18n('seed.rematch.s31') : ''}${c.count === 0 ? '' : ` / ${c.count}${i18n('seed.rematch.t52')}${c.lastDate}${t}`}）`;
+      const hist = histHtml(c);
+      if (!hist) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
       return `<details style="padding:1px 0"><summary style="cursor:pointer">${line}</summary>` +
         `<div style="margin:2px 0 4px 18px;color:#6b7280">${hist}</div></details>`;
     }).join('');
@@ -672,10 +731,9 @@ function finishSeedOptimize(result, displayOf, note, ranking, interInfo) {
     h += `<div style="margin:3px 0 0;padding-left:6px;font-size:11px;color:#374151">`;
     h += pRec.top.map(c => {
       const t = c.lastTournament ? ` ${escHtml(c.lastTournament)}${c.lastNent != null ? `〈${c.lastNent}${i18n('seed.rematch.t53')}` : ''}` : '';
-      const line = `${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（seed${c.seedA}×${c.seedB} / ${c.round}${i18n('seed.rematch.s31')}${c.count != null ? ' / ' + c.count + i18n('seed.rematch.t49') : ''}${i18n('seed.rematch.t71')}${c.lastDate || '?'}${t}）`;
-      const ms = Array.isArray(c.matches) ? c.matches : [];
-      if (!ms.length) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
-      const hist = ms.map(histLine).join('');
+      const line = `${pubTag(c)}${seriesTag(c)}${dn(c.a)} × ${dn(c.b)}（seed${c.seedA}×${c.seedB} / ${c.round}${i18n('seed.rematch.s31')}${c.count === 0 ? '' : `${c.count != null ? ' / ' + c.count + i18n('seed.rematch.t49') : ''}${i18n('seed.rematch.t71')}${c.lastDate || '?'}${t}`}）`;
+      const hist = histHtml(c);
+      if (!hist) return `<div style="padding:1px 0 1px 12px">${line}</div>`;
       return `<details style="padding:1px 0"><summary style="cursor:pointer">${line}</summary>` +
         `<div style="margin:2px 0 4px 18px;color:#6b7280">${hist}</div></details>`;
     }).join('');

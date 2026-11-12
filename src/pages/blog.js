@@ -3,3 +3,4 @@
 // 読めなくなっていた (2026-09-28 に修正)。tools/build/build_site.mjs が esbuild で束ねて assets/blog.js にする。
 import '../../site/js/i18n.js';
 import '../../site/nav.js';
+import '../../site/blog/tabs.js';

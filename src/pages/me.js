@@ -2,6 +2,7 @@
 // src/pages/me.js — site/me.html (自分のプレイヤーページへの共通リンク、2026-09-30)。
 //   ログイン中: すぐ自分のプレイヤーページ (p/?uid=<start.gg のユーザー ID>) へ移る (履歴に残さない)。
 //   ログアウト中: start.gg でログインしてもらい、戻ってきたら (このページに ?login=1 で戻る) 同じく移る。
+//   ?to=edit なら自分のカード編集 (p/edit?uid=…) へ移る (2026-10-25)。
 //   ログインできない所 (API の無い ConoHa のプレビュー) では、その旨だけ出す。
 import '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
@@ -18,7 +19,8 @@ async function main() {
   await SpspLogin.verify();   // 無効なトークンはここで消える
   const sess = SpspLogin.session();
   if (sess) {
-    location.replace(SPSP.pageHref('p/index.html') + '?uid=' + encodeURIComponent(String(sess.user.id)));
+    const page = new URLSearchParams(location.search).get('to') === 'edit' ? 'p/edit.html' : 'p/index.html';
+    location.replace(SPSP.pageHref(page) + '?uid=' + encodeURIComponent(String(sess.user.id)));
     return;
   }
   $('loading').style.display = 'none';

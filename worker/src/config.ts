@@ -20,6 +20,8 @@ export interface Env {
   TS_OFFSET?: string;
   SESSION_TTL_MS?: string;
   STATE_TTL_MS?: string;
+  /** サイトの CSP: "report-only" (Content-Security-Policy-Report-Only) / "enforce" (Content-Security-Policy) / 未設定 (付けない) */
+  CSP_MODE?: string;
   /** 投票の資格判定を免除するテスト用 uid (カンマ区切り)。免除された投票は status='debug' で保存し、集計しない。 */
   VOTE_TESTER_UIDS?: string;
   /** "1" のとき (preview だけ)、カードの設定をログインなしで誰の分でも書ける (見た目の確認用)。本番には置かない */
@@ -37,14 +39,28 @@ export interface Env {
   CHALLONGE_CLIENT_SECRET?: string;
   /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
   TITLE_SYNC_KEY?: string;
+  /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** トーナメントシミュレーションが start.gg の公開データ (フェーズの構造) を読むトークン (2026-11-05)。無ければ画面がログインのトークンで読む */
+  STARTGG_PUBLIC_TOKEN?: string;
+  /** VAPID の連絡先 (mailto: か https:)。[vars] */
+  VAPID_SUBJECT?: string;
 }
 
 /** developer.start.gg/docs/oauth/ の記載どおり。authorize 側は api. が付かない点に注意。 */
 export const TOKEN_URL = 'https://api.start.gg/oauth/access_token';
+/** アクセストークンの延長 (refresh token。本文は token 交換と同じ形で grant_type=refresh_token) */
+export const REFRESH_URL = 'https://api.start.gg/oauth/refresh';
+export const AUTHORIZE_URL = 'https://start.gg/oauth/authorize';
 export const GQL_URL = 'https://api.start.gg/gql/alpha';
 
 /** 認可リクエストと token 交換で同じ値を送る必要がある。 */
 export const SCOPE = 'user.identity';
+/** 大会運営用のログイン (flow 'manager'、シード作成・下位クラス作成で API キーの代わり)。自分が管理する大会のシード・トーナメント設定だけ。 */
+export const MANAGER_SCOPE = 'user.identity tournament.manager';
+/** 試合結果の報告の受付 (flow 'reporter'、report.ts)。運営が大会ごとに 1 回許可する。自分が管理する大会の試合の報告だけ。 */
+export const REPORTER_SCOPE = 'user.identity tournament.reporter';
 
 /** 本文の長さ (UTF-16 code unit 数。クライアントの textarea maxlength と同じ数え方)。 */
 export const BODY_MIN = 1;
@@ -60,6 +76,9 @@ export const CARD_RATE_MAX_PER_DAY = 300;           // 同一ユーザーの当�
 /** 下位クラスの登録 (action class_register、docs/class_bracket_design.md)。 */
 export const CLASS_RATE_MIN_INTERVAL_MS = 10 * 1000; // 同じ TO の登録間隔
 export const CLASS_RATE_MAX_PER_DAY = 50;            // 同じ TO の当日登録数
+/** 大会運営ツールの使用記録 (action tool_log、tool_logs)。1 人 1 日の上限と detail (JSON) の長さ */
+export const TOOL_LOG_MAX_PER_DAY = 300;
+export const TOOL_LOG_DETAIL_MAX = 4000;
 export const STARTGG_TIMEOUT_MS = 10 * 1000;         // start.gg GraphQL の応答待ち
 export const CHALLONGE_TIMEOUT_MS = 15 * 1000;       // Challonge API の応答待ち (1 回ごと)
 export const CLASS_MINE_DAYS = 60;                   // class_mine に出す期間
@@ -70,6 +89,29 @@ export const CLASS_DELETE_MAX_PER_DAY = 50;
 export const CLASS_PARTICIPANTS_MIN = 2;
 export const CLASS_PARTICIPANTS_MAX = 512;
 
+/** 試合結果の報告 (report.ts)。送る間隔・1 日の数 (同じ人)・受付の期間 */
+export const REPORT_MIN_INTERVAL_MS = 3 * 1000;
+export const REPORT_MAX_PER_DAY = 300;
+export const REPORT_ADMIN_MAX_PER_DAY = 2000;
+/** 運営のログイン (report_login) のトークンを預かる長さ。受付を始めるまでの間だけ (始めたらイベントの受付に写す) */
+export const REPORT_GRANT_MS = 12 * 3600 * 1000;
+export const REPORT_MIN_OPEN_MS = 6 * 3600 * 1000;        // 受付は少なくともこれだけ開ける
+export const REPORT_MAX_OPEN_MS = 8 * 24 * 3600 * 1000;   // 長くてもこれまで (大会が延びたら運営が受付し直す)
+// Challonge の参加者・試合の写し (report_challonge.ts)。Challonge の API は使える回数が少ないので、読むのはこの間隔まで
+export const REPORT_CH_PRESTART_MS = 2 * 60 * 1000;       // 始まる前 (試合が 0 件): 試合だけを読む間隔
+export const REPORT_CH_DIRTY_MS = 20 * 1000;              // SPSP が書いた後、次の試合を読み直すまでにあける時間 (前に読んでから)
+export const REPORT_CH_BASE_MS = 10 * 60 * 1000;          // 運営が Challonge で直接直したのに気づくための読み直し
+export const REPORT_CH_EXT_MS = 2 * 60 * 1000;            //   気づいた後 REPORT_CH_EXT_WINDOW_MS の間はこの間隔
+export const REPORT_CH_EXT_WINDOW_MS = 20 * 60 * 1000;
+export const REPORT_CH_IDLE_AFTER_MS = 60 * 60 * 1000;    //   これだけ動きが無ければ REPORT_CH_IDLE_MS ごと
+export const REPORT_CH_IDLE_MS = 30 * 60 * 1000;
+export const REPORT_CH_DONE_STOP_MS = 2 * 3600 * 1000;    //   全試合が終わってこれだけ動きが無ければ読まない
+export const REPORT_CH_STALE_STOP_MS = 6 * 3600 * 1000;   //   終わっていなくても、これだけ動きが無ければ読まない (運営の読み直しボタンでは読む)
+export const REPORT_CH_FRESH_MS = 60 * 1000;              // 報告された試合が写しに無いときの読み直し
+export const REPORT_CH_FORCE_MIN_MS = 30 * 1000;          // 運営の「Challonge から読み直す」
+export const REPORT_CH_FAIL_MS = 60 * 1000;               // 読めなかった後に読みに行かない時間
+export const REPORT_CH_LIMIT_MS = 15 * 60 * 1000;         //   429 (回数の上限) のとき
+
 /** Challonge (OAuth と API v2.1)。scope は取得側 (smash_database、client credentials の application:manage) と
  *  確認済み: TO が SPSP のアプリ経由で作ったトーナメントは /v2.1/application/tournaments に出る (2026-10-01)。 */
 // 許可画面は challonge.com で開く (api.challonge.com だと、ログインしていない人のログイン画面が {"error": "authentication required"} になって先へ進めない)
@@ -77,6 +119,9 @@ export const CHALLONGE_AUTHORIZE_URL = 'https://challonge.com/oauth/authorize';
 export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
 export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
 export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';
+/** CSP の違反報告 (POST /api/csp-report)。 */
+export const CSP_REPORT_MAX_KEYS = 500;              // まとめた組の数の上限 (超えた新しい組は捨てる)
+export const CSP_REPORT_PER_IP_PER_MIN = 60;         // 同じ IP から 1 分に受ける報告の数 (isolate ごと)
 export const CARD_TEMPLATES = ['standard'];          // テンプレートが増えたらここも増やす
 export const CARD_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray'];
 export const CARD_ACH_MAX = 12;                      // 載せる実績の数
@@ -123,6 +168,9 @@ export const CLIENT_ERROR_KINDS: Record<string, 1> = {
   no_code: 1,            // code/state が返ってこなかった
   login_failed: 1,       // login が失敗 (server 側にも残るが経路確認用)
   network: 1,            // fetch 自体が失敗
+  manager_failed: 1,     // 大会運営用の start.gg ログイン (manager_login) が失敗
+  reporter_failed: 1,    // 試合結果の報告の受付 (report_enable) が失敗
+  challonge_failed: 1,   // Challonge のログインが失敗
 };
 
 /** ハンドラが使う設定 (env から組み立てる。テストでは直接作る)。 */
@@ -140,6 +188,10 @@ export interface Config {
   /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
   titleLang?: string;
   titleSyncKey?: string;
+  /** Web Push の鍵 (未設定なら通知は出さない) */
+  vapid?: { publicKey: string; privateKey: string; subject: string };
+  /** start.gg の公開データを読むトークン (トーナメントシミュレーション)。無ければ undefined */
+  publicToken?: string;
   sessionTtlMs: number;
   stateTtlMs: number;
   /** タイムスタンプの固定オフセット (分)。JST = 540。 */
@@ -177,6 +229,9 @@ export function configFromEnv(env: Env): Config {
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
     titleSyncKey: env.TITLE_SYNC_KEY || undefined,
+    vapid: env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
+      ? { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: String(env.VAPID_SUBJECT || 'https://spsp.games/') } : undefined,
+    publicToken: env.STARTGG_PUBLIC_TOKEN || undefined,
     titleLang: String(env.SITE_PREFIX || '/jp').replace(/\/+$/, '') === '/na' ? 'en' : 'ja',
     sessionTtlMs: intOr(env.SESSION_TTL_MS, SESSION_TTL_MS_DEFAULT),
     stateTtlMs: intOr(env.STATE_TTL_MS, STATE_TTL_MS_DEFAULT),

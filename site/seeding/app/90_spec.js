@@ -4,12 +4,13 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, manualMovedSet, manualParseUid, orderedRecs, renderManualUI, saveManual } from './30_core.js';
-import { render } from './40_startgg.js';
+import { DATA, _csvNormDisc, manualMovedSet, manualOrder, manualParseUid, manualPushOrder, orderedRecs, renderManualUI, saveManual } from './30_core.js';
+import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
-import { CSV_SEAT_COLS, CSV_TPL_OUT_NAMES, _csvMatchRow, _csvPick, _csvRecLookups, _csvRowLabel, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
+import { CSV_SEAT_COLS, _csvMatchRow, _csvNormName, _csvPick, _csvRecLookups, _csvRowLabel, csvTemplateLines, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
 import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
+import { decodeCsvBytes } from '../../js/csv_text.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SeedShare from '../seed_share.js';
 'use strict';
@@ -30,15 +31,34 @@ function parseWaveValue(v) {
   const n = parseInt(s, 10);
   return (Number.isFinite(n) && String(n) === s && n >= 1) ? n - 1 : null;
 }
+// 「◯◯の逆」の参照の照合キー (名前の正規化 / discriminator の ="..." を外す)
+/** @param {unknown} v */
+function _specRefKey(v) { return String(v).trim().replace(/^="?|"$/g, '').toLowerCase(); }
+const CSV_NAME_COLS_SPEC = ['player', 'name', 'display', 'tag', 'プレイヤー', '名前', 'hn', 'short gamertag', 'gamertag'];
+// ウェーブ列の「指定しない」の書き方 (警告を出さずに空欄と同じ扱い、2026-11-11)
+const WAVE_NONE_RE = /^(指定不可|指定なし|なし|無し|どっちでも|どちらでも|どれでも|any|either|none|no|n\/a|-|ー|—|×)$/i;
+// ウェーブ列の「◯◯の逆」(◯◯ と別のウェーブ。◯◯ は CSV の name・discriminator か参加者の名前、2026-11-11)
+const WAVE_OPPOSITE_RE = /^(.+?)\s*の逆$|^(?:opposite(?:\s+of)?|not)\s+(.+)$/i;
+// seed 列の「ノーシード」(残りの全員より後ろ = 最後尾にまとめる、2026-11-11)
+const NOSEED_RE = /^(ノーシード|ノシード|シードなし|no[\s_-]?seed|unseeded)$/i;
+/** 「◯◯の逆」の参照先の文字列 (違えば null) @param {unknown} v @returns {string | null} */
+export function parseWaveOpposite(v) {
+  const m = v == null ? null : WAVE_OPPOSITE_RE.exec(String(v).trim());
+  return m ? String(m[1] || m[2]).trim() || null : null;
+}
+/** 逆のウェーブ: 2 つなら他方、3 つ以上なら半周先 @param {number} w @param {number} W */
+export function oppositeWave(w, W) { return W === 2 ? 1 - w : (w + Math.floor(W / 2)) % W; }
 // 固定指定値 → 'pool' | 'wave' | null。明示 (プール/ウェーブ) 優先、
 // 汎用 truthy (1/○/true/固定 …) はウェーブ指定行ならウェーブ固定、それ以外はプール固定。
-/** @param {unknown} v @param {boolean} hasWave @returns {'pool' | 'wave' | null} */
+/** @param {unknown} v @param {boolean} hasWave @returns {'pool' | 'wave' | 'seed' | null} */
 function parseFixValue(v, hasWave) {
   if (v == null) return null;
   const s = String(v).trim().toLowerCase();
   if (!s || s === '0' || s === 'no' || s === 'false' || s === 'none' || s === '-' || s === '×') return null;
   if (s === 'wave' || s === 'ウェーブ' || s === 'w') return 'wave';
   if (s === 'pool' || s === 'プール' || s === 'p') return 'pool';
+  // シード固定 (2026-11-11): 被り回避の最適化でもシード番号を動かさない
+  if (s === 'seed' || s === 'シード' || s === 'シード固定' || s === 's') return 'seed';
   return hasWave ? 'wave' : 'pool';
 }
 
@@ -48,7 +68,7 @@ function parseFixValue(v, hasWave) {
 // ピンはそのシード位置に固定配置し、残りは現在順のまま空き位置へ。ウェーブ指定者は
 // そのウェーブのプールに落ちる最初の空き位置まで待つ (= 現在順位付近に収まる)。
 // 満たせない指定は notes (人が読める説明) で返す (黙って握りつぶさない)。
-function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf) {
+function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   const N = curOrder.length;
   const out = new Array(N).fill(null);
   const notes = [];
@@ -61,25 +81,47 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf) {
     out[s] = uid;
     pinned.add(uid);
   }
-  const wanted = new Map(waveOf);
-  const queue = curOrder.filter((u) => !pinned.has(u));
-  let waveGaveUp = 0;   // ウェーブの枠が足りず指定を諦めた人数
-  for (let s = 0; s < N; s++) {
-    if (out[s] != null) continue;
-    const wv = waveMap ? waveMap[poolOf(s, P)] : 0;
-    let k = -1;
-    for (let q = 0; q < queue.length; q++) {
-      const want = wanted.get(queue[q]);
-      if (want == null || want === wv) { k = q; break; }
-    }
-    // 置ける人が居ない (= そのウェーブの枠が足りない) ときは先頭の 1 人だけ諦める。
-    if (k < 0) k = 0;
-    const picked = queue.splice(k, 1)[0];
-    if (wanted.has(picked) && wanted.get(picked) !== wv) { waveGaveUp++; wanted.delete(picked); }
-    out[s] = picked;
+  // ウェーブ指定を優先する (2026-11-11 ユーザー指定): ウェーブ指定の人は、本来の位置 (今の並びで空きに詰めたときの位置)
+  // から下へ見て最初の同じウェーブの空きに置く (シードは下げる方向にだけずらす)。ノーシードの枠に入ってもよい
+  // (ノーシードの人は残りの最後にまとまるので、さらに下がる)。下に空きが無いときだけ上の一番近い空きに置き、
+  // それも無い (= そのウェーブの枠を使い切った) ときは指定を諦める。残りの人は今の並びの順に空きへ詰め、ノーシードは最後。
+  const tail = noSeed ? curOrder.filter((u) => noSeed.has(u) && !pinned.has(u)) : [];
+  const tailSet = new Set(tail);
+  const queue = curOrder.filter((u) => !pinned.has(u) && !tailSet.has(u));
+  /** @type {number[]} 空きの位置 (上から) */
+  const freeSeats = [];
+  for (let k = 0; k < N; k++) if (out[k] == null) freeSeats.push(k);
+  const waveAt = (/** @type {number} */ k) => (waveMap ? waveMap[poolOf(k, P)] : 0);
+  const taken = new Set();
+  const placed = new Set();
+  let waveGaveUp = 0, movedDown = 0, movedUp = 0, maxDown = 0;
+  /** @type {{ uid: number, from: number, to: number }[]} ウェーブのために動かした人 (シード番号は 1 始まり) */
+  const moved = [];
+  const want = new Map(waveOf);
+  for (let qi = 0; qi < queue.length; qi++) {
+    const u = queue[qi];
+    if (!want.has(u)) continue;
+    const w = want.get(u);
+    const home = qi;   // 本来の位置 = 空きの中で qi 番目
+    let at = -1;
+    for (let i = home; i < freeSeats.length; i++) if (!taken.has(i) && waveAt(freeSeats[i]) === w) { at = i; break; }
+    if (at < 0) for (let i = home - 1; i >= 0; i--) if (!taken.has(i) && waveAt(freeSeats[i]) === w) { at = i; break; }
+    if (at < 0) { waveGaveUp++; continue; }
+    taken.add(at); placed.add(u);
+    out[freeSeats[at]] = u;
+    if (at !== home && home < freeSeats.length) moved.push({ uid: u, from: freeSeats[home] + 1, to: freeSeats[at] + 1 });
+    if (at > home) { movedDown++; maxDown = Math.max(maxDown, freeSeats[at] - freeSeats[home]); } else if (at < home) movedUp++;
   }
+  // 残り: 今の並びの順に空きへ詰め、ノーシードは最後
+  const rest = queue.filter((u) => !placed.has(u)).concat(tail);
+  let r = 0;
+  for (let i = 0; i < freeSeats.length; i++) if (!taken.has(i)) out[freeSeats[i]] = rest[r++];
+  /** @type {string[]} 注意ではないお知らせ (ウェーブのために下げた) */
+  const info = [];
+  if (movedDown) info.push(i18n('seed.spec.wave_moved_down', { n: movedDown, max: maxDown }));
+  if (movedUp) notes.push(i18n('seed.spec.wave_moved_up', { n: movedUp }));
   if (waveGaveUp) notes.push(`${i18n('seed.spec.t4')} ${waveGaveUp}${i18n('seed.spec.t5')}`);
-  return { order: out, notes };
+  return { order: out, notes, info, moved };
 }
 
 // 固定 (対象付き) を満たすよう並びを組み直す (純関数・挿入ソート方式)。
@@ -95,6 +137,7 @@ export function enforceSeedLocks(order, locks, P, waveMap, poolOf) {
     const l = locks[u];
     if (!l) continue;
     const kind = l.kind || l;
+    if (kind === 'seed') continue;   // シード固定: 並びの位置そのものを固定 (最適化で動かさないだけ。射影では寄せない)
     const target = (l && l.target != null) ? l.target : null;
     if (target == null) continue;   // 旧形式/対象なし: 現位置のまま (移動しない)
     need.set(u, kind === 'pool' ? { pool: target } : { wave: target });
@@ -208,6 +251,14 @@ function applySpecRows(rows, label) {
   let discUnavailable = false;
   let sampleRows = 0;   // テンプレートの記入例が残っていた行 (無視 + 警告)
   let matchedRows = 0;
+  const noSeed = new Set();
+  /** @type {string[]} */
+  const infos = [];
+  let waveOver = 0;   // ウェーブ数より大きいウェーブの指定 (ウェーブ数を入れ忘れて読んだとき)
+  /** @type {{ u: number, rec: any, ref: string, seat: number | null, fixV: unknown }[]} 「◯◯の逆」(全行を読んでから決める) */
+  const opposites = [];
+  /** CSV の行の名前・discriminator → 参加者 (「◯◯の逆」の参照先。参加者の start.gg の名前と違う呼び方でも引ける) */
+  const csvRef = new Map();
   for (const row of rows) {
     if (isCsvTemplateSample(row)) { sampleRows++; continue; }
     const m = _csvMatchRow(row, lk);
@@ -218,10 +269,15 @@ function applySpecRows(rows, label) {
     if (rec.user_id == null) { problems.push(`${rec.display}${i18n('seed.spec.t12')}`); continue; }
     matchedRows++;
     const u = rec.user_id;
+    for (const key of [_csvPick(row, CSV_NAME_COLS_SPEC), _csvPick(row, ['discriminator', 'disc'])]) {
+      if (key != null && String(key).trim()) csvRef.set(_specRefKey(key), rec);
+    }
     /** @type {number | null} */
     let seat = null;
     const seatV = _csvPick(row, CSV_SEAT_COLS);
-    if (seatV != null) {
+    if (seatV != null && NOSEED_RE.test(String(seatV).trim())) {
+      noSeed.add(u);
+    } else if (seatV != null) {
       const nn = parseInt(seatV, 10);
       if (Number.isFinite(nn) && nn >= 1 && nn <= DATA.length) seat = nn;
       else problems.push(`${rec.display}${i18n('seed.spec.t13')}${seatV})`);
@@ -229,8 +285,15 @@ function applySpecRows(rows, label) {
     /** @type {number | null} */
     let wIdx = null;
     const waveV = _csvPick(row, SPEC_WAVE_COLS);
-    if (waveV != null) {
+    const oppRef = waveV != null ? parseWaveOpposite(waveV) : null;
+    if (oppRef) {
+      // 「◯◯の逆」: 参照先のウェーブは全行を読んでから決める (下の opposites)
+      opposites.push({ u, rec, ref: oppRef, seat, fixV: _csvPick(row, SPEC_FIX_COLS) });
+    } else if (waveV != null && WAVE_NONE_RE.test(String(waveV).trim())) {
+      // 指定不可・どっちでも = 指定しない
+    } else if (waveV != null) {
       wIdx = parseWaveValue(waveV);
+      if (wIdx != null && wIdx >= W) waveOver++;
       if (wIdx == null || wIdx >= W) { problems.push(`${rec.display}${i18n('seed.spec.t14')}${waveV})`); wIdx = null; }
     }
     if (seat != null) {
@@ -242,7 +305,8 @@ function applySpecRows(rows, label) {
     } else if (wIdx != null) {
       waveOf.set(u, wIdx);
     }
-    const fx = parseFixValue(_csvPick(row, SPEC_FIX_COLS), wIdx != null);
+    const fixV = _csvPick(row, SPEC_FIX_COLS);
+    const fx = parseFixValue(fixV, wIdx != null);
     if (fx === 'wave' && W < 2) {
       problems.push(`${rec.display}${i18n('seed.spec.t18')}`);
       locks[u] = 'pool';
@@ -250,6 +314,41 @@ function applySpecRows(rows, label) {
       locks[u] = fx;
     }
   }
+  // 「◯◯の逆」: ◯◯ のウェーブ (CSV で指定 > シード番号の指定 > 今の並び) の逆に置く。◯◯ にウェーブの指定が無い
+  // (指定不可・シードが高くて動かせない) ときは、今の並び (既定のランキング) の位置に ◯◯ を固定して、その逆にする (2026-11-11)
+  if (opposites.length) {
+    const curOrder0 = orderedRecs().map((r) => r.user_id);
+    const poolOfS0 = (s0) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s0, P) : 0);
+    for (const o of opposites) {
+      const key = _specRefKey(o.ref);
+      const refRec = csvRef.get(key) || (!lk.dupNames.has(_csvNormName(o.ref)) ? lk.byName.get(_csvNormName(o.ref)) : null)
+        || (lk.byDisc ? lk.byDisc.get(_csvNormDisc(o.ref)) : null) || null;
+      if (W < 2) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_no_wave')}`); continue; }
+      if (!refRec || refRec.user_id == null) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_not_found', { name: o.ref })}`); continue; }
+      const r = refRec.user_id;
+      if (r === o.u) continue;
+      let rw = waveOf.has(r) ? /** @type {number} */ (waveOf.get(r)) : null;
+      if (rw == null && pins.has(r)) rw = waveMap[poolOfS0(pins.get(r) - 1)];
+      if (rw == null) {
+        // ◯◯ を今の並びの位置 (既定のランキングのシード) に固定する
+        const pos = curOrder0.indexOf(r);
+        if (pos < 0) { problems.push(`${o.rec.display}: ${i18n('seed.spec.opp_not_found', { name: o.ref })}`); continue; }
+        if (!noSeed.has(r)) { pins.set(r, pos + 1); if (!locks[r]) locks[r] = 'wave'; }
+        rw = waveMap[poolOfS0(pos)];
+      }
+      const wIdx = oppositeWave(/** @type {number} */ (rw), W);
+      if (o.seat != null) {
+        if (waveMap[poolOfS0(o.seat - 1)] !== wIdx) problems.push(`${o.rec.display}${i18n('seed.spec.t15')}${o.seat} ${i18n('seed.spec.t16')} ${waveLetter(wIdx)} ${i18n('seed.spec.t17')}`);
+      } else if (!noSeed.has(o.u)) {
+        waveOf.set(o.u, wIdx);
+      }
+      // 「◯◯の逆」はウェーブで固定する (被り回避の最適化でも逆のまま。lock 列に pool と書いてあればそちら)
+      const fx = parseFixValue(o.fixV, true);
+      locks[o.u] = fx || 'wave';
+    }
+  }
+  // ウェーブ数を入れ忘れて読んだ: 1 件ずつの警告より先に、何をすればよいかを出す (2026-11-11)
+  if (waveOver || (W < 2 && opposites.length)) problems.unshift(i18n('seed.spec.wave_count_hint', { w: W, n: waveOver + (W < 2 ? opposites.length : 0) }));
   // discriminator 列があるのに照合データが無い = エラー (黙って名前照合等に劣化させない)。
   if (discUnavailable) {
     _specStatus(`${i18n('seed.spec.t19')}` +
@@ -259,7 +358,7 @@ function applySpecRows(rows, label) {
   // 名前の被り = エラー (何も適用しない)。黙って別人に指定が付くのを防ぐ。
   if (ambiguous.length) {
     _specStatus(`${i18n('seed.spec.t21')} ` +
-      `${[...new Set(ambiguous)].slice(0, 5).map(escHtml).join(', ')}${ambiguous.length > 5 ? ' …' : ''}` +
+      `${[...new Set(ambiguous)].map(escHtml).join(', ')}` +   // 省略しない (2026-11-11)
       i18n('seed.spec.s7'), true);
     return;
   }
@@ -268,15 +367,17 @@ function applySpecRows(rows, label) {
     return;
   }
   // 順位/ウェーブ指定があれば現在の出力順を組み直して手動調整 base に取り込む。
-  if (pins.size || waveOf.size) {
-    if (S.MANUAL && manualMovedSet().size > 0 &&
-        !confirm(i18n('seed.spec.s9'))) return;
+  if (pins.size || waveOf.size || noSeed.size) {
+    // 手動調整の 1 手として積むので「元に戻す」で戻せる (確認は出さない、2026-11-11)
     const curOrder = orderedRecs().map(r => r.user_id);
-    const { order, notes } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
-      (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0));
+    const { order, notes, info, moved } = buildSpecOrder(curOrder, [...pins], [...waveOf], P, waveMap,
+      (s, PP) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, PP) : 0), noSeed);
     problems.push(...notes);
-    S.MANUAL = { base: order, ops: [], hpos: 0, committed: true, editing: false, sel: null, src: 'spec' };
-    dropAppliedOrder();
+    infos.push(...info);
+    // 誰をどれだけ動かしたか (上位から。下げるのは順位の高い指定者から順に近い枠を取った残り = 下位の指定者ほど下がる)
+    const nameOf = new Map(DATA.map((r) => [r.user_id, r.display]));
+    for (const m of moved) infos.push(i18n('seed.spec.wave_moved_one', { name: nameOf.get(m.uid) || String(m.uid), from: m.from, to: m.to }));
+    manualPushOrder(order, 'spec');
     if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.spec.s10'));
   } else if (Object.keys(locks).length && !S.MANUAL) {
     // 固定のみの CSV: 現在の並びを手動調整として取り込む (手動列に射影後の位置と
@@ -288,13 +389,14 @@ function applySpecRows(rows, label) {
   // 配置後の位置のプール/ウェーブ。以後は読み取り時射影が並びを常にこの対象へ寄せる。
   const lockObjs = {};
   if (Object.keys(locks).length) {
-    const placedOrder = (pins.size || waveOf.size)
-      ? /** @type {SpspSeedManual} */ (S.MANUAL).base   // 直前で S.MANUAL に入れている
+    const placedOrder = (pins.size || waveOf.size || noSeed.size)
+      ? manualOrder()   // 直前で手動調整に積んだ並び
       : orderedRecs().map(r => r.user_id);
     const poolOfS = (s) => (SeedOptimizer ? SeedOptimizer.poolOfSeed(s, P) : 0);
     for (const k in locks) {
       const u = manualParseUid(k);
       const kind = locks[k];
+      if (kind === 'seed') { lockObjs[u] = { kind, target: null }; continue; }
       let target;
       if (kind === 'wave' && waveOf.has(u)) {
         target = waveOf.get(u);
@@ -311,18 +413,24 @@ function applySpecRows(rows, label) {
     pins: Object.fromEntries(pins),
     waves: Object.fromEntries(waveOf),
     locks: lockObjs,
+    noseed: [...noSeed],
   };
   saveManual();
   render();
   let msg = `✅ ${escHtml(label)}: ${matchedRows}${i18n('seed.spec.t22')} ` +
-    `${i18n('seed.spec.t6')} ${pins.size} ${i18n('seed.spec.t7')} ${waveOf.size} ${i18n('seed.spec.t8')} ${Object.keys(locks).length}${i18n('seed.spec.t23')}`;
+    `${i18n('seed.spec.t6')} ${pins.size} ${i18n('seed.spec.t7')} ${waveOf.size} ${i18n('seed.spec.t8')} ${Object.keys(locks).length}${i18n('seed.spec.t23')}`
+    + (noSeed.size ? ` ${i18n('seed.spec.noseed_count', { n: noSeed.size })}` : '');
   if (settingNotes.length) msg += ` ${i18n('seed.spec.t24')}${settingNotes.join('・')})`;
   if (sampleRows) msg += ` ${i18n('seed.spec.t25')} ${sampleRows}${i18n('seed.spec.t26')}`;
   if (unmatched.length) {
-    msg += ` ${i18n('seed.spec.t27')} ${unmatched.length}${i18n('seed.spec.t28')} ${unmatched.slice(0, 5).map(escHtml).join(', ')}${unmatched.length > 5 ? ' …' : ''}`;
+    // 未照合・注意は省略せずに全部出す (注意は 1 件 1 行、2026-11-11)
+    msg += ` ${i18n('seed.spec.t27')} ${unmatched.length}${i18n('seed.spec.t28')} ${unmatched.map(escHtml).join(', ')}`;
   }
   if (problems.length) {
-    msg += `<br>⚠ ${problems.slice(0, 8).map(escHtml).join(' ／ ')}${problems.length > 8 ? ' …' : ''}`;
+    msg += problems.map((p) => `<br>⚠ ${escHtml(p)}`).join('');
+  }
+  if (infos.length) {
+    msg += infos.map((p) => `<br>ℹ ${escHtml(p)}`).join('');
   }
   _specStatus(msg, false);
   const st = document.getElementById('status');
@@ -345,7 +453,7 @@ async function loadSpecSource() {
       } else {
         const res = await fetch(url);
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        text = await res.text();
+        text = decodeCsvBytes(await res.arrayBuffer());   // Shift_JIS の CSV もある (2026-11-11)
         label = 'CSV URL';
       }
     } else {
@@ -416,14 +524,19 @@ function exportSeedWorkCsv() {
 // プレビュー側も 9,500 字超で「共有には CSV 推奨」と出すので、それと揃えている。
 const BRACKET_URL_BUDGET = 9500;
 
-async function issueBracketPreview() {
+/**
+ * @param {{ recs?: any[], pools?: number | null, applied?: boolean } | Event} [opts] recs = この並びで (適用後に start.gg から読み直した並び)。
+ *   ボタンのクリックから呼ばれたとき (Event) は今の出力順
+ */
+async function issueBracketPreview(opts) {
+  const o = opts && !(opts instanceof Event) ? opts : {};
   const note = document.getElementById('work-note');
   const say = (m) => { if (note) note.textContent = m; };
   if (!DATA.length) { say(i18n('seed.spec.s15')); return; }
   if (typeof SeedShare === 'undefined') { say(i18n('seed.spec.s16')); return; }
   try {
-    const recs = orderedRecs();
-    const P = Math.max(1, parseInt(/** @type {{ value?: any }} */ (document.getElementById('so-pools') || {}).value, 10) || 1);
+    const recs = o.recs || orderedRecs();
+    const P = Math.max(1, (Number(o.pools) | 0) || parseInt(/** @type {{ value?: any }} */ (document.getElementById('so-pools') || {}).value, 10) || 1);
     const waveMap = currentWaveMap(P);
     const uids = recs.map((r) => (r.user_id != null && r.user_id > 0) ? r.user_id : null);
     // 表示名。uid が無い参加者は URL に名前が無いと誰か分からなくなるので必ず入れる。
@@ -473,6 +586,13 @@ async function issueBracketPreview() {
       wv: waveMap,
       uids, names: fullNames,
     };
+    // start.gg のフェーズの id (あれば、プレビューが start.gg の構造をそのまま読んで同じ形の表を出す。2026-11-05)
+    const chainIds = S.EVENT_CONTEXT && Array.isArray(S.EVENT_CONTEXT.phaseChain) ? S.EVENT_CONTEXT.phaseChain : [];
+    // start.gg から取れたフェーズ構成をそのまま使っているときだけ (カスタムした・取りようがないときは載せない = ログインなしで SPSP の組み方。2026-11-05)
+    //   2 フェーズ以上: start.gg の連鎖 (phasesFromGg) / 1 フェーズ: プール数が start.gg のプール数と同じ
+    const ggPools = S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount;
+    const fromGg = chainIds.length >= 2 ? phasesFromGg : chainIds.length === 1 && !!ggPools && !!phases && (phases[0].pools | 0) === ggPools;
+    if (fromGg) /** @type {any} */ (payload).sgg = chainIds;
     const bracketUrl = new URL(SPSP.langRoot + 'bracket/', location.href).toString();
     let blob = await SeedShare.encodePayload(payload);
     let url = bracketUrl + SeedShare.buildFragment({ ph: 0, wd: 1 }, blob);
@@ -501,6 +621,127 @@ async function issueBracketPreview() {
   }
 }
 
+// ── トーナメントプレビューのメニュー (2026-11-10) ──
+// どの並びで組むかを選ぶ:
+//   current   = 表示中のシード (今の表の並び = orderedRecs)
+//   optimized = 被り回避最適化後のシード (最適化の結果があるときだけ。反映を外した・手動調整を再開したあとでも結果の並びで出せる)
+//   startgg   = start.gg 上のシード (API で今のシードを読む。start.gg の大会を読み込んでいるときだけ)
+
+/** 各項目を選べるか。選べないときは理由の文言 @returns {{ current: string | null, optimized: string | null, startgg: string | null }} */
+export function bracketPreviewAvailability() {
+  const opt = S.SEEDOPT_RESULT && Array.isArray(S.SEEDOPT_RESULT.seedOrder) && S.SEEDOPT_RESULT.seedOrder.length;
+  const ctx = S.EVENT_CONTEXT;
+  return {
+    current: null,
+    optimized: opt ? null : i18n('seed.preview.opt_disabled'),
+    startgg: !ctx ? i18n('seed.preview.gg_disabled') : ctx.phaseId == null ? i18n('seed.preview.gg_no_phase') : null,
+  };
+}
+
+/** 被り回避最適化の結果の並び (結果に無い人は後ろ) */
+function optimizedRecs() {
+  const order = /** @type {SpspSeedOptResult} */ (S.SEEDOPT_RESULT).seedOrder;
+  const pos = new Map(order.map((u, i) => [u, i]));
+  const at = (r) => (pos.has(r.user_id) ? /** @type {number} */ (pos.get(r.user_id)) : 1e9);
+  return DATA.slice().sort((a, b) => at(a) - at(b));
+}
+
+/** start.gg に入っている今のシードを読んで、その並びで開く @param {string} token @param {number | string} phaseId */
+async function previewStartggSeeds(token, phaseId) {
+  const note = document.getElementById('work-note');
+  try {
+    if (note) note.textContent = i18n('seed.spec.applied_loading');
+    const nodes = await fetchAllSeeds(token, phaseId);
+    const infos = nodes.map(seedNodeToInfo).sort((a, b) => (a.originalSeed || 0) - (b.originalSeed || 0));
+    const recs = infos.map((si) => ({ user_id: si.userId, display: si.display }));
+    await issueBracketPreview({ recs, pools: S.EVENT_CONTEXT && S.EVENT_CONTEXT.poolCount, applied: true });
+  } catch (err) {
+    if (note) note.textContent = i18n('seed.spec.applied_error') + ' ' + String((err && /** @type {any} */ (err).message) || err);
+  }
+}
+
+/** メニューの項目を選んだとき @param {'current' | 'optimized' | 'startgg'} kind */
+export function runBracketPreviewChoice(kind) {
+  closeBracketPreviewMenu();
+  if (bracketPreviewAvailability()[kind]) return;
+  if (kind === 'current') return issueBracketPreview();
+  if (kind === 'optimized') return issueBracketPreview({ recs: optimizedRecs() });
+  const token = getToken();
+  if (!token) {
+    const note = document.getElementById('work-note');
+    if (note) note.textContent = i18n('seed.startgg.s16');
+    return;
+  }
+  return previewStartggSeeds(token, /** @type {number | string} */ (/** @type {SpspSeedEventContext} */ (S.EVENT_CONTEXT).phaseId));
+}
+
+/** メニューを作り直す (開くたびに今の状態で) */
+function renderBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  if (!menu) return;
+  const av = bracketPreviewAvailability();
+  /** @type {[ 'current' | 'optimized' | 'startgg', string, string ][]} */
+  const items = [
+    ['current', i18n('seed.preview.current'), i18n('seed.preview.current_sub')],
+    ['optimized', i18n('seed.preview.opt'), i18n('seed.preview.opt_sub')],
+    ['startgg', i18n('seed.preview.gg'), i18n('seed.preview.gg_sub')],
+  ];
+  menu.innerHTML = items.map(([k, label, sub]) => {
+    const why = av[k];
+    return `<button type="button" role="menuitem" data-bp-kind="${k}"${why ? ' disabled aria-disabled="true"' : ''}
+      style="display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;padding:7px 10px;cursor:${why ? 'not-allowed' : 'pointer'};color:${why ? '#9ca3af' : '#111827'};font-size:12px">
+      <span style="font-weight:600">${escHtml(label)}</span>
+      <span style="display:block;font-size:11px;color:${why ? '#9ca3af' : '#6b7280'};margin-top:2px">${escHtml(why || sub)}</span>
+    </button>`;
+  }).join('');
+  menu.querySelectorAll('[data-bp-kind]').forEach((b) => {
+    const el = /** @type {HTMLButtonElement} */ (b);
+    if (!el.disabled) {
+      el.addEventListener('mouseenter', () => { el.style.background = '#f3f4f6'; });
+      el.addEventListener('mouseleave', () => { el.style.background = 'none'; });
+    }
+    el.addEventListener('click', () => { runBracketPreviewChoice(/** @type {any} */ (el.dataset.bpKind)); });
+  });
+}
+
+/** @param {Event} e */
+function _bpOutside(e) {
+  const wrap = document.getElementById('bracket-preview-wrap');
+  if (wrap && e.target instanceof Node && wrap.contains(e.target)) return;
+  closeBracketPreviewMenu();
+}
+/** @param {KeyboardEvent} e */
+function _bpKey(e) {
+  if (e.key !== 'Escape') return;
+  closeBracketPreviewMenu();
+  const btn = document.getElementById('bracket-preview');
+  if (btn) btn.focus();
+}
+
+export function closeBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  const btn = document.getElementById('bracket-preview');
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', _bpOutside, true);
+  document.removeEventListener('keydown', _bpKey);
+}
+
+export function toggleBracketPreviewMenu() {
+  const menu = document.getElementById('bracket-preview-menu');
+  const btn = document.getElementById('bracket-preview');
+  if (!menu || !btn) return;
+  if (!menu.hidden) { closeBracketPreviewMenu(); return; }
+  if (!DATA.length) { const note = document.getElementById('work-note'); if (note) note.textContent = i18n('seed.spec.s15'); return; }
+  renderBracketPreviewMenu();
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  document.addEventListener('click', _bpOutside, true);
+  document.addEventListener('keydown', _bpKey);
+  const first = /** @type {HTMLButtonElement | null} */ (menu.querySelector('[data-bp-kind]:not([disabled])'));
+  if (first) first.focus();
+}
+
 function clearSeedSpec() {
   if (!S.SEED_SPEC) { _specStatus(i18n('seed.spec.s24')); return; }
   S.SEED_SPEC = null;
@@ -524,7 +765,7 @@ export function applySeedLockChoice(uid) {
   // 固定バーは表 (行の直下) にある。以前の manual-bar 内も一応拾えるよう document 全体で探す。
   const kindEl = /** @type {HTMLSelectElement | null} */ (document.querySelector('[data-mn-lock-kind]'));
   const targetEl = /** @type {HTMLSelectElement | null} */ (document.querySelector('[data-mn-lock-target]'));
-  const kind = /** @type {'none' | 'pool' | 'wave'} */ (kindEl ? kindEl.value : 'none');   // select の option 値 (30_core.js manualLockBarHtml)
+  const kind = /** @type {'none' | 'pool' | 'wave' | 'seed'} */ (kindEl ? kindEl.value : 'none');   // select の option 値 (30_core.js manualLockBarHtml)
   if (kind === 'none') {
     if (S.SEED_SPEC && S.SEED_SPEC.locks) delete S.SEED_SPEC.locks[uid];
     _pruneSeedSpec();
@@ -532,7 +773,8 @@ export function applySeedLockChoice(uid) {
     const target = targetEl ? parseInt(targetEl.value, 10) : 0;
     if (!S.SEED_SPEC) S.SEED_SPEC = { label: null, pins: {}, waves: {}, locks: {} };
     if (!S.SEED_SPEC.locks) S.SEED_SPEC.locks = {};
-    S.SEED_SPEC.locks[uid] = { kind, target: Number.isFinite(target) ? target : 0 };
+    if (kind === 'seed') S.SEED_SPEC.locks[uid] = { kind, target: null };
+    else S.SEED_SPEC.locks[uid] = { kind, target: Number.isFinite(target) ? target : 0 };
   }
   const manual = /** @type {SpspSeedManual} */ (S.MANUAL);   // 固定バーは手動調整の編集中にしか出ない
   manual.lockSel = null;
@@ -547,16 +789,18 @@ export function applySeedLockChoice(uid) {
   const loadBtn = document.getElementById('spec-src-load');
   if (loadBtn) loadBtn.addEventListener('click', () => { loadSpecSource(); });
   const tplBtn = document.getElementById('spec-tpl');
-  // seed / wave / lock はすべて任意 (2 行目が空欄可の例)。
-  if (tplBtn) tplBtn.addEventListener('click', () => downloadCsvTemplate([
-    'name,discriminator,seed,wave,lock',
-    `${CSV_TPL_OUT_NAMES[0]},="00000000",1,A,pool`,
-    `${CSV_TPL_OUT_NAMES[1]},="00000001",,,wave`,
-  ], 'spsp_seed_spec_template.csv'));
+  // テンプレートは表示言語で、使い方の説明行つき (2026-11-11)
+  if (tplBtn) tplBtn.addEventListener('click', () => downloadCsvTemplate(csvTemplateLines('spec'), 'spsp_seed_spec_template.csv'));
   const exportBtn = document.getElementById('spec-export');
   if (exportBtn) exportBtn.addEventListener('click', exportSeedWorkCsv);
+  // トーナメントプレビューはメニューから並びを選ぶ (2026-11-10)
   const bracketBtn = document.getElementById('bracket-preview');
-  if (bracketBtn) bracketBtn.addEventListener('click', issueBracketPreview);
+  if (bracketBtn) bracketBtn.addEventListener('click', toggleBracketPreviewMenu);
+  // 適用後のトーナメントをプレビュー (40_startgg.js のボタン): start.gg から適用後のシード順を読み直して、その並びで開く (2026-11-05)
+  document.addEventListener('spsp:preview-applied', (e) => {
+    const d = /** @type {CustomEvent} */ (e).detail || {};
+    previewStartggSeeds(d.token, d.phaseId);
+  });
   const clearBtn = document.getElementById('spec-clear');
   if (clearBtn) clearBtn.addEventListener('click', clearSeedSpec);
   // プール数/ウェーブ数の変更は手動列のプール表示 (A3/P3) に反映する。

@@ -25,6 +25,10 @@ workers_dev = true
 # 外すと spsp.games は何も指さなくなる (WING には戻らない: 09-09 以降 spsp.games は WING に無い)
 routes = [{ pattern = "spsp.games", custom_domain = true }]
 
+# 定期実行: 結果報告の受付の開始時刻にブラケットを自動で開始 (src/index.ts の scheduled、2026-11-05)。D1 を 1 回読むだけで、対象が無ければ start.gg は呼ばない
+[triggers]
+crons = ["* * * * *"]
+
 [assets]
 # dist-cf/ = 地域ごとのビルド出力をまとめたもの (dist/ → dist-cf/jp/, dist-na/ → dist-cf/na/)。
 # scripts/assemble_dist.sh が作る。20,000 ファイル上限があるので JSON (players/ 等) は入れない (R2)。
@@ -58,6 +62,8 @@ DATA_ORIGIN = "https://data.spsp.games/jp"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
 # 配信の既定プレフィックス (/ → /jp/ の 301、旧 URL の付け替え先)。
 SITE_PREFIX = "/jp"
+# サイトの CSP (セキュリティレビュー M4)。段階 1 = report-only。enforce にするときは 3 環境と assemble_dist.sh の既定をそろえる
+CSP_MODE = "report-only"
 # タイムスタンプの固定オフセット (GAS は Asia/Tokyo で書いていた)。
 TS_OFFSET = "+09:00"
 # セッションの有効期間 (180 日) と state の有効期間 (30 分)。ミリ秒。
@@ -70,6 +76,9 @@ STATE_TTL_MS = "1800000"
 routes = []
 name = "spsp-web-preview"
 workers_dev = true
+
+[env.preview.triggers]
+crons = []
 
 [env.preview.assets]
 directory = "../dist-cf"
@@ -96,6 +105,8 @@ SITE_PREFIX = "/jp"
 TS_OFFSET = "+09:00"
 SESSION_TTL_MS = "15552000000"
 STATE_TTL_MS = "1800000"
+# サイトの CSP (セキュリティレビュー M4)。段階 1 = report-only で違反を集める (本番・na も同じ。静的アセットの分は assemble_dist.sh が _headers に書く)
+CSP_MODE = "report-only"
 
 # ── na (北米版。start.gg アプリ・データ・D1 を分ける) ──
 [env.na]
@@ -103,6 +114,9 @@ STATE_TTL_MS = "1800000"
 routes = []
 name = "spsp-web-na"
 workers_dev = true
+
+[env.na.triggers]
+crons = []
 
 [env.na.assets]
 directory = "../dist-cf"
@@ -123,6 +137,8 @@ STARTGG_CLIENT_ID = "619"
 REDIRECT_URI = "https://spsp.games/callback.html"
 CHALLONGE_REDIRECT_URI = "https://spsp.games/callback.html"
 DATA_ORIGIN = "assets:/na"
+# サイトの CSP (セキュリティレビュー M4)。段階 1 = report-only。enforce にするときは 3 環境と assemble_dist.sh の既定をそろえる
+CSP_MODE = "report-only"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
 SITE_PREFIX = "/na"
 TS_OFFSET = "-05:00"

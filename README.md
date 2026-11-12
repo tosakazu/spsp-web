@@ -24,7 +24,6 @@ types/                global types (window.SPSP …)
 tests/                node --test (meta / post / seeding), jsdom snapshot checks (frontend/), sim, split, views
 tools/                build script and helpers
 docs/                 architecture.md (start here), seeding tool notes; docs/archive/ = older notes in Japanese
-gas/                  the old Google Apps Script backend (kept for reference; the Worker replaced it)
 ```
 
 ## Regions and translation

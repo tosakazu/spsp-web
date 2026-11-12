@@ -20,8 +20,6 @@ site/seed_map.json
 site/demo/
 
 # ── 秘密 (INV-3: start.gg client secret は clasp push でだけ Apps Script に載せる) ──
-gas/secrets.gs
-gas/.clasp.json
 .env
 *.token
 
@@ -33,5 +31,7 @@ node_modules/
 .vscode/
 .claude/
 *.png
+# ホーム画面に追加のアイコン (結果報告の manifest.json)
+!site/report/icon-*.png
 __pycache__/
 *.pyc

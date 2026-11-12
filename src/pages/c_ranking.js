@@ -26,7 +26,7 @@ SPSPI18n.apply(document);   // 静的 HTML の data-i18n を辞書の言語に
 
 /** @type {{ charId: number | null, charName: string | null, index: SpspCharacterIndex | null, masterMap: Map<number, SpspRankRecord>,
  *            masterMeta: SpspRankMeta | null, data: SpspRankRecord[], method: string, sortKey: string, sortDir: string, searchText: string,
- *            overseasUids?: Set<number> | null, showSub: boolean, subRecs: SpspRankRecord[] | null, views: any }} */
+ *            overseasUids?: Set<number> | null, showSub: boolean, showProvisional: boolean, subRecs: SpspRankRecord[] | null, views: any }} */
 const STATE = {
   charId: null,
   charName: null,
@@ -39,6 +39,7 @@ const STATE = {
   sortDir: 'asc',
   searchText: '',
   showSub: false,              // 「サブ使用も表示」(既定はメインの人だけ)
+  showProvisional: false,      // 「計測中プレイヤーを表示」(既定は出さない。順位も出す人だけで付け直す)
   subRecs: null,               // サブで使う人の行 (初めてチェックしたときに取る)
   views: null,                 // data/views/ の manifest (null = 全選手を読んだ)
 };
@@ -54,6 +55,7 @@ function buildData() {
   const add = (uid, src, isSub) => {
     // 海外タグ勢 (= site/data/overseas.json) は使い手ランキングから除外.
     if (!src || (STATE.overseasUids && STATE.overseasUids.has(uid))) return;
+    if (!STATE.showProvisional && SPSPRankingTable.isProvisional(src)) return;
     const rec = RP.cloneWithGlobalRanks(src);
     if (isSub) /** @type {any} */ (rec)._is_sub = true;
     ranked.push(rec);
@@ -136,7 +138,7 @@ function render() {
 function setupEvents() {
   RP.bindSearch(text => {
     STATE.searchText = text;
-    if (TABLE) TABLE.setFilterText(STATE.searchText);
+    if (TABLE) TABLE.setFilterText(STATE.searchText, RP.searchById());
   });
   RP.bindMethodTabs(method => {
     STATE.method = method;
@@ -153,6 +155,11 @@ function setupEvents() {
       }
       rebuild();
     });
+  }
+  const provCb = /** @type {HTMLInputElement | null} */ (document.getElementById('show-provisional'));
+  if (provCb) {
+    provCb.checked = false;   // 戻るで来たときの前の状態は捨てる (表は既定 = 隠すで描く)
+    provCb.addEventListener('change', () => { STATE.showProvisional = provCb.checked; rebuild(); });
   }
 }
 

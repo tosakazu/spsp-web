@@ -161,3 +161,48 @@ CREATE TABLE card_settings (
 3. 他人の編集ページでは編集できない。`card_put` に他人の設定を送っても自分の行しか変わらない
 4. キャラ投票: ヘッダーでログイン済みなら、投票ページでログインを求められない
 5. ログアウト → ヘッダーがログアウト中の表示に戻る。別タブにも反映
+
+## 大会運営ツールの start.gg ログイン (2026-10-28)
+
+シード作成・シードアップロード・下位クラス作成は、API キーの代わりに start.gg のログインでも使える (どちらでも選べる)。
+
+| 段階 | 誰が | 内容 |
+|---|---|---|
+| 1 | ページ | `POST /api {action:'manager_begin', nonce, returnPath}` → scope `user.identity tournament.manager` の認可 URL (state は `f:'manager'`) |
+| 2 | callback.html | `POST /api {action:'manager_login', code, state}` → `{token, user, exp, access_token, expires_in}` |
+| 3 | callback.html | 普段のセッションと、start.gg のアクセストークン (`localStorage.spsp_startgg_manager`、期限つき) を保存 |
+
+- 普段のログイン (`login`) と投稿 (`post`) は `f:'manager'` の state を受けない (scope が違う)。`manager_login` も他の flow の state を受けない。
+- アクセストークンは Worker が交換して返すだけで、保存しない・ログに出さない。期限は start.gg の `expires_in` (7 日)。
+- 画面は `site/js/startgg_manager.js` の `mount` (「start.gg でログイン | API キー」の切り替え・ログアウト)。
+  ログインと選んだ方は localStorage なので 3 ページで共通 (別のタブにも効く)。API キーを保存している人には 1 回だけ案内を出す (既定は API キーのまま)。
+- callback は、運営用ログインと Challonge のログインを **ログインを始めたブラウザ (nonce を持っている) でだけ** 処理する。
+  開いたリンクを先に確かめるセキュリティ製品の自動ブラウザが、本人より先に callback を開いて code を使ってしまう例があったため
+  (2026-10-28、preview)。普段のログインは nonce が無くても続ける (アプリ内ブラウザから別のブラウザに戻される経路のため、今までどおり)。
+
+### 使用記録 (D1 `tool_logs`、migrations/0009、2026-10-28)
+
+どの大会を、どのユーザーが、SPSP のどの機能で操作したかを残す。トークン・API キーは入れない。
+
+| 機能 (`tool`) | 操作 (`action`) | 書くのは | ユーザー |
+|---|---|---|---|
+| `seed` (シード作成) / `seed_upload` (シードアップロード) | `seeding` | start.gg への書き込みが成功したあと、ブラウザが `POST /api {action:'tool_log', op:'seeding', …}` (`site/js/tool_log.js`) | ログイン: SPSP のセッションで確かめる (`verified 1`) / API キー: そのキーで start.gg の currentUser を取って申告 (`verified 0`) |
+| `class` (下位クラス作成) | `create` / `delete` | `class_create` / `class_delete` が成功したときに Worker が書く (大会名などはブラウザが `log` に入れる) | start.gg で確かめた TO (`verified 1`) |
+
+- `detail` (JSON): シードは基準・被り回避 (反映したか・`so-*` の設定すべて)・手動の並べ替え (回数)・シード指定と固定 (件数)・フェーズを作ったか・CSV。下位クラスはクラス・形式・順位の範囲・Challonge。
+- 1 人 1 日 300 件まで (`TOOL_LOG_MAX_PER_DAY`)。記録に失敗しても操作は成功のまま。
+- 読むときは `wrangler d1 execute spsp --remote --command "SELECT … FROM tool_logs ORDER BY id DESC LIMIT 50"`。
+
+## ログインの引き継ぎ (2026-11-05)
+
+iPhone のアプリ内ブラウザ (Discord などの SFSafariViewController) でログインを始めると、start.gg のユニバーサルリンクでアプリを経て
+`redirect_uri` が Safari 本体で開くことがある (callback に nonce が無い = errors の `state_missing ios-safari`、週 66 回中約 30 回)。
+保存領域が別なので始めた画面は未ログインのまま、もう一度ログインすることになっていた。
+
+- 始めた画面 (js/login.js `startLogin`) が 256 bit の乱数 s を localStorage `spsp_login_handoff` に置き、`h = SHA-256(s)` (base64url 43 文字) を
+  `begin_login` の `handoff_h` で渡す。Worker は h を署名つき state (`payload.h`、普段のログインだけ) に入れる。
+- callback に nonce が無い (別のブラウザ) ときだけ、「ログインを続ける」を押したあと `login` に `handoff: true` を付ける。Worker はログインを済ませ、
+  結果 (セッション・start.gg のトークン) を AES-GCM で暗号化して D1 `login_handoffs` に h をキーに置く (15 分・取り出したら消す、migration 0027)。
+- 始めた画面は戻ってきたとき (読み込み・表示・focus・表示中は 5 秒おき、最長 45 分) に `login_handoff { s }` で取りに行く。Worker は SHA-256(s) で
+  引き当てて返し、その場で消す。まだ無ければ `{ pending: true }`。
+- URL・state に載るのは h だけ。callback の URL が漏れても s が無いので取り出せない。始めた画面で戻ってきた通常のログインはサーバに何も置かない。

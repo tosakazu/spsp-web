@@ -10,7 +10,8 @@
 //       opts.statusEl があれば描画のたびに「N / M 表示中」を書く (opts.statusTotal() = M)
 //   SPSPRankingPage.applyState(tbl, {rows, method, filterText, sort})
 //   SPSPRankingPage.bindMethodTabs(onChange)   総合 / 順位 / 直対 タブ (#method-tabs)。onChange(method)
-//   SPSPRankingPage.bindSearch(onChange)       #search の input。onChange(text)
+//   SPSPRankingPage.bindSearch(onChange)       #search の input と「ID検索」(#search-by-id) の切り替え。onChange(text)
+//   SPSPRankingPage.searchById()               「ID検索」にチェックがあるか (名前だけが既定)
 //   SPSPRankingPage.rowClickHandler(rec, tr, {cfg, colspan})
 //       行クリックで展開行 (大会別 / 直接対決) を出し入れする。開くのは 1 行だけ。詳細 JSON は SPSPDetail が取る
 //   SPSPRankingPage.bindDetailClicks(tbody, getCfg)
@@ -86,7 +87,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   function applyState(tbl, st) {
     tbl.setRows(st.rows);
     tbl.setMethod(st.method);
-    tbl.setFilterText(st.filterText || '');
+    tbl.setFilterText(st.filterText || '', searchById());
     if (st.sort) tbl.setSort(st.sort.key, st.sort.dir);
   }
 
@@ -103,9 +104,16 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     });
   }
 
+  /** 「ID検索」(#search-by-id) にチェックがあるか */
+  function searchById() {
+    var cb = /** @type {HTMLInputElement | null} */ (document.getElementById('search-by-id'));
+    return !!(cb && cb.checked);
+  }
   function bindSearch(onChange) {
-    var search = document.getElementById('search');
+    var search = /** @type {HTMLInputElement | null} */ (document.getElementById('search'));
     if (search) search.addEventListener('input', function (e) { onChange(/** @type {HTMLInputElement} */ (e.target).value); });
+    var cb = document.getElementById('search-by-id');
+    if (cb) cb.addEventListener('change', function () { onChange(search ? search.value : ''); });   // 切り替えたら打ってある語で探し直す
   }
 
   // ── 行の展開 ──
@@ -275,7 +283,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
   var api = {
     getQueryParam: getQueryParam, smallGray: smallGray, scoreColumns: scoreColumns,
-    createTable: createTable, applyState: applyState, bindMethodTabs: bindMethodTabs, bindSearch: bindSearch,
+    createTable: createTable, applyState: applyState, bindMethodTabs: bindMethodTabs, bindSearch: bindSearch, searchById: searchById,
     rowClickHandler: rowClickHandler, refreshOpenTournamentTables: refreshOpenTournamentTables, bindDetailClicks: bindDetailClicks,
     loadMaster: loadMaster, cloneWithGlobalRanks: cloneWithGlobalRanks, rerankByGlobalEnsemble: rerankByGlobalEnsemble,
   };
@@ -283,4 +291,4 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   (global.SPSP = global.SPSP || {}).RankingPage = api;   // window.SPSP.RankingPage (名前空間。旧名 SPSPRankingPage も残す)
 
 export default api;
-export { getQueryParam, smallGray, scoreColumns, createTable, applyState, bindMethodTabs, bindSearch, rowClickHandler, refreshOpenTournamentTables, bindDetailClicks, loadMaster, cloneWithGlobalRanks, rerankByGlobalEnsemble };
+export { getQueryParam, smallGray, scoreColumns, createTable, applyState, bindMethodTabs, bindSearch, searchById, rowClickHandler, refreshOpenTournamentTables, bindDetailClicks, loadMaster, cloneWithGlobalRanks, rerankByGlobalEnsemble };

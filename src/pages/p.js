@@ -23,6 +23,11 @@ import SPSPPlayerCard from '../../site/js/player_card.js';
 import SpspLatinName from '../../site/js/latin_name.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
+import SpspLive from '../../site/js/live.js';
+import SpspReportNotice from '../../site/js/report_notice.js';
+import SpspLivePredict from '../../site/js/live_predict.js';
+import SpspLiveBrowser from '../../site/js/live_browser.js';
+import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
@@ -104,8 +109,63 @@ function buildLatestResultSection() {
   if (!PLAYER || !META) return;
   const tours = (PLAYER && PLAYER.tournaments) || [];
   if (!tours.length) return;
-  const t = tours.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  const latest = tours.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  // 下位クラスに出た大会は同じ大会の本戦の行もある: 本戦 / クラスをタブで切り替える (本戦が先、最初は本戦)
+  const pid = latest.parent_event_id != null ? latest.parent_event_id : latest.event_id;
+  const sibs = pid == null ? [latest]
+    : tours.filter(x => x.event_id === pid || x.parent_event_id === pid)
+      .sort((a, b) => (a.parent_event_id != null ? 1 : 0) - (b.parent_event_id != null ? 1 : 0));
+  renderLatestResultCard(sibs.length > 1 ? sibs[0] : latest, sibs.length > 1 ? sibs : []);
+}
 
+/** @param {PTour} t 表示する行 @param {PTour[]} tabs 同じ大会の本戦・クラスの行 (タブが要らなければ空) */
+function renderLatestResultCard(t, tabs) {
+  const lrBody = document.getElementById('latestres-body');
+  if (lrBody) {
+    lrBody.dataset.rc = rcKey(tabs, { latest: true });
+    lrBody.innerHTML = resultCardHtml(t, tabs, { latest: true });
+    SpspTourIcons.fill(lrBody);
+  }
+  const lrDate = document.getElementById('latestres-date');
+  if (lrDate) lrDate.textContent = t.date || '';
+  const lrSection = document.getElementById('latestres-section');
+  if (lrSection) lrSection.style.display = '';
+}
+
+// 大会結果のカード (最新の大会結果と出場履歴で同じもの)。同じ大会の本戦・下位クラスはタブで切り替える。
+// タブの切り替え・パフォーマンスの「?」は setupResultCards の委譲で拾う。カードの外枠に data-rc (タブの行の登録キー) を付ける
+/** @type {Map<string, { tabs: PTour[], opts: { latest?: boolean, date?: boolean } }>} */
+const RC_TABS = new Map();
+let rcSeq = 0;
+/** @param {PTour[]} tabs @param {{ latest?: boolean, date?: boolean }} opts */
+function rcKey(tabs, opts) {
+  const k = String(++rcSeq);
+  RC_TABS.set(k, { tabs, opts });
+  return k;
+}
+function setupResultCards() {
+  document.addEventListener('click', e => {
+    const el = /** @type {Element} */ (e.target);
+    const help = el.closest('.ph-help');
+    if (help) {
+      const cap = help.closest('.tour-group') && /** @type {HTMLElement | null} */ (/** @type {Element} */ (help.closest('.tour-group')).querySelector('.lr-cap'));
+      if (cap) cap.style.display = cap.style.display === 'none' ? '' : 'none';
+      return;
+    }
+    const tab = /** @type {HTMLElement | null} */ (el.closest('[data-lr-tab]'));
+    const wrap = /** @type {HTMLElement | null} */ (tab && tab.closest('[data-rc]'));
+    if (!tab || !wrap) return;
+    const reg = RC_TABS.get(/** @type {string} */ (wrap.dataset.rc));
+    const x = reg && reg.tabs[parseInt(/** @type {string} */ (tab.dataset.lrTab))];
+    if (!reg || !x || tab.classList.contains('active')) return;
+    wrap.innerHTML = resultCardHtml(x, reg.tabs, reg.opts);
+    SpspTourIcons.fill(wrap);
+  });
+}
+
+/** @param {PTour} t 表示する行 @param {PTour[]} tabs 同じ大会の本戦・クラスの行 (タブが要らなければ空)
+ *  @param {{ latest?: boolean, date?: boolean }} opts latest = 最新の大会結果 (「?」に id を付ける)、date = 日付を大会名の前に出す (出場履歴) @returns {string} */
+function resultCardHtml(t, tabs, opts) {
   // ---- パフォーマンス (build がエクスポートする perf_rank をそのまま使う) ----
   const perf = perfInfoOf(t);
 
@@ -115,51 +175,56 @@ function buildLatestResultSection() {
   const lcTag = playerTourTag(t, 'lc');
   const stTag = playerTourTag(t, 'status');
   const rsTag = playerTourTag(t, 'rs');
-  // 当時全国 → 大会後。改善時のみ (+N) を付ける (悪化時は注記なし)
+  // 集計対象バッジ (この選手にとって評価に使われた大会か)
+  const counted = !!(t.bt_used || (t.tjpr_lv || 0) > 0 || (t.tjpr_raw || 0) > 0);
+  // 当時全国 → 大会後 (集計対象の大会だけ。集計対象外は順位が動かないので出さない)。改善時のみ (+N) を付ける (悪化時は注記なし)
   let zenHtml = '';
-  if (t.pretour_ranks && t.pretour_ranks.ensemble != null) {
+  if (counted && t.pretour_ranks && t.pretour_ranks.ensemble != null) {
     const pre = t.pretour_ranks.ensemble;
     const d = t.rank_delta_ensemble;
     zenHtml = `<div class="lr-zen">${i18n('common.national')} <b>#${pre}</b>${d != null ? ` → <b>#${pre - d}</b>` : ''}${
       /** @type {number} */ (d) > 0 ? ` <span class="lr-zen-up">(+${d})</span>` : ''}</div>`;
   }
-  // 集計対象バッジ (この選手にとって評価に使われた大会か)
-  const counted = !!(t.bt_used || (t.tjpr_lv || 0) > 0 || (t.tjpr_raw || 0) > 0);
   const cntTag = counted
     ? `<span class="lr-badge ok">${i18n('player.counted')}</span>`
     : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
   // 順位の色: 1-3位 = 金銀銅, 4-8位 (トップ8) = ピンク
   const placeCls = t.place === 1 ? 'gold' : t.place === 2 ? 'silver' : t.place === 3 ? 'bronze'
     : (t.place != null && t.place <= 8) ? 'top8' : '';
-  let hero = `<span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
-    (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '');
+  // 最新の大会結果と出場履歴でカードの中身の位置を揃える: アイコン・順位・SPR・パフォーマンスはそれぞれ幅の決まった箱 (無いときも空の箱)
+  let hero = `<span class="ph-pl"><span class="ph-place ${placeCls}">${t.is_dq ? 'DQ' : (t.place != null ? t.place + `<span class="ph-i">${i18n('player.place_unit', { n: t.place })}</span>` : '—')}</span>` +
+    (t.nent != null ? `<span class="ph-n">/${t.nent}</span>` : '') + `</span>`;
   // SPR は順位の横に大きく (ラベル+値+seed のスタック)
   if (!t.is_dq && t.spr != null) {
     const cls = t.spr > 0 ? 'pos' : (t.spr < 0 ? 'neg' : 'dim');
     const txt = t.spr > 0 ? `+${t.spr}` : (t.spr < 0 ? `${t.spr}` : '±0');
     hero += `<span class="ph-sep"></span>` +
-      `<span class="ph-perf"><span class="ph-perf-lbl">SPR</span>` +
+      `<span class="ph-perf ph-sprbox"><span class="ph-perf-lbl">SPR</span>` +
       `<span class="ph-spr ${cls}">${txt}</span>` +
       (t.seed != null ? `<span class="ph-perf-sub">seed ${t.seed}</span>` : '') +
       `</span>`;
+  } else {
+    hero += `<span class="ph-sep"></span><span class="ph-perf ph-sprbox"></span>`;
   }
   // パフォーマンスも同じ行 (ラベルを数値の上にスタック)
   let capHtml = '';
   if (perf) {
     hero += `<span class="ph-sep"></span>` +
-      `<span class="ph-perf">` +
+      `<span class="ph-perf ph-pfbox">` +
       `<span class="ph-perf-lbl">${i18n('player.performance')}` +
-      `<button type="button" class="ph-help" id="ph-help-btn" aria-label="${i18n('player.performance_help_aria')}">?</button></span>` +
+      `<button type="button" class="ph-help"${opts.latest ? ' id="ph-help-btn"' : ''} aria-label="${i18n('player.performance_help_aria')}">?</button></span>` +
       `<span class="ph-perf-val"><span class="ph-rank"><span class="ph-lbl">${i18n('common.national')}</span>#${perf.eq}<span class="ph-lbl">${i18n('player.equivalent')}</span></span>` +
       `<span class="lv-pill lv-${perf.eqLv}">Lv${perf.eqLv}${perf.lvSfx}</span></span>` +
       `</span>`;
-    capHtml = `<div class="lr-cap" id="lr-cap" style="display:none">` +
+    capHtml = `<div class="lr-cap"${opts.latest ? ' id="lr-cap"' : ''} style="display:none">` +
       i18n('player.performance_help') +
       `</div>`;
+  } else {
+    hero += `<span class="ph-sep"></span><span class="ph-perf ph-pfbox"></span>`;
   }
   // 順位評価 / 直対評価 chips (= 出場大会一覧の行と同じ表記、▶ 展開の中)
-  const ELO_PER_UNIT2 = (META.params && META.params.ELO_PER_UNIT) || 29.48;
-  const TJPR_SCALE2 = (META.params && META.params.TJPR_ELO_SCALE) || 17.5;
+  const ELO_PER_UNIT2 = (META && META.params && META.params.ELO_PER_UNIT) || 29.48;
+  const TJPR_SCALE2 = (META && META.params && META.params.TJPR_ELO_SCALE) || 17.5;
   const w = (t.tjpr_w || 0) * TJPR_SCALE2;
   const base = (t.tjpr_raw || 0) * TJPR_SCALE2;
   const tjprChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.tjpr')}</span>${
@@ -177,32 +242,23 @@ function buildLatestResultSection() {
 
   const dataPid = (t.parent_event_id != null) ? t.parent_event_id : (t.event_id != null ? t.event_id : '');
   const isClass = t.parent_event_id != null ? '1' : '0';
-  const lrBody = document.getElementById('latestres-body');
-  if (lrBody) lrBody.innerHTML =
+  const tabsHtml = tabs.length ? `<div class="lr-tabs">${tabs.map((x, i) =>
+    `<div class="lr-tab${x === t ? ' active' : ''}" data-lr-tab="${i}">${x.parent_event_id != null
+      ? escapeHtml(i18n('player.latest.tab_class', { c: x.class_letter || '' })) : i18n('player.latest.tab_main')}</div>`).join('')}</div>` : '';
+  const dateHtml = opts.date && t.date ? `<span class="rc-date">${escapeHtml(t.date)}</span>` : '';
+  return tabsHtml +
     `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${t.seed != null ? t.seed : ''}">
       <div class="tour-item tour-item-nohover tour-clickable latestres-card" style="border-bottom:none">
-        <div class="lr-top">${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
-        <div class="perf-hero">${hero}<span class="chevron lr-chev">▶</span></div>
+        <div class="lr-top">${dateHtml}${link}${cntTag}${resTag}${lcTag}${rsTag}${stTag}</div>
+        <div class="perf-hero"><span class="lr-ico">${SpspTourIcons.html(t.event_id != null ? t.event_id : t.parent_event_id, 'lr-icon')}</span>${hero}<span class="chevron lr-chev">▶</span></div>
         ${capHtml}
         ${zenHtml}
       </div>
       <div class="lr-detail">
-        <div class="v-stats lr-stats">${tjprChip}${btChip}</div>
         <div class="tour-matches"></div>
+        <div class="v-stats lr-stats">${tjprChip}${btChip}</div>
       </div>
     </div>`;
-  const lrDate = document.getElementById('latestres-date');
-  if (lrDate) lrDate.textContent = t.date || '';
-  const lrSection = document.getElementById('latestres-section');
-  if (lrSection) lrSection.style.display = '';
-  const helpBtn = document.getElementById('ph-help-btn');
-  if (helpBtn) {
-    helpBtn.addEventListener('click', e => {
-      e.stopPropagation();  // カード展開 (対戦表示) を発火させない
-      const cap = document.getElementById('lr-cap');
-      if (cap) cap.style.display = cap.style.display === 'none' ? '' : 'none';
-    });
-  }
 }
 
 // ライバルプレイヤー: 4指標ごとに全国順位の近い上下2人 (カテゴリ間で重複なし)。
@@ -226,6 +282,14 @@ async function buildRivalsSection() {
   ))).filter(r => r.status === 'fulfilled').map(r => r.value);
   // 現在の全国順位は大会 JSON には無い (全選手の現在順位から引く。data/views/ があれば players_index.json、無ければ players_current.json)
   const CUR = await SPSPPlayerData.loadRanks(SPSP.data).catch(() => null);
+  // 計測中 (provisional) の選手はライバルに出さない。data/views/ があれば players_index.json の prov、無ければ players_current.json の metadata
+  const vIndex = await SPSPViews.index().catch(() => null);
+  /** @param {number} uid */
+  const isProv = uid => {
+    if (vIndex) { const r = vIndex.get(uid); return !!(r && r.prov); }
+    const p = SPSPPlayerData.currentOf(CUR, uid);
+    return !!(p && p.metadata && p.metadata.provisional);
+  };
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const info = new Map();   // uid -> {display, rank} (新しい大会優先)
   /** @type {Map<number, number>} */
@@ -253,7 +317,7 @@ async function buildRivalsSection() {
   function pickByScore(counts, used) {
     const cands = [...counts.entries()]
       .map(([uid, n]) => /** @type {RivalCand & { n: number }} */ (Object.assign({ uid, n }, info.get(uid) || {})))
-      .filter(c => c.rank && !used.has(c.uid))
+      .filter(c => c.rank && !used.has(c.uid) && !isProv(c.uid))
       .map(c => Object.assign(c, { score: c.n * proximity(/** @type {number} */ (c.rank)) }))
       .sort((a, b) => b.score - a.score);
     const my = /** @type {number} */ (myRank);   // 関数宣言 (巻き上げ) の中では上の guard の絞り込みが効かない
@@ -273,7 +337,7 @@ async function buildRivalsSection() {
       const e = PLAYER_SUBRANKS[u][kind];
       if (!e || (kind === 'char' ? e.id : e.name) !== key) continue;
       const uid = parseInt(u, 10);
-      if (used.has(uid)) continue;
+      if (used.has(uid) || isProv(uid)) continue;
       pool.push({ uid, r: e.rank });
     }
     return pool.filter(p => p.r < mine.rank).sort((a, b) => b.r - a.r).slice(0, 2)
@@ -297,7 +361,6 @@ async function buildRivalsSection() {
   // subrank 系の 名前 + 全国順位: data/views/ があれば players_index.json、無ければ players/<uid>.json から取得 (最大8件)
   /** @type {Map<number, { display: string, rank: number | null | undefined }>} */
   const fmap = new Map();
-  const vIndex = await SPSPViews.index().catch(() => null);
   if (vIndex) {
     for (const c of cats[2].items.concat(cats[3].items)) {
       const r = vIndex.get(c.uid);
@@ -314,13 +377,10 @@ async function buildRivalsSection() {
     if (f) { c.display = f.display; c.rank = f.rank; }
   });
   // ---- 描画: 各カテゴリ 順位昇順 + 自分の行を挟む ----
-  // 横幅が足りないのでチームタグ (例 "ZETA | あcola" の ZETA) は省略し、
+  // 横幅が足りないのでチームタグ (例 "ZETA | あcola" の ZETA) と「/name」は省略し (直対・ランキングと同じ js/format.js shortName)、
   // 代わりにメインキャラ絵文字を名前の前に付ける
   /** @param {string | undefined} s */
-  const stripTag = s => {
-    const i = (s || '').lastIndexOf('|');
-    return i >= 0 ? /** @type {string} */ (s).slice(i + 1).trim() : s;
-  };
+  const stripTag = s => SPSPFormat.shortName(s || '');
   /** @param {number} uid */
   const emojiOf = uid => { const e = charEmojiOf(uid); return e ? e + ' ' : ''; };
   const boxes = cats.map(cat => {
@@ -346,58 +406,159 @@ async function buildRivalsSection() {
   if (rivalsSection) rivalsSection.style.display = '';
 }
 
-// スコアシミュレーション: 次に出場予定の集計対象大会
-// (エントラント登録済 & 現 Lv の加算対象) を出す。
-async function buildYosouSection() {
-  if (!UID || !META) return;
-  const yosouLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById('yosou-link'));
-  if (yosouLink) yosouLink.href = SPSP.langRoot + 'sim/?uid=' + UID;
-  // 欄 (見出し・大会・スコア予想のボタン) は次の集計対象大会があるときだけ出す
-  const yosouSection = document.getElementById('yosou-section');
+/** data/upcoming_entrants.json (参加予定の大会。次の集計対象大会と予選プールの欄で共有して 1 回だけ読む) @type {Promise<any> | null} */
+let UPCOMING_P = null;
+function loadUpcoming() {
+  // プレビューの見本 (?live=sample、spsp.games 以外): 速報の見本と同じ場所の upcoming_entrants.json (予選プールの確認用)
+  const root = SpspLive.liveRoot();
+  const url = root.indexOf('/live/sample/') >= 0 ? root + 'upcoming_entrants.json' : SPSP.data + 'data/upcoming_entrants.json';
+  return UPCOMING_P || (UPCOMING_P = fetch(url, { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); }));
+}
+
+// 参加予定の大会: 出場登録している開催前の大会を近い順に 5 件ずつ (出場履歴と同じページ送り)。最初は大会名と集計対象のバッジだけ、
+// 押すと日付・人数と、集計対象ならスコア予想のボタン。start.gg でトーナメントとシードが公開されている大会 (smash_database が
+// bracket と entrants[].seed / pg を付ける) は、プール・自分のシードと「プールのプレイヤー」(同じプールの人を
+// シード順に、メインキャラの絵文字付き。24 人ずつページ送り) も
+const POOL_PAGE = 24;
+/** 予定の開始時刻を過ぎてもまだ参加予定の欄に出す長さ (start.gg で始まって速報に出るまでのつなぎ) */
+const STARTED_GRACE_MS = 3 * 3600 * 1000;
+/** シード (プール) が出る前でも参加者全員を出す大会の人数の上限 */
+const ENTRANTS_LIST_MAX = 64;
+/** start.gg のシードが登録順のまま (主催者がまだ並べていない): 参加者の並び (start.gg は新しい登録から返す) とシードが
+ * ちょうど逆順。公開設定がオンでもシードは出ていない扱い (11-05) @param {any} ev */
+const unseeded = (ev) => {
+  const s = (ev.entrants || []).map((/** @type {any} */ x) => x.seed);
+  return s.length >= 2 && s.every((/** @type {any} */ v, /** @type {number} */ i) => typeof v === 'number' && (i === 0 || v === s[i - 1] - 1));
+};
+/** 速報 (live/<地域>/index.json) でこの人が出ている部門の id。読めなければ空 @returns {Promise<Set<string>>} */
+async function loadLiveIds() {
+  const root = SpspLive.liveRoot();
+  if (!root) return new Set();
   try {
-    const up = await fetch(SPSP.data + 'data/upcoming_entrants.json', { cache: 'no-cache' })
-      .then(r => { if (!r.ok) throw new Error(/** @type {any} */ (r.status)); return r.json(); });
-    const lv = (PLAYER && PLAYER.scores && PLAYER.scores.shared_cascade_lv) || 1;
-    // 集計対象の規模条件は meta.json の実効フィルタ (params.LV_FILTERS_EFFECTIVE) から。無い古い meta では従来の定数
-    const _eff = (META.params && META.params.LV_FILTERS_EFFECTIVE) || null;
-    const MIN_NENT_GT = [0, 1, 2, 3, 4, 5].map(l => _eff ? ((_eff[String(l)] || {}).min_nent_gt || 0) : [0, 0, 8, 24, 32, 48][l]);
-    /** @param {any} ev */
-    const passes = ev => {
-      const nent = ev.num_entrants || (ev.entrants && ev.entrants.length) || 0;
-      if (ev.is_non_serious || nent < 5) return false;  // 全 Lv 共通の除外
-      if (lv >= 2 && nent <= MIN_NENT_GT[lv]) return false;
-      if (lv >= 3 && (!ev.is_weekend || ev.is_restricted || ev.is_lower_class)) return false;
-      return true;
-    };
-    const eids = (up.by_uid[String(UID)] || []).map(String)
-      .filter(eid => up.events[eid] && up.events[eid].start_at * 1000 > Date.now() && passes(up.events[eid]))
-      .sort((a, b) => up.events[a].start_at - up.events[b].start_at);
-    if (!eids.length) return;
-    if (yosouSection) yosouSection.style.display = '';
-    const ev = up.events[eids[0]];
+    const r = await fetch(root + 'index.json', { cache: 'no-cache' });
+    const ix = r.ok ? await r.json() : null;
+    return new Set((((ix && ix.players) || {})[String(UID)] || []).map(String));
+  } catch (e) {
+    return new Set();
+  }
+}   // プールのプレイヤーのページ送りの 1 ページの人数
+async function buildUpcomingSection() {
+  if (!UID || !META) return;
+  const sec = document.getElementById('yosou-section');
+  if (!sec) return;
+  let up;
+  try { up = await loadUpcoming(); } catch (e) { return; }   // 予定のデータが読めなければ欄ごと出さない
+  const lv = (PLAYER && PLAYER.scores && PLAYER.scores.shared_cascade_lv) || 1;
+  // 集計対象の規模条件は meta.json の実効フィルタ (params.LV_FILTERS_EFFECTIVE) から。無い古い meta では従来の定数
+  const _eff = (META.params && META.params.LV_FILTERS_EFFECTIVE) || null;
+  const MIN_NENT_GT = [0, 1, 2, 3, 4, 5].map(l => _eff ? ((_eff[String(l)] || {}).min_nent_gt || 0) : [0, 0, 8, 24, 32, 48][l]);
+  /** @param {any} ev */
+  const passes = ev => {
+    const nent = ev.num_entrants || (ev.entrants && ev.entrants.length) || 0;
+    if (ev.is_non_serious || nent < 5) return false;  // 全 Lv 共通の除外
+    if (lv >= 2 && nent <= MIN_NENT_GT[lv]) return false;
+    if (lv >= 3 && (!ev.is_weekend || ev.is_restricted || ev.is_lower_class)) return false;
+    return true;
+  };
+  const now = Date.now();
+  // 予定の時刻を過ぎても start.gg で始まるまでは速報 (参加中の大会) に出ないので、STARTED_GRACE_MS のあいだは
+  // ここに残す (遅れて始まる大会がどちらの欄からも消えていた、11-04)。速報に出たらここからは外す
+  const live = await loadLiveIds();
+  const items = ((up.by_uid || {})[String(UID)] || []).map(String)
+    .filter((/** @type {string} */ eid) => up.events[eid] && up.events[eid].start_at * 1000 > now - STARTED_GRACE_MS && !live.has(eid))
+    .map((/** @type {string} */ eid) => ({ eid, ev: up.events[eid], counted: passes(up.events[eid]) }))
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => a.ev.start_at - b.ev.start_at);
+  if (!items.length) return;
+  const [upList, CUR, I] = await Promise.all([
+    fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null),   // 大会の start.gg の slug
+    SPSPPlayerData.loadRanks(SPSP.data).catch(() => null),
+    SPSPViews.index().catch(() => null),
+  ]);
+  const hasPage = CUR ? (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(CUR, id) : null;
+  /** 全国順位 (無ければ null)。シードが出る前の参加者一覧の並び @param {number} id */
+  const rankOf = (id) => { const r = CUR ? SPSPPlayerData.currentRank(CUR, id) : null; return typeof r === 'number' ? r : null; };
+  /** @type {Map<number, string>} */
+  const slugOf = new Map(((upList && upList.tournaments) || []).map((/** @type {any} */ x) => [x.tournament_id, x.tournament_slug]));
+  // キャラの絵文字: charEmojiOf は全国順位のある人だけ (character_index の main_by_char)。計測中の人は players_index の char 列から
+  const emojiOf = (/** @type {number} */ u) => {
+    const em = charEmojiOf(u);
+    if (em) return em;
+    const r = I && I.get(u);
+    const c = r && r.char != null && CHAR_EMOJI ? CHAR_EMOJI[String(r.char)] : null;
+    return (c && c.emoji) || '';
+  };
+  /** プレイヤーの一覧 (プールのプレイヤー / 参加者)。POOL_PAGE 人ずつページ送り、見出しの右にページ送り
+   * (一覧より上なので、ページで人数・行数が変わってもボタンの位置は動かない)。
+   * showSeed=false: シードが出る前の参加者一覧 (start.gg の仮の番号は参加順なので、シード順に見えないよう出さない)
+   * @param {any[]} members @param {boolean} [showSeed] */
+  const memberList = (members, showSeed = true) => {
+    const pages = Math.ceil(members.length / POOL_PAGE);
+    const chips = members.map((/** @type {any} */ x, /** @type {number} */ k) => {
+      const em = x.uid != null ? emojiOf(x.uid) : '';
+      const name = escapeHtml(SPSPFormat.shortName(x.tag || ''));
+      const nameHtml = x.uid != null && x.uid !== UID && hasPage && hasPage(x.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, x.uid, name) : name;
+      const pg = Math.floor(k / POOL_PAGE);
+      return `<span class="pe-p${x.uid === UID ? ' me' : ''}" data-page="${pg}"${pg ? ' hidden' : ''}>${showSeed && x.seed != null ? `<span class="s">#${x.seed}</span>` : ''}${em ? em + ' ' : ''}${nameHtml}</span>`;
+    }).join('');
+    const pager = pages > 1 ? `<div class="pager pe-pager" data-pages="${pages}"><button type="button" class="page-btn" data-act="prev" disabled aria-label="${i18n('pager.prev')}">◀</button>` +
+      `<span class="page-info">1 / ${pages}</span><button type="button" class="page-btn" data-act="next" aria-label="${i18n('pager.next')}">▶</button></div>` : '';
+    return `<div class="pe-pool">${pager ? `<div class="pe-pool-h"><span></span>${pager}</div>` : ''}<div class="pe-list">${chips}</div></div>`;
+  };
+  /** @param {{ eid: string, ev: any, counted: boolean }} it */
+  const SEP = '<span class="pe-sep">|</span>';   // 区切り (細く。全角の「・」は幅を取る)
+  const itemHtml = ({ eid, ev, counted }) => {
     const d = new Date(ev.start_at * 1000);
     const wd = new Intl.DateTimeFormat(SPSPI18n.lang, { weekday: 'short' }).format(d);   // 表示言語の曜日 (ja: 日 / en: Sun)
-    const yosouHead = document.getElementById('yosou-head');
-    if (yosouHead) yosouHead.style.display = '';
-    const t = document.getElementById('yosou-tour');
-    if (!t) return;
-    t.style.display = '';
-    // 1 行目 = 大会名、2 行目 = 日付・人数
-    const meta2 = `${d.getMonth() + 1}/${d.getDate()}(${wd}) ・ ` +
-      i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' });
-    const draw = (/** @type {string} */ nameHtml) => {
-      t.innerHTML = `<div class="yt-name">${nameHtml}</div><div class="yt-meta">${escapeHtml(meta2)}</div>`;
-    };
-    draw(escapeHtml(ev.tournament_name));
-    // 大会名は start.gg の大会のホームへのリンク (開催予定の一覧 upcoming.json の大会の slug から)
-    const upList = await fetch(SPSP.data + 'data/upcoming.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
-    const tour = upList && Array.isArray(upList.tournaments)
-      ? upList.tournaments.find((/** @type {any} */ x) => x.tournament_id === ev.tournament_id) : null;
-    const slug = (tour && tour.tournament_slug) || '';
-    if (slug) {
-      draw(`<a href="https://www.start.gg/${escapeHtml(slug)}" target="_blank" rel="noopener">${escapeHtml(ev.tournament_name)}</a>`);
+    const badge = counted ? `<span class="lr-badge ok">${i18n('player.counted')}</span>` : `<span class="lr-badge ng">${i18n('player.not_counted')}</span>`;
+    const me = (ev.entrants || []).find((/** @type {any} */ x) => x.uid === UID);
+    const pool = ev.bracket && !unseeded(ev) && me && me.pg != null ? (ev.bracket.pools || {})[String(me.pg)] || {} : null;
+    // 1 行目 (いつも出す): 大会名・集計対象のバッジ・スコア予想 (集計対象のとき)。大会名は開くと省略せずに折り返す
+    const sim = counted ? `<a class="pe-sim" href="${escapeHtml(SPSP.langRoot + 'sim/?uid=' + UID + '&eid=' + encodeURIComponent(eid))}">${i18n('player.simulate')}</a>` : '';
+    // 開いたとき: 日付・人数・フェーズ・プール・自分のシード・リンク、プールのプレイヤー (全員。POOL_PAGE 人ずつページ送り)
+    /** @type {string[]} */
+    const parts = [`${d.getMonth() + 1}/${d.getDate()}(${wd})`,
+      escapeHtml(i18n('player.upcoming.entrants', { n: (ev.entrants && ev.entrants.length) || ev.num_entrants || '?' }))];
+    let list = '';
+    if (pool) {
+      const poolTxt = Object.keys(ev.bracket.pools || {}).length > 1 && pool.ident ? i18n('player.pool.pool', { id: pool.ident }) : '';
+      parts.push(escapeHtml(ev.bracket.phase || '') + (poolTxt ? ' ' + escapeHtml(poolTxt) : ''));
+      if (me.seed != null) parts.push(i18n('player.pool.seed', { n: me.seed }));
+      const members = (ev.entrants || []).filter((/** @type {any} */ x) => x.pg === me.pg)
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+      list = memberList(members);
+    } else if (ev.entrants && ev.entrants.length && ev.entrants.length <= ENTRANTS_LIST_MAX) {
+      // シードが出る前: 小さい大会は参加者全員 (全国順位の順、順位の無い人は start.gg の順で後ろ)
+      const members = ev.entrants.map((/** @type {any} */ x, /** @type {number} */ k) => ({ x, k, r: x.uid != null ? rankOf(x.uid) : null }))
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.r ?? 1e9) - (b.r ?? 1e9) || a.k - b.k).map((/** @type {any} */ o) => o.x);
+      list = memberList(members, false);
     }
-  } catch (e) { /* 予定のデータが読めなければ欄ごと出さない */ }
+    // リンク: トーナメントが公開されていればそのプールのブラケット、無ければ大会のホーム
+    const slug = slugOf.get(ev.tournament_id) || '';
+    const href = pool && pool.url ? pool.url : (slug ? 'https://www.start.gg/' + slug : '');
+    if (href) parts.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${pool && pool.url ? i18n('player.pool.view') : i18n('player.upcoming.view_tournament')} ↗</a>`);
+    const body = `<div class="pe-body"><div class="pe-meta">${parts.join(SEP)}</div>${list}</div>`;
+    return `<details class="pool-ev"><summary class="pe-name"><span class="pe-t">${escapeHtml(ev.tournament_name || '')}</span>` +
+      `${badge}${sim}</summary>${body}</details>`;
+  };
+  sec.style.display = '';   // ページ送りが高さを測るので先に出す
+  SPSPPager.setupPaginated(items, 'upcoming-list', 'upcoming-pager', (/** @type {any[]} */ arr) => arr.map(itemHtml).join(''), '');
+  // プールのプレイヤーのページ送り (表示を切り替えるだけ。描き直さない)
+  const listEl = document.getElementById('upcoming-list');
+  if (listEl) listEl.addEventListener('click', (e) => {
+    const b = /** @type {HTMLButtonElement | null} */ (/** @type {Element} */ (e.target).closest('.pe-pager .page-btn'));
+    if (!b) return;
+    const pager = /** @type {HTMLElement} */ (b.closest('.pe-pager'));
+    const pool = /** @type {HTMLElement} */ (pager.closest('.pe-pool'));
+    const pages = parseInt(pager.dataset.pages || '1', 10);
+    const cur = Math.max(0, Math.min(pages - 1, parseInt(pager.dataset.cur || '0', 10) + (b.dataset.act === 'next' ? 1 : -1)));
+    pager.dataset.cur = String(cur);
+    pool.querySelectorAll('.pe-p').forEach(c => { /** @type {HTMLElement} */ (c).hidden = /** @type {HTMLElement} */ (c).dataset.page !== String(cur); });
+    const info = pager.querySelector('.page-info');
+    if (info) info.textContent = `${cur + 1} / ${pages}`;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="prev"]')).disabled = cur === 0;
+    /** @type {HTMLButtonElement} */ (pager.querySelector('[data-act="next"]')).disabled = cur === pages - 1;
+  });
 }
 
 /** @type {PMeta | null} */
@@ -572,8 +733,8 @@ function fmtPlace(place) {
   return `<span class="place ${cls}">${place}</span>`;
 }
 
-/** @param {PTour} t @param {string} valueHtml @returns {string} */
-function tournamentItem(t, valueHtml) {
+/** @param {PTour} t @param {string} valueHtml @param {boolean} [withIcon] 大会アイコン (出場履歴だけ。js/tour_icons.js) @returns {string} */
+function tournamentItem(t, valueHtml, withIcon) {
   const eid = t.event_id;
   const link = eid ? SPSPLinks.tournamentLink(SPSP.langRoot, eid, escapeHtml(t.name || '')) : escapeHtml(t.name || '');
   // place は「順位/参加人数」表記 (CSS で縦並びに改行)
@@ -588,8 +749,9 @@ function tournamentItem(t, valueHtml) {
   const stTag = playerTourTag(t, 'status');
   const rsTag = playerTourTag(t, 'rs');
   return `
-    <div class="tour-item">
+    <div class="tour-item${withIcon ? ' has-icon' : ''}">
       <span class="date-top">${t.date}</span>
+      ${withIcon ? `<span class="tour-ico">${SpspTourIcons.html(eid != null ? eid : t.parent_event_id)}</span>` : ''}
       <span class="place">${placeHtml}</span>
       <div class="meta">
         ${link}${resTag}${lcTag}${rsTag}${stTag}
@@ -1067,63 +1229,6 @@ function render() {
     return passesFilterByEid(m.event_id);
   }
 
-  /** @param {PTour[]} items */
-  function renderContribs(items) {
-    return items.map(t => {
-      const w = (t.tjpr_w || 0) * TJPR_SCALE;
-      const base = (t.tjpr_raw || 0) * TJPR_SCALE;
-      return tournamentItem(t,
-        `<span style="color:#16a34a">+${w.toFixed(1)}</span>` +
-        `<br><span style="color:#9ca3af;font-size:11px">(${base.toFixed(1)})</span>`);
-    }).join('');
-  }
-  function renderTopContribs() {
-    if (!PLAYER) return;
-    const tcAll = (PLAYER.top_tjpr_contribs || []).filter(t => passesFilter(t));
-    setupPaginated(tcAll, 'top-contribs', 'top-contribs-pager',
-      arr => renderContribs(arr),
-      i18n('player.empty.top_tjpr'));
-  }
-
-  // Top BT gains — per-match format: vs opponent at tournament
-  /** @param {PMatch} m */
-  function matchItem(m) {
-    const oppLink = m.opp_uid
-      ? SPSPLinks.playerLink(SPSPLinks.SELF, m.opp_uid, escapeHtml(m.opp_display || ''), ' style="color:#dc2626;text-decoration:none;font-weight:500"')
-      : escapeHtml(m.opp_display || '');
-    const tName = m.event_id
-      ? SPSPLinks.tournamentLink(SPSP.langRoot, m.event_id, escapeHtml(m.tournament_name || ''), ' style="color:#dc2626;text-decoration:none"')
-      : escapeHtml(m.tournament_name || '');
-    // per-match の rate 変化は内部レート (current) のみ
-    const btD = (m.bt_internal_d != null ? m.bt_internal_d : (m.bt_d || 0));
-    const str = `${btD >= 0 ? '+' : ''}${(btD * ELO_PER_UNIT).toFixed(1)}`;
-    const color = btD > 0 ? '#16a34a' : (btD < 0 ? '#2563eb' : '#9ca3af');
-    // 左 place 列: 上に score (3-2 等、自分が左)、下に bracket (W.Top64 等).
-    const scoreStr = (m.p_score != null && m.o_score != null) ? `${m.p_score}-${m.o_score}` : '';
-    const bracketStr = compactBracketLabel(m.global_bracket_label, m.round_text, m.bracket_type);
-    const placeHtml = `
-      <span class="place" style="font-size:13px">
-        ${scoreStr ? `<span class="num" style="font-size:14px">${scoreStr}</span>` : ''}
-        ${bracketStr ? `<span class="frac">${bracketStr}</span>` : ''}
-      </span>`;
-    return `
-      <div class="tour-item">
-        <span class="date-top">${m.date}</span>
-        ${placeHtml}
-        <div class="meta">
-          vs ${oppLink}
-          <br><span class="date date-inline">${m.date}</span> · ${tName}
-        </div>
-        <div class="v" style="text-align:right;color:${color}">${str}</div>
-      </div>`;
-  }
-  function renderTopBT() {
-    if (!PLAYER) return;
-    const items = (PLAYER.top_bt_gains || []).filter(passesFilterEntry);
-    setupPaginated(items, 'top-bt', 'top-bt-pager',
-      arr => arr.map(matchItem).join(''),
-      i18n('player.empty.top_bt'));
-  }
   // SPR item: UF と同じ「左 place 列に +N SPR」スタイル.
   /** @param {PTour} t */
   const renderSprItem = t => {
@@ -1223,7 +1328,29 @@ function render() {
     const header = (pName || pSeed != null)
       ? `<div class="match-header">${escapeHtml(pName)}${pSeed != null ? `<span class="seed">#${pSeed}</span>` : ''}</div>`
       : '';
-    return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    // フェーズが 2 つ以上なら、フェーズの境目に横線 (新しいフェーズが上)。線には上のフェーズ (進んだ先) の名前で「◯◯ 進出！」。
+    // フェーズの順 = フェーズの大きさが小さいほど後。大きさは名前の「TOP N」、無ければそのフェーズの試合の global_top_x の最大
+    // (総当たりなどで無ければ一番前)。start.gg の phaseOrder は進む順とは限らず、それを使う global_top_x もずれることがあるので名前を先に見る
+    /** @type {Map<string, PMatch[]>} */
+    const byPhase = new Map();
+    for (const m of sorted) {
+      const k = m.phase_name || '';
+      if (!byPhase.has(k)) byPhase.set(k, []);
+      /** @type {PMatch[]} */ (byPhase.get(k)).push(m);
+    }
+    if (byPhase.size < 2) return header + sorted.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('');
+    /** @param {string} name @param {PMatch[]} g */
+    const size = (name, g) => {
+      const n = name.match(/TOP\s*(\d+)/i);
+      return n ? Number(n[1]) : Math.max(...g.map(m => (m.global_top_x != null ? m.global_top_x : Infinity)));
+    };
+    const groups = [...byPhase.entries()].sort((a, b) => (size(a[0], a[1]) - size(b[0], b[1])) || 0);   // Infinity 同士は NaN
+    return header + groups.map(([name, g], i) =>
+      g.map(m => _renderMatchRow(m, pName, pSeed, noUf)).join('') + (i < groups.length - 1 ? phaseSeparator(name) : '')).join('');
+  }
+  /** フェーズの境目 (横線の真ん中に「◯◯ 進出！」、◯◯ = 進んだ先のフェーズ) @param {string} name */
+  function phaseSeparator(name) {
+    return `<div class="match-phase advanced"><span>${i18n('match.phase_advanced', { name: escapeHtml(name) })}</span></div>`;
   }
   /** @param {PMatch} m @param {string} pName @param {number | null | undefined} pSeed @param {boolean} [noUf] @returns {string} */
   function _renderMatchRow(m, pName, pSeed, noUf) {
@@ -1271,74 +1398,32 @@ function render() {
       <span class="m-delta" style="color:${dColor}">${dStr}</span>
     </div>`;
   }
-  /** @param {PTour[]} items */
-  function renderRecent(items) {
-    return items.map((t, idx) => {
-      // SPR chip. sub 行に seed 番号を表示 (= 他 chip と高さ揃える).
-      let sprChip;
-      const sprSub = (t.seed != null)
-        ? `<span class="sub">seed ${t.seed}</span>`
-        : `<span class="sub">&nbsp;</span>`;
-      if (t.is_dq) {
-        sprChip = `<div class="chip"><span class="lbl">&nbsp;</span><span class="val dim">DQ</span>${sprSub}</div>`;
-      } else if (t.spr != null) {
-        const cls = t.spr > 0 ? 'pos' : (t.spr < 0 ? 'neg' : 'dim');
-        const txt = t.spr > 0 ? `+${t.spr}` : (t.spr < 0 ? `${t.spr}` : '±0');
-        sprChip = `<div class="chip"><span class="lbl lbl-en">SPR</span><span class="val ${cls}">${txt}</span>${sprSub}</div>`;
-      } else {
-        sprChip = `<div class="chip"><span class="lbl lbl-en">SPR</span><span class="val dim">—</span>${sprSub}</div>`;
-      }
-      // 順位評価 chip (= tjpr_w × scale). 下に括弧で base pt を併記.
-      const w = (t.tjpr_w || 0) * TJPR_SCALE;
-      const base = (t.tjpr_raw || 0) * TJPR_SCALE;
-      const tjprValHtml = w > 0.05
-        ? `<span class="val pos">+${w.toFixed(1)}</span>`
-        : `<span class="val dim">±0</span>`;
-      const tjprSubHtml = base > 0.05
-        ? `<span class="sub">(${base.toFixed(1)})</span>`
-        : `<span class="sub">&nbsp;</span>`;
-      const tjprChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.tjpr')}</span>${tjprValHtml}${tjprSubHtml}</div>`;
-      // 直対評価 chip (= peak180 delta in Elo). 下に括弧で内部レート (current) delta.
-      const btD = t.bt_d || 0;
-      const btIntD = t.bt_internal_d || 0;
-      const btElo = btD * ELO_PER_UNIT;
-      const btIntElo = btIntD * ELO_PER_UNIT;
-      let btValHtml;
-      if (Math.abs(btElo) > 0.05) {
-        const cls = btElo > 0 ? 'pos' : 'neg';
-        const sign = btElo > 0 ? '+' : '';
-        btValHtml = `<span class="val ${cls}">${sign}${btElo.toFixed(1)}</span>`;
-      } else {
-        btValHtml = `<span class="val dim">±0</span>`;
-      }
-      const btSubHtml = Math.abs(btIntElo) > 0.05
-        ? `<span class="sub">(${btIntElo > 0 ? '+' : ''}${btIntElo.toFixed(1)})</span>`
-        : `<span class="sub">&nbsp;</span>`;
-      const btChip = `<div class="chip"><span class="lbl">${i18n('ranking.tab.bt')}</span>${btValHtml}${btSubHtml}</div>`;
-      const vHtml = `<div class="v-stats">${sprChip}${tjprChip}${btChip}<span class="chevron">▶</span></div>`;
-      const itemHtml = tournamentItem(t, vHtml)
-        .replace('class="tour-item"', 'class="tour-item tour-item-nohover tour-clickable" style="border-bottom:none"');
-      // 展開部の先頭にパフォーマンス (perf_rank があれば)
-      const pf = perfInfoOf(t);
-      const perfHtml = pf
-        ? `<div class="tour-perf"><span class="tp-lbl">${i18n('player.performance')}</span>` +
-          ` ${i18n('common.national')} <b>#${pf.eq}</b> ${i18n('player.equivalent')}` +
-          ` <span class="lv-pill lv-${pf.eqLv}">Lv${pf.eqLv}${pf.lvSfx}</span></div>`
-        : '';
-      const matchesHtml = `<div class="tour-matches"></div>`;
-      // data-eid + data-pid + data-class が onClick 時に matches を遅延 render する.
-      const dataPid = (t.parent_event_id != null) ? t.parent_event_id : (t.event_id != null ? t.event_id : '');
-      const isClass = t.parent_event_id != null ? '1' : '0';
-      const seedAttr = t.seed != null ? t.seed : '';
-      return `<div class="tour-group" data-pid="${dataPid}" data-cls="${isClass}" data-seed="${seedAttr}">${itemHtml}${perfHtml}${matchesHtml}</div>`;
+  // 出場履歴の 1 件 = 1 大会 (最新の大会結果と同じカード)。下位クラスに出た大会は本戦とクラスの行をまとめてタブにする (本戦が先、最初は本戦)
+  /** @param {PTour[]} rows @returns {PTour[][]} */
+  function groupRecent(rows) {
+    /** @type {Map<number | string, PTour[]>} */
+    const byPid = new Map();
+    rows.forEach((t, i) => {
+      const pid = t.parent_event_id != null ? t.parent_event_id : (t.event_id != null ? t.event_id : 'r' + i);
+      if (!byPid.has(pid)) byPid.set(pid, []);
+      /** @type {PTour[]} */ (byPid.get(pid)).push(t);
+    });
+    return [...byPid.values()].map(g => g.sort((x, y) => (x.parent_event_id != null ? 1 : 0) - (y.parent_event_id != null ? 1 : 0)));
+  }
+  /** @param {PTour[][]} groups */
+  function renderRecent(groups) {
+    return groups.map(g => {
+      const tabs = g.length > 1 ? g : [];
+      const opts = { date: true };
+      return `<div class="rc" data-rc="${rcKey(tabs, opts)}">${resultCardHtml(g[0], tabs, opts)}</div>`;
     }).join('');
   }
   // Click delegation: tour-clickable → toggle parent .tour-group.expanded + render matches lazily
   document.addEventListener('click', (e) => {
     const ti = /** @type {Element} */ (e.target).closest('.tour-clickable');
     if (!ti) return;
-    // リンク (a) クリック時は遷移を優先 (展開しない)
-    if (/** @type {Element} */ (e.target).closest('a')) return;
+    // リンク (a) クリック時は遷移を優先 (展開しない)。パフォーマンスの「?」も展開しない (setupResultCards)
+    if (/** @type {Element} */ (e.target).closest('a, .ph-help')) return;
     const group = /** @type {HTMLElement | null} */ (ti.closest('.tour-group'));
     if (!group) return;
     const wasExpanded = group.classList.contains('expanded');
@@ -1385,22 +1470,46 @@ function render() {
       }
     }
   });
+  // 出場履歴の検索: 大会名・部門名・日付・その大会の対戦相手の名前 (recent_matches にあるもの)。
+  // 空白で区切ると全部を含むもの (AND)。全角半角・大文字小文字・ひらがなカタカナは区別しない
+  /** @param {string} s */
+  const normQ = s => String(s || '').normalize('NFKC').toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  /** @type {Map<PTour, string>} */
+  const recentText = new Map();
+  /** @param {PTour} t */
+  function recentHaystack(t) {
+    let s = recentText.get(t);
+    if (s == null) {
+      const eid = t.parent_event_id != null ? t.parent_event_id : t.event_id;
+      const opps = (eid != null ? matchesByEvent[eid] || [] : []).map(m => m.opp_display || '');
+      s = normQ([t.name, t.event, t.date, ...opps].join('\n'));
+      recentText.set(t, s);
+    }
+    return s;
+  }
+  const recentQ = /** @type {HTMLInputElement | null} */ (document.getElementById('recent-q'));
   function renderRecentSection() {
-    const allTours = allToursAll.filter(t => passesFilter(t));
+    const terms = normQ(recentQ ? recentQ.value : '').split(/\s+/).filter(Boolean);
+    const allTours = groupRecent(allToursAll.filter(t => passesFilter(t) && terms.every(w => recentHaystack(t).includes(w))));
+    const countEl = document.getElementById('recent-count');
+    if (countEl) countEl.textContent = terms.length ? i18n('player.recent.count', { n: allTours.length }) : '';
     setupPaginated(allTours, 'recent', 'recent-pager',
-      arr => renderRecent(arr),
+      arr => { queueMicrotask(() => SpspTourIcons.fill(document.getElementById('recent'))); return renderRecent(arr); },
       i18n('player.empty.filtered'));
   }
 
   // 初回 + フィルタ変更時の再描画ハンドル
   function applyFilter() {
-    renderTopContribs();
-    renderTopBT();
+    renderRecentSection();
     renderTopSPR();
     renderTopUFs();
-    renderRecentSection();
   }
   applyFilter();
+  if (recentQ) {
+    let qTimer = 0;
+    recentQ.addEventListener('input', () => { clearTimeout(qTimer); qTimer = window.setTimeout(renderRecentSection, 200); });
+  }
   // フィルタボタン (期間 + 大会). 期間変更時はチャートも再描画して時間軸を更新する.
   /** @param {string} attr @param {'period' | 'kind'} stateKey */
   function bindFilterGroup(attr, stateKey) {
@@ -1426,11 +1535,48 @@ function render() {
     });
   });
 
-  buildYosouSection();
+  buildUpcomingSection();
+  setupResultCards();
   buildLatestResultSection();
+  const liveSec = document.getElementById('live-section');
+  if (liveSec) {   // 参加中の大会 (開催中だけ。js/live.js)。試合の行は最新の大会結果と同じ (相手は SPSP にページがあればリンク)
+    SpspLive.start(liveSec, UID, {
+      name: SPSPFormat.shortName((MAIN_REC && MAIN_REC.display) || ''),
+      emojiOf: charEmojiOf,
+      hasPage: SPSPPlayerData.loadRanks(SPSP.data).then(cur => (/** @type {number} */ id) => !!SPSPPlayerData.currentOf(cur, id)),
+      ...livePredictOpts(),
+      browser: SpspLiveBrowser,   // ログインしていればブラウザが start.gg から 15 秒ごとに読み直す
+      reflected: liveReflected(),
+    });
+  }
   // 自分のページなら、最新の大会結果の下に本人へのお知らせ (全国順位・Lv が上がった、二つ名を入手。js/my_notice.js)
   SpspMyNotice.showForSelf(document.getElementById('my-notice'), id => (id === UID ? MAIN_REC : undefined), { selfPage: true }).catch(() => {});
+  // 自分のページなら、参加中の大会の結果報告ページへの入口 (受付中のものだけ。js/report_notice.js)
+  SpspLogin.verify().then(() => { if (SpspLogin.isSelf(UID) || SpspReportNotice.isDemo()) SpspReportNotice.show(document.getElementById('report-notice')).catch(() => {}); });
   buildRivalsSection();
+}
+
+// 参加中の大会のうち、結果がもう選手の記録に入っている部門 (最新の大会結果と同じものを二重に出さない)。
+// 下位クラスの行は event_id が無く parent_event_id で親の部門を指すので、下位クラスにいる人は下位クラスの行があるかで見る
+function liveReflected() {
+  const main = new Set(), cls = new Set();
+  for (const t of (PLAYER && PLAYER.tournaments) || []) {
+    if (t.event_id != null) main.add(String(t.event_id));
+    else if (t.parent_event_id != null) cls.add(String(t.parent_event_id));
+  }
+  return (/** @type {string} */ eid, /** @type {boolean} */ inClass) => (inClass ? cls : main).has(eid);
+}
+
+// 参加中の大会の予想 (js/live_predict.js)。全選手の数値 (sim_pop) は速報に載っているときだけ読む
+function livePredictOpts() {
+  if (!PLAYER || !UID) return {};
+  const pr = SpspLivePredict.create({ uid: UID, player: PLAYER, data: SPSP.data || '', meta: META,
+    utcOffset: /** @type {SpspSiteConfig} */ (SPSP.site).utcOffset || '+00:00' });
+  return {
+    predict: (/** @type {any} */ doc) => pr.predict(doc).then(r => r && Object.assign(r, {
+      perfInfo: r.perf != null ? perfInfoOf({ perf_rank: r.perf, place: r.place }) : null })),
+    rankChange: (/** @type {any} */ p) => pr.rankChange(p),
+  };
 }
 
 /** @type {ChartInstance | null} */

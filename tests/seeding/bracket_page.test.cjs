@@ -59,6 +59,8 @@ test('依存スクリプトの読み込み順が正しい', () => {
     '../seeding/seed_share.js',
     'bracket_core.js',
     'bracket_app.js',
+    '../../src/pages/bracket_sgg.js',   // 組み合わせを start.gg の構造で (2026-11-05)
+    '../../src/pages/bracket_share.js', // 短い URL
   ]);
   for (const src of order) {
     const p = path.resolve(DIR, src);
@@ -101,7 +103,10 @@ test('seed_app.js: プレビューボタンが定義され issueBracketPreview �
   assert.ok(APP_JS.includes('id="bracket-preview"'), 'ボタンがスケルトンに無い');
   assert.ok(/function issueBracketPreview\(/.test(APP_JS), 'issueBracketPreview 未定義');
   assert.ok(/getElementById\('bracket-preview'\)/.test(APP_JS), 'ボタンの参照が無い');
-  assert.ok(/addEventListener\('click',\s*issueBracketPreview\)/.test(APP_JS), 'クリック配線が無い');
+  // 2026-11-10: ボタンはメニューを開く (表示中 / 被り回避最適化後 / start.gg 上)。表示中を選ぶと issueBracketPreview
+  assert.ok(/addEventListener\('click',\s*toggleBracketPreviewMenu\)/.test(APP_JS), 'クリック配線が無い');
+  assert.ok(/id="bracket-preview-menu"/.test(APP_JS), 'メニューがスケルトンに無い');
+  assert.ok(/kind === 'current'\) return issueBracketPreview\(\)/.test(APP_JS), '表示中のシードが issueBracketPreview につながっていない');
 });
 
 test('issueBracketPreview は orderedRecs / currentWaveMap / SeedShare を使い bracket へ誘導する', () => {
@@ -334,4 +339,85 @@ test('データ版: ヘッダに表示欄があり、描画で埋まる配線が
   assert.ok(!/STATE\.view/.test(fn), '見る側の状態が版に混ざっている');
   const css = fs.readFileSync(path.join(DIR, 'bracket_app.css'), 'utf8');
   assert.ok(/\.bp-version/.test(css), 'CSS が無い');
+});
+
+// ── プレビューのメニュー (2026-11-10): 表示中 / 被り回避最適化後 (結果があるときだけ) / start.gg 上 (API で読む) ──
+function menuDom() {
+  const skel = APP_JS.match(/<span id="bracket-preview-wrap"[\s\S]*?<\/span>/);
+  assert.ok(skel, 'スケルトンにメニューが無い');
+  const dom = new JSDOM('<div id="work-note"></div>' + skel[0].replace(/\$\{[^}]*\}/g, 'x') + '<p id="outside">外</p>', {
+    runScripts: 'outside-only', url: 'https://spsp.example/seed/',
+  });
+  const win = dom.window;
+  for (const f of ['region/config.js', 'i18n/ja.js', 'region/i18n.js', 'js/i18n.js']) win.eval(require('../helpers/built.cjs').built(f));
+  win.eval('var i18n = SPSPI18n.t; var S = window;');
+  win.calls = [];
+  win.eval(`
+    var DATA = [{ user_id: 1, display: 'A' }, { user_id: 2, display: 'B' }, { user_id: 3, display: 'C' }];
+    var SEEDOPT_RESULT = null, EVENT_CONTEXT = null, TOKEN = '';
+    function escHtml(s) { return String(s).replace(/[&<>"]/g, (c) => '&#' + c.charCodeAt(0) + ';'); }
+    function issueBracketPreview(o) { calls.push(['issue', o ? o.recs.map((r) => r.user_id) : 'current']); }
+    function previewStartggSeeds(t, ph) { calls.push(['startgg', t, ph]); }
+    function getToken() { return TOKEN; }
+    ${['bracketPreviewAvailability', 'optimizedRecs', 'runBracketPreviewChoice', 'renderBracketPreviewMenu',
+        '_bpOutside', '_bpKey', 'closeBracketPreviewMenu', 'toggleBracketPreviewMenu'].map((n) => extractFn(APP_JS, n)).join('\n')}
+  `);
+  const $ = (id) => win.document.getElementById(id);
+  const item = (k) => win.document.querySelector('[data-bp-kind="' + k + '"]');
+  return { win, $, item };
+}
+
+test('プレビューのメニュー: 最適化前・大会未読み込みでは「表示中」だけ選べて、理由が出る', { skip: skipJsdom }, () => {
+  const { win, $, item } = menuDom();
+  win.toggleBracketPreviewMenu();
+  assert.strictEqual($('bracket-preview-menu').hidden, false);
+  assert.strictEqual($('bracket-preview').getAttribute('aria-expanded'), 'true');
+  assert.strictEqual(item('current').disabled, false);
+  assert.strictEqual(item('optimized').disabled, true);
+  assert.strictEqual(item('startgg').disabled, true);
+  assert.match(item('optimized').textContent, /被り回避最適化を実行すると選べます/);
+  assert.match(item('startgg').textContent, /start\.gg の大会を読み込むと選べます/);
+  // 選べない項目を押しても何もしない
+  item('optimized').click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(win.calls)), []);
+  item('current').click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(win.calls)), [['issue', 'current']]);
+  assert.strictEqual($('bracket-preview-menu').hidden, true, '選んだらメニューを閉じる');
+});
+
+test('プレビューのメニュー: 最適化後は結果の並び、start.gg 上はトークンとフェーズで読む', { skip: skipJsdom }, () => {
+  const { win, $, item } = menuDom();
+  win.eval("SEEDOPT_RESULT = { seedOrder: [3, 1, 2], report: {} }; EVENT_CONTEXT = { phaseId: 777 }; TOKEN = 'tok';");
+  win.toggleBracketPreviewMenu();
+  assert.strictEqual(item('optimized').disabled, false);
+  assert.strictEqual(item('startgg').disabled, false);
+  item('optimized').click();
+  win.toggleBracketPreviewMenu();
+  item('startgg').click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(win.calls)), [['issue', [3, 1, 2]], ['startgg', 'tok', 777]]);
+  // トークンが無ければ読まずに案内
+  win.eval("TOKEN = '';");
+  win.toggleBracketPreviewMenu();
+  item('startgg').click();
+  assert.strictEqual(win.calls.length, 2);
+  assert.match($('work-note').textContent, /ログイン/);
+  // フェーズが無い (参加者だけ読んだ) ときは選べない
+  win.eval('EVENT_CONTEXT = { phaseId: null };');
+  win.toggleBracketPreviewMenu();
+  assert.strictEqual(item('startgg').disabled, true);
+  assert.match(item('startgg').textContent, /フェーズがありません/);
+});
+
+test('プレビューのメニュー: もう一度押す・外を押す・Esc で閉じる', { skip: skipJsdom }, () => {
+  const { win, $ } = menuDom();
+  const menu = $('bracket-preview-menu');
+  win.toggleBracketPreviewMenu(); win.toggleBracketPreviewMenu();
+  assert.strictEqual(menu.hidden, true);
+  win.toggleBracketPreviewMenu();
+  $('outside').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert.strictEqual(menu.hidden, true);
+  win.toggleBracketPreviewMenu();
+  win.document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.strictEqual(menu.hidden, true);
+  assert.strictEqual($('bracket-preview').getAttribute('aria-expanded'), 'false');
 });

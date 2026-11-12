@@ -5,6 +5,7 @@ export class MemStore {
     this.posts = [];
     this.errors = [];
     this.used = new Map();   // key → expires_ms
+    this.csp = new Map();    // key → { directive, blocked, path, hits, first_seen, last_seen }
     this.cards = new Map();  // uid → { settings, updated_at }
     this.cardWrites = [];    // { uid, ts_ms, day }
     this.classes = [];       // class_brackets の行 (id, status 付き)
@@ -161,5 +162,258 @@ export class MemStore {
     this.classActions.push({ user_id: g.userId, action, ts_ms: g.nowMs, day: g.dayKey });
     this.classActions = this.classActions.filter((r) => r.ts_ms >= g.nowMs - 2 * 24 * 3600 * 1000);
     return true;
+  }
+
+  async putLoginHandoff(h, data, expiresMs, nowMs) {
+    this.handoffs = this.handoffs || new Map();
+    for (const [k, v] of this.handoffs) if (v.expires_ms < nowMs) this.handoffs.delete(k);
+    this.handoffs.set(h, { data, expires_ms: expiresMs });
+  }
+  async takeLoginHandoff(h, nowMs) {
+    const r = (this.handoffs || new Map()).get(h);
+    if (!r) return null;
+    this.handoffs.delete(h);
+    return r.expires_ms >= nowMs ? r.data : null;
+  }
+
+  async insertLogin(row) {
+    (this.logins = this.logins || []).push({ ...row });
+  }
+
+  async insertToolLog(row, maxPerDay) {
+    this.toolLogs = this.toolLogs || [];
+    if (this.toolLogs.filter((r) => r.user_id === row.user_id && r.day === row.day).length >= maxPerDay) return false;
+    this.toolLogs.push({ ...row });
+    return true;
+  }
+
+  async recordCsp(key, e, ts, maxKeys) {
+    const cur = this.csp.get(key);
+    if (cur) { cur.hits += 1; cur.last_seen = ts; return; }
+    if (this.csp.size >= maxKeys) return;
+    this.csp.set(key, { directive: e.directive, blocked: e.blocked, path: e.path, sample: e.sample || '', source: e.source || '', hits: 1, first_seen: ts, last_seen: ts });
+  }
+
+  async listCsp() {
+    return [...this.csp.entries()].sort((a, b) => b[1].hits - a[1].hits || (a[0] < b[0] ? -1 : 1)).map(([, v]) => ({ ...v }));
+  }
+
+  // ── 試合結果の報告 (report_events / report_sets / report_submissions) ──
+  _rep() {
+    if (!this.reportEvents) { this.reportEvents = []; this.reportSets = []; this.reportSubs = []; this.reportPresets = []; this.reportGrants = []; this.reportPush = []; this.reportHealth = []; this.reportSnaps = []; this.reportManual = []; this.reportPicks = []; this.reportDqs = []; this.reportNoshows = []; this.reportStarts = []; }
+  }
+
+  async getReportEvent(code) { this._rep(); const r = this.reportEvents.find((x) => x.code === code); return r ? { ...r } : null; }
+
+  async getReportEventByTarget(kind, targetId) {
+    this._rep(); const r = this.reportEvents.find((x) => x.kind === kind && x.target_id === targetId); return r ? { ...r } : null;
+  }
+
+  async upsertReportEvent(row) {
+    this._rep();
+    const i = this.reportEvents.findIndex((x) => x.kind === row.kind && x.target_id === row.target_id);
+    if (i < 0) { this.reportEvents.push({ managers: '[]', ...row }); return; }
+    const old = this.reportEvents[i];
+    this.reportEvents[i] = { ...row, code: old.code, created_ms: old.created_ms, managers: old.managers || '[]', sgg_admins: old.sgg_admins || '', sgg_admins_ms: old.sgg_admins_ms || 0 };
+  }
+
+  async updateReportEventToken(code, tokenEnc, tokenExpMs) {
+    this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.token_enc = tokenEnc; x.token_exp_ms = tokenExpMs; }
+  }
+
+  async updateReportEventAdmins(code, admins) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.admins = admins; }
+  async updateReportEventManagers(code, managers) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.managers = managers; }
+  async listReportAutoStartDue(nowMs, sinceMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => { let op = 0; try { op = Number(JSON.parse(x.settings || '{}').opens_ms) || 0; } catch (_) { op = 0; }
+      return x.status === 'active' && x.kind === 'startgg' && !x.ended_ms && !x.auto_start_ms && x.expires_ms >= nowMs && op > x.created_ms && op <= nowMs && op >= sinceMs; })
+      .map((x) => x.code);
+  }
+  async setReportAutoStart(code, v) { for (const x of this.reportEvents) if (x.code === code) { x.auto_start_ms = v.ms; x.auto_start_tries = v.tries; x.auto_start_note = v.note; } }
+  async listReportEntrantCodes(uid) { this._rep(); return (this.reportEntrants || []).filter((x) => x.uid === uid).map((x) => x.code); }
+  async replaceReportEntrants(code, uids, ms) {
+    this._rep(); for (const x of this.reportEvents) if (x.code === code) x.entrants_ms = ms;
+    if (uids) this.reportEntrants = (this.reportEntrants || []).filter((x) => x.code !== code).concat([...new Set(uids)].map((uid) => ({ uid, code })));
+  }
+  async listReportEntrantsCandidates(nowMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => x.status === 'active' && x.kind === 'startgg' && !x.ended_ms && x.expires_ms >= nowMs && x.token_enc)
+      .map((x) => { let op = 0; try { op = Number(JSON.parse(x.settings || '{}').opens_ms) || 0; } catch (_) { op = 0; } return { code: x.code, opens_ms: op, created_ms: x.created_ms, entrants_ms: x.entrants_ms || 0 }; })
+      .sort((a, b) => a.entrants_ms - b.entrants_ms);
+  }
+  async purgeReportEntrants(nowMs) {
+    this._rep(); const live = new Set(this.reportEvents.filter((x) => x.status === 'active' && x.expires_ms >= nowMs && !x.ended_ms).map((x) => x.code));
+    this.reportEntrants = (this.reportEntrants || []).filter((x) => live.has(x.code));
+  }
+  async setReportEventEnded(code, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code && (ms === 0 || !x.ended_ms)) x.ended_ms = ms; }
+  async putBracketShare(row) { (this.shares ||= new Map()).set(row.id, { ...row }); }
+  async getBracketShare(id, nowMs) { const r = (this.shares || new Map()).get(id); return r && r.expires_ms >= nowMs ? { frag: r.frag, sgg: r.sgg, expires_ms: r.expires_ms } : null; }
+  async listBracketSharesOf(userId) { return [...(this.shares || new Map()).entries()].filter(([, v]) => v.user_id === userId).map(([id, v]) => ({ id, created_ms: v.created_ms })).sort((a, b) => b.created_ms - a.created_ms); }
+  async deleteBracketShare(id) { (this.shares || new Map()).delete(id); }
+  async purgeBracketShares(nowMs) { for (const [k, v] of (this.shares || new Map())) if (v.expires_ms < nowMs) this.shares.delete(k); }
+  async listReportProgOk(code) { this._rep(); return (this.reportProgOk || []).filter((x) => x.code === code).map((x) => ({ group_id: x.group_id, list: x.list })); }
+  async putReportProgOk(code, groupId, list, userId, ms) { this._rep(); this.reportProgOk = (this.reportProgOk || []).filter((x) => !(x.code === code && x.group_id === groupId)); this.reportProgOk.push({ code, group_id: groupId, list, user_id: userId, ms }); }
+  async updateReportEventSggAdmins(code, ids, ms) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { if (ids !== null) x.sgg_admins = ids; x.sgg_admins_ms = ms; } }
+  async updateReportEventSettings(code, settings) { this._rep(); for (const x of this.reportEvents) if (x.code === code) x.settings = settings; }
+
+  async listReportPresets(userId) {
+    this._rep(); return this.reportPresets.filter((x) => x.user_id === userId).sort((a, b) => b.updated_ms - a.updated_ms).map(({ name, settings, updated_ms }) => ({ name, settings, updated_ms }));
+  }
+
+  async saveReportPreset(userId, row, max) {
+    this._rep();
+    const old = this.reportPresets.find((x) => x.user_id === userId && x.name === row.name);
+    if (old) { old.settings = row.settings; old.updated_ms = row.updated_ms; return true; }
+    if (this.reportPresets.filter((x) => x.user_id === userId).length >= max) return false;
+    this.reportPresets.push({ user_id: userId, ...row }); return true;
+  }
+
+  async deleteReportPreset(userId, name) { this._rep(); this.reportPresets = this.reportPresets.filter((x) => !(x.user_id === userId && x.name === name)); }
+
+  async getReportGrant(userId, nowMs) { this._rep(); const r = this.reportGrants.find((x) => x.user_id === userId && x.expires_ms >= nowMs); return r ? { ...r } : null; }
+  async putReportGrant(row) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== row.user_id).concat([{ ...row }]); }
+  async putReportPushSub(row, max) {
+    this._rep(); this.reportPush = this.reportPush.filter((x) => x.endpoint !== row.endpoint).concat([{ ...row }]);
+    const mine = this.reportPush.filter((x) => x.user_id === row.user_id).sort((a, b) => b.created_ms - a.created_ms);
+    const drop = new Set(mine.slice(max).map((x) => x.endpoint));
+    this.reportPush = this.reportPush.filter((x) => !drop.has(x.endpoint));
+  }
+  async deleteReportPushSub(endpoint, userId) { this._rep(); this.reportPush = this.reportPush.filter((x) => !(x.endpoint === endpoint && (userId === null || x.user_id === userId))); }
+  async listReportPushSubs(userIds) { this._rep(); return this.reportPush.filter((x) => userIds.includes(x.user_id)).map((x) => ({ ...x })); }
+  async deleteReportGrant(userId) { this._rep(); this.reportGrants = this.reportGrants.filter((x) => x.user_id !== userId); }
+
+  async stopReportEvent(code) { this._rep(); for (const x of this.reportEvents) if (x.code === code) { x.status = 'stopped'; x.token_enc = ''; } }
+
+  async purgeReportTokens(nowMs) {
+    this._rep(); for (const x of this.reportEvents) if (x.expires_ms < nowMs) { x.status = 'stopped'; x.token_enc = ''; }
+    this.reportGrants = this.reportGrants.filter((x) => x.expires_ms >= nowMs);
+  }
+
+  async listActiveReportEvents(nowMs) {
+    this._rep();
+    return this.reportEvents.filter((x) => x.status === 'active' && x.expires_ms >= nowMs).sort((a, b) => a.created_ms - b.created_ms)
+      .map(({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings, ended_ms }) => ({ code, kind, event_id, tournament_id, class_id, name, slug, expires_ms, settings, ended_ms: ended_ms || 0 }));
+  }
+
+  async getReportSet(code, setId) { this._rep(); const r = this.reportSets.find((x) => x.code === code && x.set_id === setId); return r ? { ...r } : null; }
+
+  async casReportSet(row, prevVersion) {
+    this._rep();
+    const i = this.reportSets.findIndex((x) => x.code === row.code && x.set_id === row.set_id);
+    if (prevVersion === null) { if (i >= 0) return false; this.reportSets.push({ ...row }); return true; }
+    if (i < 0 || this.reportSets[i].version !== prevVersion) return false;
+    this.reportSets[i] = { ...row };
+    return true;
+  }
+
+  async listReportSets(code) {
+    this._rep(); return this.reportSets.filter((x) => x.code === code).sort((a, b) => b.updated_ms - a.updated_ms).map((x) => ({ ...x }));
+  }
+
+  async listReportSetsForUser(userId, codes) {
+    this._rep();
+    return this.reportSets.filter((x) => codes.includes(x.code) && x.users.includes('|' + userId + '|')).sort((a, b) => b.updated_ms - a.updated_ms).map((x) => ({ ...x }));
+  }
+
+  async insertReportSubmission(row) {
+    this._rep(); const id = this.reportSubs.length + 1; this.reportSubs.push({ ...row, id }); return id;
+  }
+
+  async setReportSubmissionOutcome(id, outcome) { this._rep(); const r = this.reportSubs.find((x) => x.id === id); if (r) r.outcome = outcome; }
+
+  async listReportSubmissions(code, setId) {
+    this._rep(); return this.reportSubs.filter((x) => x.code === code && x.set_id === setId).map((x) => ({ ...x }));
+  }
+
+  async updateReportSubmission(id, setId, side, result) { this._rep(); const r = this.reportSubs.find((x) => x.id === id); if (r) Object.assign(r, { set_id: setId, side, result }); }
+  async deleteReportSet(code, setId) { this._rep(); this.reportSets = this.reportSets.filter((x) => !(x.code === code && x.set_id === setId)); }
+  async getReportHealth(kind) { this._rep(); const r = this.reportHealth.find((x) => x.kind === kind); return r ? { ...r } : null; }
+  async putReportHealth(row) { this._rep(); this.reportHealth = this.reportHealth.filter((x) => x.kind !== row.kind).concat([{ ...row }]); }
+  async claimReportProbe(kind, nowMs, gapMs) {
+    this._rep(); const r = this.reportHealth.find((x) => x.kind === kind);
+    if (!r || !(r.probe_ms < nowMs - gapMs)) return false; r.probe_ms = nowMs; return true;
+  }
+  async getReportSnapshot(code) { this._rep(); const r = this.reportSnaps.find((x) => x.code === code); return r ? { ...r } : null; }
+  async getReportSnapshotMeta(code) {
+    this._rep(); const r = this.reportSnaps.find((x) => x.code === code);
+    if (!r) return null;
+    if (String(r.data).startsWith('z1:')) return { synced_ms: r.synced_ms, checked_ms: r.checked_ms || 0, full: !!r.m_full, sets: r.m_sets || 0 };
+    let d = {}; try { d = JSON.parse(r.data); } catch (_) { d = {}; }
+    return { synced_ms: r.synced_ms, checked_ms: r.checked_ms || 0, full: d.full === true, sets: d.sets ? Object.keys(d.sets).length : 0 };
+  }
+  async putReportSnapshot(code, data, syncedMs, meta) {
+    this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0, m_full: meta && meta.full ? 1 : 0, m_sets: meta ? meta.sets : 0 }]);
+  }
+  async casReportSnapshot(code, data, syncedMs, prevSyncedMs) {
+    this._rep(); let r = this.reportSnaps.find((x) => x.code === code);
+    if (!r && prevSyncedMs === 0) { r = { code, data: '{}', synced_ms: 0, lock_ms: 0 }; this.reportSnaps.push(r); }
+    if (!r || r.synced_ms !== prevSyncedMs) return false;
+    r.data = data; r.synced_ms = syncedMs; r.lock_ms = 0; return true;
+  }
+  async claimReportSnapshot(code, nowMs, holdMs) {
+    this._rep(); let r = this.reportSnaps.find((x) => x.code === code);
+    if (!r) { r = { code, data: '{}', synced_ms: 0, lock_ms: 0 }; this.reportSnaps.push(r); }
+    if (!(r.lock_ms < nowMs - holdMs)) return false; r.lock_ms = nowMs; return true;
+  }
+  async releaseReportSnapshot(code) { this._rep(); for (const x of this.reportSnaps) if (x.code === code) x.lock_ms = 0; }
+  async touchReportSnapshot(code, checkedMs) { this._rep(); for (const x of this.reportSnaps) if (x.code === code) { x.checked_ms = checkedMs; x.lock_ms = 0; } }
+  async insertReportManual(row) { this._rep(); const id = this.reportManual.length + 1; this.reportManual.push({ ...row, id }); return id; }
+  async getReportManual(code, id) { this._rep(); const r = this.reportManual.find((x) => x.code === code && x.id === id); return r ? { ...r } : null; }
+  async listReportManual(code) { this._rep(); return this.reportManual.filter((x) => x.code === code).sort((a, b) => b.id - a.id).map((x) => ({ ...x })); }
+  async updateReportManual(code, id, status, setId, nowMs) {
+    this._rep(); for (const x of this.reportManual) if (x.code === code && x.id === id) Object.assign(x, { status, set_id: setId, updated_ms: nowMs });
+  }
+  async listReportManualForUser(userId, code) {
+    this._rep(); return this.reportManual.filter((x) => x.code === code && x.status === 'open' && x.users.includes('|' + userId + '|')).sort((a, b) => b.id - a.id).map((x) => ({ ...x }));
+  }
+
+  async putReportPick(code, userId, setId, nowMs) {
+    this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.user_id === userId));
+    if (setId) this.reportPicks.push({ code, user_id: userId, set_id: setId, ts_ms: nowMs });
+  }
+  async deleteReportPicksForSet(code, setId) { this._rep(); this.reportPicks = this.reportPicks.filter((x) => !(x.code === code && x.set_id === setId)); }
+  async listReportPicks(code, sinceMs) { this._rep(); return this.reportPicks.filter((x) => x.code === code && x.ts_ms >= sinceMs).map(({ user_id, set_id, ts_ms }) => ({ user_id, set_id, ts_ms })); }
+
+  async insertReportDq(row) { this._rep(); const id = this.reportDqs.length + 1; this.reportDqs.push({ ...row, id }); return id; }
+  async listReportDqs(code) { this._rep(); return this.reportDqs.filter((x) => x.code === code).sort((a, b) => b.id - a.id).map((x) => ({ ...x })); }
+  async updateReportDq(code, id, status, doneSets, note, nowMs) {
+    this._rep(); for (const x of this.reportDqs) if (x.code === code && x.id === id) Object.assign(x, { status, done_sets: doneSets, note, updated_ms: nowMs });
+  }
+  async getReportNoshow(code, setId, userId) { this._rep(); const r = this.reportNoshows.find((x) => x.code === code && x.set_id === setId && x.user_id === userId); return r ? { ...r } : null; }
+  async upsertReportNoshow(row, notifiedMs) {
+    this._rep(); const r = this.reportNoshows.find((x) => x.code === row.code && x.set_id === row.set_id && x.user_id === row.user_id);
+    if (!r) { this.reportNoshows.push({ ...row, count: 1, notified_ms: notifiedMs ?? 0, status: 'open', note: '' }); return; }
+    if (r.status !== 'open') r.first_ms = row.last_ms;
+    Object.assign(r, { info: row.info, users: row.users, last_ms: row.last_ms, count: r.count + 1, status: 'open', note: '' });
+    if (notifiedMs !== null) r.notified_ms = notifiedMs;
+  }
+  async listReportNoshows(code, sinceMs) { this._rep(); return this.reportNoshows.filter((x) => x.code === code && x.last_ms >= sinceMs).sort((a, b) => b.last_ms - a.last_ms).map((x) => ({ ...x })); }
+  async resolveReportNoshows(code, setId, note, userId) {
+    this._rep(); for (const x of this.reportNoshows) if (x.code === code && x.set_id === setId && x.status === 'open' && (userId === null || x.user_id === userId)) Object.assign(x, { status: 'resolved', note });
+  }
+
+  async insertReportStart(code, setId, users, userId, nowMs, info = '{}') {
+    this._rep(); if (this.reportStarts.some((x) => x.code === code && x.set_id === setId)) return false;
+    this.reportStarts.push({ code, set_id: setId, users, user_id: userId, ts_ms: nowMs, sgg: 0, tried_ms: 0, note: '', info }); return true;
+  }
+  _start(x) { return { set_id: x.set_id, user_id: x.user_id, ts_ms: x.ts_ms, sgg: x.sgg, tried_ms: x.tried_ms, note: x.note, info: x.info }; }
+  async getReportStart(code, setId) { this._rep(); const r = this.reportStarts.find((x) => x.code === code && x.set_id === setId); return r ? this._start(r) : null; }
+  async listReportStarts(code, sinceMs) { this._rep(); return this.reportStarts.filter((x) => x.code === code && x.ts_ms >= sinceMs).map((x) => this._start(x)); }
+  async setReportStartSync(code, setId, sgg, note, triedMs) { this._rep(); for (const x of this.reportStarts) if (x.code === code && x.set_id === setId) Object.assign(x, { sgg, note, tried_ms: triedMs }); }
+  async moveReportStart(code, from, to) {
+    this._rep(); if (this.reportStarts.some((x) => x.code === code && x.set_id === to)) return;
+    for (const x of this.reportStarts) if (x.code === code && x.set_id === from) x.set_id = to;
+  }
+  async listReportStartsForUser(code, userId, sinceMs) {
+    this._rep(); return this.reportStarts.filter((x) => x.code === code && x.users.includes('|' + userId + '|') && x.ts_ms >= sinceMs).map((x) => this._start(x));
+  }
+  async listReportNoshowsForUser(code, userId, sinceMs) {
+    this._rep(); return this.reportNoshows.filter((x) => x.code === code && (x.users || '').includes('|' + userId + '|') && x.last_ms >= sinceMs).map((x) => ({ ...x }));
+  }
+
+  async reportSubmissionActivity(userId, sinceMs) {
+    this._rep();
+    const rows = this.reportSubs.filter((x) => x.user_id === userId && x.ts_ms >= sinceMs);
+    return { count: rows.length, latestMs: rows.length ? Math.max(...rows.map((x) => x.ts_ms)) : null };
   }
 }

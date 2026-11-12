@@ -263,6 +263,7 @@ test('login: action:login を送り、トークンを保存して ?login=1 で�
   assert.strictEqual(loginBody.action, 'login');
   assert.strictEqual(loginBody.code, 'CODE-L');
   assert.ok(loginBody.state, 'state を渡していない');
+  assert.strictEqual(loginBody.handoff, false, '始めた画面で戻った: 引き継ぎは要らない');
   assert.deepStrictEqual(r.calls.nav, ['/spsp/vote.html?login=1']);
 
   const saved = JSON.parse(r.w.localStorage.getItem('spsp_session_v1'));
@@ -309,6 +310,26 @@ test('login: GAS がエラーを返したらトークンを保存しない', { s
   assert.deepStrictEqual(r.calls.nav, []);
   assert.strictEqual(r.w.localStorage.getItem('spsp_session_v1'), null);
   assert.match(r.text(), /認証に失敗しました/);
+});
+
+// 2026-10-28: nonce の無いブラウザ (別のブラウザに戻された / セキュリティ製品の自動ブラウザが先に開いた) では
+// すぐには送らず、「ログインを続ける」を押してから送る (自動ブラウザは押さないので code が使われずに残る)
+test('login: nonce が無ければボタンを押してから送る', { skip: !JSDOM }, async () => {
+  const r = await run({
+    search: '?code=CODE-L&state=' + encodeURIComponent(stateFor('/spsp/vote.html')),
+    session: { spsp_oauth_intent: 'login' }, config: CONFIG,
+    response: { ok: true, token: 'tok.sig', user: { id: 4242, slug: 'user/x', gamerTag: 'Toko' }, exp: Date.now() + 1000000 },
+  });
+  assertNoCodeSent(r);
+  assert.match(r.text(), /ログインを続けますか/);
+  const btn = r.w.document.querySelector('#cb-root button');
+  assert.ok(btn);
+  btn.click();
+  await new Promise((res) => setTimeout(res, 20));
+  const sent = r.calls.fetch.map((f) => JSON.parse(f.init.body)).find((b) => b.action === 'login');
+  assert.ok(sent && sent.code === 'CODE-L' && sent.state);
+  assert.strictEqual(sent.handoff, true, '別のブラウザで戻った: 始めた画面に引き継ぐ (2026-11-05)');
+  assert.deepStrictEqual(r.calls.nav, ['/spsp/vote.html?login=1']);
 });
 
 test('post フロー: intent=post が明示されていても従来どおり動く', { skip: !JSDOM }, async () => {

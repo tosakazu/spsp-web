@@ -59,7 +59,8 @@ export function items(uid, titlesN) {
   /** @type {Array<{kind: 'rank' | 'lv' | 'titles', from?: number, to?: number, n?: number}>} */
   const out = [];
   if (st && st.base && st.now) {
-    const b = st.base, n = st.now;
+    // 文字列で innerHTML に入るので、保存値 (localStorage) は数に直してから使う
+    const b = { rank: num(st.base.rank), lv: num(st.base.lv) }, n = { rank: num(st.now.rank), lv: num(st.now.lv) };
     if (b.rank != null && n.rank != null && n.rank < b.rank) out.push({ kind: 'rank', from: b.rank, to: n.rank });
     if (b.lv != null && n.lv != null && n.lv > b.lv) out.push({ kind: 'lv', from: b.lv, to: n.lv });
   }
@@ -181,6 +182,16 @@ function renderDemo(el, selfPage) {
   if (btn) btn.addEventListener('click', () => { el.style.display = 'none'; });
 }
 
+/** 押し間違い防止: × ボタンの左 CLOSE_GUARD_PX は押しても何もしない (帯を開くのも閉じるのもしない。2026-11-04) */
+export const CLOSE_GUARD_PX = 32;
+/** 押した位置が × のすぐ近く (× の左 CLOSE_GUARD_PX 以内、同じ高さ) か @param {MouseEvent} e @param {Element} box 帯 */
+export function nearClose(e, box) {
+  const btn = box.querySelector('.ticker-close');
+  if (!btn || typeof e.clientX !== 'number') return false;
+  const r = btn.getBoundingClientRect();
+  return e.clientY >= r.top && e.clientY <= r.bottom && e.clientX >= r.left - CLOSE_GUARD_PX && e.clientX < r.left;
+}
+
 /**
  * お知らせの帯を el に描く (トップの速報・通知と同じ形、× で閉じる)
  * @param {HTMLElement} el @param {number | string} uid
@@ -204,6 +215,13 @@ export function render(el, uid, opts) {
         : `<a class="my-notice-item ${it.kind}" href="${page('p/index.html') + '?uid=' + id}">${text(it)}</a>`).join('')}</div>` +
     `<button type="button" class="ticker-close" aria-label="${esc(t('notice.me.close'))}" title="${esc(t('common.close'))}">×</button>`;
   el.style.display = '';
+  // リンク先が 1 つ (順位・Lv だけ、二つ名の一覧が無い) なら帯の中全体を押せる (× と二つ名の開閉は除く。2026-11-04)
+  const one = !o.selfPage && list.every(it => it.kind !== 'titles') ? page('p/index.html') + '?uid=' + id : null;
+  el.style.cursor = one ? 'pointer' : '';
+  el.onclick = one ? (/** @type {MouseEvent} */ e) => {
+    if (/** @type {Element} */ (e.target).closest('a, button') || nearClose(e, el)) return;
+    location.href = one;
+  } : null;
   bindTitles(el, uid, editHref);
   const btn = el.querySelector('.ticker-close');
   if (btn) btn.addEventListener('click', ev => {
@@ -240,7 +258,7 @@ export async function showForSelf(el, recOf, opts) {
   navChanged();
 }
 
-const API = { observe, observeRec, items, dismiss, titlesNew, text, itemHTML, newTitles, bindTitles, render, showForSelf };
+const API = { observe, observeRec, items, dismiss, titlesNew, text, itemHTML, newTitles, bindTitles, render, showForSelf, nearClose };
 // ほかの共通モジュールと同じく window にも置く
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspMyNotice = API;
 export default API;

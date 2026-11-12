@@ -43,7 +43,12 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', e => { if (e.key === SpspAuth.KEY) notify(); });   // 別のタブでのログイン・ログアウト
 }
 
-export function logout() { SpspAuth.clear(); notify(); }
+// ログアウトでは start.gg のトークン (js/startgg_identity.js の KEY。import すると循環するので名前で消す) も消す
+export function logout() {
+  SpspAuth.clear();
+  try { localStorage.removeItem('spsp_startgg_identity'); } catch (e) { /* 何もしない */ }
+  notify();
+}
 
 /** @param {number | string | null | undefined} uid */
 export function isSelf(uid) {
@@ -60,7 +65,8 @@ export async function startLogin(returnPath) {
   try { nonce = crypto.randomUUID(); } catch (e) { return false; }
   S.saveNonce(nonce);
   try { sessionStorage.setItem(S.INTENT_KEY, 'login'); } catch (e) { /* 署名 state 側で判断できる */ }
-  const json = await api({ action: 'begin_login', flow: 'login', nonce, returnPath: returnPath || (location.pathname + location.search) });
+  const handoff_h = await newHandoff().catch(() => null);   // 別のブラウザで戻ってきたときの引き継ぎ (下)
+  const json = await api({ action: 'begin_login', flow: 'login', nonce, returnPath: returnPath || (location.pathname + location.search), ...(handoff_h ? { handoff_h } : {}) });
   if (!json || !json.ok || !json.state) return false;
   location.assign(S.buildAuthorizeUrl(CFG, json.state));
   return true;
@@ -91,7 +97,76 @@ if (typeof location !== 'undefined' && typeof history !== 'undefined') {
   } catch (e) { /* 何もしない */ }
 }
 
-const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api };
+// ── ログインの引き継ぎ (2026-11-05) ──
+// iPhone のアプリ内ブラウザ (Discord などの SFSafariViewController) でログインを始めると、start.gg アプリを経て Safari 本体で
+// 戻ってくることがある。保存領域が別なので、始めた画面は未ログインのまま (2 回ログインすることになっていた)。
+// 始めるときに乱数 s を作ってここ (localStorage) に置き、SHA-256(s) を署名つき state に入れてもらう。別のブラウザで戻ってきたら
+// Worker が結果を暗号化して置く (15 分・1 回だけ)。この画面に戻ってきたとき (読み込み・表示・数秒おき) に s で取りに行く。
+export const HANDOFF_KEY = 'spsp_login_handoff';
+const HANDOFF_MAX_MS = 45 * 60 * 1000;   // state の有効期間 30 分 + Worker が置いておく 15 分
+const HANDOFF_POLL_MS = 5000;
+const IDENTITY_KEY = 'spsp_startgg_identity';   // js/startgg_identity.js の KEY (import すると循環する)
+/** @param {Uint8Array} b */
+const b64url = (b) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** @returns {Promise<string | null>} 引き継ぎのハッシュ (state に入れる) */
+async function newHandoff() {
+  if (!crypto || !crypto.subtle) return null;
+  const raw = new Uint8Array(32);
+  crypto.getRandomValues(raw);
+  const s = b64url(raw);
+  const h = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))));
+  localStorage.setItem(HANDOFF_KEY, JSON.stringify({ s, t: Date.now() }));
+  startHandoffWatch();
+  return h;
+}
+let handoffBusy = false;
+/** @type {any} */
+let handoffTimer = 0;
+function stopHandoffWatch() { clearInterval(handoffTimer); handoffTimer = 0; }
+/** 置いてある引き継ぎを取りに行く。取れたらログインして読み直す */
+export async function claimHandoff() {
+  if (handoffBusy) return false;
+  /** @type {{ s?: unknown, t?: unknown } | null} */
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(HANDOFF_KEY) || 'null'); } catch (e) { o = null; }
+  if (!o || typeof o.s !== 'string' || typeof o.t !== 'number') { stopHandoffWatch(); return false; }
+  if (Date.now() - o.t > HANDOFF_MAX_MS) { try { localStorage.removeItem(HANDOFF_KEY); } catch (e) { /* 何もしない */ } stopHandoffWatch(); return false; }
+  if (!apiAvailable()) return false;
+  handoffBusy = true;
+  try {
+    const r = await api({ action: 'login_handoff', s: o.s });
+    if (!r || !r.ok || !r.token || !r.user) return false;
+    try { localStorage.removeItem(HANDOFF_KEY); } catch (e) { /* 何もしない */ }
+    stopHandoffWatch();
+    SpspAuth.save({ token: r.token, user: r.user, exp: r.exp });
+    // start.gg のトークン (startgg_identity.js の save と同じ形)
+    const sg = r.startgg;
+    if (sg && sg.access_token) {
+      const ttl = Number(sg.expires_in) > 0 ? Number(sg.expires_in) * 1000 : 7 * 24 * 3600 * 1000;
+      try { localStorage.setItem(IDENTITY_KEY, JSON.stringify({ token: sg.access_token, exp: Date.now() + ttl, refresh: sg.refresh_token || null, uid: String(r.user.id) })); } catch (e) { /* 何もしない */ }
+    }
+    notify();
+    location.reload();
+    return true;
+  } finally { handoffBusy = false; }
+}
+function startHandoffWatch() {
+  if (handoffTimer || typeof document === 'undefined') return;
+  handoffTimer = setInterval(() => { if (document.visibilityState === 'visible') claimHandoff(); }, HANDOFF_POLL_MS);
+}
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  let pending = false;
+  try { pending = !!localStorage.getItem(HANDOFF_KEY); } catch (e) { pending = false; }
+  // callback ページ自身は取りに行かない (そこで完了する / 別のブラウザの結果を置く側)
+  if (pending && !/\/callback(\.html)?$/.test(location.pathname)) {
+    claimHandoff();
+    startHandoffWatch();
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') claimHandoff(); });
+    window.addEventListener('focus', () => { claimHandoff(); });
+  }
+}
+
+const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api, claimHandoff, HANDOFF_KEY };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むときは import がグローバル参照になるため)
 if (typeof window !== 'undefined') {
   /** @type {any} */ (window).SpspLogin = API;

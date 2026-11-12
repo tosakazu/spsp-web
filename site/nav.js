@@ -8,6 +8,8 @@ import SPSPLogo from './logo.js';
 import './js/html.js';   // SPSP.root / SPSP.langRoot (ページが読んでいなくても nav が要る: 解説ページは html.js を読まない)
 import './logo.js';   // ロゴ (SPSPLogo)。ES module になったので動的な <script> では読めない: 束ねる
 import SpspLogin from './js/login.js';   // 人型アイコンのアカウントメニュー (start.gg でログイン。docs/login_design.md)
+import SpspReportNotice from './js/report_notice.js';   // 人型のメニューの「結果報告」(受付中の大会)
+import SpspLiveRoot from './js/live_root.js';   // 人型のメニューの「参加中」(開催中の大会。速報の一覧だけ読む)
 import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順位・Lv が上がった、二つ名を入手): ベルの一番上と印 (js/my_notice.js)
 
 // ── Google Analytics 4 (gtag.js) ──
@@ -88,6 +90,8 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     if (/\/math(\.html)?$/.test(p))     return 'math';
     if (/\/seed-upload\//.test(p))   return 'seed-upload';
     if (/\/class\//.test(p))         return 'class';
+    if (/\/report\//.test(p))        return 'report';
+    if (/\/dupes\//.test(p))         return 'dupes';
     if (/\/seed\//.test(p))          return 'seed';
     if (/\/priority\//.test(p))      return 'priority';
     if (/\/local\/ranking(\.html)?$/.test(p)) return 'local-ranking';
@@ -107,7 +111,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
   }
   const cur = currentPage();
   const isRanking = cur === 'ranking' || cur === 'local-series' || cur === 'local-ranking' || cur === 'char-list' || cur === 'char-ranking' || cur === 'pref-list' || cur === 'pref-ranking' || cur === 'events' || cur === 'sim';
-  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class';
+  const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class' || cur === 'dupes' || cur === 'report';
   const isMethod  = ['overview', 'details', 'eval', 'math', 'blog'].includes(cur);
 
   // 言語の切替 (日本語 ⇄ English)。同じ URL に ?lang=<言語> を付けたもの (js/lang_boot.js が読んで覚える。既定言語へ戻すときも明示する)。
@@ -161,6 +165,8 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
           <a href="${prefix}seed-upload/"${cur === 'seed-upload' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.upload')}</a>
           <a href="${prefix}priority/"${cur === 'priority' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.priority')}</a>
           <a href="${prefix}class/"${cur === 'class' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.class')}</a>
+          <a href="${prefix}dupes/"${cur === 'dupes' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.dupes')}</a>
+          <a href="${prefix}report/"${cur === 'report' ? ' class="current"' : ''} role="menuitem">${t('nav.seeding.report')}</a>
         </div>
       </div>
       <div class="nav-dropdown${isMethod ? ' has-current' : ''}">
@@ -263,6 +269,9 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .nav-user-trigger.has-new .nav-user-icon::before { content:''; position:absolute; top:-2px; right:-3px;
                                             width:7px; height:7px; background:#dc2626;
                                             border-radius:50%; box-shadow:0 0 0 2px #fff; }
+      /* 結果報告を受付中の大会があるとき: 人型の左上に赤い星 (右上の点より目立つように、2026-11-04)。文字の ★ は端末のフォント次第なので SVG */
+      .nav-user-trigger.has-report .nav-user-icon::after { content:''; position:absolute; top:-6px; left:-7px; width:13px; height:13px;
+                                            background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z' fill='%23dc2626' stroke='%23fff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain; }
       /* User dropdown (= 選手本人が使う操作をまとめる). ベルと同じ見た目に揃える. */
       .nav-user .nav-user-trigger { color:#6b7280; display:inline-flex; align-items:center;
                                     line-height:0; padding:4px 8px; }
@@ -287,6 +296,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       /* アカウントメニュー: 項目はほかのメニューのリンクと同じ見た目 (色も同じ灰色)。
          名前は押せないので見出しとして: 濃い字・太字、下に細い線 */
       .nav-user .nav-menu .nav-user-new { color:#dc2626; font-weight:600; }
+      .nav-user .nav-menu .nav-user-ev { color:#dc2626; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user-name { padding:7px 14px 6px; margin-bottom:4px; font-size:13px; font-weight:600; color:#111827;
                        border-bottom:1px solid #f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .nav-user .nav-menu button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0;
@@ -329,6 +339,10 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       .my-notice .my-notice-item { color:#065f46; }
       .my-notice .my-notice-item.lv { font-weight:600; }
       .my-notice .d { white-space:nowrap; font-weight:600; }
+      /* 参加中・結果報告の帯 (赤)。トップと自分のプレイヤーページで同じ色 (2026-11-04 に index.html から移した) */
+      .my-notice.live-notice { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+      .my-notice.live-notice .label { background:#dc2626; color:#fff; }
+      .my-notice.live-notice a.my-notice-item, .my-notice.live-notice .my-notice-item { color:#991b1b; }
       /* 二つ名を N 件入手 ▼ (帯とベルで共通)。押すと新しく入手した二つ名が下に並ぶ */
       .my-notice-titles-toggle { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-align:left; }
       .my-notice-titles-toggle:hover { text-decoration:underline; }
@@ -423,6 +437,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     const sess = SpspLogin ? SpspLogin.session() : null;
     const cls = (/** @type {string} */ k) => (cur === k ? ' class="current"' : '');
     const vote = `<a href="${assetPrefix}${pageHref('vote.html')}"${cls('vote')} role="menuitem">${t('nav.user.vote')}</a>`;
+    trigger.classList.remove('has-report');
     if (!sess) {
       renderMyNotice(null);
       trigger.innerHTML = `<span class="nav-user-icon">${USER_SVG}</span>`;
@@ -437,6 +452,8 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
+    // 開催中の大会: 名前の下 (マイページの上) に「結果報告: 大会」(受付中のもの) と「参加中: 大会」(それ以外)。押すと報告ページ / 自分の速報
+    renderMyEvents(menu, String(sess.user.id));
     // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)
     trigger.classList.remove('has-new');
     if (SpspMyNotice) {
@@ -454,6 +471,37 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
         }
       }).catch(() => {});
     }
+  }
+  // 結果報告のお知らせを読み直したら (受付の開始時刻など、js/report_notice.js) 描き直す (2026-11-10)
+  /** @type {{ menu: HTMLElement, myId: string } | null} */
+  var myEventsArgs = null;   // var: リスナーより先に renderMyEvents が呼ばれても良いように
+  if (typeof window !== 'undefined') window.addEventListener('spsp:report-notice', () => {
+    if (!myEventsArgs) return;
+    const { menu, myId } = myEventsArgs;
+    menu.querySelectorAll('.nav-user-ev').forEach((x) => x.remove());
+    const tr = document.querySelector('.nav-user-trigger'); if (tr) tr.classList.remove('has-report');
+    renderMyEvents(menu, myId);
+  });
+  /** @param {HTMLElement} menu @param {string} myId */
+  function renderMyEvents(menu, myId) {
+    if (!SpspReportNotice || !SpspLiveRoot) return;
+    myEventsArgs = { menu, myId };
+    Promise.all([SpspReportNotice.items().catch(() => ({ events: [], conflicts: [], admin: [] })), SpspLiveRoot.myEvents(myId).catch(() => [])]).then(([rep, live]) => {
+      const now = SpspLogin && SpspLogin.session();
+      if (!now || String(now.user.id) !== myId || menu.querySelector('.nav-user-ev')) return;
+      const repIds = new Set(rep.events.filter((/** @type {any} */ e) => e.event_id != null).map((/** @type {any} */ e) => String(e.event_id)));
+      const adm = /** @type {any[]} */ (rep.admin || []);
+      const links = rep.events.map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(SpspReportNotice.hrefOf(e))}" role="menuitem">${escHTML(t('nav.user.report_ev', { name: e.name || '' }))}</a>`)
+        .concat(live.filter((/** @type {any} */ e) => !repIds.has(e.event_id))
+          .map((/** @type {any} */ e) => `<a class="nav-user-ev" href="${escHTML(e.href)}" role="menuitem">${escHTML(t('nav.user.live_ev', { name: e.name }))}</a>`))
+        // 運営・報告管理者の受付: 運営の画面へ (2026-11-04)
+        .concat(adm.map((/** @type {any} */ a) => `<a class="nav-user-ev" href="${escHTML(SpspReportNotice.adminHrefOf(a))}" role="menuitem">${escHTML(t('nav.user.report_admin', { name: a.name || '' }))}</a>`));
+      if (!links.length) return;
+      // 結果報告を受付中の大会があれば人型の左上に赤い星 (二つ名の右上の点とは別の印)
+      if (rep.events.length) { const tr = document.querySelector('.nav-user-trigger'); if (tr) tr.classList.add('has-report'); }
+      const mypage = menu.querySelector('a[href$="' + pageHref('me.html') + '"]');
+      if (mypage) mypage.insertAdjacentHTML('beforebegin', links.join(''));
+    }).catch(() => {});
   }
   // ベルの一番上に本人へのお知らせ (順位・Lv が上がった、二つ名を入手。押すとマイページ) と、ベルに印
   /** @type {{uid: string, n: number} | null} */

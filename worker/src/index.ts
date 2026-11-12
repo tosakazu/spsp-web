@@ -14,6 +14,7 @@ import { handleApiRequest } from './api/router.ts';
 import type { Env } from './config.ts';
 import { configFromEnv } from './config.ts';
 import { D1Store } from './db.ts';
+import { runReportAutoStart, runReportEntrants } from './api/report.ts';
 
 /**
  * 旧 URL (spsp.games 直下 / gh-pages の /spsp/ 直下にあったもの) の先頭セグメント。
@@ -56,6 +57,23 @@ export const NOT_FOUND_PAGE = '/_errors/404';
 /** callback.html の CSP。site/callback.html の meta と同じで、connect-src だけ自分自身 (= /api)。 */
 export const CALLBACK_CSP = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'";
 
+/**
+ * サイト (HTML) の CSP。セキュリティレビュー M4。段階 1 = CSP_MODE "report-only" (本番・preview・na とも) で違反を集め、
+ * 段階 2 で同じ文字列を "enforce" (Content-Security-Policy) にする。報告の先は POST /api/csp-report (api/csp.ts)。
+ * Worker を通らない静的アセットには、scripts/assemble_dist.sh が同じ文字列を dist-cf/_headers に書く (ここが正本)。
+ * インラインの <script> と onclick 等の属性は使わない (script-src に 'unsafe-inline' を入れないため)。
+ */
+export const SITE_CSP = "default-src 'self'; "
+  // static.cloudflareinsights.com / cloudflareinsights.com = Cloudflare Web Analytics (本番ドメインに Cloudflare が自動で差し込む。preview には無い)
+  // 'report-sample' = インラインのスクリプトの違反の報告に、コードの先頭 (40 文字) を付けてもらう (正体を見分けるため。2026-10-28)
+  + "script-src 'self' 'report-sample' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.googletagmanager.com https://static.cloudflareinsights.com; "
+  + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+  + "img-src 'self' data: blob: https:; "
+  // www.google.com = Google アナリティクス (gtag) が送る先の 1 つ (2026-10-28、報告の 8 割がこれ)
+  + "connect-src 'self' https://data.spsp.games https://api.start.gg https://docs.google.com https://*.googleusercontent.com "
+  + "https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://cloudflareinsights.com; "
+  + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/csp-report";
+
 const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN',
@@ -63,13 +81,22 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
-/** アセット応答にヘッダを足す (Response は immutable なことがあるので作り直す)。 */
-export function withSecurityHeaders(res: Response, pathname: string): Response {
+/**
+ * アセット応答にヘッダを足す (Response は immutable なことがあるので作り直す)。
+ * cspMode (env.CSP_MODE): HTML の応答に SITE_CSP を "report-only" / "enforce" で付ける。callback は下の厳しい CSP のまま
+ */
+export function withSecurityHeaders(res: Response, pathname: string, cspMode?: string): Response {
   const out = new Response(res.body, res);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
-  if (/\/callback(\.html)?$/.test(pathname)) {   // 静的配信は /jp/callback.html → /jp/callback に寄せる (html_handling) ので両方
+  const isCallback = /\/callback(\.html)?$/.test(pathname);
+  if (!isCallback && /^text\/html\b/i.test(out.headers.get('Content-Type') || '')) {
+    if (cspMode === 'report-only') out.headers.set('Content-Security-Policy-Report-Only', SITE_CSP);
+    else if (cspMode === 'enforce') out.headers.set('Content-Security-Policy', SITE_CSP);
+  }
+  if (isCallback) {   // 静的配信は /jp/callback.html → /jp/callback に寄せる (html_handling) ので両方
     // INV-8: 認可コードが URL に載るページ。外部リソース禁止・referrer も送らない。
     out.headers.set('Content-Security-Policy', CALLBACK_CSP);
+    out.headers.delete('Content-Security-Policy-Report-Only');   // _headers の分 (callback は上の厳しい CSP だけ)
     out.headers.set('Referrer-Policy', 'no-referrer');
     out.headers.set('Cache-Control', 'no-store');
   }
@@ -156,9 +183,20 @@ export default {
     if (res.status === 404 && (request.method === 'GET' || request.method === 'HEAD')) {
       const page = await env.ASSETS.fetch(new Request(new URL(NOT_FOUND_PAGE, url).toString(), { method: 'GET' }));
       if (page.ok) {
-        return withSecurityHeaders(new Response(request.method === 'HEAD' ? null : page.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }), url.pathname);
+        return withSecurityHeaders(new Response(request.method === 'HEAD' ? null : page.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }), url.pathname, env.CSP_MODE);
       }
     }
-    return withSecurityHeaders(res, url.pathname);
+    return withSecurityHeaders(res, url.pathname, env.CSP_MODE);
+  },
+
+  // 定期実行 (wrangler.toml の [triggers]、本番だけ毎分): 結果報告の受付の開始時刻にブラケットを自動で開始する (2026-11-05)・受付の参加者を読み直す (2026-11-10)
+  async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runReportAutoStart(configFromEnv(env), new D1Store(env.DB), (input, init) => fetch(input, init), Date.now())
+      .then((r) => { if (r) console.log('auto_start', r.code, r.note); })
+      .catch((e) => console.log('auto_start error', String(e))));
+    // 受付の参加者 (結果報告のお知らせを本人に開始時刻から出す、2026-11-10)
+    ctx.waitUntil(runReportEntrants(configFromEnv(env), new D1Store(env.DB), (input, init) => fetch(input, init), Date.now())
+      .then((r) => { for (const x of r) console.log('entrants', x.code, x.n); })
+      .catch((e) => console.log('entrants error', String(e))));
   },
 } satisfies ExportedHandler<Env>;

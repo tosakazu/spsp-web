@@ -36,6 +36,15 @@
   }
   .method-tab:hover { color: #374151; background: #f3f4f6; }
   .method-tab.active { background: #dc2626; color: #fff; }
+  /* ランダムシード: 特殊なメニューなので紫の枠 (2026-11-05) */
+  .method-tab.method-tab-random { color: #7c3aed; border: 1.5px solid #7c3aed; margin-left: 6px; }
+  .method-tab.method-tab-random:hover { background: #f5f3ff; color: #6d28d9; }
+  .method-tab.method-tab-random.active { background: #7c3aed; color: #fff; }
+  .random-seed-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 12px; padding: 8px 10px; border: 1.5px solid #7c3aed; border-radius: 8px; color: #6d28d9; font-size: 12px; background: #faf5ff; }
+  .random-seed-box[hidden] { display: none; }
+  .random-seed-box input { width: 11ch; font: 600 13px ui-monospace, monospace; padding: 3px 6px; border: 1px solid #c4b5fd; border-radius: 4px; }
+  .random-seed-box button { font-size: 12px; padding: 3px 10px; border: 1px solid #7c3aed; background: #fff; color: #6d28d9; border-radius: 4px; cursor: pointer; font-family: inherit; }
+  .random-seed-note { color: #6b7280; font-size: 11px; }
   .method-tab .tab-desc { display: block; font-size: 10px; opacity: 0.7; margin-top: 2px; }
 
   .controls {
@@ -251,6 +260,7 @@
   .upcoming-item:hover { border-color: #dc2626; background: #fef2f2; }
   .upcoming-item .row-1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .upcoming-item .ev-date { color: #dc2626; font-weight: 600; font-size: 11px; white-space: nowrap; }
+  .upcoming-item .ev-live { background: #dc2626; color: #fff; font-size: 10px; font-weight: 600; padding: 0 6px; border-radius: 8px; white-space: nowrap; }
   .upcoming-item .ev-name { font-size: 13px; color: #111827; font-weight: 500; flex: 1; min-width: 0; }
   .upcoming-item .ev-link {
     color: #9ca3af; text-decoration: none; font-size: 12px;
@@ -463,3 +473,18 @@
   .help-pop { max-width: calc(100vw - 24px); font-size: 12px; }
   .help-ico { width: 16px; height: 16px; font-size: 11px; }
 }
+
+
+  /* ── 大会の選び方のタブ (管理している大会 / 直近の大会 / URL を入力。60_upcoming.js initEventSourceTabs) ── */
+  .ev-src { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; }
+  .ev-tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid #e5e7eb; overflow-x: auto; }
+  .ev-tabs button {
+    border: none; background: none; font: inherit; font-size: 13px; color: #6b7280; padding: 10px 12px 9px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ev-tabs button:hover { color: #111827; }
+  .ev-tabs button.on { color: #111827; font-weight: 600; border-bottom-color: #dc2626; }
+  .ev-tabs .badge { background: #dc2626; color: #fff; font-size: 10px; padding: 1px 7px; border-radius: 9px; font-weight: 600; }
+  .ev-pane { padding: 10px 12px 12px; }
+  .ev-pane[hidden] { display: none; }
+  .ev-note { font-size: 11px; color: #9ca3af; margin-bottom: 6px; }

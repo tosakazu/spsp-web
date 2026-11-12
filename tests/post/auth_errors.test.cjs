@@ -10,35 +10,6 @@ const R = (p) => fs.readFileSync(path.resolve(__dirname, '../../', p), 'utf8');
 const CALLBACK = R('site/js/callback.js');
 const VOTE_JS = R('site/js/vote.js');
 const VOTE_HTML = R('site/vote.html');
-const OAUTH_GS = R('gas/oauth.gs');
-const SESSION_GS = R('gas/session.gs');
-const MAIN_GS = R('gas/main.gs');
-
-test('OAuth の失敗理由が種類ごとに分かれている', () => {
-  for (const reason of ['code_invalid', 'startgg_down', 'network', 'no_user']) {
-    assert.ok(OAUTH_GS.includes("'" + reason + "'"), '理由が無い: ' + reason);
-  }
-  // 期限切れ / 使い回しは「やり直せば直る」と分かる文言であること
-  assert.match(OAUTH_GS, /期限切れ/);
-  assert.match(OAUTH_GS, /start\.gg が混雑・障害中/);
-});
-
-test('login / post とも汎用文でなく理由付きのメッセージを返す', () => {
-  for (const [name, src] of [['session.gs', SESSION_GS], ['main.gs', MAIN_GS]]) {
-    assert.match(src, /oauthErrorMessage_\(LAST_OAUTH_ERROR\)/, name + ': 理由を渡していない');
-    assert.match(src, /oauthErrorMessage_\('no_user'\)/, name + ': ユーザー取得失敗の分岐が無い');
-    assert.doesNotMatch(src, /'start\.gg の認証に失敗しました。やり直してください。'/,
-      name + ': 汎用文が残っている');
-  }
-});
-
-test('秘密情報を利用者向けメッセージに載せない', () => {
-  const fn = OAUTH_GS.slice(OAUTH_GS.indexOf('function oauthErrorMessage_'),
-    OAUTH_GS.indexOf('function exchangeCodeForToken_'));
-  for (const bad of ['client_secret', 'CLIENT_SECRET', 'access_token', 'code']) {
-    assert.doesNotMatch(fn, new RegExp(bad + '\\s*[:=]'), '秘密が混ざっている: ' + bad);
-  }
-});
 
 test('callback: start.gg 側エラーをキャンセルとそれ以外で分ける', () => {
   assert.match(CALLBACK, /access_denied/);
@@ -51,7 +22,7 @@ test('callback: start.gg 側エラーをキャンセルとそれ以外で分け�
   assert.match(CALLBACK, /error_description/);
 });
 
-// 2026-08-17: 照合の本体を GAS の署名 state に移したので、
+// 2026-08-17: 照合の本体をサーバ (当時は GAS、今は Worker) の署名 state に移したので、
 // 「保存領域に nonce が無い」だけでは止めない (アプリ内ブラウザ経路を通すため)。
 test('callback: nonce が残っていないだけでは止めない', () => {
   const blk = CALLBACK.slice(CALLBACK.indexOf('S.takeNonce()'), CALLBACK.indexOf('safeReturnPath'));
@@ -59,7 +30,7 @@ test('callback: nonce が残っていないだけでは止めない', () => {
   assert.match(blk, /if \(!st \|\| \(stored && st\.n !== stored\)\)/);
 });
 
-test('callback: 照合できないときは GAS が state を検証する (素通しにしない)', () => {
+test('callback: 照合できないときはサーバ (/api) が state を検証する (素通しにしない)', () => {
   assert.match(CALLBACK, /action: 'login', code: code, state: state/);
   assert.match(CALLBACK, /action: 'post', code: code, state: state/);
 });

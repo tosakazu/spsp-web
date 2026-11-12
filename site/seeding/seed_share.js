@@ -304,6 +304,19 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
 
   // ───────────────────────── ウェーブ / プール表示名 ─────────────────────────
   // seed_app.js の chunkWaveMap / waveLetter / poolLabel と同一仕様 (純関数として再掲)。
+  // ウェーブ交互の割り当て (篝火 #14・#15 の作り方、2026-11-11): プール番号ごとに W 個ずつ並べ、1 組ごとに向きを変える。
+  // W=2 なら A, B, B, A, A, B, B, A, … (シードは 1 つごとに A, B, B, A, …)。start.gg にまだプールが無い (ウェーブが分からない)
+  // ときの既定。前半 A・後半 B (chunkWaveMap) だとシードが十数個の塊でウェーブを替え、ウェーブ指定で大きくずれていた
+  /** @param {number} P @param {number} W @returns {number[]} */
+  function interleaveWaveMap(P, W) {
+    const Wc = Math.max(1, Math.min(W, P));
+    const map = new Array(P);
+    for (let p = 0; p < P; p++) {
+      const k = Math.floor(p / Wc), j = p % Wc;
+      map[p] = k % 2 === 0 ? j : Wc - 1 - j;
+    }
+    return map;
+  }
   function chunkWaveMap(P, W) {
     const map = new Array(P);
     const Wc = Math.max(1, Math.min(W, P));
@@ -365,6 +378,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     phases: ['phases'],
     wv: ['wv'],
     view: ['view'],
+    // start.gg のフェーズの id (JSON の配列) と、読んだ構造 (JSON。worker/src/api/bracket_struct.ts の SimData)。2026-11-05
+    sgg: ['sgg'],
+    sgg_data: ['sgg_data'],
   };
 
   function _findHeader(rows) {
@@ -395,6 +411,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     /** @type {number | null} */ let P = null, /** @type {number | null} */ W = null;
     /** @type {string | null} */ let evName = null, /** @type {string | null} */ phasesJson = null;
     /** @type {string | null} */ let wvJson = null, /** @type {string | null} */ viewStr = null;
+    /** @type {string | null} */ let sggJson = null, /** @type {string | null} */ sggDataJson = null;
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const row = rows[i];
       const get = (k) => (cols[k] != null && row[cols[k]] != null) ? String(row[cols[k]]).trim() : '';
@@ -405,6 +422,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       if (phasesJson == null && get('phases')) phasesJson = get('phases');
       if (wvJson == null && get('wv')) wvJson = get('wv');
       if (viewStr == null && get('view')) viewStr = get('view');
+      if (sggJson == null && get('sgg')) sggJson = get('sgg');
+      if (sggDataJson == null && get('sgg_data')) sggDataJson = get('sgg_data');
       const name = get('name');
       const uidS = get('uid');
       const uid = /^\d+$/.test(uidS) ? parseInt(uidS, 10) : null;
@@ -458,10 +477,17 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       ev: evName || opts.ev || i18n('seed.share.s26'),
       src: 'csv',
       phases: withFinalPhase(phases || [{ name: P >= 2 ? i18n('seed.share.s27') : i18n('seed.share.s28'), pools: P, adv: 2 }], uids.length),
-      wv: wvArr || chunkWaveMap(P, Math.max(1, W)),
+      wv: wvArr || interleaveWaveMap(P, Math.max(1, W)),   // 既定は交互 (seeding/app/85_waves.js と同じ、2026-11-11)
       uids,
       names,
     };
+    // start.gg のフェーズと構造 (あれば。壊れていたら無かったことにして警告)
+    try {
+      const sgg = sggJson ? JSON.parse(sggJson) : null;
+      if (Array.isArray(sgg) && sgg.every((x) => /^\d+$/.test(String(x)))) /** @type {any} */ (payload).sgg = sgg.map(String);
+      const sd = sggDataJson ? JSON.parse(sggDataJson) : null;
+      if (sd && sd.v === 1 && Array.isArray(sd.phases)) /** @type {any} */ (payload).sggData = sd;
+    } catch (e) { warnings.push(i18n('seed.share.sgg_bad')); }
     const errors = validatePayload(payload);
     if (errors.length) throw new Error(i18n('seed.share.s29') + errors.join(' / '));
     return { payload, warnings, view };
@@ -484,7 +510,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const viewStr = opts.view
       ? buildFragment(opts.view, 'x').slice(1).replace(/&d=x$/, '')
       : '';
-    const lines = ['seed,name,uid,pool,pools,waves,event,phases,wv,view'];
+    const sgg = Array.isArray(payload.sgg) ? payload.sgg : null;
+    const sggData = payload.sggData && payload.sggData.v === 1 ? payload.sggData : null;
+    const lines = ['seed,name,uid,pool,pools,waves,event,phases,wv,view' + (sgg ? ',sgg,sgg_data' : '')];
     payload.uids.forEach((uid, i) => {
       const name = opts.nameOf ? (opts.nameOf(i) || '') : ((payload.names || {})[String(i)] || '');
       lines.push([
@@ -498,6 +526,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         i === 0 ? field(JSON.stringify(payload.phases)) : '',
         i === 0 ? field(JSON.stringify(wv)) : '',
         i === 0 ? field(viewStr) : '',
+        ...(sgg ? [i === 0 ? field(JSON.stringify(sgg)) : '', i === 0 && sggData ? field(JSON.stringify(sggData)) : ''] : []),
       ].join(','));
     });
     return lines.join('\r\n') + '\r\n';
@@ -507,7 +536,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase,
     versionSource, payloadVersion,
     parseFragment, buildFragment,
-    chunkWaveMap, waveLetter, poolLabel,
+    chunkWaveMap, interleaveWaveMap, waveLetter, poolLabel,
     parseCsv, workCsvToPayload, buildWorkCsv,
     // テスト用の下位 API
     bytesToBase64url, base64urlToBytes, deflateRawBytes, inflateRawBytes,
@@ -516,4 +545,4 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   (global.SPSP = global.SPSP || {}).SeedShare = API;   // window.SPSP.SeedShare (名前空間。旧名 SeedShare も残す)
 
 export default API;
-export { encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase, versionSource, payloadVersion, parseFragment, buildFragment, chunkWaveMap, waveLetter, poolLabel, parseCsv, workCsvToPayload, buildWorkCsv, base64urlToBytes, deflateRawBytes, inflateRawBytes };
+export { encodePayload, decodePayload, validatePayload, validatePhases, phaseEntrantCounts, withFinalPhase, versionSource, payloadVersion, parseFragment, buildFragment, chunkWaveMap, interleaveWaveMap, waveLetter, poolLabel, parseCsv, workCsvToPayload, buildWorkCsv, base64urlToBytes, deflateRawBytes, inflateRawBytes };

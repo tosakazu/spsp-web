@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { i18n } from './10_skeleton.js';
-import { DATA, renderManualUI, saveManual } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, parseRandomSeed, renderManualUI, renderRandomTab, saveManual } from './30_core.js';
 import { dropAppliedOrder, resetSeedOptResultPanel } from './75_series_rematch.js';
 import SPSPDetail from '../../player-detail.js';
 'use strict';
@@ -16,15 +16,22 @@ if (searchEl) searchEl.addEventListener('input', e => {
   const tbl = S.TABLE; if (tbl) tbl.setFilterText(S.filterText);
 });
 
+/** 基準を変えると捨てる手動調整に、捨てて困るものがあるか: 実際に動かした・CSV / 指定の順を基準にしている (11-05: 開いただけなら聞かない) */
+const manualWorthKeeping = () => !!S.MANUAL && (S.MANUAL.hpos > 0 || S.MANUAL.src === 'csv' || S.MANUAL.src === 'spec');
+
 const methodTabs = document.getElementById('method-tabs');
 if (methodTabs) methodTabs.addEventListener('click', e => {
   const tab = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.method-tab'));
-  if (!tab || tab.dataset.method === S.currentMethod) return;
+  // ランダムは選んでいるときにもう一度押すと引き直す
+  if (!tab || (tab.dataset.method === S.currentMethod && tab.dataset.method !== 'random')) return;
   // 手動調整がある場合は破棄確認を先に (キャンセルならタブ切替自体を中止)。
-  if (S.MANUAL && !confirm(i18n('seed.events.s1'))) return;
+  if (manualWorthKeeping() && !confirm(i18n('seed.events.s1'))) return;
   document.querySelectorAll('.method-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   S.currentMethod = /** @type {string} */ (tab.dataset.method);
+  // ランダム: 選ぶたびに新しい種で並べ直す
+  if (S.currentMethod === 'random') assignRandomRanks(DATA, newRandomSeed());
+  renderRandomTab();
   dropAppliedOrder();  // 基準が変わるので適用解除
   // 被り回避の結果も基準ランキング前提なので破棄（残すと再適用できない死に状態になる）。
   if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.events.s2'));
@@ -34,6 +41,29 @@ if (methodTabs) methodTabs.addEventListener('click', e => {
     const st = document.getElementById('status');
     if (st) st.textContent = i18n('seed.events.s3');
   }
+  const tbl = S.TABLE; if (tbl) tbl.setMethod(S.currentMethod);
+});
+
+// ランダムシードの種: コピー・入れた種で並べ直す (手動調整・被り回避の結果は基準が変わるので捨てる。タブを切り替えたときと同じ)
+const rsCopy = document.getElementById('random-seed-copy');
+if (rsCopy) rsCopy.addEventListener('click', () => {
+  if (S.RANDOM_SEED == null) return;
+  const note = document.getElementById('random-seed-note');
+  navigator.clipboard.writeText(String(S.RANDOM_SEED)).then(() => { if (note) note.textContent = i18n('seed.random.copied'); }, () => undefined);
+});
+const rsApply = document.getElementById('random-seed-apply');
+if (rsApply) rsApply.addEventListener('click', () => {
+  const inp = /** @type {HTMLInputElement | null} */ (document.getElementById('random-seed-input'));
+  const note = document.getElementById('random-seed-note');
+  const seed = parseRandomSeed(inp ? inp.value : '');
+  if (seed == null) { if (note) note.textContent = i18n('seed.random.bad'); return; }
+  if (manualWorthKeeping() && !confirm(i18n('seed.events.s1'))) return;
+  dropAppliedOrder();
+  if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.events.s2'));
+  if (S.MANUAL) { S.MANUAL = null; saveManual(); renderManualUI(); }
+  assignRandomRanks(DATA, seed);
+  renderRandomTab();
+  if (note) note.textContent = i18n('seed.random.applied', { n: seed });
   const tbl = S.TABLE; if (tbl) tbl.setMethod(S.currentMethod);
 });
 

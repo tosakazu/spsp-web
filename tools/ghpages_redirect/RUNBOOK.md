@@ -63,7 +63,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://tosakazu.github.io/          # 
   rm ~/spsp-state/ghpages_retired     # 次の nightly から旧サイトを通常どおり出す (deploy_v4.sh が origin に合わせてから rsync する)
   ```
   すぐ最新にしたいときは、ロックを取って `cd ~/spsp-ranking && bash deploy/deploy_v4.sh ~/spsp-state/builds/nightly_$(date +%Y%m%d) "切り戻し"`。
-- GAS の変更 (data.spsp.games を読む) は戻さなくてよい (どちらの状態でも動く)。
+- GAS の変更 (data.spsp.games を読む) は戻さなくてよい (どちらの状態でも動く)。GAS のコード (`gas/`) は 2026-10-29 にこのリポジトリから消した。Google 側の GAS 本体はそのまま動いている。直すときは git の履歴 (`git show <消す前のコミット>:gas/…`) から取り出す。
 
 ## 切り替え後 (数週間のうちに)
 - Google Search Console: spsp.games をドメインプロパティで登録し、`https://spsp.games/jp/sitemap.xml` を送信。

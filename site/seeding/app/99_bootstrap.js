@@ -7,9 +7,10 @@ import { i18n, regionGroupToggleId, regionGroupToggles } from './10_skeleton.js'
 import { injectHelpIcons } from './20_help.js';
 import { cachedFetchers } from './70_players_cache.js';
 import SeedData from '../seed_data.js';
-import { downloadCsv, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
-import { UPCOMING_PAGE_SIZE, openUpcomingBox, renderUpcomingPage, toggleUpcomingBox } from './60_upcoming.js';
-import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updateSeriesToggleState } from './75_series_rematch.js';
+import { downloadCsv, getToken, handleFetch, showError, uploadToStartgg } from './40_startgg.js';
+import SpspStartggManager from '../../js/startgg_manager.js';
+import { UPCOMING_PAGE_SIZE, initEventSourceTabs, loadMyTournaments, renderUpcomingPage } from './60_upcoming.js';
+import { cancelSeedOptimize, cleanupSeedOptWorker, runSeedOptimize, seriesNoteEl, stopSeedOptimize, updateIntraToggleState, updatePublishedToggleState, updateSeriesToggleState } from './75_series_rematch.js';
 import SeedOptimizer from '../seed_optimizer.js';
 import SPSPGeo from '../../js/geo.js';
 'use strict';
@@ -22,6 +23,8 @@ import SPSPGeo from '../../js/geo.js';
   const saveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('token-save'));
   const TOKEN_KEY = 'spsp_startgg_token';
   if (!tokenEl || !hintEl || !revealBtn || !saveBtn) return;   // 骨格 (10_skeleton.js) に必ずある
+  // 大会の選び方のタブ (最初は「管理している大会」)
+  initEventSourceTabs();
 
   function updateHint() {
     if (!tokenEl || !hintEl) return;   // 巻き上げられる関数宣言なので上の guard の絞り込みは効かない
@@ -36,6 +39,12 @@ import SPSPGeo from '../../js/geo.js';
     if (t) { tokenEl.value = t; updateHint(); }
   } catch (e) {}
   tokenEl.addEventListener('input', () => { updateHint(); });
+  // トークンがあれば、そのアカウントが管理している大会を一覧の上に出す (入力し終わったとき = change でも取り直す)
+  loadMyTournaments(getToken());
+  tokenEl.addEventListener('change', () => { loadMyTournaments(getToken()); });
+  // start.gg の認証: 「start.gg でログイン」と「API キー」の切り替え (ログインは下位クラス作成・シードアップロードと共通)
+  const authEl = document.getElementById('token-auth'), keyBlock = document.getElementById('token-key-block');
+  if (authEl && keyBlock) SpspStartggManager.mount({ root: authEl, keyBlock, onChange: () => loadMyTournaments(getToken()) });
   revealBtn.addEventListener('click', () => {
     const isPwd = tokenEl.type === 'password';
     tokenEl.type = isPwd ? 'text' : 'password';
@@ -88,6 +97,11 @@ import SPSPGeo from '../../js/geo.js';
   // プール数に応じて「プール内変動」トグルの有効/無効を切り替える（2プール以上のみ指定可能）。
   const soPools = document.getElementById('so-pools');
   if (soPools) soPools.addEventListener('input', updateIntraToggleState);
+  // 公開済みシードとの被り回避: 対象の大会の欄 (直近対戦・平日の設定でも変わる)
+  for (const id of ['so-avoid-published', 'so-avoid-recent', 'so-include-weekday']) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { Promise.resolve(updatePublishedToggleState()).catch(() => {}); });
+  }
   // 同シリーズ再マッチ: ON にした時点で大会一覧をロードしてシリーズを判定する。
   const seriesCb = document.getElementById('so-avoid-series');
   if (seriesCb) seriesCb.addEventListener('change', () => {
@@ -103,9 +117,7 @@ import SPSPGeo from '../../js/geo.js';
     }
   });
 
-  // ── 直近の大会ピッカー: イベント binding ──
-  const upToggle = document.getElementById('upcoming-toggle');
-  if (upToggle) upToggle.addEventListener('click', toggleUpcomingBox);
+  // ── 直近の大会ピッカー: イベント binding (タブは initEventSourceTabs、開いたときに読む) ──
   const upPrev = document.getElementById('upcoming-prev');
   if (upPrev) upPrev.addEventListener('click', () => {
     if (S.UPCOMING_PAGE > 0) { S.UPCOMING_PAGE -= 1; renderUpcomingPage(); }
@@ -116,11 +128,6 @@ import SPSPGeo from '../../js/geo.js';
     const totalPages = Math.max(1, Math.ceil(total / UPCOMING_PAGE_SIZE));
     if (S.UPCOMING_PAGE < totalPages - 1) { S.UPCOMING_PAGE += 1; renderUpcomingPage(); }
   });
-  // 開いた状態で起動するので初期 load を即実行
-  const upcomingBox = document.getElementById('upcoming-box');
-  if (upcomingBox && upcomingBox.classList.contains('open')) {
-    openUpcomingBox();
-  }
 })();
 
 // ───────────────────────── 被り回避最適化パネル ─────────────────────────
@@ -260,6 +267,7 @@ function resetSeedOptSettings() {
   _lastShiftPrefill = SHIFT_LIMIT_IDS.map((id) => { const e = /** @type {HTMLInputElement | null} */ (document.getElementById(id)); return e ? e.value : ''; });
   refreshSeedOptDerivedUi();
   Promise.resolve(updateSeriesToggleState()).catch(() => {});
+  Promise.resolve(updatePublishedToggleState()).catch(() => {});
   const p = document.getElementById('so-progress');
   if (p) p.textContent = i18n('seed.boot.s4');
 }

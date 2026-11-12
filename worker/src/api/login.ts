@@ -1,11 +1,13 @@
 /** action: "login" — code を検証してセッショントークンを返す (gas/session.gs handleLogin_)。 */
 import type { Config } from '../config.ts';
+import { AUTHORIZE_URL, MANAGER_SCOPE, REPORTER_SCOPE, requireClientId } from '../config.ts';
 import type { Store } from '../store.ts';
 import type { FetchFn } from './oauth.ts';
-import { authenticateCode, oauthErrorMessage } from './oauth.ts';
+import { authenticateCode, exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAccessToken } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
-import { checkStateToken, issueSessionToken, verifySessionToken } from './session.ts';
+import { base64UrlEncode, checkStateToken, issueSessionToken, signState, verifySessionToken } from './session.ts';
+import { openJson, sealJson } from './report_crypto.ts';
 
 export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   if (typeof req.code !== 'string' || req.code.length === 0) {
@@ -13,8 +15,8 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   }
   // 署名 state の検証 (ここで単回使用にする)。
   const st0 = await checkStateToken(cfg, store, req.state, true, now);
-  // Challonge 用の state (f='challonge') は start.gg のログインには使わせない
-  const st = 'payload' in st0 && st0.payload.f === 'challonge' ? { reason: 'wrong_flow' as const } : st0;
+  // Challonge 用 (f='challonge')・大会運営用 (f='manager' / 'reporter'、scope が違う) の state はここでは使わせない
+  const st = 'payload' in st0 && (st0.payload.f === 'challonge' || st0.payload.f === 'manager' || st0.payload.f === 'reporter') ? { reason: 'wrong_flow' as const } : st0;
   if ('reason' in st) {
     return err('state_invalid',
       '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
@@ -27,9 +29,104 @@ export async function handleLogin(cfg: Config, store: Store, fetchFn: FetchFn, r
   }
   const token = await issueSessionToken(cfg, auth.user, now);
   const sess = await verifySessionToken(cfg, token, now); // exp を取り出すついでに自己検証
-  return ok({
+  await logLogin(store, auth.user.id, 'login', now);
+  const out = {
     token,
     user: { id: auth.user.id, slug: auth.user.slug, gamerTag: auth.user.gamerTag },
     exp: sess ? sess.exp : null,
+    // start.gg のトークン (scope user.identity)。ブラウザが参加中の大会を start.gg から直接読み直すのに使う (js/startgg_identity.js)
+    startgg: auth.startgg || null,
+  };
+  // ログインを始めたブラウザと別のブラウザで戻ってきた (callback に nonce が無い): 始めたブラウザが取りに来られるよう、結果を暗号化して置く
+  if (req.handoff === true && st.payload.h) {
+    const put = await store.putLoginHandoff(st.payload.h, await sealJson(cfg, out), now + LOGIN_HANDOFF_TTL_MS, now).then(() => true, () => false);
+    // 記録: 別のブラウザで戻ってきて引き継ぎを置いた (login_log の flow = handoff_put)。始めた画面が取れたら handoff
+    if (put) await logLogin(store, auth.user.id, 'handoff_put', now);
+  }
+  return ok(out);
+}
+
+/*
+ * ログインの引き継ぎ (2026-11-05)。iPhone のアプリ内ブラウザ (SFSafariViewController) でログインを始めると、start.gg アプリを経て
+ * Safari 本体で戻ってくることがある (保存領域が別なので、始めた画面は未ログインのまま)。始めた画面は乱数 s を持ち、begin_login で
+ * SHA-256(s) を署名つき state に入れておく。別のブラウザで戻ってきたら handleLogin が結果をそのハッシュで置き、始めた画面が s で取りに来る。
+ *   action: "login_handoff" { s } → { token, user, exp, startgg } (1 回だけ) / まだ無い・期限切れは { pending: true }
+ * URL・state に出るのはハッシュだけなので、callback の URL が漏れても取り出せない。
+ */
+export const LOGIN_HANDOFF_TTL_MS = 15 * 60 * 1000;
+export async function handoffHash(s: string): Promise<string> {
+  // ブラウザ (js/login.js) と同じ形: base64url・末尾の = なし (43 文字)
+  return base64UrlEncode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))).replace(/=+$/, '');
+}
+export async function handleLoginHandoff(cfg: Config, store: Store, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
+  const s = req.s;
+  if (typeof s !== 'string' || !/^[A-Za-z0-9_-]{22,128}$/.test(s)) return err('bad_request', '引き継ぎの指定が正しくありません。');
+  const data = await store.takeLoginHandoff(await handoffHash(s), now);
+  const v = data ? await openJson<Record<string, unknown>>(cfg, data) : null;
+  // 記録: 始めた画面が引き継ぎを取れた = 2 回目のログインが要らなかった (login_log の flow = handoff)
+  const u = v && v.user as { id?: unknown } | undefined;
+  if (u && u.id != null) await logLogin(store, String(u.id), 'handoff', now);
+  return ok(v ? { ...v } : { pending: true });
+}
+
+/** ログインの記録 (ユーザー ID・時刻・どのログインか だけ。トークンなどは入れない)。記録に失敗してもログインは止めない */
+export async function logLogin(store: Store, userId: string, flow: string, now: number): Promise<void> {
+  try { await store.insertLogin({ user_id: String(userId), ts_ms: now, flow }); } catch (e) {
+    console.error('login log failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+/*
+ * action: "startgg_refresh" { refresh_token } → { access_token, expires_in, refresh_token }
+ * 普段のログインの start.gg のトークンの延長 (client secret が要るので Worker を通す)。保存しない・ログに出さない。
+ */
+export async function handleStartggRefresh(cfg: Config, fetchFn: FetchFn, req: Record<string, unknown>): Promise<HandlerResult> {
+  const rt = req.refresh_token;
+  if (typeof rt !== 'string' || !rt || rt.length > 4096) return err('bad_request', 'refresh token がありません。');
+  const ex = await refreshAccessToken(cfg, rt, fetchFn);
+  if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
+  return ok({ access_token: ex.token, expires_in: ex.expiresIn, refresh_token: ex.refreshToken ?? null });
+}
+
+/*
+ * 大会運営用の start.gg ログイン (シード作成・下位クラス作成で API キーの代わりに使う)。
+ *   action: "manager_begin" { nonce, returnPath } → { url }  (scope = MANAGER_SCOPE の認可画面。state は f='manager')
+ *   action: "manager_login" { code, state }       → { token, user, exp, access_token, expires_in }
+ * 普段のログインと違い、start.gg のアクセストークンをブラウザに返す (ページが start.gg の API を直接呼ぶため)。
+ * Worker はトークンを保存しない・ログに出さない。普段のログインのセッションも同時に発行する。
+ */
+const MSG_MANAGER_STATE = '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、'
+  + '同じリンクを二度開いた可能性があります。元のページからやり直してください。';
+
+export async function handleManagerBegin(cfg: Config, req: Record<string, unknown>, now: number = Date.now(), flow: 'manager' | 'reporter' = 'manager'): Promise<HandlerResult> {
+  const nonce = String(req && req.nonce ? req.nonce : '');
+  const ret = String(req && req.returnPath ? req.returnPath : '');
+  if (nonce.length > 128 || ret.length > 512) return err('bad_request', 'パラメータが長すぎます。');
+  const state = await signState(cfg, nonce, ret, flow, now);
+  const q = new URLSearchParams({
+    response_type: 'code', client_id: requireClientId(cfg), scope: flow === 'reporter' ? REPORTER_SCOPE : MANAGER_SCOPE, redirect_uri: cfg.redirectUri, state,
+  });
+  return ok({ url: AUTHORIZE_URL + '?' + q.toString(), ttlMs: cfg.stateTtlMs });
+}
+
+export async function handleManagerLogin(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
+  if (typeof req.code !== 'string' || !req.code || req.code.length > 1024) return err('bad_request', '認証コードがありません。');
+  const code = req.code;
+  const st = await checkStateToken(cfg, store, req.state, true, now);
+  if ('reason' in st) return err('state_invalid', MSG_MANAGER_STATE, st.reason);
+  if (st.payload.f !== 'manager') return err('state_invalid', MSG_MANAGER_STATE, 'wrong_flow');
+  const ex = await exchangeCodeForToken(cfg, code, fetchFn, MANAGER_SCOPE);
+  if (!ex.token) return err('auth_failed', oauthErrorMessage(ex.reason), ex.reason || '');
+  const user = await fetchCurrentUser(ex.token, fetchFn);
+  if (!user) return err('auth_failed', oauthErrorMessage('no_user'), 'no_user');
+  const token = await issueSessionToken(cfg, user, now);
+  const sess = await verifySessionToken(cfg, token, now);
+  await logLogin(store, user.id, 'manager', now);
+  return ok({
+    token,
+    user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag },
+    exp: sess ? sess.exp : null,
+    access_token: ex.token,
+    expires_in: ex.expiresIn,
   });
 }

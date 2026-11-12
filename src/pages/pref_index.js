@@ -100,7 +100,7 @@ function render() {
         topHtml = SPSPLinks.playerLink(SPSP.langRoot, p.top_uid, escapeHtml(disp)) + rankFrag;
       }
       return `
-        <tr class="pref-row" onclick="if(event.target.closest('a'))return;location.href='${url}'">
+        <tr class="pref-row" data-href="${escapeHtml(url)}">
           <td class="col-idx">${currentRankOf(p)}</td>
           <td class="col-name"><a href="${url}">${escapeHtml(prefName(p.name))}</a></td>
           <td class="col-num">${p.n}</td>
@@ -176,6 +176,13 @@ async function init() {
     if (status) status.textContent = '';
   }
 }
+// 行のどこを押しても県のランキングへ (リンクはそのまま開く)。CSP のため onclick 属性は使わない
+document.getElementById('tbody')?.addEventListener('click', (e) => {
+  const t = /** @type {Element} */ (e.target);
+  if (t.closest('a')) return;
+  const tr = /** @type {HTMLElement | null} */ (t.closest('tr.pref-row'));
+  if (tr && tr.dataset.href) location.href = tr.dataset.href;
+});
 function finish() {
   assignFixedRanks();
   applyFilters(); render();

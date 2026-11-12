@@ -341,6 +341,22 @@ test('class_create: 管理している大会の一覧は 50 件ずつ、見つ�
   assert.strictEqual((await post(e, body())).error.code, 'not_admin');
 });
 
+test('class_create: 大会の開始日が分かれば、一覧は新しい順にその大会より前まで (4 ページを超えても読む・前の大会が出たら止める、2026-11-06)', async () => {
+  const T0 = 1800000000;
+  const ev = () => resp(200, { data: { currentUser: { id: 111 }, event: { id: 1234567, tournament: { id: 777, startAt: T0, owner: { id: 999 }, admins: null } } } });
+  // 新しい順の 1 ページ 50 件 (page が進むほど開始が前)。777 は 6 ページ目
+  const page = (p, withTarget) => resp(200, { data: { currentUser: { tournaments: { nodes: Array.from({ length: 50 }, (_, i) => (withTarget && i === 10
+    ? { id: 777, startAt: T0 } : { id: p * 1000 + i, startAt: T0 + (6 - p) * 86400 + (50 - i) })) } } } });
+  let e = env({ ...okHandlers(), gql: gqlRouter(ev, (p) => page(p, p === 6)) });
+  assert.strictEqual((await post(e, body())).ok, true, '4 ページを超えても、まだ新しい大会なら読む');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 7);
+  // その大会より前の大会が出たページで止める (無い = 管理者ではない)
+  const older = (p) => resp(200, { data: { currentUser: { tournaments: { nodes: Array.from({ length: 50 }, (_, i) => ({ id: p * 1000 + i, startAt: T0 + 86400 - p * 86400 - i })) } } } });
+  e = env({ ...okHandlers(), gql: gqlRouter(ev, older) });
+  assert.strictEqual((await post(e, body())).error.code, 'not_admin');
+  assert.strictEqual(e.calls.filter((c) => c.kind === 'gql').length, 2, '1 ページ目の途中で前の大会になったので 2 ページ目は読まない');
+});
+
 test('class_create: 管理している大会の一覧の取得に失敗したら startgg_error (not_admin にはしない)', async () => {
   for (const [page, note] of [
     [() => resp(500, {}), 'tours:http_500'],
@@ -621,4 +637,28 @@ test('class_create: :nocount の参加者もそのまま bulk_add に入る', as
   assert.strictEqual((await post(e, body({ participants: ps }))).ok, true);
   const b = JSON.parse(e.calls.find((c) => c.kind === 'bulk').init.body);
   assert.strictEqual(b.data.attributes.participants[2].misc, 'startgg:5555:nocount');
+});
+
+test('class_create / class_delete: 使用記録 (tool_logs) に start.gg で確かめたユーザーで残す。大会名などはブラウザの log から', async () => {
+  const e = env({ ...okHandlers(), gql: gqlBy(() => meResp(111), () => gqlOk(111, 111, null)) });
+  e.nowMs = Date.parse('2026-10-01T03:00:00Z');
+  assert.strictEqual((await post(e, body({ log: { auth: 'login', gamer_tag: 'Toko', tournament_name: '篝火#15', tournament_slug: 'tournament/kagaribi-15', event_name: 'Singles', tournament_id: 1 } }))).ok, true);
+  e.nowMs += 60 * 1000;
+  const c = e.store.toolLogs[0];
+  assert.strictEqual(c.tool, 'class');
+  assert.strictEqual(c.action, 'create');
+  assert.strictEqual(c.user_id, '111');
+  assert.strictEqual(c.verified, 1);
+  assert.strictEqual(c.auth, 'login');
+  assert.strictEqual(c.gamer_tag, 'Toko');
+  assert.strictEqual(c.tournament_id, 777, '大会 ID は start.gg に問い合わせた値を優先');
+  assert.strictEqual(c.tournament_name, '篝火#15');
+  assert.strictEqual(c.count, 4);
+  assert.strictEqual(JSON.parse(c.detail).challonge_id, 98765);
+  assert.strictEqual(leaked(e), false);
+  setHandlers(e, { gql: gqlBy(() => meResp(111), () => { throw new Error('not needed'); }), delete: () => new Response(null, { status: 204 }) });
+  assert.strictEqual((await post(e, delBody({ log: { auth: 'key' } }))).ok, true);
+  const d = e.store.toolLogs[1];
+  assert.deepStrictEqual([d.tool, d.action, d.user_id, d.verified, d.auth], ['class', 'delete', '111', 1, 'key']);
+  assert.strictEqual(JSON.parse(d.detail).by_creator, true);
 });

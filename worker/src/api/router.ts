@@ -9,6 +9,7 @@
  *   POST /api/<action>   body に action が無ければパスから補う
  *   GET  /api/export/votes?key=&since=   = action export_votes
  *   GET  /api/export/errors?key=&limit=  = action export_errors
+ *   POST /api/csp-report                 CSP の違反報告 (ブラウザ。body は csp-report / reports+json、応答 204)
  *   GET  /api/card?uid=                  = action card_get (だれでも読める。60 秒キャッシュ可)
  *   GET  /api/titles?uid=&lang=          = action title_get (持っている二つ名の記録。だれでも読める。60 秒キャッシュ可)
  *   GET  /api/class_waitlist             = action class_waitlist (下位クラスの取得待ち。だれでも読める)
@@ -17,13 +18,21 @@
  */
 import type { Config } from '../config.ts';
 import type { Store } from '../store.ts';
+import { handleBracketStructure } from './bracket_sim.ts';
+import { handleBracketShareCreate, handleBracketShareGet } from './bracket_share.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
+import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
 import { handleExportErrors, handleExportVotes } from './export.ts';
-import { handleLogin } from './login.ts';
+import { handleLogin, handleLoginHandoff, handleManagerBegin, handleManagerLogin, handleStartggRefresh } from './login.ts';
+import { handleToolLog } from './tool_log.ts';
+import {
+  handleReportAdmin, handleReportRefresh, handleReportAdminFix, handleReportStartBracket, handleReportBegin, handleReportBracket, handleReportProgression, handleReportProgressionOk, handleReportBracketView, handleReportDq, handleReportDqCancel, handleReportHeldExport, handleReportNoshow, handleReportNoshowResolve, handleReportPlayerSets, handleReportStart, handleReportManualCancel, handleReportManualCreate, handleReportPick, handleReportPhases, handleReportEnable, handleReportLogin, handleReportTournaments, handleReportEnableClass, handleReportInfo, handleReportNotices,
+  handleReportPresetDelete, handleReportPresets, handleReportPushKey, handleReportPushSubscribe, handleReportManagerAdd, handleReportManagerRemove, handleReportManagerLookup, handleReportJoin, handleReportPushTest, handleReportPushUnsubscribe, handleReportPresetSave, handleReportSettings, handleReportStop, handleReportSubmit, handleReportView,
+} from './report.ts';
 import type { FetchFn } from './oauth.ts';
 import { handlePost } from './post.ts';
 import type { ApiBody, HandlerResult } from './respond.ts';
@@ -71,6 +80,15 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         return (await handleBeginLogin(ctx.cfg, r, now)).body;
       case 'login':
         res = await handleLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'login_handoff':
+        // ログインの引き継ぎを取りに来る (待っている間は数秒おき)。まだ無いのは失敗ではない ({ pending: true })
+        return (await handleLoginHandoff(ctx.cfg, ctx.store, r, now)).body;
+      case 'manager_begin':
+        return (await handleManagerBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
+      case 'manager_login':
+        res = await handleManagerLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'startgg_refresh':
+        res = await handleStartggRefresh(ctx.cfg, ctx.fetch, r); break;
       case 'vote':
         res = await handleVote(ctx.cfg, ctx.store, ctx.dataFetch, r, now); break;
       case 'me':
@@ -86,6 +104,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleTitleExport(ctx.cfg, ctx.store, r); break;
       case 'card_put':
         res = await handleCardPut(ctx.cfg, ctx.store, r, now, ctx.dataFetch); break;
+      case 'tool_log':
+        res = await handleToolLog(ctx.cfg, ctx.store, r, now); break;
       case 'class_create':
         res = await handleClassCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_mine':
@@ -98,6 +118,100 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         res = await handleChallongeMe(ctx.fetch, r); break;
       case 'challonge_token':
         res = await handleChallongeToken(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      // 選手による試合結果の報告 (report.ts)
+      case 'report_begin':
+        return (await handleReportBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
+      case 'report_login':
+        res = await handleReportLogin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_tournaments':
+        res = await handleReportTournaments(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_enable':
+        res = await handleReportEnable(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_enable_class':
+        res = await handleReportEnableClass(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_info':
+        return (await handleReportInfo(ctx.store, r, now)).body;   // 読むだけ (だれでも)。記録しない
+      case 'report_view':
+        return (await handleReportView(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 15 秒ごとに読む。記録しない
+      case 'report_notices':
+        return (await handleReportNotices(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_submit':
+        res = await handleReportSubmit(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_start_bracket':
+        res = await handleReportStartBracket(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_refresh':
+        return (await handleReportRefresh(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_phases':
+        return (await handleReportPhases(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_admin':
+        return (await handleReportAdmin(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_admin_fix':
+        res = await handleReportAdminFix(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_settings':
+        res = await handleReportSettings(ctx.cfg, ctx.store, r, now); break;
+      case 'report_presets':
+        return (await handleReportPresets(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ。記録しない
+      case 'report_preset_save':
+        res = await handleReportPresetSave(ctx.cfg, ctx.store, r, now); break;
+      case 'report_preset_delete':
+        res = await handleReportPresetDelete(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_key':
+        return handleReportPushKey(ctx.cfg).body;   // 公開鍵を返すだけ。記録しない
+      case 'report_push_subscribe':
+        res = await handleReportPushSubscribe(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_unsubscribe':
+        res = await handleReportPushUnsubscribe(ctx.cfg, ctx.store, r, now); break;
+      case 'report_push_test':
+        res = await handleReportPushTest(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manager_lookup':
+        return (await handleReportManagerLookup(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_join':
+        res = await handleReportJoin(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manager_add':
+        res = await handleReportManagerAdd(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manager_remove':
+        res = await handleReportManagerRemove(ctx.cfg, ctx.store, r, now); break;
+      case 'report_stop':
+        res = await handleReportStop(ctx.cfg, ctx.store, r, now); break;
+      // start.gg に繋がらないあいだに運営が次の試合を指定する (report.ts、docs/self_report_design.md §11)
+      case 'report_bracket':
+        return (await handleReportBracket(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      // 前のフェーズからの通過順 (障害中に次のフェーズを計算で埋める前に運営が確かめる、2026-11-05)
+      // トーナメントシミュレーション: start.gg のフェーズの構造 (bracket_sim.ts)
+      // トーナメントプレビューの短い URL (bracket_share.ts)
+      case 'bracket_share_create':
+        res = await handleBracketShareCreate(ctx.cfg, ctx.store, r, now); break;
+      case 'bracket_share_get':
+        return (await handleBracketShareGet(ctx.store, r, now)).body;   // 読むだけ
+      case 'bracket_structure':
+        return (await handleBracketStructure(ctx.cfg, ctx.fetch, r, now)).body;   // 読むだけ
+      case 'report_bracket_view':
+        return (await handleReportBracketView(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ (D1 の写し)
+      case 'report_progression':
+        return (await handleReportProgression(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ
+      case 'report_progression_ok':
+        res = await handleReportProgressionOk(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      // 対戦開始・対戦相手が見つからない・DQ (docs §12)
+      case 'report_noshow':
+        return (await handleReportNoshow(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 連打されるので記録しない
+      case 'report_start':
+        return (await handleReportStart(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;
+      case 'report_noshow_resolve':
+        res = await handleReportNoshowResolve(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_player_sets':
+        return (await handleReportPlayerSets(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ
+      case 'report_dq':
+        res = await handleReportDq(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_dq_cancel':
+        res = await handleReportDqCancel(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_held_export':
+        return (await handleReportHeldExport(ctx.cfg, ctx.store, ctx.fetch, r, now)).body;   // 読むだけ。記録しない
+      case 'report_pick':
+        return (await handleReportPick(ctx.cfg, ctx.store, r, now)).body;   // 総当たりの「この人とやる」。記録しない
+      case 'report_manual_create':
+        res = await handleReportManualCreate(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
+      case 'report_manual_cancel':
+        res = await handleReportManualCancel(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'class_waitlist':
         return (await handleClassWaitlist(ctx.store)).body;   // 読むだけ (だれでも)。記録しない
       case 'class_done':
@@ -105,6 +219,8 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'export_votes':
         // ビルドサーバーの定期取得。失敗しても人手の出番は無いので記録しない。
         return (await handleExportVotes(ctx.cfg, ctx.store, r)).body;
+      case 'csp_export':
+        return (await handleCspExport(ctx.cfg, ctx.store, r)).body;
       case 'export_errors':
         return (await handleExportErrors(ctx.cfg, ctx.store, r)).body;
       case 'client_error':
@@ -135,7 +251,8 @@ async function logIfFailed(ctx: ApiContext, action: string, req: Record<string, 
     if (sess) uid = sess.id;
   }
   // note は理由の符号だけ (start.gg / Challonge のキー・トークンは note にも入らない)
-  const NOTE_ACTIONS = ['login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me'];
+  const NOTE_ACTIONS = ['login', 'manager_login', 'post', 'card_put', 'title_sync', 'title_export', 'class_create', 'class_mine', 'class_delete', 'challonge_token', 'challonge_me', 'tool_log',
+    'report_login', 'report_tournaments', 'report_enable', 'report_enable_class', 'report_submit', 'report_admin_fix', 'report_settings', 'report_stop', 'report_manager_add', 'report_manager_remove', 'report_join', 'report_manual_create', 'report_manual_cancel', 'report_dq', 'report_dq_cancel', 'report_noshow_resolve', 'report_start_bracket', 'report_progression_ok', 'bracket_share_create'];
   const note = NOTE_ACTIONS.includes(action) ? String(res.note || '') : '';
   await logError(ctx.cfg, ctx.store, 'server', action, res.body.error.code, uid, note, now);
 }
@@ -206,6 +323,19 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
 
   if (request.method !== 'POST') {
     return jsonResponse(getOnlyPostBody());
+  }
+
+  // CSP の違反報告 (ブラウザが送る。action は無い)。中身は返さない (204)
+  if (sub === 'csp-report') {
+    const n = Number(request.headers.get('content-length') || 0);
+    if (n <= MAX_BODY_BYTES) {
+      let t = '';
+      try { t = await request.text(); } catch (_) { t = ''; }
+      if (t && t.length <= MAX_BODY_BYTES) {
+        await recordCspReport(ctx.cfg, ctx.store, t, request.headers.get('cf-connecting-ip') || '', ctx.now());
+      }
+    }
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   const maxBody = sub === 'title_sync' ? TITLE_SYNC_MAX_BODY_BYTES : MAX_BODY_BYTES;

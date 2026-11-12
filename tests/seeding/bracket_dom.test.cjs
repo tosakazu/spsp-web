@@ -106,12 +106,14 @@ async function bootPage(fragment, opts) {
       const uid = Number(m[1]);
       state.playerHits.push(uid);
       const st = opts.playerStatus ? opts.playerStatus(uid, state) : 'ok';
+      if (st === 'hold') return new Promise(() => {});   // 届かない (読み込み中のまま)
       if (st === 'error') return { ok: false, status: 503, json: async () => ({}) };
       const p = (st === 'missing') ? null : fx.players[uid];
       return p ? j(p) : { ok: false, status: 404, json: async () => ({}) };
     }
     return { ok: false, status: 404, json: async () => ({}) };
   };
+  if (opts.views) win.SPSPViews = opts.views;   // 一覧の索引 (js/views.js) の代わり
   for (const src of SRC) {
     win.eval(src);
     // bracket/ はルートの 1 段下。js/html.js は script の src から推定するが、eval では取れないので教える
@@ -858,4 +860,68 @@ test('フェーズ構成を変えるとデータ版も変わり、変更済み�
   const el = doc.getElementById('bp-version');
   assert.ok(el.classList.contains('bp-version-edited'), '編集済みの見た目になっていない');
   assert.ok(el.textContent.includes('変更済み'), '編集済みの注記が無い: ' + el.textContent);
+});
+
+// 一覧の索引 (views/players_index.json) の代わり。名前だけ持つ。manifest は無し (= 選手 JSON は従来の場所から)
+function viewsStub(names, ready) {
+  const ix = { get: (uid) => (names[uid] ? { uid, name: names[uid] } : null) };
+  let loaded = false;
+  const api = {
+    manifest: async () => null,
+    bundledPlayer: async () => null,   // まとめ (bundle/) は無い
+    index: async () => { await ready; loaded = true; return ix; },
+    peekIndex: () => (loaded ? ix : null),
+  };
+  return { at: () => api };
+}
+
+test('名前は選手 JSON を待たずに一覧の索引から出す (共有 URL に名前が無い人)', { skip }, async () => {
+  const blob = await S.encodePayload(payload16());   // DB 登録者の名前は載っていない (大きい大会の共有 URL と同じ)
+  const names = {};
+  for (let i = 1; i <= 16; i++) names[100 + i] = '索引' + i;
+  let release;
+  const ready = new Promise((r) => { release = r; });
+  const { win } = await bootPage(`#v=1&ph=0&pool=A2&wd=1&d=${blob}`, {
+    views: viewsStub(names, ready),
+    playerStatus: () => 'hold',   // 選手 JSON はいつまでも届かない
+  });
+  const doc = win.document;
+  const shown = () => [...doc.querySelectorAll('.bp-name')].map((e) => e.textContent);
+  assert.ok(!shown().includes('索引2'), '索引が届く前から出ている');
+  release();
+  await waitFor(win, () => shown().includes('索引2') && shown().includes('索引7'));
+  assert.ok(doc.getElementById('bp-status').textContent.includes('取得中'), '選手 JSON の読み込みは続いている: ' + doc.getElementById('bp-status').textContent);
+});
+
+test('表示中のプールを読み終えたら、ほかのプールの選手を裏で 1 回ずつ読む (表示中のプールが先)', { skip }, async () => {
+  const blob = await S.encodePayload(payload16());
+  const { win, state } = await bootPage(`#v=1&ph=0&pool=A2&wd=1&d=${blob}`);
+  const all = [];
+  for (let i = 1; i <= 16; i++) if (i !== 4) all.push(100 + i);   // シード4 は uid なし
+  await waitFor(win, () => all.every((u) => state.playerHits.includes(u)));
+  const hits = state.playerHits.slice();
+  // 表示中のプール A2 (シード 2,7,10,15) が先頭 4 件
+  assert.deepStrictEqual(hits.slice(0, 4).sort(), [102, 107, 110, 115]);
+  // 二重に取らない
+  assert.strictEqual(new Set(hits).size, hits.length, JSON.stringify(hits));
+  // 先読みした後で別のプールを開くと、取り直さずに描ける
+  const before = state.playerHits.length;
+  const sel = win.document.getElementById('bp-pool-select');
+  sel.value = 'B1';
+  sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await waitFor(win, () => win.document.getElementById('bp-pool-info').textContent.startsWith('B1'));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.strictEqual(state.playerHits.length, before, '先読み済みなのに取り直した');
+});
+
+test('先読みは取得に失敗した人を取り直さない', { skip }, async () => {
+  const blob = await S.encodePayload(payload16());
+  const { win, state } = await bootPage(`#v=1&ph=0&pool=A2&wd=1&d=${blob}`, {
+    playerStatus: (uid) => (uid === 101 ? 'error' : 'ok'),   // シード1 (プール A1) は 5xx
+  });
+  await waitFor(win, () => state.playerHits.includes(116));
+  await new Promise((r) => setTimeout(r, 300));
+  // 先読みで 1 回 (fetchJson の中で 3 回まで) 試したら、それ以上は取りにいかない
+  const n101 = state.playerHits.filter((u) => u === 101).length;
+  assert.ok(n101 >= 1 && n101 <= 3, 'uid 101 の取得回数 ' + n101);
 });

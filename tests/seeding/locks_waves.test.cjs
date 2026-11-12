@@ -205,6 +205,8 @@ test('app: parseWaveValue / parseFixValue', () => {
   assert.strictEqual(ctx.parseWaveValue('0'), null);
   assert.strictEqual(ctx.parseFixValue('プール', false), 'pool');
   assert.strictEqual(ctx.parseFixValue('wave', false), 'wave');
+  assert.strictEqual(ctx.parseFixValue('seed', true), 'seed');   // シード固定 (2026-11-11)
+  assert.strictEqual(ctx.parseFixValue('シード固定', false), 'seed');
   assert.strictEqual(ctx.parseFixValue('1', false), 'pool');   // 汎用 truthy
   assert.strictEqual(ctx.parseFixValue('1', true), 'wave');    // ウェーブ指定行なら wave
   assert.strictEqual(ctx.parseFixValue('0', true), null);
@@ -237,6 +239,38 @@ test('app: buildSpecOrder — 順位ピン・ウェーブ割当・警告', () =>
   r = ctx.buildSpecOrder(cur, [], cur.map(u => [u, 1]), 2, [0, 1], poolOf);
   assert.ok(arr(r.notes).some(n => /ウェーブの枠が足りず 4人/.test(n)), arr(r.notes).join(' / '));
   assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
+});
+
+test('app: buildSpecOrder — ノーシードは最後尾にまとめる (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  let r = ctx.buildSpecOrder(cur, [], [], 2, [0, 1], poolOf, new Set([2, 5]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 4, 6, 7, 8, 2, 5], 'ノーシードは最後尾 (その中は今の順)');
+  // 最後のシードに順位ピンがあれば、その前の空きに入る
+  r = ctx.buildSpecOrder(cur, [[8, 8]], [], 2, [0, 1], poolOf, new Set([2]));
+  assert.deepStrictEqual(arr(r.order), [1, 3, 4, 5, 6, 7, 2, 8]);
+  assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
+});
+
+test('app: ウェーブの「◯◯の逆」・指定しない書き方 (2026-11-11)', () => {
+  const ctx = extractFns(['parseWaveOpposite', 'oppositeWave']);
+  vm.runInContext(APP_SRC.match(/const WAVE_OPPOSITE_RE = [^\n]*/)[0].replace('const ', 'globalThis.'), ctx);
+  ctx.WAVE_OPPOSITE_RE = ctx.WAVE_OPPOSITE_RE;
+  assert.strictEqual(ctx.parseWaveOpposite('さぼてんの逆'), 'さぼてん');
+  assert.strictEqual(ctx.parseWaveOpposite(' Celestia の逆 '), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('opposite of Celestia'), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('not Celestia'), 'Celestia');
+  assert.strictEqual(ctx.parseWaveOpposite('B'), null);
+  assert.strictEqual(ctx.oppositeWave(0, 2), 1);
+  assert.strictEqual(ctx.oppositeWave(1, 2), 0);
+  assert.strictEqual(ctx.oppositeWave(0, 4), 2);
+  const none = new RegExp(APP_SRC.match(/const WAVE_NONE_RE = \/(.*)\/i;/)[1], 'i');
+  for (const v of ['指定不可', 'どっちでも', 'どちらでも', 'なし', 'any']) assert.ok(none.test(v), v);
+  assert.ok(!none.test('A'));
+  const noseed = new RegExp(APP_SRC.match(/const NOSEED_RE = \/(.*)\/i;/)[1], 'i');
+  for (const v of ['ノーシード', 'noseed', 'No Seed', 'unseeded']) assert.ok(noseed.test(v), v);
+  assert.ok(!noseed.test('950'));
 });
 
 function csvMatchCtx() {
@@ -377,24 +411,26 @@ test('静的: 両ページに CSV テンプレート DL と記入例の無視・
   // 文言は辞書 (i18n/ja.js の priority.csv.sample_ignored) から引く
   assert.ok(/i18n\('priority\.csv\.sample_ignored', \{ n: sample \}\)/.test(PRI), '優先枠ページの警告が無い');
   // 例の値は両ページで一致していること (テンプレを取り違えても弾ける)。
-  // テンプレ出力は ASCII 名 (Shift_JIS 前提で開くアプリでも化けない)。判定は日本語名も含む。
-  assert.ok(/CSV_TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(APP_SRC), 'seed 側の出力例名が想定と違う');
-  assert.ok(/TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(PRI), '優先枠側の出力例名が想定と違う');
-  assert.ok(/concat\(\['山田太郎', '鈴木花子'\]\)/.test(APP_SRC) && /concat\(\['山田太郎', '鈴木花子'\]\)/.test(PRI),
-    '旧テンプレ (日本語名) の判定が残っていない');
-  // テンプレ本文に非 ASCII を混ぜない (文字化けの余地をなくす)。
-  for (const m of APP_SRC.match(/downloadCsvTemplate\(\[[\s\S]*?\], '[^']+'\)/g) || []) {
-    assert.ok(!/[^\x00-\x7F]/.test(m.replace(/CSV_TPL_OUT_NAMES/g, '')), 'テンプレ出力に非 ASCII: ' + m);
+  // 2026-11-11 からテンプレは表示言語 (説明行 ## と記入例の名前、BOM 付き UTF-8)。読み込みは UTF-8 / Shift_JIS のどちらも読む
+  // (js/csv_text.js)。記入例の判定はどの言語の例名も含む。
+  assert.ok(/CSV_TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(APP_SRC), 'seed 側の例名が想定と違う');
+  assert.ok(/TPL_OUT_NAMES = \['Taro Yamada', 'Hanako Suzuki'\]/.test(PRI), '優先枠側の例名が想定と違う');
+  for (const src of [APP_SRC, PRI]) {
+    assert.ok(/concat\(\['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato', '田中四郎', 'Shiro Tanaka'\]\)/.test(src), '各言語の記入例名の判定が無い');
   }
+  assert.ok(/csvTemplateLines\('source'\)/.test(APP_SRC) && /csvTemplateLines\('spec'\)/.test(APP_SRC), 'テンプレを表示言語で作っていない');
+  assert.ok(/comments: CSV_COMMENT/.test(APP_SRC + fs.readFileSync(require('node:path').resolve(__dirname, '../../site/seed-upload/seed_uploader.js'), 'utf8')),
+    'テンプレの説明行 (##) を読み飛ばしていない');
+  assert.ok(/dropCommentRows\(parseCsv\(text\)\)/.test(PRI), '優先枠ページがテンプレの説明行を読み飛ばしていない');
   // 例の disc 判定は「先頭7桁が 0」で両ページ共通。
   assert.ok(/\^0\{7\}\[0-9a-f\]\$/.test(APP_SRC) && /\^0\{7\}\[0-9a-f\]\$/.test(PRI),
     '例 disc の判定 (先頭7桁が0) が両ページに無い');
   // カラム名は英語 (テンプレ出力)。
   assert.ok(/'name,discriminator,seed,wave,lock'/.test(APP_SRC), '指定CSVテンプレが英語カラムでない');
   assert.ok(/'name,discriminator,seed'/.test(APP_SRC), '基準CSVテンプレが英語カラムでない');
-  // 空欄可の列はサンプル 2 行目を空にして示す。
-  assert.ok(/,="00000001",,,wave/.test(APP_SRC), '指定CSVテンプレに空欄可の例が無い');
-  assert.ok(/,="00000001",`/.test(APP_SRC), '基準CSVテンプレに空欄可の例が無い');
+  // 空欄可の列は記入例の行を空にして示す (指定: 2・3 行目、基準: 3 行目の seed)。
+  assert.ok(/,="00000001",,B,`/.test(APP_SRC) && /,="00000002",,,wave`/.test(APP_SRC), '指定CSVテンプレに空欄可の例が無い');
+  assert.ok(/,="00000002",`/.test(APP_SRC), '基準CSVテンプレに空欄可の例が無い');
   assert.ok(/',="00000001"/.test(PRI) || /,="00000001"/.test(PRI), '優先枠テンプレに空欄可の例が無い');
   // 文字化け対策: Blob の charset を明示。
   assert.ok(/text\/csv;charset=utf-8/.test(APP_SRC) && /text\/csv;charset=utf-8/.test(PRI),
@@ -434,7 +470,7 @@ test('静的: 手動調整バーからプール数/ウェーブ数を指定で�
   assert.ok(/tbody\.insertBefore\(lr,/.test(APP_SRC), '固定バーを行の直下に挿入していない');
   // 行のボタン/バッジは 📌 ではなくテキスト表記 (MANUAL_COL の cell 内)。
   const colBlock = APP_SRC.slice(APP_SRC.indexOf('const MANUAL_COL'), APP_SRC.indexOf('const SEED_BASE_COLUMNS'));
-  assert.ok(/プール指定/.test(colBlock), 'ボタンが「プール指定」表記でない');
+  assert.ok(/'固定'/.test(colBlock), 'ボタンが「固定」表記でない');   // 2026-11-11 シード固定を足して「プール指定」から改名
   assert.ok(!/📌/.test(colBlock), '手動列に📌マークが残っている');
   assert.ok(/'固定'/.test(colBlock) || /固定'/.test(colBlock), 'バッジが「〜固定」表記でない');
 });
@@ -596,14 +632,136 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
   assert.ok(/function exportSeedWorkCsv\(/.test(APP_SRC), 'exportSeedWorkCsv が無い');
   // インポート側の列と一致するヘッダを出す。
   assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves'/.test(APP_SRC), 'エクスポート列が想定と違う');
-  // 被り回避は「最後に別枠でかける処理」: 手動編集の再開で base に畳み込まない。
+  // 被り回避の反映中に編集を再開したら、最適化後の並びを手動調整の 1 手 ({ order }) として積む (base には畳み込まない。
+  // 「元に戻す」で最適化前に戻せる、2026-11-11)。
   const unlock = APP_SRC.slice(APP_SRC.indexOf('function manualUnlock('), APP_SRC.indexOf('function manualCommit('));
   assert.ok(!/} else if \(APPLIED_ORDER\) \{/.test(unlock),
     '被り回避の結果が手動調整の基準に畳み込まれている');
   assert.ok(/dropAppliedOrder\(/.test(unlock), '再編集で被り回避の反映が解除されない');
+  assert.ok(/manualPushOrder\(S\.APPLIED_ORDER\.slice\(\), 'opt'\)/.test(unlock), '最適化後の並びを手動調整に積んでいない');
   const csvApply = APP_SRC.slice(APP_SRC.indexOf('function applyCsvOrderIfReady('),
                                  APP_SRC.indexOf('async function buildParticipantsFromCsv('));
-  assert.ok(/dropAppliedOrder\(/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない');
+  assert.ok(/manualPushOrder\(order, 'csv'\)/.test(csvApply), 'CSV 読み込みで被り回避の反映が解除されない (manualPushOrder が解除する)');
   // 共有した CSV でプール数/ウェーブ数も揃う。
   assert.ok(/\['pools', 'so-pools', 'プール数'\]/.test(APP_SRC), 'pools/waves 列の反映が無い');
+});
+
+// ── optimizer: シード位置の固定 (seedFixed、2026-11-11) ─────────────
+test('optimizer: seedFixed の人は pools・winners スコープとも入力の位置から動かない', () => {
+  const N = 32, P = 4;
+  const ranking = Array.from({ length: N }, (_, i) => i + 1);
+  // 同地域を固めて移動を誘発する。8・16・30・31・32 を固定 (30〜32 はノーシード想定)
+  const prefByUid = { 1: '愛知県', 8: '愛知県', 9: '愛知県', 16: '愛知県', 17: '愛知県', 25: '福岡県', 30: '福岡県', 31: '福岡県', 32: '福岡県' };
+  const fixed = [8, 16, 30, 31, 32];
+  for (const scope of ['pools', 'winners']) {
+    for (const seed of [1, 2, 3]) {
+      const res = SO.optimize({
+        poolCount: P, format: 'DOUBLE_ELIMINATION', ranking, prefByUid, recentPair: {},
+        params: { mode: 'sa', rngSeed: seed, avoidRecent: false, keepDePlace: false, bracketScope: scope,
+          seedFixed: fixed, _verifyDelta: true, _verifyMoves: true },
+      });
+      for (const u of fixed) assert.strictEqual(res.seedOrder.indexOf(u), u - 1, `${scope} seed=${seed}: uid${u} が動いた`);
+      assert.deepStrictEqual(res.seedOrder.slice().sort((a, b) => a - b), ranking);
+    }
+  }
+  // 固定なしなら少なくとも誰かは動く (このデータで最適化が効いていることの確認)
+  const free = SO.optimize({ poolCount: P, format: 'DOUBLE_ELIMINATION', ranking, prefByUid, recentPair: {},
+    params: { mode: 'sa', rngSeed: 1, avoidRecent: false, keepDePlace: false } });
+  assert.ok(free.seedOrder.some((u, i) => u !== i + 1));
+});
+
+// start.gg はプール (phase group) の ID 順にスネークでシードを配る (篝火 #12・#14・#15 の実データで 99.9〜100% 一致、2026-11-11)
+test('app: wavesFromGroupNodes はプールを ID 順に並べる (ウェーブを交互に作った大会)', () => {
+  const ctx = extractFns(['wavesFromGroupNodes']);
+  // 篝火 #15 の形: ID 順が A100, B100, B200, A200, A300, B300, B400, A400 (API は名前順で返す)
+  const ids = { A100: 1, B100: 2, B200: 3, A200: 4, A300: 5, B300: 6, B400: 7, A400: 8 };
+  const nodes = ['A100', 'A200', 'A300', 'A400', 'B100', 'B200', 'B300', 'B400']
+    .map((d) => ({ id: 3520000 + ids[d], displayIdentifier: d, wave: { identifier: d[0] } }));
+  const wv = ctx.wavesFromGroupNodes(nodes);
+  assert.deepStrictEqual(Array.from(wv.identifiers), ['A100', 'B100', 'B200', 'A200', 'A300', 'B300', 'B400', 'A400']);
+  assert.deepStrictEqual(Array.from(wv.poolToWave), [0, 1, 1, 0, 0, 1, 1, 0]);
+  const SOx = require('../../site/seeding/seed_optimizer.js');
+  const poolOf = (s) => (SOx.default || SOx).poolOfSeed(s, 8);
+  // シード 1 は A100 (ウェーブ A)、シード 2 は B100 (ウェーブ B)、3 は B200、4 は A200
+  assert.deepStrictEqual([0, 1, 2, 3].map((s) => wv.identifiers[poolOf(s)]), ['A100', 'B100', 'B200', 'A200']);
+  // 篝火 #14 の形 (ID 順が B から始まる) でもウェーブ番号は文字順 (A = 0)
+  const ids14 = { B100: 1, A100: 2, A200: 3, B200: 4 };
+  const wv14 = ctx.wavesFromGroupNodes(['A100', 'A200', 'B100', 'B200'].map((d) => ({ id: ids14[d], displayIdentifier: d, wave: { identifier: d[0] } })));
+  assert.deepStrictEqual(Array.from(wv14.letters), ['A', 'B']);
+  assert.deepStrictEqual(Array.from(wv14.poolToWave), [1, 0, 0, 1]);
+});
+
+test('app: buildSpecOrder — ウェーブ指定を優先し、シードは下げる方向にだけずらす (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  ctx.i18n = (k, p) => k + (p ? JSON.stringify(p) : '');
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = Array.from({ length: 20 }, (_, i) => i + 1);
+  const waveMap = [0, 0, 1, 1];   // プール 1・2 = A、3・4 = B
+  const waveOfSeat = (s) => waveMap[poolOf(s, 4)];
+  // 13〜16 位が B 指定・17〜20 位がノーシード (下の行は A のプールから埋まるので、前の方法では 2 人が諦めになっていた)
+  const r = ctx.buildSpecOrder(cur, [], [13, 14, 15, 16].map((u) => [u, 1]), 4, waveMap, poolOf, new Set([17, 18, 19, 20]));
+  const order = Array.from(r.order);
+  assert.deepStrictEqual(order.slice().sort((a, b) => a - b), cur);
+  for (const u of [13, 14, 15, 16]) {
+    assert.strictEqual(waveOfSeat(order.indexOf(u)), 1, `uid${u} がウェーブ B にいない`);
+    assert.ok(order.indexOf(u) >= u - 1, `uid${u} のシードが上がった`);
+  }
+  assert.ok(!Array.from(r.notes).some((n) => /seed\.spec\.t4|枠が足りず/.test(n)), '諦めが出ている: ' + Array.from(r.notes).join(' / '));
+  assert.ok(Array.from(r.info).some((n) => /wave_moved_down|下げました/.test(n)), Array.from(r.info).join(' / '));
+  // ノーシードの人どうしの順は今の並びのまま
+  const ns = order.filter((u) => u >= 17);
+  assert.deepStrictEqual(ns, [17, 18, 19, 20]);
+});
+
+test('app: buildSpecOrder — 同じウェーブの枠を取り合うときは下位の指定者ほど下がる・動かした人の一覧 (2026-11-11)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  // P=4・A=プール1・2 / B=プール3・4。シード 3・4 は本来 B の枠。2 人とも A 指定 → A の枠は 7・8 番目
+  const r = ctx.buildSpecOrder(cur, [], [[3, 0], [4, 0]], 4, [0, 0, 1, 1], poolOf);
+  const order = Array.from(r.order);
+  assert.deepStrictEqual(order, [1, 2, 5, 6, 7, 8, 3, 4], '上位 (3) が近い枠、下位 (4) がその下');
+  assert.deepStrictEqual(Array.from(r.moved).map((m) => [m.uid, m.from, m.to]), [[3, 3, 7], [4, 4, 8]]);
+});
+
+test('app: interleaveWaveMap — 既定のウェーブの並びは交互 (篝火 #14・#15 式、2026-11-11)', () => {
+  const ctx = extractFns(['interleaveWaveMap']);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(8, 2)), [0, 1, 1, 0, 0, 1, 1, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3)), [0, 1, 2, 2, 1, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1)), [0, 0, 0, 0]);
+  // プール 16・ウェーブ 2: シードは 1 つごとに A, B, B, A, …、一番下の段にも両方のウェーブが来る
+  const wm = arr(ctx.interleaveWaveMap(16, 2));
+  const waveOfSeed = (s1) => wm[SO.poolOfSeed(s1 - 1, 16)];
+  assert.deepStrictEqual([1, 2, 3, 4, 5, 6].map(waveOfSeed), [0, 1, 1, 0, 0, 1]);
+  const last = Array.from({ length: 16 }, (_, i) => waveOfSeed(1536 - i));
+  assert.ok(last.includes(0) && last.includes(1));
+});
+
+// 篝火 #14 (64 プール)・#15 (128 プール) の実際の予選プール (ID 順の表示名) と一致すること (2026-11-11)。
+// start.gg にプールがあるとき: ID 順に読めば両方とも全員のプール・ウェーブが一致 (実データで #14 1520/1520・#15 2814/2814)。
+// プールが無いときの既定 (交互): #15 と同じ並び。#14 は最初に B100 を作ったため A・B の名前だけが逆
+test('app: ウェーブ・プールの対応が篝火 #14・#15 と一致', () => {
+  const ctx = extractFns(['wavesFromGroupNodes', 'interleaveWaveMap', 'waveLetter', 'poolLabel']);
+  const kagaribi = (P, first) => {   // ID 順の表示名: #15 = A100, B100, B200, A200, A300, …
+    const other = first === 'A' ? 'B' : 'A';
+    return Array.from({ length: P }, (_, i) => ((Math.floor(i / 2) % 2 === 0) === (i % 2 === 0) ? first : other) + (Math.floor(i / 2) + 1) * 100);
+  };
+  const short = (d) => d.replace(/00$/, '');   // A100 → A1 (ツールの表示)
+  for (const [P, first] of [[64, 'B'], [128, 'A']]) {
+    const names = kagaribi(P, first);
+    const wv = ctx.wavesFromGroupNodes(names.map((d, i) => ({ id: 1000 + i, displayIdentifier: d })));
+    const labels = Array.from({ length: P }, (_, p) => ctx.poolLabel(p, wv.poolToWave));
+    assert.deepStrictEqual(labels, names.map(short), `start.gg のプール (${P}, ${first} から)`);
+  }
+  assert.deepStrictEqual(kagaribi(8, 'A'), ['A100', 'B100', 'B200', 'A200', 'A300', 'B300', 'B400', 'A400']);
+  const def = ctx.interleaveWaveMap(128, 2);
+  assert.deepStrictEqual(Array.from({ length: 128 }, (_, p) => ctx.poolLabel(p, def)), kagaribi(128, 'A').map(short), '既定 = #15');
+});
+
+test('app: enforceSeedLocks — シード固定 (kind seed) は並びを寄せない (最適化で動かさないだけ、2026-11-11)', () => {
+  const ctx = extractFns(['enforceSeedLocks']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const r = ctx.enforceSeedLocks([1, 2, 3, 4, 5, 6, 7, 8], { 3: { kind: 'seed', target: null } }, 4, [0, 0, 1, 1], poolOf);
+  assert.deepStrictEqual(arr(r.order), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepStrictEqual(arr(r.overflow), []);
 });

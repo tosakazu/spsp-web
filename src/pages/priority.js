@@ -3,6 +3,7 @@
 // import が依存 (default import = そのモジュールの api、副作用 import = グローバルに置くだけのもの)。tools/build/build_site.mjs が esbuild で束ねて dist/assets/priority.js にする。
 import SPSPHtml from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
+import { dropCommentRows, readCsvText } from '../../site/js/csv_text.js';
 import SPSPLinks from '../../site/js/links.js';
 import SPSPData from '../../site/js/data.js';
 import SPSPViews from '../../site/js/views.js';
@@ -294,7 +295,7 @@ function utcOffsetMs(off) {
   // 出力は ASCII 名にする: Shift_JIS 前提で CSV を開くアプリ (Excel for Mac 等) でも
   // 化けないため。判定側は旧テンプレの日本語名も引き続き例として扱う。
   var TPL_OUT_NAMES = ['Taro Yamada', 'Hanako Suzuki'];
-  var TPL_NAMES = TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子']);
+  var TPL_NAMES = TPL_OUT_NAMES.concat(['山田太郎', '鈴木花子', '佐藤次郎', 'Jiro Sato', '田中四郎', 'Shiro Tanaka']);
   /** @param {string | null | undefined} disc */
   function isTemplateDisc(disc) { return !!disc && /^0{7}[0-9a-f]$/i.test(disc); }
   /** @param {string[]} row @param {string | null} disc */
@@ -314,9 +315,13 @@ function utcOffsetMs(off) {
     URL.revokeObjectURL(a.href);
   }
   // name は照合に使わない (discriminator のみ)。2 行目で name 空欄可を示す。
+  // テンプレートは表示言語の説明行 (## で始まる行、読み込み時は無視) つき (2026-11-11)
   function downloadTemplate() {
-    downloadBlob('name,discriminator\r\n'
-      + TPL_OUT_NAMES[0] + ',="00000000"\r\n'
+    var note = function (/** @type {string} */ t) { return '## ' + t.replace(/,/g, '、').replace(/"/g, '\u201d') + '\r\n'; };
+    downloadBlob(note(i18n('priority.tpl.title')) + note(i18n('priority.tpl.rows')) + note(i18n('priority.tpl.disc'))
+      + note(i18n('priority.tpl.name')) + note(i18n('priority.tpl.ignored'))
+      + 'name,discriminator\r\n'
+      + i18n('seed.csvtpl.sample1') + ',="00000000"\r\n'
       + ',="00000001"\r\n',
       'priority_template.csv');
   }
@@ -407,7 +412,7 @@ function utcOffsetMs(off) {
   // clear で参照ごと差し替えないよう list/unknown は in-place で操作する。
   /** @param {string} text @param {CsvTarget} target */
   function importCsv(text, target) {
-    var rows = parseCsv(text);
+    var rows = dropCommentRows(parseCsv(text));   // テンプレートの説明行 (## で始まる行) は読み飛ばす
     var found = findDiscColumn(rows);
     if (!found) {
       var noteEl = document.getElementById(target.noteId);
@@ -601,9 +606,8 @@ function utcOffsetMs(off) {
         var fileInput = /** @type {HTMLInputElement} */ (e.target);
         var f = fileInput.files && fileInput.files[0];
         if (!f) return;
-        var reader = new FileReader();
-        reader.onload = function () { importCsv(String(reader.result), pair[1]); };
-        reader.readAsText(f);
+        // UTF-8 で読めなければ Shift_JIS (Excel で保存し直した CSV、2026-11-11)
+        readCsvText(f).then(function (text) { importCsv(text, pair[1]); });
         fileInput.value = '';   // 同じファイルの再選択でも change が発火するように
       });
     });

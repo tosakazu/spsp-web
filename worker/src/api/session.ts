@@ -131,18 +131,21 @@ const STATE_USED_PREFIX = 'st:';
 export interface StatePayload {
   n: string;
   r: string;
-  f: 'post' | 'login' | 'challonge';
+  f: 'post' | 'login' | 'challonge' | 'manager' | 'reporter';
   t: number;
+  /** ログインの引き継ぎ (login.ts): 始めたブラウザの乱数 s の SHA-256 (base64url)。普段のログインだけ */
+  h?: string;
 }
 
 /** state を発行する。payload = { n, r, f, t }。f (flow) を署名に含める。 */
-export async function signState(cfg: Config, nonce: unknown, returnPath: unknown, flow: unknown, now: number = Date.now()): Promise<string> {
+export async function signState(cfg: Config, nonce: unknown, returnPath: unknown, flow: unknown, now: number = Date.now(), handoffHash: string | null = null): Promise<string> {
   const payload: StatePayload = {
     n: String(nonce || ''),
     r: String(returnPath || ''),
-    f: flow === 'post' ? 'post' : flow === 'challonge' ? 'challonge' : 'login',
+    f: flow === 'post' ? 'post' : flow === 'challonge' ? 'challonge' : flow === 'manager' ? 'manager' : flow === 'reporter' ? 'reporter' : 'login',
     t: now,
   };
+  if (handoffHash && payload.f === 'login') payload.h = handoffHash;
   const body = utf8ToBase64Url(JSON.stringify(payload));
   return body + '.' + (await signPayload(cfg, body));
 }
@@ -198,5 +201,7 @@ export async function handleBeginLogin(cfg: Config, req: Record<string, unknown>
   if (nonce.length > 128 || ret.length > 512) {
     return err('bad_request', 'パラメータが長すぎます。');
   }
-  return ok({ state: await signState(cfg, nonce, ret, req && req.flow, now), ttlMs: cfg.stateTtlMs });
+  // handoff_h = ログインの引き継ぎ用のハッシュ (SHA-256 の base64url、43 文字)。形が違えば付けない
+  const h = typeof req.handoff_h === 'string' && /^[A-Za-z0-9_-]{43}$/.test(req.handoff_h) ? req.handoff_h : null;
+  return ok({ state: await signState(cfg, nonce, ret, req && req.flow, now, h), ttlMs: cfg.stateTtlMs });
 }

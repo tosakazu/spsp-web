@@ -417,3 +417,36 @@ start.gg の実ブラケット構造は `phaseGroup.sets(filters:{showByes:true}
 - Discord 共有は URL では不可 (2,000字制限) → CSV ファイルで。
 - 敗者側は教科書的ドロップパターンの近似 (start.gg の実配置は大会設定依存。画面に注記)。
 - `CompressionStream` 非対応の古いブラウザは対象外 (エラー表示のみ)。
+
+## 9. 組み合わせを start.gg の構造で決める (2026-11-05)
+
+シードページの共有 URL に start.gg のフェーズの id (`sgg`、選んだ phase から通過でつながる順) を載せる (start.gg から取れたフェーズ構成をそのまま使ったときだけ: 2 フェーズ以上は start.gg の連鎖、1 フェーズはプール数が start.gg と同じ。
+カスタムした・取りようがない (CSV 等) ときは載せない = ログインなしで SPSP の組み方。プレビューでフェーズ構成を編集したときも SPSP の組み方に切り替える)。プレビューはこれがあれば
+start.gg のブロックの構造 (`sets(showByes)` の枠の前の試合) を読み、**表の組み合わせ (勝者側の対戦・敗者側に落ちる位置・敗者側スタートの組み) を
+start.gg のものにする**。表の見た目と列の形 (ラウンドの数・並び・敗者側の major / minor) は従来のまま。
+
+- 組み立て = site/bracket/bracket_sgg_core.js (`deFromSgg`: start.gg の試合のつながりからシード通りに勝ち上がらせた表、
+  `alignToApp`: 従来の組み方の列の形に後ろ (決勝側) から揃える。start.gg は全部が不戦勝の敗者側のラウンドを持たないことがあり、従来の表はその空の列も出すため)。
+  画面の差し替え = bracket_app.js の `deOf` (`window.SPSP.BracketSgg` があればそれ、無ければ従来の `poolDoubleElim`)、読み込み = src/pages/bracket_sgg.js。
+- 読むもの: フェーズ・フェーズのシード・試合は同じフェーズで人数が同じブロックは構造が同じなので人数ごとに 1 ブロックだけ (実データ 318 組で一致を確認、
+  worker/src/api/bracket_struct.ts の fetchSimData)。73 人 4 プール → TOP24 で 10 回。
+- どこから読むか: SPSP の Worker (`bracket_structure`、トークン STARTGG_PUBLIC_TOKEN があるときだけ、Cloudflare のキャッシュに 10 分) →
+  読めなければブラウザからログインのトークンで start.gg を直接読む。ログインしていなければ SPSP の推定の組み方で出し、「推定・まれにずれる・厳密にはログイン」と案内する (読んでいる間は表を出さない)。start.gg が読めなかったときだけ従来の組み方で出してそう書く。
+- 検証 (終わった大会のダブルイリミのプール 808): 全部で表に組めた (806 は従来の列の形に揃えられた、2 は start.gg の形のまま)。
+  組み合わせの集合が従来の組み方と同じ 706、違う 102 (勝者側 39 = 運営が組み方を変えた大会など、敗者側 97 のうち 63 = 敗者側スタートの組み)。違うものは start.gg の実際が正しい。
+- 次のフェーズに誰が進むか (プールの顔ぶれ) は従来どおり (進出者を全体シード順で組み直す = start.gg の既定と同じ)。各プールの中の組み合わせだけ start.gg の構造。
+
+## 10. 適用後のプレビュー・短い URL (2026-11-05)
+
+- **適用後のトーナメントをプレビュー**: シードページで start.gg にシードを適用したあと、状態の行に「🏆 適用後のトーナメントをプレビュー」。
+  押すと start.gg から適用後のシード順を読み直し (40_startgg.js の fetchAllSeeds)、その並び・start.gg のプール数でトーナメントプレビューを開く
+  (90_spec.js の issueBracketPreview({ recs, pools }))。フェーズ構成・start.gg の組み合わせは普段の共有と同じきまり。
+- **短い URL**: プレビューの「🔗 URLをコピー」の横に「🔗 短い URL」と保存期間 (1 / 3 / 7 日、既定 3 日)。今の共有 URL の # の後ろを Worker に置き
+  (`bracket_share_create`、D1 `bracket_shares` = migration 0024)、`/bracket/?s=<id>` をコピーする。開くと `bracket_share_get` で読み、# の付いた元の URL に移る。
+  ID は 8 文字 (紛らわしい文字を除いた 55 種)。期限を過ぎたものは作るときに消す。API の無いサイトでは出さない。src/pages/bracket_share.js / worker/src/api/bracket_share.ts。
+  - (2026-11-05 追記) **作るのはログイン必須**。作った人 (start.gg のユーザー ID・名前) を行に残す (migration 0025)。1 人 30 個まで (超えたら古いものから消す)・10 分に 10 個まで。
+  - start.gg の組み合わせで出しているときは、作った人のブラウザが読んだ構造 (SimData) も一緒に置く。開く人はログインなしで start.gg の組み合わせになる
+    (sessionStorage に置いて bracket_sgg.js が使う)。
+  - (2026-11-05 追記) **長い URL・CSV 保存にも入れる**: プレビューで start.gg の構造を読み終えたら、構造 (payload.sggData) を入れた d= に作り直して URL を書き換える
+    (bracket_app.js が spsp:bracket-blob を受ける)。コピーした URL・CSV 保存 (1 行目の sgg / sgg_data 列) を開いた人はログインなしで start.gg の組み合わせ。
+    CSV 読み込みでも戻る (seed_share.js の workCsvToPayload)。データ版 (payloadVersion) には入れない。

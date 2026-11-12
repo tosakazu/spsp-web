@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { makeEnv, post, http, SECRET } from './_env.mjs';
 import { deriveExportKey, keyMatches } from '../src/api/export.ts';
 
-// 導出値の固定ベクタ (tests/post/gas_export.test.cjs / tests/post/test_char_vote.py と同じ)。
+// 導出値の固定ベクタ (ビルド側 spsp-build の取得と同じ)。
 const KEY = 'r_GJ1PQZlcDh4cNc85qvUxAaFBoKzoHGgPVE_pPDfhg';
 
 /** [timestamp, user_id, user_slug, gamer_tag, char_id, char_name, status] */

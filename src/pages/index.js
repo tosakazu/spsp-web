@@ -18,6 +18,8 @@ import '../../site/share.js';
 import SPSPLogo from '../../site/logo.js';
 import SPSPShare from '../../site/share.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
+import SpspLive from '../../site/js/live.js';
+import SpspReportNotice from '../../site/js/report_notice.js';
 /** 地域の暦日の時差 (region/config.js utcOffset。無ければ止まらないよう空 = UTC ではなく、設定は必ずある前提) */
 const SITE_UTC_OFFSET = /** @type {SpspSiteConfig} */ (window.SPSP.site).utcOffset;
 
@@ -106,7 +108,7 @@ async function useSource(src) {
 }
 /** 検索の当たり (players_index.json。並びは表と同じ = いまの順位評価の順位順、順位なしは末尾) @param {string} q @param {string} method */
 async function searchSource(q, method) {
-  const hits = await SPSPViews.searchIndex(q);
+  const hits = await SPSPViews.searchIndex(q, { byId: SPSPRankingPage.searchById() });
   const key = method === 'tjpr' ? 'tjpr' : method === 'bt_gated' ? 'bt' : 'ens';
   const rk = (/** @type {any} */ h) => (h[key] > 0 ? h[key] : Infinity);
   const order = hits.map((h, i) => ({ h, i })).sort((a, b) => (rk(a.h) - rk(b.h)) || (a.i - b.i)).map((x) => x.h.uid);
@@ -179,6 +181,13 @@ async function loadData() {
     // views 読みでは表に居ない (まだ取っていない) 人の行は ranking/ensemble/ から 1 つだけ取る
     SpspMyNotice.showForSelf(document.getElementById('my-notice'), uid => DATA.find(r => r.user_id === uid) ||
       (VIEWS ? SPSPViews.rowsByUids([uid]).then(r => r[0] || null) : null)).catch(() => {});
+    // ログイン中の本人が出ている開催中の大会 (js/live.js) と、そのうち結果報告を受付中のもの・報告の食い違い (js/report_notice.js)。
+    // 結果報告を受付中の大会は結果報告の帯だけに出す (参加中の帯と二重にしない、2026-11-04)
+    const rep = SpspReportNotice.items().catch(() => ({ events: [], conflicts: [], admin: [] }));
+    SpspLive.showNotice(document.getElementById('live-notice'), {
+      skip: rep.then((r) => new Set(r.events.filter((e) => e.event_id != null).map((e) => String(e.event_id)))),
+    }).catch(() => {});
+    SpspReportNotice.show(document.getElementById('report-notice'), rep).catch(() => {});
   } catch (e) {
     status.textContent = t('common.error', { message: /** @type {Error} */ (e).message });
   }
@@ -292,7 +301,7 @@ SPSPRankingPage.bindSearch(text => {
   filterText = text;
   if (TABLE) TABLE.rowFilter = rowFilter();   // 検索中は隠さない (次の描画から)
   if (VIEWS) { if (TABLE) refreshViewsSource().catch(() => {}); return; }
-  if (TABLE) TABLE.setFilterText(filterText);
+  if (TABLE) TABLE.setFilterText(filterText, SPSPRankingPage.searchById());
 });
 
 SPSPRankingPage.bindMethodTabs(method => {
@@ -452,6 +461,7 @@ SPSPShare.setup(document.getElementById('share-icon-btn'), () => ({
         const target = ev.target instanceof Element ? ev.target : null;
         if (target && target.closest('.ticker-close')) return;
         if (target && target.closest('a')) return;  // 内部リンクはデフォルト動作
+        if (SpspMyNotice.nearClose(ev, row)) return;   // × のすぐ左は押しても何もしない (押し間違い防止)
         location.href = `news/?filter=${filter}`;
       });
       // × ボタン: hide + 現在時刻 (ms) を localStorage に保存. 後で新しい news が来たら自動再表示.

@@ -140,7 +140,7 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   win.document.getElementById('so-keep-deplace').checked = true;
   win.document.getElementById('so-include-weekday').checked = false;
   // 固定 (SEED_SPEC.locks) の配線: ranking 内 uid のみが params.seedLocks に届く。
-  win.eval("SEED_SPEC = { label: null, pins: {}, waves: {}, locks: { '101': 'pool', '999': 'wave' } };");
+  win.eval("SEED_SPEC = { label: null, pins: { '103': 3, '998': 1 }, waves: {}, locks: { '101': 'pool', '999': 'wave', '105': { kind: 'seed', target: null }, '997': { kind: 'seed', target: null } }, noseed: [108] };");
 
   await win.eval('runSeedOptimize()');
 
@@ -173,6 +173,10 @@ test('jsdom: 5トグルと数値入力が buildSeedData / worker params へ届�
   assert.strictEqual(p.seedLocks['101'], 'pool');
   assert.ok(!('999' in p.seedLocks), 'ranking 外の uid が seedLocks に残っている');
   assert.strictEqual(p.poolWaves.length, 4);
+  // シード固定: lock の種類 seed (105) だけが seedFixed に載り、seedLocks には入らない。順位指定 (103) だけ・ノーシード (108)
+  // は固定しない (被り回避で動いてよい、2026-11-11)。ranking 外の 997 は載らない
+  assert.deepStrictEqual(Array.from(p.seedFixed), [105]);
+  assert.ok(!('105' in p.seedLocks), 'シード固定が seedLocks に入っている');
   // poolCount / ranking も入力どおり。
   assert.strictEqual(cap.post.input.poolCount, 4);
   assert.deepStrictEqual(Array.from(cap.post.input.ranking), [101, 102, 103, 104, 105, 106, 107, 108]);
@@ -463,10 +467,14 @@ function uploadSetup(HTML) {
     function alert(m) { calls.alerts.push(m); }
     function confirm() { return true; }
     async function createPhaseThenUpload() { calls.createPhase++; }
+    function logSeedingUse(token, phaseId, count) { calls.logged = { phaseId: phaseId, count: count }; }   // 使用記録 (js/tool_log.js) は送ったことだけ見る
     var SmashSeed = { uploadSeeding: async function (phaseId, token, mapping) { calls.upload = { phaseId: phaseId, mapping: mapping }; return { ok: true, count: mapping.length }; } };
     ${extractFn(HTML, 'uploadOrderLabel')}
+    ${extractFn(HTML, 'appliedPreviewButton')}
     ${extractFn(HTML, 'isAutoOptimizeOn')}
     ${extractFn(HTML, 'openSeedOptPanel')}
+    ${extractFn(HTML, 'manualFromOptimized')}
+    ${extractFn(HTML, 'manualSrc')}
     ${extractFn(HTML, 'ensureAutoOptimizeForUpload')}
     ${extractFn(HTML, 'settleSeedOptWaiter')}
     ${extractFn(HTML, 'runSeedOptimizeAndWait')}
@@ -496,6 +504,7 @@ test('jsdom: 自動実行 ON → 最適化の完了を待ってから、反映�
   assert.strictEqual(JSON.stringify(c.upload.mapping), JSON.stringify([{ seedId: 13, seedNum: 1 }, { seedId: 12, seedNum: 2 }, { seedId: 11, seedNum: 3 }]));
   assert.match(win.document.getElementById('status').textContent, /シード適用成功/);
   assert.strictEqual(c.errors.length, 0);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(c.logged)), { phaseId: 77, count: 3 }, '書き込めたら使用記録を送る');
   // 反映済みなので、もう一度押しても回し直さない。
   await win.eval('uploadToStartgg()');
   assert.strictEqual(win.eval('calls').optimize, 1, '反映済みなのに最適化を回し直した');
@@ -590,6 +599,7 @@ function settingsSetup(HTML) {
     var modeDefaultsCalls = 0;
     function applyModeDefaults() { modeDefaultsCalls++; document.getElementById('so-restarts').value = '15'; }
     async function updateSeriesToggleState() {}
+    async function updatePublishedToggleState() {}
     ${extractFn(HTML, 'updateIntraToggleState')}
     ${extractFn(HTML, 'seedOptSettingFields')}
     ${extractFn(HTML, 'seedOptFieldValue')}

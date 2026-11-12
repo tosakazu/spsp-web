@@ -9,6 +9,7 @@
 //       --data <deployed dir> --out <snapshot dir> [--freeze <dir>] [--only <scenario 名の正規表現>] [--site <site dir>] [--region <REGION>]
 //
 //   --freeze <dir>: 読んだデータファイルをそこへ写し、以後はそちらを優先して読む (nightly でデータが変わっても同じ入力で比べられる)。
+//   --live <dir>: 速報 (data.spsp.games/live/) を dir から配る (参加中の大会の確認用。dir/jp/index.json, dir/jp/events/<id>.json)
 //   --block <正規表現>: データの相対パスがこれに当たる要求は 404 にする (例 '^(latest_tjpr_full\.jsonl|players_current\.json)$':
 //                      data/views/ があるデータで、ページが全選手の大きいファイルを読まずに描けるかを見る。当たった要求は errors.txt にも書く。
 //                      '@<file>' でファイルから読む)
@@ -37,6 +38,9 @@ const opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] :
 const DATA = path.resolve(opt('--data'));
 const OUT = path.resolve(opt('--out'));
 const FREEZE = opt('--freeze') ? path.resolve(opt('--freeze')) : null;
+// --live <dir>: 速報 (https://data.spsp.games/live/…) をこの dir から配る (dir/jp/index.json, dir/jp/events/<id>.json …)。無ければ外部要求のまま
+const LIVE = opt('--live') ? path.resolve(opt('--live')) : null;
+const LIVE_URL = 'https://data.spsp.games/live/';
 const ONLY = opt('--only', '');   // scenario 名の正規表現 (部分一致)。ConoHa の CPU 時間制限 (~300s/プロセス) に当たるときは分割して走らせる
 const COMPUTED = args.includes('--computed');        // 各要素の computed style (メディアクエリの変種ごと) も記録する (遅い)
 const DUMP_COMPUTED = args.includes('--dump-computed'); // ハッシュだけでなく全行を書く (差分の調査用)
@@ -111,6 +115,12 @@ function serve(url, state) {
       if (rel.startsWith(BASE.slice(1))) rel = rel.slice(BASE.length - 1);
       else state.errors.push('request outside base ' + BASE + ': /' + rel);
     }
+  }
+  if (rel === null && LIVE && url.startsWith(LIVE_URL)) {
+    const f = path.join(LIVE, decodeURIComponent(new URL(url).pathname.replace(/^\/live\//, '')));
+    state.hits.push(url);
+    if (!f.startsWith(LIVE + path.sep) || !fs.existsSync(f)) return new Response('', { status: 404 });
+    return new Response(fs.readFileSync(f), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
   if (rel === null) {
     const stub = cdnStub(url);

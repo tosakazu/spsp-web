@@ -21,6 +21,57 @@ import SeedOptimizer from '../seed_optimizer.js';
 
 export const DATA = [];
 
+// ── ランダムシード (2026-11-05) ──
+// 選ぶたびに乱数の種 (32 bit) を暗号用の乱数で作り、各プレイヤーに「種とその人の ID から作る乱数」を振って昇順に並べる。
+// 同じ種なら同じ並び (記録・説明用)。並びの後に被り回避 (既定 ON) をかけるのは他の評価と同じ。
+/** 種を作る @returns {number} */
+export function newRandomSeed() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0];
+}
+/** 種 × 文字列 → [0, 2^53) の乱数 (cyrb53) @param {number} seed @param {string} str */
+export function randomKey(seed, str) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+/** 記録の並びに使う ID (ランキングに無い人・ゲストも含めて全員に振る) @param {any} r */
+function randomIdOf(r) {
+  return r.user_id != null ? 'u' + r.user_id : r.seedId != null ? 's' + r.seedId : r.entrantId != null ? 'e' + r.entrantId : 'd' + (r.display || '');
+}
+/** ranks.random を 1..N で振る (種が無ければ作る) @param {any[]} recs @param {number | null} [seed] */
+export function assignRandomRanks(recs, seed) {
+  if (seed == null) seed = S.RANDOM_SEED != null ? S.RANDOM_SEED : newRandomSeed();
+  S.RANDOM_SEED = seed;
+  const keyed = recs.map((r) => ({ r, id: randomIdOf(r), k: randomKey(/** @type {number} */ (seed), randomIdOf(r)) }));
+  keyed.sort((a, b) => a.k - b.k || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  keyed.forEach((x, i) => { x.r.ranks = x.r.ranks || {}; x.r.ranks.random = i + 1; });
+}
+/** ランダムのタブの説明 (種の値) を書き直す */
+export function renderRandomTab() {
+  const el = document.getElementById('random-seed-desc');
+  if (el) el.textContent = S.currentMethod === 'random' && S.RANDOM_SEED != null ? i18n('seed.random.seed_value', { n: S.RANDOM_SEED }) : i18n('seed.random.desc');
+  // 種の値を見せる・コピーする・入れて同じ並びを作る (ランダムであることの証明と再現のため)
+  const box = document.getElementById('random-seed-box');
+  if (box) box.hidden = S.currentMethod !== 'random' || !DATA.length;
+  const inp = /** @type {HTMLInputElement | null} */ (document.getElementById('random-seed-input'));
+  if (inp && S.RANDOM_SEED != null && document.activeElement !== inp) inp.value = String(S.RANDOM_SEED);
+}
+/** 入力された種の値 (0〜4294967295 の整数)。正しくなければ null @param {string} v */
+export function parseRandomSeed(v) {
+  const s = String(v || '').trim();
+  if (!/^\d{1,10}$/.test(s)) return null;
+  const n = Number(s);
+  return n <= 0xffffffff ? n : null;
+}
+
 // MASTER は (uid → record) Map にキャッシュ
 /** @type {SpspRankMeta | null} */
 let MASTER_META = null;
@@ -75,16 +126,25 @@ const MANUAL_MAX_OPS = 100;
 // シード指定・固定 (spec-panel の CSV / 行の📌ボタン)。MANUAL と同じ localStorage に保存。
 //   pins:  {uid: seat1}      … 順位指定 (base 組み直しに使用済みの記録)
 //   waves: {uid: waveIdx0}   … ウェーブ指定 (同上)
-//   locks: {uid: 'pool'|'wave'} … 被り回避最適化のハード制約 (optimizer の seedLocks へ)
+//   locks: {uid: {kind:'pool'|'wave', target} | {kind:'seed'}} … 被り回避最適化のハード制約 (pool/wave は optimizer の seedLocks、
+//          seed は seedFixed へ。seed 列・手動調整で置いただけの人は最適化で動いてよい、2026-11-11)
 
 function manualEventKey() {
   if (!S.EVENT_CONTEXT) return null;
   return `${S.EVENT_CONTEXT.eventId || ''}:${S.EVENT_CONTEXT.phaseId || ''}`;
 }
 export function manualParseUid(s) { const n = Number(s); return Number.isNaN(n) ? s : n; }
-/** @param {number[]} arr @param {{ uid: number, to: number }} op @returns {number[]} */
+/** @param {number[]} arr @param {SpspSeedManualOp} op @returns {number[]} */
 function manualApplyOp(arr, op) {
+  // 並び全体の op (被り回避の結果から手動調整を始めたとき、2026-11-11): その並びにする (並びに無い人は後ろ、今の順のまま)
+  if (Array.isArray(op.order)) {
+    const have = new Set(arr);
+    const head = op.order.filter((u) => have.has(u));
+    const hs = new Set(head);
+    return head.concat(arr.filter((u) => !hs.has(u)));
+  }
   const a = arr.slice();
+  if (op.uid === undefined) return a;
   const i = a.indexOf(op.uid);
   if (i >= 0) {
     a.splice(i, 1);
@@ -138,9 +198,69 @@ export function manualOrder() {
   for (let k = 0; k < M.hpos; k++) a = manualApplyOp(a, M.ops[k]);
   return _projectSeedLocks(a);
 }
+/**
+ * 並び全体を手動調整の 1 手として積む (2026-11-11)。kind = 'opt' 被り回避の結果 / 'csv' CSV の順 / 'spec' 作業状況 CSV の
+ * 順位・ウェーブ指定 / 'reset' 初期状態に戻す。「元に戻す」でその前の並びに戻れる (これまでは手動調整ごと置き換えていた)。
+ * 被り回避を反映中なら、先にその並びを 1 手として積む (元に戻すで最適化後の並びに戻れる)。反映は解除する。
+ * 手動調整が無ければ order を基準にして作る (csv / spec はそのとき src に残す = これまでと同じ形)。
+ * @param {number[]} order @param {'opt' | 'csv' | 'spec' | 'reset'} kind
+ */
+export function manualPushOrder(order, kind) {
+  if (S.APPLIED_ORDER && kind !== 'opt') manualPushOrder(S.APPLIED_ORDER.slice(), 'opt');
+  if (!S.MANUAL) {
+    S.MANUAL = { base: order.slice(), ops: [], hpos: 0, committed: true, editing: false, sel: null,
+                 src: kind === 'csv' || kind === 'spec' ? kind : null };
+    if (kind === 'opt') S.MANUAL.ops.push({ order: order.slice(), kind }), S.MANUAL.hpos = 1;   // 最適化から始まったことを残す (適用前の自動被り回避を回さない)
+  } else {
+    S.MANUAL.ops = S.MANUAL.ops.slice(0, S.MANUAL.hpos);
+    S.MANUAL.ops.push({ order: order.slice(), kind });
+    if (S.MANUAL.ops.length > MANUAL_MAX_OPS) {
+      S.MANUAL.base = manualApplyOp(S.MANUAL.base, S.MANUAL.ops[0]);
+      S.MANUAL.ops = S.MANUAL.ops.slice(1);
+    }
+    S.MANUAL.hpos = S.MANUAL.ops.length;
+    S.MANUAL.sel = null;
+  }
+  dropAppliedOrder();
+}
+/** 今の並びの由来 (いちばん新しい並び全体の 1 手、無ければ基準の src): 'csv' / 'spec' / 'opt' / 'reset' / null */
+export function manualSrc() {
+  const M = S.MANUAL;
+  if (!M) return null;
+  for (let k = M.hpos - 1; k >= 0; k--) if (Array.isArray(M.ops[k].order)) return M.ops[k].kind || 'opt';
+  return M.src || null;
+}
+/** 初期状態の並び: 取得直後と同じ (シードアップロードは読み込んだ CSV の順、それ以外は選んでいる基準の順位順) */
+export function initialOrder() {
+  if (S.MANUAL && S.MANUAL.src === 'csv') return S.MANUAL.base.slice();
+  return DATA.slice().sort((a, b) => (a.ranks[S.currentMethod] || 1e9) - (b.ranks[S.currentMethod] || 1e9)).map((r) => r.user_id);
+}
+/** 「初期状態に戻す」: 手動の移動・被り回避・CSV の並びを取り消して初期状態の並びにする (1 手として積むので元に戻せる) */
+function manualResetToInitial() {
+  const init = initialOrder();
+  manualPushOrder(init, 'reset');
+  if (S.SEEDOPT_RESULT) resetSeedOptResultPanel(i18n('seed.core.reset_done'));
+  saveManual(); render(); renderManualUI();
+}
+/** 今の手動順が被り回避の結果から始まっている (並び全体の op が効いている)。シード適用前の自動被り回避を回さない
+ * (回すと最適化後に手で動かした分が崩れる、2026-11-11) */
+export function manualFromOptimized() {
+  const M = S.MANUAL;
+  return manualSrc() === 'opt' && !!M;
+}
 export function manualMovedSet() {
   const M = /** @type {SpspSeedManual} */ (S.MANUAL);   // 同上
-  return new Set(M.ops.slice(0, M.hpos).map(o => o.uid));
+  const out = new Set();
+  let a = M.base.slice();
+  for (let k = 0; k < M.hpos; k++) {
+    const op = M.ops[k];
+    const b = manualApplyOp(a, op);
+    if (op.kind === 'reset') out.clear();   // 初期状態に戻した: それまでの移動の印は消す (2026-11-11)
+    else if (Array.isArray(op.order)) b.forEach((u, i) => { if (a[i] !== u) out.add(u); });   // 並び全体の op は位置が変わった人
+    else if (op.uid !== undefined) out.add(op.uid);
+    a = b;
+  }
+  return out;
 }
 export function saveManual() {
   try {
@@ -150,6 +270,7 @@ export function saveManual() {
       base: S.MANUAL ? S.MANUAL.base : null, ops: S.MANUAL ? S.MANUAL.ops : [],
       hpos: S.MANUAL ? S.MANUAL.hpos : 0, committed: S.MANUAL ? S.MANUAL.committed : false,
       src: (S.MANUAL && S.MANUAL.src) || null,
+      method: S.currentMethod, random_seed: S.currentMethod === 'random' ? S.RANDOM_SEED : null,   // 基準の並び (ランダムは種まで)
       spec: S.SEED_SPEC,   // 指定・固定 (MANUAL と独立に保持)
       ts: Date.now(),
     }));
@@ -167,7 +288,11 @@ export function restoreManualForEvent() {
       const s = JSON.parse(raw);
       if (s && s.eventKey === key) {
         const cur = new Set(DATA.map(r => r.user_id));
-        if (Array.isArray(s.base) && s.base.length === cur.size && s.base.every(u => cur.has(u))) {
+        // ランダムシードを選んでいるとき: 同じ種で作った手動調整だけ戻す (別の種・別の評価の並びを基準にすると、表示している種と
+        // 実際の順が食い違う。総合評価の順で書き込んでしまうのを防ぐ、2026-11-05)
+        // 逆に、ランダムの並びを基準にした手動調整を他の評価のときには戻さない
+        const sameBase = S.currentMethod === 'random' ? (s.method === 'random' && s.random_seed === S.RANDOM_SEED) : s.method !== 'random';
+        if (sameBase && Array.isArray(s.base) && s.base.length === cur.size && s.base.every(u => cur.has(u))) {
           S.MANUAL = {
             base: s.base, ops: Array.isArray(s.ops) ? s.ops : [],
             hpos: Math.min(s.hpos || 0, (s.ops || []).length),
@@ -187,14 +312,19 @@ export function restoreManualForEvent() {
             return o;
           };
           const sp = { label: s.spec.label || null, pins: keep(s.spec.pins),
-                       waves: keep(s.spec.waves), locks: keep(s.spec.locks) };
-          if (Object.keys(sp.pins).length || Object.keys(sp.waves).length || Object.keys(sp.locks).length) {
+                       waves: keep(s.spec.waves), locks: keep(s.spec.locks),
+                       noseed: (Array.isArray(s.spec.noseed) ? s.spec.noseed : []).map(manualParseUid).filter((u) => cur.has(u)) };
+          if (Object.keys(sp.pins).length || Object.keys(sp.waves).length || Object.keys(sp.locks).length || sp.noseed.length) {
             S.SEED_SPEC = sp;
           }
         }
       }
     }
   } catch (e) { S.MANUAL = null; S.SEED_SPEC = null; }
+  const restored = !!S.MANUAL;
+  // csv モード: 保存済みの手動調整を復元しなかったら、読み込み済みの CSV 順を基準にする。下の既定の手動調整より先に
+  // (先に既定を開くと「手動調整あり」とみなされて CSV 順が使われず、CSV を読んでから適用するとランキング順で書き込んでいた。2026-10-28)
+  if (!restored && typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
   // 手動調整は既定でオン。復元が無ければ現在の出力順を基準に開いておく
   // (オフにしておく理由が無いので、わざわざ「編集を開始」を押させない)。
   if (!S.MANUAL && DATA.length) {
@@ -206,8 +336,8 @@ export function restoreManualForEvent() {
   }
   renderManualUI();
   renderSpecStatus();
-  // csv モード: 参加者が揃ったので読み込み済み CSV 順を基準に反映 (復元済み手動調整は優先)。
-  if (typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
+  // csv モード: 復元した手動調整は CSV で上書きしない (案内だけ出す)。
+  if (restored && typeof applyCsvOrderIfReady === 'function') applyCsvOrderIfReady(true);
 }
 /** @param {number} uid @param {number} to */
 function manualPushOp(uid, to) {
@@ -228,6 +358,16 @@ function manualPushOp(uid, to) {
   saveManual(); renderManualUI();
 }
 function manualUnlock() {
+  // 被り回避を反映中: 最適化後の並びを手動調整に取り込んで、そこから続けて調整する (2026-11-11 ユーザー要望)。
+  // 並び全体を 1 つの op として積むので、「元に戻す」で最適化前の手動順に戻せる。
+  if (S.APPLIED_ORDER) {
+    manualPushOrder(S.APPLIED_ORDER.slice(), 'opt');   // 並びは手動調整が持つ (最適化の結果・レポートは残す。プレビューの「被り回避最適化後」も選べる)
+    const M = /** @type {SpspSeedManual} */ (S.MANUAL);
+    M.editing = true; M.sel = null;
+    const p = document.getElementById('so-progress'); if (p) p.textContent = i18n('seed.core.s28');
+    saveManual(); renderManualUI();
+    return;
+  }
   if (!S.MANUAL) {
     // 初回: 現在の出力順 (被り回避適用済みならその順序) を基準に取り込む。
     S.MANUAL = { base: orderedRecs().map(r => r.user_id), ops: [], hpos: 0, committed: false, editing: true, sel: null };
@@ -275,11 +415,15 @@ function manualBarHtml() {
     + `${i18n('seed.core.t15')} <input type="number" data-mn-pools min="1" max="128" step="1" value="${_pv('so-pools', 1)}" style="width:56px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
     + ` ${i18n('seed.core.t16')} <input type="number" data-mn-waves min="1" max="26" step="1" value="${_pv('so-waves', 1)}" style="width:52px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px">`
     + `</span>`;
+  // 初期状態に戻す (今の並びが初期状態と違うときだけ押せる、2026-11-11)
+  const atInit = orderedRecs().map((r) => r.user_id).join(',') === _projectSeedLocks(initialOrder()).join(',');
+  const resetBtn = btn('reset-init', i18n('seed.core.reset_init'), atInit ? 'disabled title="' + escHtml(i18n('seed.core.reset_init_same')) + '"' : 'title="' + escHtml(i18n('seed.core.reset_init_title')) + '"');
   if (!S.MANUAL) {
     // 破棄した直後などの状態。プール数/ウェーブ数はここでも触れるようにしておく
     // (手動調整と関係なく、プール表示や固定の枠を決める設定なので)。
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">`
       + `<button data-mn="unlock" style="font-size:12px;padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:#f3f4f6;color:#6b7280;cursor:pointer">${i18n('seed.core.t17')}</button>`
+      + (S.APPLIED_ORDER ? resetBtn : '')
       + poolWaveInputs + projWarn + `</div>`;
   }
   const moved = manualMovedSet().size;
@@ -296,21 +440,22 @@ function manualBarHtml() {
       + btn('redo', i18n('seed.core.s4'), canRedo ? '' : 'disabled')
       + `<button data-mn="commit" style="font-size:11px;padding:3px 12px;border:none;border-radius:6px;background:#16a34a;color:#fff;font-weight:600;cursor:pointer">${i18n('seed.core.t20')}</button>`
       + btn('discard', i18n('seed.core.s5'))
+      + resetBtn
       + `</div>`
       + `</div>`;
   }
   const optNote = S.APPLIED_ORDER ? i18n('seed.core.s6') : '';
   return `<div style="border:1px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:6px 10px;font-size:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">`
-    + `<span style="font-weight:700;color:#b45309">${i18n('seed.core.t21')}${moved}${i18n('seed.core.t19')}${S.MANUAL.src === 'csv' ? i18n('seed.core.s20') : (S.MANUAL.src === 'spec' ? i18n('seed.core.s21') : '')})</span><span style="color:#9ca3af;font-size:10px">${optNote}</span>`
+    + `<span style="font-weight:700;color:#b45309">${i18n('seed.core.t21')}${moved}${i18n('seed.core.t19')}${manualSrc() === 'csv' ? i18n('seed.core.s20') : (manualSrc() === 'spec' ? i18n('seed.core.s21') : '')})</span><span style="color:#9ca3af;font-size:10px">${optNote}</span>`
     + poolWaveInputs
     + projWarn
     // 操作ボタンは次の行に折り返す (flex-basis:100% で改行)。
     + `<div style="flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap">`
-    + btn('unlock', moved > 0 ? i18n('seed.core.s7') : i18n('seed.core.s8')) + btn('discard', i18n('seed.core.s5'))
+    + btn('unlock', moved > 0 ? i18n('seed.core.s7') : i18n('seed.core.s8')) + btn('discard', i18n('seed.core.s5')) + resetBtn
     + `</div>`
     + `</div>`;
 }
-// 「プール/ウェーブ指定」バー (「プール指定」ボタンで対象行の直下に表示)。
+// 固定バー (行の「固定」ボタンで対象行の直下に表示。シード/プール/ウェーブ)。
 // 現在と違うプール/ウェーブを選んで適用すると、その中の最寄り位置へ行を移動 (通常の手動 op =
 // undo 可) してから固定する。「固定しない」で解除。
 function manualLockBarHtml() {
@@ -334,6 +479,7 @@ function manualLockBarHtml() {
     + `<option value="none"${kind === 'none' ? ' selected' : ''}>${i18n('seed.core.t22')}</option>`
     + `<option value="pool"${kind === 'pool' ? ' selected' : ''}>${i18n('seed.core.t23')}</option>`
     + (W >= 2 ? `<option value="wave"${kind === 'wave' ? ' selected' : ''}>${i18n('seed.core.t24')}</option>` : '')
+    + `<option value="seed"${kind === 'seed' ? ' selected' : ''}>${i18n('seed.core.lock_seed')}</option>`
     + `</select>`;
   let targetSel = '';
   if (kind === 'pool') {
@@ -428,6 +574,7 @@ export function manualClickHandler(e) {
   if (!el || el.disabled) return;
   const act = el.dataset.mn;
   if (act === 'unlock') { manualUnlock(); return; }
+  if (act === 'reset-init') { manualResetToInitial(); return; }
   if (act === 'clear-locks') {
     if (S.SEED_SPEC) { delete S.SEED_SPEC.locks; _pruneSeedSpec(); }
     saveManual(); render(); renderSpecStatus();
@@ -579,14 +726,17 @@ const MANUAL_COL = {
     let lkTitle = null;
     if (lkKind) {
       const tgt = (lkRaw && lkRaw.target != null) ? lkRaw.target : null;
-      if (lkKind === 'pool') {
+      if (lkKind === 'seed') {
+        lkLabel = i18n('seed.core.lock_seed');
+        lkTitle = i18n('seed.core.lock_seed_title');
+      } else if (lkKind === 'pool') {
         lkLabel = tgt != null && _mnPoolCtx ? poolLabel(tgt, _mnPoolCtx.waveMap) + i18n('seed.core.s12') : i18n('seed.core.s13');
         lkTitle = i18n('seed.core.s13') + (tgt != null && _mnPoolCtx ? ` (${poolLabel(tgt, _mnPoolCtx.waveMap)})` : '');
       } else {
         lkLabel = tgt != null ? i18n('seed.core.s1') + waveLetter(tgt) + i18n('seed.core.s12') : i18n('seed.core.s14');
         lkTitle = i18n('seed.core.s14') + (tgt != null ? ` (${waveLetter(tgt)})` : '');
       }
-      lkTitle += i18n('seed.core.s15');
+      if (lkKind !== 'seed') lkTitle += i18n('seed.core.s15');
     }
     if (S.MANUAL && S.MANUAL.editing) {
       const isLockSel = S.MANUAL.lockSel === u;
@@ -621,6 +771,7 @@ export function ensureTable() {
     rows: DATA,
     method: S.currentMethod,
     sort: { key: 'rank', dir: 'asc' },
+    filterAllIds: true,   // 検索は名前・uid・discriminator (ランキング表と違い ID も常に)
     pageSize: 512,
     infiniteScroll: true,
     totalForRankFrac: 'rows',           // seed: event 参加者数を分母にする

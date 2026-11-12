@@ -34,49 +34,63 @@ const SEED_APP_SKELETON_HTML = `
   <h1>${i18n('seed.skeleton.t1')}</h1>
   <p class="subtitle">${i18n('seed.skeleton.t2')}</p>
 
-  <div class="upcoming-box open" id="upcoming-box">
-    <div class="upcoming-toggle" id="upcoming-toggle">
-      <span class="chev">▶</span>
-      <span>${i18n('seed.skeleton.t3')}</span>
-      <span class="badge" id="upcoming-count" style="display:none">0</span>
-      <span style="color:#9ca3af;font-weight:400;font-size:11px;margin-left:auto">${i18n('seed.skeleton.t4')}</span>
+  <!-- start.gg の認証 (ログイン / API キーの切り替え。js/startgg_manager.js の mount が組み立てる。ログインは下位クラス作成と共通) -->
+  <div id="token-auth">
+    <div id="token-key-block">
+    <label for="token" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">
+      start.gg API Token
+      <a href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" style="color:#dc2626;margin-left:6px;font-size:10px;text-decoration:underline">${i18n('seed.skeleton.t8')}</a>
+    </label>
+    <div style="display:flex;gap:4px;align-items:stretch">
+      <input type="password" id="token" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off"
+        style="flex:1;min-width:0;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
+      <button type="button" id="token-reveal" title="${i18n('seed.skeleton.t116')}"
+        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;padding:0 10px;font-size:14px;cursor:pointer;font-family:inherit">👁</button>
+      <button type="button" id="token-save" title="${i18n('seed.skeleton.t117')}"
+        style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
     </div>
-    <div class="upcoming-body" id="upcoming-body">
-      <div class="upcoming-loading" id="upcoming-loading">${i18n('seed.skeleton.t5')}</div>
-      <div class="upcoming-pager" id="upcoming-pager" style="display:none">
-        <button type="button" id="upcoming-prev">${i18n('seed.skeleton.t6')}</button>
-        <span id="upcoming-pageinfo">1 / 1</span>
-        <button type="button" id="upcoming-next">${i18n('seed.skeleton.t7')}</button>
-      </div>
-      <div class="upcoming-list" id="upcoming-list" style="display:none"></div>
+    <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
+    <div class="sgg-key-note">${i18n('seed.skeleton.t114')} ${i18n('seed.skeleton.t115')}</div>
     </div>
   </div>
 
   <form id="seed-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px">
-        <label for="token" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">
-          start.gg API Token
-          <a href="https://start.gg/admin/profile/developer" target="_blank" rel="noopener" style="color:#dc2626;margin-left:6px;font-size:10px;text-decoration:underline">${i18n('seed.skeleton.t8')}</a>
-        </label>
-        <div style="display:flex;gap:4px;align-items:stretch">
-          <input type="password" id="token" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off"
-            style="flex:1;min-width:0;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
-          <button type="button" id="token-reveal" title="${i18n('seed.skeleton.t116')}"
-            style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:6px;padding:0 10px;font-size:14px;cursor:pointer;font-family:inherit">👁</button>
-          <button type="button" id="token-save" title="${i18n('seed.skeleton.t117')}"
-            style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t9')}</button>
+    <!-- 大会の選び方: 管理している大会 / 直近の大会 / URL を入力 (同じ場所のタブ。60_upcoming.js initEventSourceTabs) -->
+    <div class="ev-src" id="ev-src">
+      <div class="ev-tabs" role="tablist">
+        <button type="button" role="tab" data-t="mine">${i18n('seed.src.mine')}<span class="badge" id="mytours-count" style="display:none">0</span></button>
+        <button type="button" role="tab" data-t="upcoming">${i18n('seed.src.upcoming')}<span class="badge" id="upcoming-count" style="display:none">0</span></button>
+        <button type="button" role="tab" data-t="url">${i18n('seed.src.url')}</button>
+      </div>
+      <!-- 自分が管理している大会 (start.gg の認証で取れたとき。60_upcoming.js loadMyTournaments) -->
+      <div class="ev-pane" data-p="mine">
+        <div class="ev-note">${i18n('seed.mine.note')}</div>
+        <div class="upcoming-loading" id="mytours-empty"></div>
+        <div id="mytours-box" style="display:none">
+          <div class="upcoming-list" id="mytours-list"></div>
         </div>
-        <div id="token-hint" style="font-size:10px;color:#9ca3af;margin-top:3px;height:14px"></div>
       </div>
-      <div style="flex:2;min-width:280px">
-        <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
-        <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
-          style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
-        <div id="event-url-help" style="font-size:10px;color:#9ca3af;margin-top:3px">${i18n('seed.skeleton.t11')} <code>/event/...</code> ${i18n('seed.skeleton.t12')}</div>
+      <div class="ev-pane" data-p="upcoming" id="upcoming-box">
+        <div class="ev-note">${i18n('seed.skeleton.t4')}</div>
+        <div class="upcoming-loading" id="upcoming-loading">${i18n('seed.skeleton.t5')}</div>
+        <div class="upcoming-pager" id="upcoming-pager" style="display:none">
+          <button type="button" id="upcoming-prev">${i18n('seed.skeleton.t6')}</button>
+          <span id="upcoming-pageinfo">1 / 1</span>
+          <button type="button" id="upcoming-next">${i18n('seed.skeleton.t7')}</button>
+        </div>
+        <div class="upcoming-list" id="upcoming-list" style="display:none"></div>
       </div>
-      <div style="display:flex;align-items:flex-end;padding-bottom:14px">
-        <button type="submit" id="fetch-btn" style="background:#dc2626;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t13')}</button>
+      <div class="ev-pane" data-p="url">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px">
+            <label for="event-url" style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">${i18n('seed.skeleton.t10')}</label>
+            <input type="text" id="event-url" placeholder="https://www.start.gg/tournament/15-kagaribi-15/event/singles"
+              style="width:100%;padding:8px 12px;background:#f9fafb;color:#111827;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-family:inherit">
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button type="submit" id="fetch-btn" style="background:#dc2626;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${i18n('seed.skeleton.t13')}</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="phase-row" style="display:none">
@@ -116,6 +130,17 @@ const SEED_APP_SKELETON_HTML = `
     <div class="method-tab" data-method="bt_gated">
       ${i18n('seed.skeleton.t23')}<span class="tab-desc">${i18n('seed.skeleton.t24')}</span>
     </div>
+    <div class="method-tab method-tab-random" data-method="random" title="${i18n('seed.random.title')}">
+      ${i18n('seed.random.label')}<span class="tab-desc" id="random-seed-desc">${i18n('seed.random.desc')}</span>
+    </div>
+  </div>
+
+  <div class="random-seed-box" id="random-seed-box" hidden>
+    <span>${i18n('seed.random.box_label')}</span>
+    <input type="text" id="random-seed-input" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <button type="button" id="random-seed-copy">${i18n('seed.random.copy')}</button>
+    <button type="button" id="random-seed-apply">${i18n('seed.random.apply')}</button>
+    <span class="random-seed-note" id="random-seed-note">${i18n('seed.random.note')}</span>
   </div>
 
   <div class="controls">
@@ -123,7 +148,7 @@ const SEED_APP_SKELETON_HTML = `
     <button id="csv-btn" disabled style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:none">${i18n('seed.skeleton.t25')}</button>
     <button id="upload-btn" disabled style="background:#b91c1c;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:none">${i18n('seed.skeleton.t26')}</button>
     <label id="auto-opt-label" style="display:none;font-size:12px;color:#374151;white-space:nowrap"><input type="checkbox" id="so-auto-apply" checked> ${i18n('seed.skeleton.t27')}</label>
-    <span class="status" id="status">${i18n('seed.skeleton.t28')}</span>
+    <span class="status" id="status"></span>
   </div>
   <div id="error-help" style="display:none;margin-top:8px"></div>
 </div>
@@ -164,8 +189,10 @@ const SEED_APP_SKELETON_HTML = `
         </select>
         <span id="so-series-note" style="margin-left:5px"></span>
       </span>
+      <label title="${i18n('seed.published.help')}"><input type="checkbox" id="so-avoid-published" checked> ${i18n('seed.published.toggle')}</label>
       <span id="so-group-box" style="display:contents"></span>
     </div>
+    <div id="so-published-box" style="display:none;margin-top:6px;font-size:11px;color:#6b7280"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;color:#374151">
       <span id="so-shiftlimit-label" style="font-weight:600">${i18n('seed.skeleton.t45')}</span>
       <label>${i18n('seed.skeleton.t46')} <input type="number" id="so-shift0" min="1" style="width:52px"> ${i18n('seed.skeleton.t47')}</label>
@@ -277,10 +304,8 @@ const SEED_APP_SKELETON_HTML = `
       <button id="spec-tpl" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.t100')}</button>
       <button id="spec-clear" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.t101')}</button>
     </div>
+    <div id="spec-guide"></div>
     <div style="font-size:11px;color:#6b7280;margin-top:5px;line-height:1.6">
-      ${i18n('seed.skeleton.t102')}<b>uid</b> / <b>discriminator</b> / <b>seedId</b> / <b>name</b>${i18n('seed.skeleton.t103')}
-      <b>seed</b> ${i18n('seed.skeleton.t104')} <b>wave</b> ${i18n('seed.skeleton.t105')}
-      <b>lock</b> ${i18n('seed.skeleton.t106')}
       ${i18n('seed.skeleton.t107')}
       <b>${i18n('seed.skeleton.t108')}</b> ${i18n('seed.skeleton.t109')}
       ${i18n('seed.skeleton.t110')}
@@ -292,7 +317,10 @@ const SEED_APP_SKELETON_HTML = `
 <!-- 作業状況の保存 (現在のシード順 + 固定を CSV に。読み込みは 📌 パネル側) -->
 <div id="work-bar" style="display:none;margin:10px 0 0">
   <button id="spec-export" style="background:#16a34a;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">${i18n('seed.skeleton.t111')}</button>
-  <button id="bracket-preview" title="${i18n('seed.skeleton.t143')}" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:6px">${i18n('seed.skeleton.t112')}</button>
+  <span id="bracket-preview-wrap" style="position:relative;display:inline-block;margin-left:6px">
+    <button id="bracket-preview" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="bracket-preview-menu" title="${i18n('seed.skeleton.t143')}" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">${i18n('seed.skeleton.t112')} ▾</button>
+    <div id="bracket-preview-menu" role="menu" hidden style="position:absolute;left:0;top:calc(100% + 4px);z-index:50;width:280px;max-width:calc(100vw - 32px);background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:4px"></div>
+  </span>
   <span id="work-note" style="font-size:11px;color:#6b7280;margin-left:8px"></span>
 </div>
 
@@ -302,16 +330,10 @@ const SEED_APP_SKELETON_HTML = `
 <div class="table-wrap">
   <table id="ranktable">
     <!-- thead は SPSPRankingTable コンポーネントが自動生成 -->
-    <tbody id="tbody">
-      <tr><td colspan="9" class="empty-msg">${i18n('seed.skeleton.t113')}</td></tr>
-    </tbody>
+    <tbody id="tbody"></tbody>
   </table>
 </div>
-
-<div style="max-width:1400px;margin:24px auto 0;padding:0 24px;font-size:11px;color:#9ca3af;line-height:1.6">
-  ${i18n('seed.skeleton.t114')}
-  ${i18n('seed.skeleton.t115')}
-</div>`;
+`;
 
 export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_CONFIG || {});
 (function mountSeedAppSkeleton() {
@@ -332,8 +354,8 @@ export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_C
     // 「参加者を取得」前提の案内文も CSV 向けに差し替え
     const st = root.querySelector('#status');
     if (st) st.textContent = i18n('seed.skeleton.s4');
-    const emptyMsg = root.querySelector('#ranktable .empty-msg');
-    if (emptyMsg) emptyMsg.textContent = i18n('seed.skeleton.s5');
+    const tbody = root.querySelector('#tbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">${i18n('seed.skeleton.s5')}</td></tr>`;
   }
   // csv モード: 基準順位ソース (CSV / Sheets) の入力欄を差し込む
   if (SEED_APP_CONFIG.mode === 'csv') {
@@ -350,8 +372,9 @@ export const SEED_APP_CONFIG = Object.assign({ mode: 'spsp' }, window.SEED_APP_C
       + `<button id="csv-tpl" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">${i18n('seed.skeleton.s10')}</button>`
       + '</div>'
       + '<div id="csv-src-status" style="font-size:11px;color:#6b7280;margin-top:5px;line-height:1.5">'
-      + i18n('seed.skeleton.s6')
-      + i18n('seed.skeleton.s11') + '</div>';
+      + i18n('seed.skeleton.s11') + '</div>'
+      // 列の書き方 (タップで開く。中身は 80_csv_source.js の csvGuideHtml、2026-11-11)
+      + `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:#1e40af;font-weight:600">📖 ${i18n('seed.csvguide.open')}</summary><div id="csv-guide"></div></details>`;
     if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(div, anchorEl);
   }
 })();

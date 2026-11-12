@@ -1,6 +1,6 @@
 'use strict';
 // 静的整合: HTML ↔ JS の id、INV-8 (callback の外部リソース禁止)、
-// クライアント定数と GAS 定数の食い違い検出。jsdom 不要。
+// クライアント定数とビルド側定数の食い違い検出。jsdom 不要。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -21,7 +21,6 @@ const CB_JS = read('site/js/callback.js');
 const VOTE_JS = read('site/js/vote.js');
 const AUTH_JS = read('site/js/auth.js');
 const CONFIG_JS = read('site/js/post_config.js');
-const GAS_CONFIG = read('gas/config.gs');
 
 // 「nav.js は読まない」「spsp.games には出さない」のような注意書き自体が
 // 検出に引っかからないよう、コメントを除いたソースで検査する。
@@ -198,26 +197,7 @@ test('両ページとも同じ設定・共有ロジックを読む', () => {
   }
 });
 
-test('REDIRECT_URI がクライアントと GAS で一致する', () => {
-  const c = CONFIG_JS.match(/REDIRECT_URI:\s*'([^']+)'/)[1];
-  const g = GAS_CONFIG.match(/REDIRECT_URI\s*=\s*'([^']+)'/)[1];
-  assert.strictEqual(c, g);
-  assert.strictEqual(c, 'https://tosakazu.github.io/spsp/callback.html');
-  // callback.html の実配置と一致していること
-  assert.ok(fs.existsSync(path.join(ROOT, 'site/callback.html')));
-});
-
-test('SCOPE / BODY_MAX がクライアントと GAS で一致する', () => {
-  assert.strictEqual(
-    CONFIG_JS.match(/SCOPE:\s*'([^']+)'/)[1],
-    GAS_CONFIG.match(/SCOPE\s*=\s*'([^']+)'/)[1]);
-  assert.strictEqual(
-    Number(CONFIG_JS.match(/BODY_MAX:\s*(\d+)/)[1]),
-    Number(GAS_CONFIG.match(/BODY_MAX\s*=\s*(\d+)/)[1]));
-});
-
-test('token エンドポイントは api.start.gg、認可は start.gg', () => {
-  assert.match(GAS_CONFIG, /TOKEN_URL\s*=\s*'https:\/\/api\.start\.gg\/oauth\/access_token'/);
+test('認可は start.gg', () => {
   assert.match(CONFIG_JS, /AUTHORIZE_URL:\s*'https:\/\/start\.gg\/oauth\/authorize'/);
 });
 
@@ -240,45 +220,13 @@ test('INV-3: 配信されるファイルに secret 形状の文字列が無い',
   }
 });
 
-test('INV-3: secrets.gs は git 管理外で、追跡ファイルに secret が無い', () => {
-  const { execFileSync } = require('node:child_process');
-  const ignored = execFileSync('git', ['check-ignore', 'gas/secrets.gs'],
-    { cwd: ROOT, encoding: 'utf8' }).trim();
-  assert.strictEqual(ignored, 'gas/secrets.gs', 'gas/secrets.gs が .gitignore されていない');
-
-  // 追跡されている gas/*.gs に secret 形状の文字列が無いこと
-  const tracked = execFileSync('git', ['ls-files', 'gas'], { cwd: ROOT, encoding: 'utf8' })
-    .split('\n').filter((s) => s.endsWith('.gs'));
-  assert.ok(tracked.length > 0);
-  for (const f of tracked) {
-    assert.ok(!/\b[0-9a-f]{32,}\b/i.test(read(f)), f + ' に secret 形状の文字列がある');
-  }
-});
-
-test('CLIENT_ID がクライアントと GAS で一致する', () => {
-  assert.strictEqual(
-    CONFIG_JS.match(/CLIENT_ID:\s*'([^']+)'/)[1],
-    GAS_CONFIG.match(/STARTGG_CLIENT_ID\s*=\s*'([^']+)'/)[1]);
-});
-
-test('EXPORT_KEY_LABEL が GAS とビルドで一致する', (t) => {
-  // 鍵は保存せず両側でこのラベルから導出する。ずれると export が auth_failed になる。
-  const FETCH_PY = buildFile('spsp/cli/fetch_char_votes.py');
-  if (FETCH_PY === null) return t.skip('ビルド側 (SPSP_BUILD_REPO) が無い');
-  const gas = GAS_CONFIG.match(/EXPORT_KEY_LABEL\s*=\s*'([^']+)'/)[1];
-  const build = FETCH_PY.match(/^EXPORT_KEY_LABEL\s*=\s*'([^']+)'/m)[1];
-  assert.strictEqual(gas, build);
-});
-
-test('DOUBLE_MAIN_PCT_GAP がクライアント / GAS / ビルドで一致する', (t) => {
+test('DOUBLE_MAIN_PCT_GAP がクライアントとビルドで一致する', (t) => {
   // ビルド (spsp/char_vote.py) は投票の採否をこの閾値で決める。
-  // 3 つがずれると「投票できたのにビルドが採用しない」が黙って起きる。
+  // ずれると「投票できたのにビルドが採用しない」が黙って起きる。
   const CHAR_VOTE_PY = buildFile('spsp/char_vote.py');
   if (CHAR_VOTE_PY === null) return t.skip('ビルド側 (SPSP_BUILD_REPO) が無い');
   const client = Number(CONFIG_JS.match(/DOUBLE_MAIN_PCT_GAP:\s*([\d.]+)/)[1]);
-  const gas = Number(GAS_CONFIG.match(/DOUBLE_MAIN_PCT_GAP\s*=\s*([\d.]+)/)[1]);
   const build = Number(CHAR_VOTE_PY.match(/^DOUBLE_MAIN_PCT_GAP\s*=\s*([\d.]+)/m)[1]);
-  assert.strictEqual(client, gas);
   assert.strictEqual(client, build);
 });
 
@@ -299,26 +247,3 @@ test('spsp.games を指す URL がページに無い', () => {
   }
 });
 
-test('シート列の定義がスキーマ (§7) どおり', () => {
-  const m = read('gas/config.gs').match(/SHEET_HEADER\s*=\s*\[([^\]]+)\]/)[1];
-  const cols = m.split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
-  assert.deepStrictEqual(cols,
-    ['timestamp', 'user_id', 'user_slug', 'gamer_tag', 'body', 'status']);
-
-  const v = read('gas/config.gs').match(/VOTES_HEADER\s*=\s*\[([^\]]+)\]/)[1];
-  assert.deepStrictEqual(v.split(',').map((s) => s.trim().replace(/^'|'$/g, '')),
-    ['timestamp', 'user_id', 'user_slug', 'gamer_tag', 'char_id', 'char_name', 'status']);
-});
-
-test('GAS の資格判定データは data.spsp.games (R2、公開 URL) から読む (2026-09-28 に gh-pages から変更。GAS は 09-29 に停止)', () => {
-  const cfg = read('gas/config.gs');
-  assert.match(cfg, /DATA_BASE_URL = 'https:\/\/data\.spsp\.games\/jp'/);
-});
-
-test('appsscript.json が匿名アクセスの Web アプリ設定になっている', () => {
-  const j = JSON.parse(read('gas/appsscript.json'));
-  assert.strictEqual(j.timeZone, 'Asia/Tokyo');
-  assert.strictEqual(j.runtimeVersion, 'V8');
-  assert.strictEqual(j.webapp.executeAs, 'USER_DEPLOYING');
-  assert.strictEqual(j.webapp.access, 'ANYONE_ANONYMOUS');
-});
