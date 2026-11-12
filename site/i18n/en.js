@@ -1888,6 +1888,7 @@ window.SPSP_I18N.en = {
   'bracket.page.t16': 'Show losers side',
   'bracket.sgg.need_login': 'You are not logged in, so an estimated bracket is shown. Depending on the start.gg settings, the pairings may rarely differ. Log in with start.gg to match start.gg exactly.',
   'bracket.sgg.login': 'Log in with start.gg',
+  'bracket.sgg.login_failed': 'Could not start the login. Please wait a moment and try again.',
   'bracket.share.btn': '🔗 Short URL',
   'bracket.share.days_label': 'Keep for',
   'bracket.share.days': '{n} days',

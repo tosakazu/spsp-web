@@ -1915,6 +1915,7 @@ window.SPSP_I18N.ja = {
   'bracket.page.t16': '敗者側も表示',
   'bracket.sgg.need_login': 'ログインしていないので、推定のトーナメントを表示しています。start.gg の設定によってはまれに組み合わせがずれることがあります。start.gg と厳密に一致させるにはログインしてください。',
   'bracket.sgg.login': 'start.gg でログイン',
+  'bracket.sgg.login_failed': 'ログインを始められませんでした。少し待ってからもう一度押してください。',
   'bracket.share.btn': '🔗 短い URL',
   'bracket.share.days_label': '保存期間',
   'bracket.share.days': '{n} 日',
