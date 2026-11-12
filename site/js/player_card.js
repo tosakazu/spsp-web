@@ -856,6 +856,8 @@ const STICKER_SHADOW = { dx: 1, dy: 1, blur: 1, color: 'rgba(0, 0, 0, .3)' };
  * @param {HTMLElement} root .pc-in @param {PCardModel} m */
 function paintBackStickers(root, m) {
   const list = (m.back && m.back.stickers) || [];
+  /** @type {Promise<unknown>[]} */
+  const drawn = [];
   for (const el of /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('.pcb-sk'))) {
     const s = list[Number(el.dataset.i)];
     const p = s ? parseKey(s.e) : null;
@@ -869,9 +871,15 @@ function paintBackStickers(root, m) {
     // 判定が遅ければ (1.5 秒) 透過なしで描いておき、分かったら描き直す
     let known = false;
     const late = setTimeout(() => { if (!known && holder.isConnected) draw(false); }, 1500);
-    isTransparent(src).then(tr => tr, () => false).then(tr => { known = true; clearTimeout(late); if (holder.isConnected) draw(tr); });
+    drawn.push(isTransparent(src).then(tr => tr, () => false).then(tr => { known = true; clearTimeout(late); if (holder.isConnected) draw(tr); }));
   }
+  // 全部のシールを描き終えるまで (最大 8 秒)。カードを画像にして重ねる (強制ダークモード用、mount) のは、これを待ってから撮る:
+  // 待たずに撮ると、まだ描いていないシールが写らず、2 枚しか出ないことがあった (初めて開いたとき。2026-11-12)
+  const card = root.parentElement;
+  if (card) stickersDrawn.set(card, Promise.race([Promise.all(drawn), new Promise(r => setTimeout(r, 8000))]));
 }
+/** 裏面のシールを描き終えたら解ける (paintBackStickers が描き直すたびに入れ替える) @type {WeakMap<HTMLElement, Promise<unknown>>} */
+const stickersDrawn = new WeakMap();
 
 /** @param {HTMLElement} el @param {() => string} html @param {(root: HTMLElement) => void} fit @param {boolean} live */
 function mount(el, html, fit, live) {
@@ -898,6 +906,8 @@ function mount(el, html, fit, live) {
       if (!loaded) break;
       build();
     }
+    // シールを描き終えてから撮る (待つ間に描き直されたら、新しい方が撮る)
+    for (let p = stickersDrawn.get(el); p; ) { await p; if (renderGen.get(el) !== gen) return; const q = stickersDrawn.get(el); if (q === p) break; p = q; }
     await scheduleImage(el, live ? 1500 : 0);
   })().catch(() => {}));
   if (!observed.has(el) && typeof ResizeObserver === 'function') {
