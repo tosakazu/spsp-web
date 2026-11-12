@@ -103,6 +103,14 @@ test('poolLabel / chunkWaveMap は seed_app と同一仕様', () => {
   assert.deepStrictEqual(S.chunkWaveMap(5, 2), [0, 0, 0, 1, 1]);
 });
 
+test('作業状況 CSV の wave_order = rev: ウェーブは逆から (B, A, A, B)', () => {
+  const rows = (order) => 'seed,name,discriminator,uid,lock,pool,pools,waves,wave_order\r\n'
+    + `1,a,,1000070,,B1,4,2,${order}\r\n2,b,,1000071,,A1,,,\r\n3,c,,1000214,,A2,,,\r\n4,d,,1000865,,B2,,,\r\n`;
+  assert.deepStrictEqual(S.workCsvToPayload(rows('rev'), { ev: 't' }).payload.wv, [1, 0, 0, 1]);
+  assert.deepStrictEqual(S.workCsvToPayload(rows(''), { ev: 't' }).payload.wv, [0, 1, 1, 0]);
+  assert.deepStrictEqual(S.interleaveWaveMap(8, 2, true), [1, 0, 0, 1, 1, 0, 0, 1]);
+});
+
 test('作業状況 CSV → ペイロード (uid/名前/プール数/ウェーブ数/BOM/クォート)', () => {
   const csv = '﻿seed,name,discriminator,uid,lock,pool,pools,waves\r\n'
     + '1,"Shu, ton",="00000123",1000070,,A1,4,2\r\n'

@@ -362,7 +362,7 @@ test('被り回避パネルの設定保存 (2026-09-14): localStorage に差分�
   assert.ok(/id="so-reset-defaults"/.test(HTML), '既定に戻すボタンが無い');
   assert.ok(/'so-reset-defaults'/.test(HTML.slice(HTML.indexOf('const HELP_TARGETS'), HTML.indexOf('function injectHelpIcons'))),
     'so-reset-defaults が HELP_TARGETS に無い');
-  assert.ok(/const SEEDOPT_SETTINGS_SKIP = new Set\(\['so-pools', 'so-waves', 'so-series-select'\]\)/.test(HTML),
+  assert.ok(/const SEEDOPT_SETTINGS_SKIP = new Set\(\['so-pools', 'so-waves', 'so-wave-order', 'so-series-select'\]\)/.test(HTML),
     '大会ごとの値 (プール数・ウェーブ数・対象シリーズ) を保存対象から外していない');
   // 起動時の復元は全 const 初期化後 (ファイル末尾の IIFE)。大会読み込み時は applyModeDefaults の後に復元。
   const init = HTML.slice(HTML.indexOf('function initSeedOptPanel'), HTML.indexOf('function initSeedOptPanel') + 800);

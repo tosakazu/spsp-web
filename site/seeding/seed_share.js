@@ -307,13 +307,14 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   // ウェーブ交互の割り当て (篝火 #14・#15 の作り方、2026-11-11): プール番号ごとに W 個ずつ並べ、1 組ごとに向きを変える。
   // W=2 なら A, B, B, A, A, B, B, A, … (シードは 1 つごとに A, B, B, A, …)。start.gg にまだプールが無い (ウェーブが分からない)
   // ときの既定。前半 A・後半 B (chunkWaveMap) だとシードが十数個の塊でウェーブを替え、ウェーブ指定で大きくずれていた
-  /** @param {number} P @param {number} W @returns {number[]} */
-  function interleaveWaveMap(P, W) {
+  // rev = 逆から (2026-11-12): シード 1 のプールを最後のウェーブにする。W=2 なら B, A, A, B, B, A, A, B, …
+  /** @param {number} P @param {number} W @param {boolean} [rev] @returns {number[]} */
+  function interleaveWaveMap(P, W, rev) {
     const Wc = Math.max(1, Math.min(W, P));
     const map = new Array(P);
     for (let p = 0; p < P; p++) {
       const k = Math.floor(p / Wc), j = p % Wc;
-      map[p] = k % 2 === 0 ? j : Wc - 1 - j;
+      map[p] = (k % 2 === 0) !== !!rev ? j : Wc - 1 - j;
     }
     return map;
   }
@@ -338,7 +339,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   }
 
   // ───────────────────────── 作業状況 CSV → ペイロード ─────────────────────────
-  // seed_app の「💾 作業状況を保存 (CSV)」出力 (seed,name,discriminator,uid,lock,pool,pools,waves)
+  // seed_app の「💾 作業状況を保存 (CSV)」出力 (seed,name,discriminator,uid,lock,pool,pools,waves,wave_order)
   // を読み込む。日本語列名 (順位/名前/プール数/ウェーブ数) も受ける。
   function parseCsv(text) {
     const s = String(text || '').replace(/^\uFEFF/, '');
@@ -373,6 +374,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     uid: ['uid'],
     pools: ['pools', 'プール数'],
     waves: ['waves', 'ウェーブ数'],
+    wave_order: ['wave_order'],   // rev = ウェーブの並びが逆から (B, A, A, B, …)。1 行目のみ
     // プレビューの保存 CSV 用の拡張列 (1行目のみ。シードページの作業状況 CSV には無い)
     event: ['event', 'イベント'],
     phases: ['phases'],
@@ -409,6 +411,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const warnings = [];
     const entries = [];
     /** @type {number | null} */ let P = null, /** @type {number | null} */ W = null;
+    let waveRev = false;
     /** @type {string | null} */ let evName = null, /** @type {string | null} */ phasesJson = null;
     /** @type {string | null} */ let wvJson = null, /** @type {string | null} */ viewStr = null;
     /** @type {string | null} */ let sggJson = null, /** @type {string | null} */ sggDataJson = null;
@@ -418,6 +421,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       const pv = get('pools'), wvv = get('waves');
       if (P == null && /^\d+$/.test(pv)) P = parseInt(pv, 10);
       if (W == null && /^\d+$/.test(wvv)) W = parseInt(wvv, 10);
+      if (get('wave_order').toLowerCase() === 'rev') waveRev = true;
       if (evName == null && get('event')) evName = get('event');
       if (phasesJson == null && get('phases')) phasesJson = get('phases');
       if (wvJson == null && get('wv')) wvJson = get('wv');
@@ -477,7 +481,7 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       ev: evName || opts.ev || i18n('seed.share.s26'),
       src: 'csv',
       phases: withFinalPhase(phases || [{ name: P >= 2 ? i18n('seed.share.s27') : i18n('seed.share.s28'), pools: P, adv: 2 }], uids.length),
-      wv: wvArr || interleaveWaveMap(P, Math.max(1, W)),   // 既定は交互 (seeding/app/85_waves.js と同じ、2026-11-11)
+      wv: wvArr || interleaveWaveMap(P, Math.max(1, W), waveRev),   // 既定は交互 (seeding/app/85_waves.js と同じ、2026-11-11)
       uids,
       names,
     };

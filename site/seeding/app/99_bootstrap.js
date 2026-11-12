@@ -187,9 +187,9 @@ export function prefillShiftLimits(n) {
 // チェック・ズレ上限・ズレ抑制・上級者向けパラメータ・「適用時に被り回避を自動実行」を
 // このブラウザ (localStorage) に保存し、次回開いたときに戻す。
 // 保存するのは「既定と違う項目」だけ (既定値を後で変えたとき、触っていない項目には新しい既定が効くように)。
-// 大会ごとに自動で入る値 (プール数・ウェーブ数・対象シリーズ) は保存しない。
+// 大会ごとに決める値 (プール数・ウェーブ数・ウェーブの並び・対象シリーズ) は保存しない。
 const SEEDOPT_SETTINGS_KEY = 'spsp_seedopt_settings_v1';
-const SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-series-select']);
+const SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-wave-order', 'so-series-select']);
 /** @type {Record<string, string | boolean> | null} */
 let SEEDOPT_DEFAULTS = null;   // 起動時 (markup) の値 = 既定。シードズレ上限は SHIFT_LIMIT_PRESET。
 
