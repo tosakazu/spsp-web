@@ -354,7 +354,7 @@ async function main() {
   // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
   if (backOn) $('ce-tabs').style.display = '';
   let backMounted = false;
-  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void } | null} */
+  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void, flush: () => void } | null} */
   let backEditor = null;
   /** @type {'front' | 'back' | null} */
   let curTab = null;
@@ -422,6 +422,7 @@ async function main() {
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;
+    if (backEditor) backEditor.flush();   // シールを動かした直後 (まとめ待ちの変更) も入れる
     const r = await putApplied(uid, st);
     if (r.ok) {
       // 適用したら編集ページを閉じてプレイヤーページへ (新しい設定のカードがすぐ出る)

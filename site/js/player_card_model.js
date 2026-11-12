@@ -424,7 +424,8 @@ export async function fetchApplied(uid) {
   return (await fetchAppliedCard(uid)).settings;
 }
 /** 適用済みの設定と、付けている二つ名の文字 (card_get の title_text。API の無い所では null = 二つ名は出さない)
- * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null }>} */
+ * failed = 読めなかった (設定が無いのとは別。裏面の初期配置は、設定が無いと分かったときだけ出す)
+ * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null, failed?: boolean }>} */
 export async function fetchAppliedCard(uid) {
   if (!SpspLogin.apiAvailable()) return { settings: loadLocalApplied(uid), titleText: null };
   try {
@@ -434,11 +435,11 @@ export async function fetchAppliedCard(uid) {
     const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
                           self ? { cache: 'no-store' } : undefined);
     const j = r.ok ? await r.json() : null;
-    if (!j || !j.ok) return { settings: null, titleText: null };
+    if (!j || !j.ok) return { settings: null, titleText: null, failed: true };
     const tt = j.title_text;
     return { settings: normalize(j.settings),
              titleText: tt && typeof tt === 'object' ? { pre: String(tt.pre || ''), post: String(tt.post || '') } : null };
-  } catch (e) { return { settings: null, titleText: null }; }
+  } catch (e) { return { settings: null, titleText: null, failed: true }; }
 }
 /** 適用 (本人のログインが要る)。settings が null なら既定に戻す。{ ok, code? }
  * @param {number} uid @param {CardSettings | null} s @returns {Promise<{ ok: boolean, code?: string }>} */

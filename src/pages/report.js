@@ -943,7 +943,9 @@ function titleOf(uid, ms) {
 let MATCH_ANIM = Promise.resolve();
 function matchAnimation(m) {
   const p = runMatchAnimation(m);
-  MATCH_ANIM = p.then((skipped) => (skipped === undefined ? null : new Promise((r) => setTimeout(r, skipped ? 150 : 600))), () => null);
+  // 前の演出がまだ出ていれば、それも待つ (もう見た試合でもう一度呼ばれても、出ている幕の下で始めない)
+  const prev = MATCH_ANIM;
+  MATCH_ANIM = p.then((skipped) => (skipped === undefined ? null : new Promise((r) => setTimeout(r, skipped ? 150 : 600))), () => null).then(() => prev);
   return p;
 }
 async function runMatchAnimation(m) {

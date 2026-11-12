@@ -95,7 +95,7 @@ const HISTORY_MAX = 100;
  * @param {{ uid: number, data: any, back: CardBack | null, defBack?: CardBack | null, latin: string | null,
  *   model: (latin: string | null, back: CardBack | null) => import('../../site/js/player_card.js').PCardModel,
  *   onChange: (patch: { back?: CardBack | null, latin?: string | null }) => void }} o
- * @returns {Promise<{ refresh: () => void }>}
+ * @returns {Promise<{ refresh: () => void, flush: () => void }>} flush = 動かしている途中の変更 (まとめ待ち) を今すぐ返す
  */
 export async function mountBackEditor(o) {
   const { uid, data } = o;
@@ -108,6 +108,7 @@ export async function mountBackEditor(o) {
   // 裏面の設定が無ければ初期配置 (o.defBack、js/card_stickers.js defaultBack) から始める。初期配置のまま (か、戻した) なら設定は null のまま返す
   const def = o.defBack ? normBack(o.defBack) : null;
   const defJson = def ? JSON.stringify(def) : '';
+  const EMPTY_JSON = JSON.stringify(normBack({}));
   const start = o.back || def;
   let textTop = !!(start && start.text_top);
   let stickerText = !!(start && start.sticker_text);
@@ -263,12 +264,16 @@ export async function mountBackEditor(o) {
   let sel = null;
   /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
   function emit() {
+    // 大会のアイコンの表が読めなかったときは返さない (貼ってあるシールが一覧に無く、空の裏面で上書きしてしまう)
+    if (!icons) return;
     const b = normBack({ stickers, text_top: textTop, sticker_text: stickerText, ...backPose() });
-    o.onChange({ back: defJson && JSON.stringify(b) === defJson ? null : b });
+    // 初期配置と同じなら設定なし (null)。初期配置の無い人 (シールをまだ持っていない) は、何もしていない裏面も設定なし
+    // (空の裏面を保存すると、あとでシールをもらっても初期配置が出なくなる)
+    o.onChange({ back: JSON.stringify(b) === (defJson || EMPTY_JSON) ? null : b });
   }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
-  const snap = () => JSON.stringify({ stickers, pose });
+  const snap = () => JSON.stringify({ stickers, pose, textTop, stickerText });
   /** @type {string[]} */
   const past = [snap()];
   /** @type {string[]} */
@@ -303,6 +308,13 @@ export async function mountBackEditor(o) {
     const j = JSON.parse(json);
     stickers = j.stickers;
     pose = j.pose;
+    // 名前を前に出す・白フチも戻す (前の履歴には無い)
+    const flags = (typeof j.textTop === 'boolean' && j.textTop !== textTop) || (typeof j.stickerText === 'boolean' && j.stickerText !== stickerText);
+    if (flags) {
+      textTop = j.textTop; stickerText = j.stickerText;
+      if (!stickerText && target !== 'all') { target = 'all'; textSel = false; }
+      paintTextTop(); renderBase(); paintSx();
+    }
     showTextPos();
     if (sel != null && !stickers.some(s => s.e === sel)) sel = null;
     emit();
@@ -1120,6 +1132,6 @@ export async function mountBackEditor(o) {
   // 表のタブで変えたもの (色・二つ名など) を裏のカードにも出す (裏のタブに戻ったときに p_edit.js が呼ぶ)
   // 使い方ガイド: ? のボタンで出す。初めてなら裏の欄を見せたとき (refresh) に出す
   $('bz-guide').addEventListener('click', () => { menu.open = false; startGuide(); });
-  return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); } };
+  return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); }, flush: flushHistory };
 }
 

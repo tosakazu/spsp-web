@@ -19,11 +19,12 @@ const FLIP_MS = 500, SHOW_MS = 1200;
  * @param {{ onFlip?: (on: boolean) => void }} [opts] */
 export function attachCardFlip(wrap, front, back, opts = {}) {
   wrap.classList.add('pc-wait');
-  const setFlipped = (/** @type {boolean} */ on) => {
+  /** @param {boolean} on @param {boolean} [quiet] 紹介の裏返し (自分で裏返したのではないので onFlip に知らせない) */
+  const setFlipped = (on, quiet = false) => {
     wrap.classList.toggle('flipped', on);
     front.setAttribute('aria-hidden', String(on));
     back.setAttribute('aria-hidden', String(!on));
-    if (opts.onFlip) opts.onFlip(on);
+    if (opts.onFlip && !quiet) opts.onFlip(on);
   };
   const flipped = () => wrap.classList.contains('flipped');
 
@@ -39,9 +40,9 @@ export function attachCardFlip(wrap, front, back, opts = {}) {
     if (flipped()) return;   // もう自分で裏返している
     introPhase = 'wait';
     const at = (/** @type {number} */ ms, /** @type {() => void} */ fn) => introTimers.push(setTimeout(fn, ms));
-    at(300, () => { introPhase = 'toBack'; setFlipped(true); });
+    at(300, () => { introPhase = 'toBack'; setFlipped(true, true); });
     at(300 + FLIP_MS, () => { introPhase = 'back'; });
-    at(300 + FLIP_MS + SHOW_MS, () => { introPhase = 'toFront'; setFlipped(false); });
+    at(300 + FLIP_MS + SHOW_MS, () => { introPhase = 'toFront'; setFlipped(false, true); });
     at(300 + FLIP_MS * 2 + SHOW_MS, () => { introPhase = ''; });
   };
   wrap.addEventListener('pointerdown', () => {
@@ -137,7 +138,7 @@ export function attachCardFlip(wrap, front, back, opts = {}) {
   // 動かしたあとのクリックは何も起こさない
   wrap.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
 
-  return { ready: () => wrap.classList.remove('pc-wait'), intro, setFlipped, flipped };
+  return { ready: () => wrap.classList.remove('pc-wait'), intro, setFlipped: (/** @type {boolean} */ on) => setFlipped(on), flipped };
 }
 
 export default { attachCardFlip };

@@ -18,6 +18,7 @@ import type { Store } from '../store.ts';
 import { bitsHas, titleById, usableIn } from './titles.ts';
 import type { HandlerResult } from './respond.ts';
 import type { DataFetch } from './vote.ts';
+import { bundledPlayer } from './vote.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
 import { dayKey, formatIso } from './time.ts';
@@ -195,14 +196,17 @@ const TIER_CODE: Record<string, number> = { r: 0, g: 1, s: 2, n: 3 };
  */
 export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back: CardBack, preview = false): Promise<null | 'not_owned' | 'unavailable'> {
   if (!back.stickers.length) return null;
-  let rec: { tournaments?: unknown } | null;
-  try {
-    const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
-    if (res.status === 404) return 'not_owned';
-    if (res.status !== 200) return 'unavailable';
-    rec = await res.json();
-  } catch (_) {
-    return 'unavailable';
+  // 参加の少ない選手は data/views/bundle/ にまとめてあり、個別のファイルは古いか無い (vote.ts bundledPlayer。画面の js/player_data.js と同じ順)
+  let rec = (await bundledPlayer(dataFetch, uid)) as { tournaments?: unknown } | null;
+  if (!rec) {
+    try {
+      const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
+      if (res.status === 404) return 'not_owned';
+      if (res.status !== 200) return 'unavailable';
+      rec = await res.json();
+    } catch (_) {
+      return 'unavailable';
+    }
   }
   const top = new Map<string, number>();
   const tours = Array.isArray(rec && rec.tournaments) ? (rec as { tournaments: unknown[] }).tournaments : [];

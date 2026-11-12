@@ -978,7 +978,8 @@ function render() {
     // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
     // 裏面の設定が無い人は、持っているシールの初期配置を足してから (js/player_card_model.js loadCardDefaultBack。設定が届く前には読まない)
     const settledP = settingsP.then(async x => {
-      const def = back && !(x && x.settings && x.settings.back) ? await loadCardDefaultBack(CARD_DATA_EXTRA).catch(() => null) : null;
+      // (設定が読めなかったときは出さない: 自分で貼った人の裏面に、貼っていないシールを出さない)
+      const def = back && x && !x.failed && !(x.settings && x.settings.back) ? await loadCardDefaultBack(CARD_DATA_EXTRA).catch(() => null) : null;
       if ((x && x.settings) || def) draw(x);
       return true;
     }).catch(() => false);

@@ -181,7 +181,8 @@ export async function mountPlayerCard(el, uid, opts = {}) {
       await Promise.race([cardSettled(el), new Promise(r => setTimeout(r, 3000))]);
       await idle();
       // 裏面の設定が無い人は初期配置 (持っているシールから。読めなければ何も貼っていない裏面)
-      const def = x && x.settings && x.settings.back ? null : loadCardDefaultBack(data).catch(() => null);
+      // (設定が読めなかったときは出さない: 自分で貼った人の裏面に、貼っていないシールを出さない)
+      const def = !x || x.failed || (x.settings && x.settings.back) ? null : loadCardDefaultBack(data).catch(() => null);
       const [readingsOk] = await Promise.all([loadCardReadings(data), ensureBackCss(), def]);
       if (!el.isConnected || !back.isConnected) return;
       backDrawn = true;

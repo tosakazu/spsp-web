@@ -118,10 +118,13 @@ export function startGuide() {
   };
   /** @param {KeyboardEvent} e */
   const onKey = e => {
+    // ボタンに合わせた Enter・Space はそのボタン。ほかのキーは下の編集画面 (Delete で剥がす・Ctrl+Z など) に届かせない
+    const onBtn = !!(/** @type {HTMLElement} */ (e.target)).closest && !!(/** @type {HTMLElement} */ (e.target)).closest('.bzg button');
     if (e.key === 'Escape') close();
+    else if (e.key === 'Enter' && onBtn) { e.stopPropagation(); return; }
     else if (e.key === 'ArrowRight' || e.key === 'Enter') go(1);
     else if (e.key === 'ArrowLeft') go(-1);
-    else return;
+    else { if (e.key !== 'Tab') e.stopPropagation(); return; }
     e.preventDefault(); e.stopPropagation();
   };
   /** @param {number} d */
