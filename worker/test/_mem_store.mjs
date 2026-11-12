@@ -344,6 +344,12 @@ export class MemStore {
   async putReportSnapshot(code, data, syncedMs, meta) {
     this._rep(); this.reportSnaps = this.reportSnaps.filter((x) => x.code !== code).concat([{ code, data, synced_ms: syncedMs, lock_ms: 0, m_full: meta && meta.full ? 1 : 0, m_sets: meta ? meta.sets : 0 }]);
   }
+  async casReportSnapshot(code, data, syncedMs, prevSyncedMs) {
+    this._rep(); let r = this.reportSnaps.find((x) => x.code === code);
+    if (!r && prevSyncedMs === 0) { r = { code, data: '{}', synced_ms: 0, lock_ms: 0 }; this.reportSnaps.push(r); }
+    if (!r || r.synced_ms !== prevSyncedMs) return false;
+    r.data = data; r.synced_ms = syncedMs; r.lock_ms = 0; return true;
+  }
   async claimReportSnapshot(code, nowMs, holdMs) {
     this._rep(); let r = this.reportSnaps.find((x) => x.code === code);
     if (!r) { r = { code, data: '{}', synced_ms: 0, lock_ms: 0 }; this.reportSnaps.push(r); }

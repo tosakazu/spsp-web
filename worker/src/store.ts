@@ -335,6 +335,8 @@ export interface Store {
   /** 写しを書く (data と synced_ms。lock は外す)。meta = 中身を開かずに読む値 (圧縮した写し、0022) */
   putReportSnapshot(code: string, data: string, syncedMs: number, meta?: { full: boolean; sets: number }): Promise<void>;
   /** 写す・取り込む役を取る (lock_ms が holdMs より前なら now にして true、行が無ければ作る)。 */
+  /** 写しを書く。ただし synced_ms が prevSyncedMs のままのときだけ (読んだ後にほかの要求が書いていたら false)。行が無ければ prevSyncedMs = 0。lock は外す */
+  casReportSnapshot(code: string, data: string, syncedMs: number, prevSyncedMs: number): Promise<boolean>;
   claimReportSnapshot(code: string, nowMs: number, holdMs: number): Promise<boolean>;
   releaseReportSnapshot(code: string): Promise<void>;
   /** 中身は変わっていなかった: 確かめた時刻だけ進めて鍵を外す */

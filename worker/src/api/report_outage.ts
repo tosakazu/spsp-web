@@ -23,6 +23,8 @@ import { LOWER_CLASS_NAME_PAT } from './report_startgg.ts';
 export const OUTAGE_FAILS = 2;
 /** 障害中に試す間隔 */
 export const PROBE_GAP_MS = 30 * 1000;
+/** Challonge が 429 (回数の上限) を返しているときに試す間隔 */
+export const CHALLONGE_LIMIT_GAP_MS = 5 * 60 * 1000;
 /** 繋がっているときに last_ok_ms を書き直す間隔 (D1 に毎回書かない) */
 const OK_REFRESH_MS = 60 * 1000;
 
@@ -45,12 +47,15 @@ export class Health {
     return new Health(store, r || { kind, down_since_ms: 0, last_fail_ms: 0, last_ok_ms: 0, fails: 0, probe_ms: 0, note: '' });
   }
   down(): boolean { return this.row.fails >= OUTAGE_FAILS; }
+  /** 障害中に試す間隔。Challonge の 429 は回数の上限 (待っても数十秒では戻らない・試すだけ無駄) なので長くあける */
+  probeGap(): number { return this.row.kind === 'challonge' && /http_429/.test(this.row.note) ? CHALLONGE_LIMIT_GAP_MS : PROBE_GAP_MS; }
   view(): OutageView | null { return this.down() ? { since_ms: this.row.down_since_ms, last_ok_ms: this.row.last_ok_ms, note: this.row.note } : null; }
   /** 今 start.gg を呼んでよいか (障害中は PROBE_GAP_MS ごとに 1 つの要求だけ) */
   async allowed(now: number): Promise<boolean> {
     if (!this.down() || this.claimed) return true;
-    if (now - this.row.last_fail_ms < PROBE_GAP_MS) return false;
-    this.claimed = await this.store.claimReportProbe(this.row.kind, now, PROBE_GAP_MS).catch(() => false);
+    const gap = this.probeGap();
+    if (now - this.row.last_fail_ms < gap) return false;
+    this.claimed = await this.store.claimReportProbe(this.row.kind, now, gap).catch(() => false);
     return this.claimed;
   }
   async fail(note: string, now: number): Promise<void> {

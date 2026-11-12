@@ -310,6 +310,15 @@ test('報告の障害時 (0017): 様子の upsert と試す役、写しの役 (�
   assert.strictEqual(await store.claimReportSnapshot('c1', 1011, 25), true, '書いたら役を外す');
   await store.releaseReportSnapshot('c1');
   assert.strictEqual((await store.getReportSnapshot('c1')).lock_ms, 0);
+  // Challonge の写し: 読んだ後にほかの要求が書いていたら書かない (synced_ms で見る)。行が無ければ作る。書いたら役を外す
+  assert.strictEqual(await store.casReportSnapshot('c3', '{"v":1,"n":1}', 2000, 0), true, '行が無ければ作る');
+  assert.strictEqual(await store.casReportSnapshot('c3', '{"v":1,"n":2}', 2010, 0), false, 'もう書かれている');
+  assert.strictEqual(await store.claimReportSnapshot('c3', 2020, 25), true);
+  assert.strictEqual(await store.casReportSnapshot('c3', '{"v":1,"n":3}', 2030, 2000), true);
+  assert.deepStrictEqual((({ data, synced_ms, lock_ms }) => ({ data, synced_ms, lock_ms }))(await store.getReportSnapshot('c3')), { data: '{"v":1,"n":3}', synced_ms: 2030, lock_ms: 0 });
+  assert.strictEqual(await store.casReportSnapshot('c3', '{"v":1,"n":4}', 2040, 2000), false, '古い版からは書けない');
+  assert.strictEqual(await store.claimReportSnapshot('c4', 2050, 25), true);
+  assert.strictEqual(await store.casReportSnapshot('c4', '{"v":1}', 2060, 0), true, '役を取ったときにできた空の行に書く');
   // 指定した試合
   const m = { code: 'c1', side: 'l', group_id: '700', slots: '[]', users: '|11|22|', station: '3', set_id: '', status: 'open', created_by: '4242', created_ms: 5, updated_ms: 5 };
   const id = await store.insertReportManual(m);

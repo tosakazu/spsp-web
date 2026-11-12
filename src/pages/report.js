@@ -1767,6 +1767,28 @@ function adminShareHtml() {
     <div class="rp-share"><input type="text" readonly value="${escapeHtml(pageUrl(CODE, true))}" id="rp-share-admin-url"><button type="button" class="rp-btn" id="rp-copy-admin">${escapeHtml(i18n('report.admin.copy'))}</button></div>
     <p class="rp-muted">${escapeHtml(i18n('report.admin.share_admin_help'))}</p>`;
 }
+/**
+ * Challonge の大会: 運営が Challonge の画面で直接直した結果をすぐ SPSP に出す (report_refresh)。
+ * SPSP は Challonge を読む回数を抑えていて (API の回数の上限が小さい)、直接直した分に気づくのは最長 10 分後。2026-11-12
+ */
+function chRefreshHtml(ev) {
+  if (!ev || ev.kind !== 'challonge') return '';
+  return `<section class="rp-card-sec" id="rp-ch-refresh">
+      <p class="rp-muted">${escapeHtml(i18n('report.ch.refresh_help'))}</p>
+      <button type="button" class="rp-btn" id="rp-ch-reload">${escapeHtml(i18n('report.ch.refresh_btn'))}</button> <span class="rp-status" id="rp-ch-status"></span>
+    </section>`;
+}
+function wireChRefresh() {
+  const b = /** @type {HTMLButtonElement | null} */ ($('rp-ch-reload'));
+  if (!b) return;
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    setStatus($('rp-ch-status'), i18n('report.loading'), 'busy');
+    const x = DEMO ? { ok: true } : await api({ action: 'report_refresh', token: tok(), code: CODE });
+    setStatus($('rp-ch-status'), x && x.ok ? i18n('report.ch.refresh_done') : errText(x), x && x.ok ? 'ok' : 'err');
+    b.disabled = false;
+  });
+}
 function wireAdminShare() {
   const b = $('rp-copy-admin');
   if (b) b.addEventListener('click', () => { const i = /** @type {HTMLInputElement} */ ($('rp-share-admin-url')); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
@@ -1807,6 +1829,7 @@ async function renderAdmin() {
     <section class="rp-card-sec rp-unsynced" id="rp-adm-unsynced" hidden></section>
     <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
+    ${chRefreshHtml(ev)}
     <section class="rp-card-sec" id="rp-adm-sets"></section>`;
     wirePush(root);
     wireAdminShare();
@@ -1833,7 +1856,8 @@ async function renderAdmin() {
   <section class="rp-card-sec rp-unsynced" id="rp-adm-unsynced" hidden></section>
     <section class="rp-card-sec rp-ops-sec" id="rp-adm-ops" hidden></section>
     <section class="rp-card-sec rp-manual-sec" id="rp-adm-manual" hidden></section>
-  <section class="rp-card-sec" id="rp-adm-sets"></section>
+  ${chRefreshHtml(ev)}
+    <section class="rp-card-sec" id="rp-adm-sets"></section>
   <section class="rp-card-sec"><button type="button" class="rp-btn rp-danger" id="rp-stop">${escapeHtml(i18n('report.admin.stop'))}</button></section>`;
   $('rp-copy').addEventListener('click', () => { const i = $('rp-share-url'); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } });
   wireAdminShare();
@@ -1904,6 +1928,7 @@ async function renderAdmin() {
 
 /** 試合の一覧を出して、定期的に読み直す (運営・報告管理者) */
 async function adminSetsStart(r) {
+  wireChRefresh();
   // 直しの欄のキャラ・ステージ (ステージは start.gg の一覧。普段のログインのトークンが無ければステージは出さない)
   await loadChars();
   if (INFO && INFO.kind === 'startgg' && !STAGES && !r.outage) {

@@ -93,7 +93,19 @@ export const REPORT_ADMIN_MAX_PER_DAY = 2000;
 export const REPORT_GRANT_MS = 12 * 3600 * 1000;
 export const REPORT_MIN_OPEN_MS = 6 * 3600 * 1000;        // 受付は少なくともこれだけ開ける
 export const REPORT_MAX_OPEN_MS = 8 * 24 * 3600 * 1000;   // 長くてもこれまで (大会が延びたら運営が受付し直す)
-export const REPORT_CHALLONGE_CACHE_S = 15;               // Challonge の試合一覧を Worker で持つ秒数
+// Challonge の参加者・試合の写し (report_challonge.ts)。Challonge の API は使える回数が少ないので、読むのはこの間隔まで
+export const REPORT_CH_PRESTART_MS = 2 * 60 * 1000;       // 始まる前 (試合が 0 件): 試合だけを読む間隔
+export const REPORT_CH_DIRTY_MS = 20 * 1000;              // SPSP が書いた後、次の試合を読み直すまでにあける時間 (前に読んでから)
+export const REPORT_CH_BASE_MS = 10 * 60 * 1000;          // 運営が Challonge で直接直したのに気づくための読み直し
+export const REPORT_CH_EXT_MS = 2 * 60 * 1000;            //   気づいた後 REPORT_CH_EXT_WINDOW_MS の間はこの間隔
+export const REPORT_CH_EXT_WINDOW_MS = 20 * 60 * 1000;
+export const REPORT_CH_IDLE_AFTER_MS = 60 * 60 * 1000;    //   これだけ動きが無ければ REPORT_CH_IDLE_MS ごと
+export const REPORT_CH_IDLE_MS = 30 * 60 * 1000;
+export const REPORT_CH_DONE_STOP_MS = 2 * 3600 * 1000;    //   全試合が終わってこれだけ動きが無ければ読まない
+export const REPORT_CH_FRESH_MS = 60 * 1000;              // 報告された試合が写しに無いときの読み直し
+export const REPORT_CH_FORCE_MIN_MS = 30 * 1000;          // 運営の「Challonge から読み直す」
+export const REPORT_CH_FAIL_MS = 60 * 1000;               // 読めなかった後に読みに行かない時間
+export const REPORT_CH_LIMIT_MS = 15 * 60 * 1000;         //   429 (回数の上限) のとき
 
 /** Challonge (OAuth と API v2.1)。scope は取得側 (smash_database、client credentials の application:manage) と
  *  確認済み: TO が SPSP のアプリ経由で作ったトーナメントは /v2.1/application/tournaments に出る (2026-10-01)。 */
