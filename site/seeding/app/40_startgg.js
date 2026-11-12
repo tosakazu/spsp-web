@@ -4,7 +4,7 @@
 // トップレベルの const / let / function を同じグローバル字句環境で共有する。site/seeding/app/README.md を見ること。
 import { S } from './00_state.js';
 import { SEED_APP_CONFIG, i18n } from './10_skeleton.js';
-import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, manualSrc, orderedRecs, renderManualUI, restoreManualForEvent } from './30_core.js';
+import { DATA, assignRandomRanks, newRandomSeed, renderRandomTab, canonicalUserId, ensureMasterRecs, ensureTable, loadMasterData, manualClickHandler, manualFromOptimized, manualSrc, orderedRecs, renderManualUI, restoreManualForEvent, saveManual } from './30_core.js';
 import { showEventPickerInline } from './60_upcoming.js';
 import { cleanupSeedOptWorker, dropAppliedOrder, initSeedOptPanel, runSeedOptimize, updateIntraToggleState } from './75_series_rematch.js';
 import { fetchPhaseWaves } from './85_waves.js';
@@ -999,6 +999,7 @@ if (manualBarEl) manualBarEl.addEventListener('change', (e) => {
   const dst = /** @type {HTMLInputElement | null} */ (document.getElementById('so-wave-order'));
   if (!src || !dst) return;
   dst.value = src.value;
+  saveManual();   // 並びも作業状態と一緒に残す (読み直しで戻す)
   renderManualUI();
 });
 // 手動調整バーのプール数 / ウェーブ数 → 被り回避パネルの入力 (so-pools/so-waves) に反映。
@@ -1013,6 +1014,7 @@ if (manualBarEl) manualBarEl.addEventListener('input', (e) => {
   if (!dst || !Number.isFinite(v) || v < 1) return;
   dst.value = String(v);
   if (p) updateIntraToggleState();
+  saveManual();   // プール数・ウェーブ数も作業状態と一緒に残す (読み直しで戻す)
   renderManualUI();
   // 再描画で input が作り直されるのでフォーカスとカーソルを戻す。
   const again = /** @type {HTMLInputElement | null} */ (manualBarEl
