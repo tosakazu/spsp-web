@@ -2237,7 +2237,6 @@ window.SPSP_I18N.en = {
   'report.gate.top_cut': 'From top {n}, the organizers enter results',
   'report.waiting': 'Waiting for your next match',
   'report.show_rank': 'Show SPSP ranks',
-  'report.card_flip': 'Flip card',
   'report.cand.title': 'Possible next opponents',
   'report.cand.none': 'No candidates yet.',
   'report.cand.route': '{who} {round}',

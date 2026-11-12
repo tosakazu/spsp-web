@@ -149,7 +149,7 @@ const idle = () => new Promise(r => {
  * 戻り値: 描けたら true、選手のデータが無ければ false (el は触らない。呼ぶ側が「読み込めませんでした」などを出す)
  * opts.back: 裏面を描く要素。表が落ち着いて (設定も届いて) から、読みの表・シールの絵を読んで描く。描き終わったら opts.onBack
  * (読めないものがあっても呼ぶ = 裏返せる)。戻り値の Promise は裏面を待たない
- * @param {HTMLElement} el @param {string} uid @param {{ back?: HTMLElement | null, onBack?: () => void }} [opts]
+ * @param {HTMLElement} el @param {string} uid @param {{ back?: HTMLElement | null, onBack?: (ok: boolean) => void }} [opts] onBack の ok = 全部読めた (読みの表・シールの絵)
  */
 export async function mountPlayerCard(el, uid, opts = {}) {
   ensureCardFonts();
@@ -180,13 +180,13 @@ export async function mountPlayerCard(el, uid, opts = {}) {
     (async () => {
       await Promise.race([cardSettled(el), new Promise(r => setTimeout(r, 3000))]);
       await idle();
-      await Promise.all([loadCardReadings(data), ensureBackCss()]);
+      const [readingsOk] = await Promise.all([loadCardReadings(data), ensureBackCss()]);
       if (!el.isConnected || !back.isConnected) return;
       backDrawn = true;
       SPSPPlayerCard.renderBack(back, model(x));
-      await SPSPPlayerCard.ready(back);
-      if (back.isConnected && opts.onBack) opts.onBack();
-    })().catch(() => { /* 裏返せないだけ */ });
+      const ok = await SPSPPlayerCard.ready(back);
+      if (back.isConnected && opts.onBack) opts.onBack(readingsOk && ok);
+    })().catch(() => { if (back.isConnected && opts.onBack) opts.onBack(false); });
   }
   return true;
 }

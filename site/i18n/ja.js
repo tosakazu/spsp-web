@@ -2290,7 +2290,6 @@ window.SPSP_I18N.ja = {
   'report.gate.top_cut': 'トップ {n} からは運営が結果を入力します',
   'report.waiting': '試合待ち',
   'report.show_rank': 'SPSP 順位を表示',
-  'report.card_flip': 'カードを裏返す',
   'report.cand.title': '次の相手の候補',
   'report.cand.none': '候補はまだ分かりません。',
   'report.cand.route': '{round} の{who}',

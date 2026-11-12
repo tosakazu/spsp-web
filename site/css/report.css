@@ -57,14 +57,10 @@ body {
 .rp-plate-n { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; text-align: center; }
 .rp-card { margin: 8px auto; width: 100%; max-width: 514px; }   /* 514px = カードの原寸 (プレイヤーページと同じ大きさまで) */
 .rp-card-sm { max-width: 420px; margin: 6px 0 0; }
-/* VS のカードを裏返す (プレイヤーページと同じ裏面、js/player_card_embed.js)。裏面を読み終えるまで (.rp-flip-ok) は押しても何もしない。
-   回る仕組みは player_card.css の .pcard-flip / .flipped。ボタンは右下の角 */
-.rp-flip { position: relative; perspective: 1400px; }
-.rp-flip.rp-flip-ok .pcard-flip { cursor: pointer; }
-.rp-flip-btn { position: absolute; right: 6px; bottom: 6px; z-index: 3; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(17, 24, 39, .55); color: #fff;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.rp-flip-btn[hidden] { display: none; }
-.rp-flip-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* VS のカードを裏返す・傾ける (プレイヤーページと同じ裏面と動かし方、js/player_card_embed.js・js/card_flip.js)。
+   回る仕組み・影・読み込み中のグルグル (.pc-wait) は player_card.css の .pcard-wrap / .pcard-flip。余白はこの画面のもの */
+.rp-vs-side .rp-flip.pcard-wrap { margin: 0; }
+.rp-flip.pc-wait .pcard { cursor: default; }
 .rp-flip .rp-card-wait ~ .pcard-back { visibility: hidden; }
 
 .rp-more { margin: 10px 0; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 10px; }

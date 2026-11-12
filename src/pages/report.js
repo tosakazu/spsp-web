@@ -15,6 +15,7 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
+import { attachCardFlip } from '../../site/js/card_flip.js';
 import { cardBackOn, cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, redrawCards, setCardRanksHidden, warmCards } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
@@ -521,31 +522,18 @@ function stationHtml(m) {
 function vsCardHtml(slot, cls, after) {
   if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div>${after || ''}</div>`;
   const front = `<div class="rp-card rp-vs-card pcard rp-card-wait"${slot.uid ? ` data-card-uid="${escapeHtml(slot.uid)}"` : ''} data-card-name="${escapeHtml(slot.name)}"></div>`;
-  // SPSP の選手は裏返せる (プレイヤーページと同じ裏面: 英字名・大会シール、2026-11-12)。裏面は表を出したあとで読み (fillCards)、
-  // 読み終わるまで (.rp-flip-ok が付くまで) は裏返せないだけで、報告の操作はそのままできる。マッチングの演出・勝ちの演出は表だけ
+  // SPSP の選手は裏返せる (プレイヤーページと同じ裏面: 英字名・大会シール、2026-11-12)。動かし方もプレイヤーページと同じ (js/card_flip.js:
+  // 傾けるとシールが光る・横にはじくと裏返る・裏の準備ができたら 1 回だけ裏を見せる)。裏面は表を出したあとで読み (fillCards)、
+  // 読み終わるまで (.pc-wait、右上に小さなグルグル) は動かせないだけで、報告の操作はそのままできる。マッチングの演出・勝ちの演出は表だけ
   const body = slot.uid && cardBackOn()
-    ? `<div class="rp-card rp-flip" data-flip-uid="${escapeHtml(slot.uid)}"><div class="pcard-flip">${front}<div class="pcard pcard-back rp-vs-back" aria-hidden="true"></div></div>`
-      + `<button type="button" class="rp-flip-btn" data-flip hidden title="${escapeHtml(i18n('report.card_flip'))}" aria-label="${escapeHtml(i18n('report.card_flip'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.6L4 15.5M4 20v-4.5h4.5"/></svg></button></div>`
+    ? `<div class="rp-card rp-flip pcard-wrap" data-flip-uid="${escapeHtml(slot.uid)}"><div class="pcard-flip">${front}<div class="pcard pcard-back rp-vs-back" aria-hidden="true"></div></div></div>`
     : front;
   return `<div class="rp-vs-side ${cls}">${body}${after || ''}</div>`;
 }
 /** 裏返しているカード (選手 ID)。画面を描き直しても裏のまま (裏面を読み終えたら戻す) @type {Set<string>} */
 const FLIPPED = new Set();
-/** @param {Element} wrap .rp-flip @param {boolean} on */
-function setFlipped(wrap, on) {
-  wrap.classList.toggle('flipped', on);
-  const [f, b] = [wrap.querySelector('.rp-vs-card'), wrap.querySelector('.rp-vs-back')];
-  if (f) f.setAttribute('aria-hidden', String(on));
-  if (b) b.setAttribute('aria-hidden', String(!on));
-  const uid = wrap.getAttribute('data-flip-uid') || '';
-  if (on) FLIPPED.add(uid); else FLIPPED.delete(uid);
-}
-// カード (か右下のボタン) を押すと裏返す。裏面を読み終えてから
-document.addEventListener('click', (e) => {
-  const t = /** @type {Element | null} */ (e.target instanceof Element ? e.target : null);
-  const wrap = t && t.closest('.rp-flip.rp-flip-ok');
-  if (wrap) setFlipped(wrap, !wrap.classList.contains('flipped'));
-});
+/** 裏を見せる紹介を済ませたカード (選手 ID)。画面を描き直すたびにはやらない @type {Set<string>} */
+const INTRODUCED = new Set();
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
   return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mid"><div class="rp-vs-mark">VS</div></div>${vsCardHtml(op, 'rp-op', showRankHtml())}</div>`;
@@ -630,19 +618,22 @@ function fillCards(root) {
   const noData = (el) => { mountNoDataCard(el, el.getAttribute('data-card-name') || ''); settle(el); };
   for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    // VS のカードは裏面も (表のあとで。読み終えたら裏返せるようにし、裏返していたカードは裏に戻す)
-    const wrap = el.closest('.rp-flip');
+    // VS のカードは裏面も (表のあとで。読み終えたら動かせるようにし、裏返していたカードは裏に戻す。初めてなら裏を 1 回見せる)
+    const wrap = /** @type {HTMLElement | null} */ (el.closest('.rp-flip'));
     const back = wrap ? /** @type {HTMLElement | null} */ (wrap.querySelector('.rp-vs-back')) : null;
-    const onBack = () => {
-      if (!wrap || !wrap.isConnected) return;
-      wrap.classList.add('rp-flip-ok');
-      const btn = wrap.querySelector('[data-flip]');
-      if (btn) /** @type {HTMLElement} */ (btn).hidden = false;
-      if (FLIPPED.has(wrap.getAttribute('data-flip-uid') || '')) setFlipped(wrap, true);
+    const fuid = (wrap && wrap.getAttribute('data-flip-uid')) || '';
+    const flip = wrap && back ? attachCardFlip(wrap, el, back, { onFlip: (on) => { if (on) FLIPPED.add(fuid); else FLIPPED.delete(fuid); } }) : null;
+    const onBack = (/** @type {boolean} */ ok) => {
+      if (!flip || !wrap || !wrap.isConnected) return;
+      flip.ready();
+      if (FLIPPED.has(fuid)) flip.setFlipped(true);
+      else if (ok && !INTRODUCED.has(fuid)) { INTRODUCED.add(fuid); flip.intro(); }
     };
     mountPlayerCard(el, el.getAttribute('data-card-uid'), { back, onBack }).then((ok) => {
       if (!el.isConnected) return;
       if (ok) { settle(el); return; }
+      if (wrap) wrap.classList.remove('pc-wait');   // 裏面は無い (グルグルを消す。動かせるが裏は空なので裏返さない)
+      if (wrap) wrap.classList.remove('pcard-wrap');
       if (el.hasAttribute('data-card-name')) noData(el);   // VS: SPSP にデータが無い人
       else el.remove();   // 次の相手の候補: 名前は上に出ているのでカードは出さない
     }).catch(() => { /* カードが出ないだけ */ });
