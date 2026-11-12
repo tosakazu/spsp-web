@@ -627,7 +627,12 @@ function fillCards(root) {
       if (!flip || !wrap || !wrap.isConnected) return;
       flip.ready();
       if (FLIPPED.has(fuid)) flip.setFlipped(true);
-      else if (ok && !INTRODUCED.has(fuid)) { INTRODUCED.add(fuid); flip.intro(); }
+      // 裏を 1 回見せるのは、マッチングの演出が終わってから (幕の下で回って、飛ばしたときに途中から見えないように。演出は裏面を待たない)
+      else if (ok && !INTRODUCED.has(fuid)) MATCH_ANIM.then(() => {
+        if (!wrap.isConnected || INTRODUCED.has(fuid) || FLIPPED.has(fuid)) return;
+        INTRODUCED.add(fuid);
+        flip.intro();
+      });
     };
     mountPlayerCard(el, el.getAttribute('data-card-uid'), { back, onBack }).then((ok) => {
       if (!el.isConnected) return;
@@ -934,7 +939,14 @@ function titleOf(uid, ms) {
   const p = cardTitleOf(uid).catch(() => '');
   return Promise.race([p, new Promise((r) => setTimeout(() => r(''), ms))]);
 }
-async function matchAnimation(m) {
+/** マッチングの演出が終わって (幕が消えて、カードの所までスクロールして) 落ち着いたら解ける。演出が無ければすぐ @type {Promise<unknown>} */
+let MATCH_ANIM = Promise.resolve();
+function matchAnimation(m) {
+  const p = runMatchAnimation(m);
+  MATCH_ANIM = p.then((skipped) => (skipped === undefined ? null : new Promise((r) => setTimeout(r, skipped ? 150 : 600))), () => null);
+  return p;
+}
+async function runMatchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
