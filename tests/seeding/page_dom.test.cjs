@@ -495,6 +495,21 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
   assert.strictEqual(spec.locks[10].kind, 'wave');
   assert.ok(/ノーシード 2 人/.test(st), st);
   assert.deepStrictEqual(order.slice().sort((a, b) => a - b), Array.from({ length: 16 }, (_, i) => i + 1));
+  // ノーシード + ウェーブ指定 / ノーシード + 「◯◯の逆」(2026-11-12): ウェーブを優先して、そのウェーブでいちばん低いシード
+  win.eval('pushed = null; SEED_SPEC = null;');
+  win.applySpecRows([
+    { name: 'P4', discriminator: disc(4), seed: 'ノーシード', wave: 'A', lock: 'wave' },
+    { name: 'P6', discriminator: disc(6), seed: 'ノーシード', wave: 'P4の逆', lock: '' },
+    { name: 'P8', discriminator: disc(8), seed: 'ノーシード', wave: '', lock: '' },
+  ], 'test.csv');
+  const orderN = Array.from(win.eval('pushed'));
+  const lowestOf = (w) => Math.max(...orderN.map((_, k) => k).filter((k) => waveOfSeat(k) === w));
+  assert.strictEqual(orderN.indexOf(4), lowestOf(0), 'P4 (ノーシード・A) が A のいちばん下でない: ' + orderN.join(','));
+  assert.strictEqual(orderN.indexOf(6), lowestOf(1), 'P6 (ノーシード・P4 の逆 = B) が B のいちばん下でない: ' + orderN.join(','));
+  assert.ok(orderN.indexOf(8) >= 13, 'ウェーブ指定の無いノーシードは残りの最後尾: ' + orderN.join(','));
+  assert.strictEqual(win.eval('SEED_SPEC').locks[4].kind, 'wave');
+  assert.strictEqual(win.eval('SEED_SPEC').locks[6].kind, 'wave');
+  assert.ok(!/⚠/.test(win.document.getElementById('spec-status').innerHTML), win.document.getElementById('spec-status').innerHTML);
   // ウェーブ数を入れ忘れた (1 のまま): ノーシードは効き、ウェーブはまとめて案内する。注意は省略しない
   win.document.getElementById('so-waves').value = '1';
   win.eval('pushed = null;');

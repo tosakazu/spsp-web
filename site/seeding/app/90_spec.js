@@ -84,7 +84,8 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   // ウェーブ指定を優先する (2026-11-11 ユーザー指定): ウェーブ指定の人は、本来の位置 (今の並びで空きに詰めたときの位置)
   // から下へ見て最初の同じウェーブの空きに置く (シードは下げる方向にだけずらす)。ノーシードの枠に入ってもよい
   // (ノーシードの人は残りの最後にまとまるので、さらに下がる)。下に空きが無いときだけ上の一番近い空きに置き、
-  // それも無い (= そのウェーブの枠を使い切った) ときは指定を諦める。残りの人は今の並びの順に空きへ詰め、ノーシードは最後。
+  // それも無い (= そのウェーブの枠を使い切った) ときは指定を諦める。残りの人は今の並びの順に空きへ詰め、ノーシードは最後
+  // (ノーシードでウェーブ指定もある人は、そのウェーブでいちばん低いシード)。
   const tail = noSeed ? curOrder.filter((u) => noSeed.has(u) && !pinned.has(u)) : [];
   const tailSet = new Set(tail);
   const queue = curOrder.filter((u) => !pinned.has(u) && !tailSet.has(u));
@@ -98,6 +99,18 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
   /** @type {{ uid: number, from: number, to: number }[]} ウェーブのために動かした人 (シード番号は 1 始まり) */
   const moved = [];
   const want = new Map(waveOf);
+  // ノーシード + ウェーブ指定 (2026-11-12 ユーザー指定): ウェーブを優先して、そのウェーブでいちばん低いシードの空きに置く
+  // (今の並びで後ろの人から下へ。ほかの人のウェーブ指定より先に枠を取る)。そのウェーブに空きが無ければ指定を諦めて最後尾
+  for (let ti = tail.length - 1; ti >= 0; ti--) {
+    const u = tail[ti];
+    if (!want.has(u)) continue;
+    const w = want.get(u);
+    let at = -1;
+    for (let i = freeSeats.length - 1; i >= 0; i--) if (!taken.has(i) && waveAt(freeSeats[i]) === w) { at = i; break; }
+    if (at < 0) { waveGaveUp++; continue; }
+    taken.add(at); placed.add(u);
+    out[freeSeats[at]] = u;
+  }
   for (let qi = 0; qi < queue.length; qi++) {
     const u = queue[qi];
     if (!want.has(u)) continue;
@@ -113,7 +126,7 @@ function buildSpecOrder(curOrder, pins, waveOf, P, waveMap, poolOf, noSeed) {
     if (at > home) { movedDown++; maxDown = Math.max(maxDown, freeSeats[at] - freeSeats[home]); } else if (at < home) movedUp++;
   }
   // 残り: 今の並びの順に空きへ詰め、ノーシードは最後
-  const rest = queue.filter((u) => !placed.has(u)).concat(tail);
+  const rest = queue.filter((u) => !placed.has(u)).concat(tail.filter((u) => !placed.has(u)));
   let r = 0;
   for (let i = 0; i < freeSeats.length; i++) if (!taken.has(i)) out[freeSeats[i]] = rest[r++];
   /** @type {string[]} 注意ではないお知らせ (ウェーブのために下げた) */
@@ -349,8 +362,8 @@ function applySpecRows(rows, label) {
       const wIdx = oppositeWave(/** @type {number} */ (rw), W);
       if (o.seat != null) {
         if (waveMap[poolOfS0(o.seat - 1)] !== wIdx) problems.push(`${o.rec.display}${i18n('seed.spec.t15')}${o.seat} ${i18n('seed.spec.t16')} ${waveLetter(wIdx)} ${i18n('seed.spec.t17')}`);
-      } else if (!noSeed.has(o.u)) {
-        waveOf.set(o.u, wIdx);
+      } else {
+        waveOf.set(o.u, wIdx);   // ノーシードの人も (そのウェーブでいちばん低いシードに置く、2026-11-12)
       }
       // 「◯◯の逆」はウェーブで固定する (被り回避の最適化でも逆のまま。lock 列に pool と書いてあればそちら)
       const fx = parseFixValue(o.fixV, true);

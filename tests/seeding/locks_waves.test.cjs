@@ -253,6 +253,32 @@ test('app: buildSpecOrder — ノーシードは最後尾にまとめる (2026-1
   assert.deepStrictEqual(arr(r.order).sort((a, b) => a - b), cur);
 });
 
+test('app: buildSpecOrder — ノーシード + ウェーブ指定はそのウェーブでいちばん低いシード (2026-11-12)', () => {
+  const ctx = extractFns(['buildSpecOrder']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  const cur = [1, 2, 3, 4, 5, 6, 7, 8];
+  const waveOfSeat = (s0) => [0, 1][poolOf(s0, 2)];
+  const lowest = (w) => Math.max(...cur.map((_, k) => k).filter((k) => waveOfSeat(k) === w));
+  for (const w of [0, 1]) {
+    const r = ctx.buildSpecOrder(cur, [], [[2, w]], 2, [0, 1], poolOf, new Set([2]));
+    assert.strictEqual(arr(r.order).indexOf(2), lowest(w), `ウェーブ ${w}: ` + arr(r.order).join(','));
+    assert.deepStrictEqual(arr(r.order).filter((u) => u !== 2), [1, 3, 4, 5, 6, 7, 8], 'ほかの人の順はそのまま');
+    assert.deepStrictEqual(arr(r.notes), []);
+  }
+  // 同じウェーブに 2 人: 今の並びで後ろの人が下。ウェーブ指定の無いノーシードは残りの最後尾
+  const r2 = ctx.buildSpecOrder(cur, [], [[2, 0], [5, 0]], 2, [0, 1], poolOf, new Set([2, 5, 3]));
+  const o2 = arr(r2.order);
+  const seatsA = cur.map((_, k) => k).filter((k) => waveOfSeat(k) === 0);
+  assert.deepStrictEqual([o2.indexOf(2), o2.indexOf(5)], seatsA.slice(-2), o2.join(','));
+  assert.strictEqual(o2.indexOf(3), Math.max(...cur.map((_, k) => k).filter((k) => ![2, 5].includes(o2[k]))), o2.join(','));
+  assert.deepStrictEqual(o2.slice().sort((x, y) => x - y), cur);
+  // そのウェーブの枠が順位の指定で埋まっていれば、諦めて最後尾 (注意を出す)
+  const pinsA = seatsA.map((k, i) => [[1, 3, 4, 6][i], k + 1]);
+  const r3 = ctx.buildSpecOrder(cur, pinsA, [[2, 0]], 2, [0, 1], poolOf, new Set([2]));
+  assert.strictEqual(arr(r3.notes).length, 1);
+  assert.deepStrictEqual(arr(r3.order).slice().sort((x, y) => x - y), cur);
+});
+
 test('app: ウェーブの「◯◯の逆」・指定しない書き方 (2026-11-11)', () => {
   const ctx = extractFns(['parseWaveOpposite', 'oppositeWave']);
   vm.runInContext(APP_SRC.match(/const WAVE_OPPOSITE_RE = [^\n]*/)[0].replace('const ', 'globalThis.'), ctx);
