@@ -231,7 +231,7 @@ export function _applyCsvSettingColumns(rows) {
       settingNotes.push(`${label2}${i18n('seed.spec.t10')} ${v} ${i18n('seed.spec.t11')}`);
     }
   }
-  // ウェーブの並び (wave_order 列がある CSV だけ。rev = 逆から、空 = A から)
+  // ウェーブの並び (wave_order 列がある CSV だけ。rev = 逆から、それ以外 (a・空) = A から)
   const orderRow = rows.find((r) => _csvPick(r, ['pools']) != null || _csvPick(r, ['waves']) != null);
   const orderEl = /** @type {HTMLInputElement | null} */ (document.getElementById('so-wave-order'));
   if (orderEl && orderRow && rows.some((r) => Object.keys(r).some((k) => String(k).trim().toLowerCase() === 'wave_order'))) {
@@ -488,7 +488,7 @@ async function loadSpecSource() {
 //   lock  : pool / wave / 空 (固定の種別。対象は seed 順から決まる)
 //   pool  : 参考表示 (A3 / P3。読み込み時は無視される)
 //   pools / waves : プール数・ウェーブ数 (1 行目のみ。読み込み時に設定へ反映)
-//   wave_order    : rev = ウェーブの並びが逆から (B, A, A, B, …)。1 行目のみ。空 = A から
+//   wave_order    : ウェーブの並び。rev = 逆から (B, A, A, B, …、既定) / a = A から。1 行目のみ。列が無い CSV は今の設定のまま
 function exportSeedWorkCsv() {
   if (!DATA.length) { _specStatus(i18n('seed.spec.s15'), true); return; }
   const recs = orderedRecs();
@@ -515,7 +515,7 @@ function exportSeedWorkCsv() {
       field(P >= 2 ? poolLabel(SeedOptimizer.poolOfSeed(i, P), waveMap) : ''),
       i === 0 ? P : '',
       i === 0 ? W : '',
-      i === 0 && waveOrderReversed() ? 'rev' : '',
+      i === 0 ? (waveOrderReversed() ? 'rev' : 'a') : '',
     ].join(','));
   });
   const name = ((S.EVENT_CONTEXT && S.EVENT_CONTEXT.eventName) || (S.CSV_SOURCE && S.CSV_SOURCE.label) || 'seed')
