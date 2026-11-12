@@ -92,10 +92,10 @@ function letterShift(shape, b) {
   shiftCache.set(key, best);
   return best;
 }
-/** impl: 'img' (既定、画像版: 740px の AVIF、ラメは前の画像版のまま) | 'css' (画像を使わない) | 'old' (前の画像版、740px)
+/** レイヤーは画像 (740px の AVIF、ラメと AVIF が使えないときは WebP)。画像を使わない描き方・前の画像版は CSS ごと削った (2026-11-12)
  * cls: 下位クラスの文字 ('B' など。無ければ出さない)
  * flatten: キャンバスに 1 枚に描いて差し替えるか。'auto' (既定) = Samsung Internet かダークモードのときだけ、'always'、'never'
- * @typedef {{ src: string, variant?: number, transparent?: boolean, impl?: 'img' | 'css' | 'old', cls?: string | null, flatten?: 'auto' | 'always' | 'never', shape?: string, crop?: number }} BadgeOpts */
+ * @typedef {{ src: string, variant?: number, transparent?: boolean, cls?: string | null, flatten?: 'auto' | 'always' | 'never', shape?: string, crop?: number }} BadgeOpts */
 
 /** @type {Map<string, Promise<boolean>>} */
 const cache = new Map();
@@ -202,23 +202,22 @@ export function renderBadge(el, opts) {
   el.style.setProperty('--hb-cls-k', String(pl.k));
   // 層: 絵 / (透過なしならクラスの文字) / ホロのレイヤー (下から) / ポインタを乗せたときの光 / (透過ありならクラスの文字)
   const layers = layersFor(!!opts.transparent, v, shape);
-  const impl = opts.impl || 'img';
-  const kind = (/** @type {string} */ _name) => (impl === 'css' ? 'c' : impl === 'old' ? 'o' : 'l');
+  const impl = /** @type {'img' | 'old'} */ ('img');
   // クラスの文字: 透過なしは絵の直上 (ホロの下)、透過ありはホロの上 (形で切り抜かない)
   const letter = opts.cls ? String(opts.cls).replace(/[^A-Za-z0-9]/g, '').slice(0, 2) : '';
   const cls = letter ? `<div class="hb-cls">${letter}</div>` : '';
   // ポインタの光 (sheen / glare) は .hb の直下 (キャンバスに差し替えたあとも、その上で重なるように)。透過ありは光も形で切り抜く
   el.innerHTML = '<div class="hb-in"><div class="hb-art"></div>' + (opts.transparent ? '' : cls) +
-    layers.map(([name, mode, sc]) => `<div class="hb-${kind(name)} hb-${kind(name)}-${name}" data-mode="${mode}"${sc ? ` style="inset:${-(sc - 1) / 2 * 100}%"` : ''}></div>`).join('') +
+    layers.map(([name, mode, sc]) => `<div class="hb-l hb-l-${name}" data-mode="${mode}"${sc ? ` style="inset:${-(sc - 1) / 2 * 100}%"` : ''}></div>`).join('') +
     '</div>' + (opts.transparent ? cls : '') + '<div class="hb-sheen"></div><div class="hb-glare"></div>';
-  for (const d of el.querySelectorAll('.hb-l, .hb-c, .hb-o')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
+  for (const d of el.querySelectorAll('.hb-l')) /** @type {HTMLElement} */ (d).style.mixBlendMode = String(/** @type {HTMLElement} */ (d).dataset.mode);
   const fl = opts.flatten || 'auto';
   // 描き方 (キャンバスに描くとき用)。画像にする (badgeToCanvas、カードの保存) ときにも使うので、いつも覚えておく
-  const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl: impl === 'css' ? 'img' : impl, letter, crop, pl, shape };
+  const fo = { src: opts.src, layers, transparent: !!opts.transparent, impl, letter, crop, pl, shape };
   specOf.set(el, fo);
   // 形で切ったもの (角丸・丸・六角形・ひし形) もいつもキャンバスに描く: Windows の Chrome で、切り方 (clip-path でも border-radius でも)
   // とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-21、丸で再発)
-  if (impl !== 'css' && (fl === 'always' || (fl === 'auto' && (shape !== 'square' || forcedDarkLikely())))) {
+  if (fl === 'always' || (fl === 'auto' && (shape !== 'square' || forcedDarkLikely()))) {
     flatOpts.set(el, fo);
     flattenBadge(el, fo).catch(() => { /* 描けなければ重ねたまま */ });
   } else flatOpts.delete(el);
@@ -521,3 +520,13 @@ const API = { HOLO, isTransparent, maskImage, renderBadge, attachTilt, reflatten
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;
+
+// ── 一時 (preview だけ): 使っていない規則を削る前の CSS と見比べる。URL に ?holocss=old を付けると css/holo_badge_full.css (削る前) を使う。
+//    本番に出す前に、この塊と css/holo_badge_full.css を消す (2026-11-12) ──
+if (typeof document !== 'undefined' && typeof location !== 'undefined' && /^spsp-web-preview\./.test(location.hostname) && /[?&]holocss=old\b/.test(location.search)) {
+  const swap = () => {
+    for (const l of /** @type {NodeListOf<HTMLLinkElement>} */ (document.querySelectorAll('link[rel="stylesheet"][href*="holo_badge.css"]'))) l.href = l.href.replace('holo_badge.css', 'holo_badge_full.css');
+  };
+  swap();
+  new MutationObserver(swap).observe(document.head, { childList: true });
+}
