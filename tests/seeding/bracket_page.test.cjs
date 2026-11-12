@@ -432,7 +432,7 @@ test('bracket: ログインの戻り先に長い #d= を入れない (bracket_lo
   assert.ok(entry.indexOf("import './bracket_login_return.js'") >= 0 && entry.indexOf("import './bracket_login_return.js'") < entry.indexOf('bracket_app.js'));
   for (const f of ['src/pages/bracket_sgg.js', 'src/pages/bracket_share.js']) {
     const s = rd(f);
-    assert.ok(/loginFromBracket\(\)/.test(s), f);
+    assert.ok(/loginFromBracket\(/.test(s), f);
     assert.ok(!/startLogin\(location\.pathname \+ location\.search \+ location\.hash\)/.test(s), f + ' が # 付きの戻り先を渡している');
   }
   const m = rd('src/pages/bracket_login_return.js');

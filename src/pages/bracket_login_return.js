@@ -7,6 +7,7 @@
  * bracket.js のいちばん先に import する (bracket_app.js が location.hash を読む前に付け直すため)。
  */
 import SpspLogin from '../../site/js/login.js';
+import SpspStartggManager from '../../site/js/startgg_manager.js';
 
 const KEY = 'spsp_bracket_login_hash';
 
@@ -23,13 +24,15 @@ try {
   }
 } catch (e) { /* sessionStorage が使えないブラウザ: 付け直せないだけ */ }
 
-/** ログインを始める。始められなかったら false (呼んだ側が一言出す) @returns {Promise<boolean>} */
-export async function loginFromBracket() {
+/** ログインを始める。始められなかったら false (呼んだ側が一言出す)。manager = 大会の管理者として (scope に tournament.manager。非公開のシード・トーナメントを読む)
+ * @param {{ manager?: boolean }} [opts] @returns {Promise<boolean>} */
+export async function loginFromBracket(opts) {
+  const begin = opts && opts.manager ? SpspStartggManager.start : SpspLogin.startLogin;
   try { sessionStorage.setItem(KEY, JSON.stringify({ path: location.pathname, hash: location.hash, ts: Date.now() })); } catch (e) { /* 下で戻り先に入れる */ }
   const base = location.pathname + location.search;
   const full = base + location.hash;
   // 短ければこれまでどおり # も戻り先に入れる (sessionStorage が使えなくても戻れる)
-  const ok = await SpspLogin.startLogin(full.length <= 512 ? full : (base.length <= 512 ? base : location.pathname));
+  const ok = await begin(full.length <= 512 ? full : (base.length <= 512 ? base : location.pathname));
   if (!ok) { try { sessionStorage.removeItem(KEY); } catch (e) { /* 何もしない */ } }
   return ok;
 }
