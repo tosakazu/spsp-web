@@ -17,18 +17,18 @@ const SLIDES = [
     bandY: 640, screens: [{ raw: '2.png', x: 64, y: 640, w: 466 }, { raw: '4.png', x: 550, y: 640, w: 466 }, { raw: '3.png', x: 64, y: 960, w: 466 }, { raw: '1.png', x: 550, y: 960, w: 466 }] },
   { n: 2, title: 'シールがもらえる\n大会と色の条件',
     bullets: ['参加 8 人以上のオフライン大会が対象です', 'その大会で 1 試合でもした人がもらえます', '下位クラスはクラスごとに別のシールです'],
-    bandY: 620, panel: { x: 64, y: 590, w: 952, head: '上の色を取ると下の色も全部もらえます', rows: [
+    bandY: 560, panel: { x: 64, y: 520, w: 952, head: '上の色を取ると下の色も全部もらえます', rows: [
       ['虹', 'r', [['', '優勝']]],
       ['金', 'g', [['予選プールのある大会', 'Top 8'], ['予選のない大会', '上位 1/4 以内（最大 Top 8）']]],
       ['銀', 's', [['予選プールのある大会', '予選突破'], ['予選のない大会', '上位半分（最大 Top 16）　49 人以上は Top 24']]],
       ['素', 'n', [['', '参加']]]] },
     screens: [] },
   { n: 3, title: 'シールは編集ページの\n「裏」で貼ります',
-    steps: [['貼り方', null], ['①', 'カードを押して「編集」を開きます'], ['②', '「裏」のタブを選びます'], ['③', '一覧の大会を押すと貼られます'], ['④', '下の色を押すと色を選べます']],
+    bandY: 700, steps: [['貼り方', null], ['①', 'カードを押して「編集」を開きます'], ['②', '「裏」のタブを選びます'], ['③', '一覧の大会を押すと貼られます'], ['④', '下の色を押すと色を選べます']],
     note: '編集には start.gg でのログインが必要です',
-    screens: [{ f: `p_${M}_ov.png`, ...CARD, x: 64, y: 690, w: 430, hl: [[231, 145, 36, 36, '①']] },
-      { f: 'e_view.png', x0: 8, x1: 382, y0: 98, y1: 152, x: 64, y: 1020, w: 430, hl: [[197, 108, 174, 34, '②']] },
-      { f: 'e_tray.png', x0: 8, x1: 382, y0: 62, y1: 560, x: 576, y: 670, w: 440, hl: [[139, 190, 113, 113, '③'], [139, 490, 113, 32, '④']] }] },
+    screens: [{ f: `p_${M}_ov.png`, ...CARD, x: 64, y: 740, w: 430, hl: [[231, 145, 36, 36, '①']] },
+      { f: 'e_view.png', x0: 8, x1: 382, y0: 98, y1: 152, x: 64, y: 1070, w: 430, hl: [[197, 108, 174, 34, '②']] },
+      { f: 'e_tray.png', x0: 8, x1: 382, y0: 62, y1: 560, x: 596, y: 705, w: 420, hl: [[139, 190, 113, 113, '③'], [139, 490, 113, 32, '④']] }] },
   { n: 4, title: '場所や大きさを決めて\n「適用」で保存します',
     bullets: ['ドラッグで動かせます', '角の ↻ で回転と大きさを変えられます', '形や重なり順も変えられます', '「適用」を押すと保存されます'],
     screens: [{ f: 'e_sel.png', x0: 8, x1: 382, y0: 145, y1: 560, x: 64, y: 600, w: 480 },
@@ -88,7 +88,7 @@ ul.sm{margin-top:22px}ul.sm li{font-size:21px;margin-bottom:9px}ul.sm li::before
 .cap{position:absolute;font-size:17px;font-weight:700;color:#fff;background:#111827;padding:3px 12px;border-radius:6px 6px 0 0;line-height:1.5}
 .panel{position:absolute;background:#fff;border:3px solid #111827;border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.35);padding:22px 26px 10px}
 .ph{font-size:26px;font-weight:700;margin-bottom:14px}
-.prow{display:flex;gap:20px;align-items:center;padding:16px 0;border-top:2px solid #e5e7eb}
+.prow{display:flex;gap:20px;align-items:center;padding:12px 0;border-top:2px solid #e5e7eb}
 .pc{flex:none;width:86px;height:86px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
 .pc-r{background:linear-gradient(135deg,#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa)}.pc-g{background:#c9a227}.pc-s{background:#8b95a5}.pc-n{background:#fff;color:#111827;border:3px solid #d1d5db;text-shadow:none}
 .pi{flex:1;min-width:0}
