@@ -830,3 +830,43 @@ test('app: enforceSeedLocks — シード固定 (kind seed) は並びを寄せ�
   assert.deepStrictEqual(arr(r.order), [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepStrictEqual(arr(r.overflow), []);
 });
+
+// ── 2026-11-12: start.gg のウェーブ設定が途中・射影でシード固定/DQ の席を動かさない ──
+test('app: wavesFromGroupNodes は一部のプールだけウェーブがあるとき対応を返さない (partial)', () => {
+  const ctx = extractFns(['wavesFromGroupNodes']);
+  const wv = ctx.wavesFromGroupNodes([
+    { id: 1, displayIdentifier: 'B100', wave: { identifier: 'B' } },
+    { id: 2, displayIdentifier: 'A100', wave: { identifier: 'A' } },
+    { id: 3, displayIdentifier: '1' }, { id: 4, displayIdentifier: '2' },
+  ]);
+  assert.strictEqual(wv.partial, true);
+  assert.strictEqual(wv.poolToWave, undefined);   // currentWaveMap は画面の並びの設定に落ちる
+  assert.strictEqual(wv.poolCount, 4);
+  assert.strictEqual(wv.waveCount, 2);
+  assert.strictEqual(wv.assigned, 2);
+  // 全部に付いていればこれまでどおり
+  const full = ctx.wavesFromGroupNodes([
+    { id: 1, displayIdentifier: 'B100', wave: { identifier: 'B' } },
+    { id: 2, displayIdentifier: 'A100', wave: { identifier: 'A' } },
+  ]);
+  assert.deepStrictEqual(arr(full.poolToWave), [1, 0]);
+  assert.strictEqual(full.partial, undefined);
+});
+
+test('app: enforceSeedLocks はシード固定・DQ の席を動かさない (枠待ちの人が DQ より下に行かない)', () => {
+  const ctx = extractFns(['enforceSeedLocks']);
+  const poolOf = (s, P) => SO.poolOfSeed(s, P);
+  // P=2、ウェーブ = [A, B]。席のウェーブは A,B,B,A,A,B,B,A。5 番目 (A の席) の 50 を B に固定、下 3 人は DQ
+  const order = [1, 2, 3, 4, 50, 91, 92, 93];
+  const locks = { 50: { kind: 'wave', target: 1 }, 91: { kind: 'dq', target: null }, 92: { kind: 'dq', target: null }, 93: { kind: 'dq', target: null } };
+  const r = ctx.enforceSeedLocks(order, locks, 2, [0, 1], poolOf);
+  assert.deepStrictEqual(arr(r.order).slice(5), [91, 92, 93]);   // DQ は最下位のまま
+  assert.strictEqual(arr(r.order).indexOf(50) < 5, true);
+  // シード固定も同じ: 3 番目に固定した 7 は、上の人が枠待ちで動いても 3 番目のまま
+  const r2 = ctx.enforceSeedLocks([1, 60, 7, 4, 5, 6], { 60: { kind: 'wave', target: 0 }, 7: { kind: 'seed', target: null } }, 2, [0, 1], poolOf);
+  assert.strictEqual(arr(r2.order)[2], 7);
+  assert.strictEqual([0, 3, 4].includes(arr(r2.order).indexOf(60)), true);   // A の席 (1・4・5 番目)
+  // 固定を満たしている並びはそのまま
+  const ok = [1, 2, 3, 4, 91];
+  assert.deepStrictEqual(arr(ctx.enforceSeedLocks(ok, { 2: { kind: 'wave', target: 1 }, 91: { kind: 'dq', target: null } }, 2, [0, 1], poolOf).order), ok);
+});

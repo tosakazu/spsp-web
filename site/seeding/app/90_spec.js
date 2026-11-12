@@ -197,9 +197,18 @@ export function enforceSeedLocks(order, locks, P, waveMap, poolOf) {
   });
   const overflowByKey = new Map(overflow.map((o) => [o.kind + ':' + o.target, o]));
   const out = new Array(N).fill(null);
-  const queue = order.slice();
+  // シード固定・DQ の人は今の席のまま (2026-11-12)。以前はほかの人と同じに前へ詰めていたので、枠待ちの固定者が
+  // 居ると席がずれ、DQ (最下位のはず) より下に枠待ちの人が来ることがあった
+  const held = new Set();
+  for (let s = 0; s < N; s++) {
+    const l = locks[order[s]];
+    const kind = l && (l.kind || l);
+    if (kind === 'seed' || kind === 'dq') { out[s] = order[s]; held.add(order[s]); }
+  }
+  const queue = held.size ? order.filter((u) => !held.has(u)) : order.slice();
   let lockedLeft = need.size;
   for (let s = 0; s < N; s++) {
+    if (out[s] != null) continue;
     if (!lockedLeft) { out[s] = queue.shift(); continue; }   // 残り固定なし: そのまま流す
     const pool = poolOf(s, P);
     const wave = waveMap ? waveMap[pool] : 0;
