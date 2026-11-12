@@ -14,9 +14,7 @@ const CARD = { x0: 25, x1: 365, y0: 131, y1: 355 };
 const SLIDES = [
   { n: 1, title: '大会のシールを\nカードの裏に貼れます', lead: '大会に出るとその大会のシールがもらえます',
     bullets: ['カードを横にはじくと裏返ります', 'ゆっくり動かすと傾いてシールが光ります', '最初は順位評価の高い 20 大会が並んでいます'],
-    screens: [{ f: `p_${M}_back.png`, ...CARD, x: 820, y: 70, w: 720, cap: 'カードの裏' },
-      { f: `p_${M}_ov.png`, ...CARD, x: 800, y: 610, w: 370, hl: [[273, 145, 36, 36, null]], cap: 'カードを押すと出る「裏返す」' },
-      { f: `p_${M}_tilt_c.png`, x0: 13, x1: 367, y0: 122, y1: 362, x: 1200, y: 600, w: 370, cap: '傾けたところ' }] },
+    screens: [{ raw: '2.png', x: 815, y: 190, w: 372 }, { raw: '4.png', x: 1203, y: 190, w: 372 }, { raw: '3.png', x: 815, y: 455, w: 372 }, { raw: '1.png', x: 1203, y: 455, w: 372 }] },
   { n: 2, title: 'シールがもらえる\n大会と色の条件',
     bullets: ['参加 8 人以上のオフライン大会が対象です', 'その大会で 1 試合でもした人がもらえます', '下位クラスはクラスごとに別のシールです'],
     panel: { x: 810, y: 60, w: 760, head: '上の色を取ると下の色も全部もらえます', rows: [
@@ -45,6 +43,8 @@ function panelHtml(p) {
 const ENTRY = '自分のプレイヤーページのカードを押して「編集」';
 
 function screenHtml(s) {
+  // raw: 用意した画像 (tools/promo/ex/) をそのまま置く (角を丸めて枠を付ける)
+  if (s.raw) return `<div class="scr" style="left:${s.x}px;top:${s.y}px;width:${s.w}px"><img src="file://${path.resolve('ex', s.raw)}" style="width:100%;display:block"></div>`;
   const k = s.w / (s.x1 - s.x0), h = Math.round((s.y1 - s.y0) * k);
   const hl = (s.hl || []).map(([x, y, w, hh, lab]) => `<i class="hl" style="left:${(x - s.x0) * k}px;top:${(y - s.y0) * k}px;width:${w * k}px;height:${hh * k}px">${lab ? `<b>${esc(lab)}</b>` : ''}</i>`).join('');
   const cap = s.cap ? `<div class="cap" style="left:${s.x}px;top:${s.y - 34}px">${esc(s.cap)}</div>` : '';
