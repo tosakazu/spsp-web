@@ -1031,7 +1031,9 @@ function scrollToMatch(m, instant) {
   const smooth = !reduce && !instant;
   window.scrollTo({ top: Math.max(0, y), behavior: smooth ? 'smooth' : 'auto' });
   if (!smooth) return;
-  const evs = ['touchstart', 'wheel', 'keydown', 'pointerdown'];
+  // 止めるのは、自分でスクロールし始めたとき (指を動かした・ホイール・キー) だけ。触れただけ (演出を飛ばそうとしたタップが
+  // 幕が消えたあとに届いた、など) では止めない (途中で止まって見えていた。2026-11-12)
+  const evs = ['touchmove', 'wheel', 'keydown'];
   const stop = () => { off(); window.scrollTo({ top: window.scrollY, behavior: 'auto' }); };
   const off = () => { for (const e of evs) window.removeEventListener(e, stop, true); };
   for (const e of evs) window.addEventListener(e, stop, { capture: true, passive: true });

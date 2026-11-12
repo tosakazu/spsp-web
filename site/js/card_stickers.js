@@ -117,7 +117,8 @@ export function loadIcons() {
     const get = (/** @type {string} */ base) => fetch(base + 'data/event_icons.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
     // データ (R2、ビルドが作る) に無ければ、サイトに置いた表 (preview だけ、公開前の確認用) を使う
     iconsP = get(S.data).then(j => (j && j.f && j.e ? j : S.root !== S.data ? get(S.root) : null))
-      .then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null);
+      .then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null)
+      .then(t => { if (!t) iconsP = null; return t; });   // 読めなかったら、次に呼ばれたときにやり直す
   }
   return iconsP;
 }

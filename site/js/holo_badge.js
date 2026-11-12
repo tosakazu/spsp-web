@@ -520,13 +520,3 @@ const API = { HOLO, isTransparent, maskImage, renderBadge, attachTilt, reflatten
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspHoloBadge = API;
 export default API;
-
-// ── 一時 (preview だけ): 使っていない規則を削る前の CSS と見比べる。URL に ?holocss=old を付けると css/holo_badge_full.css (削る前) を使う。
-//    本番に出す前に、この塊と css/holo_badge_full.css を消す (2026-11-12) ──
-if (typeof document !== 'undefined' && typeof location !== 'undefined' && /^spsp-web-preview\./.test(location.hostname) && /[?&]holocss=old\b/.test(location.search)) {
-  const swap = () => {
-    for (const l of /** @type {NodeListOf<HTMLLinkElement>} */ (document.querySelectorAll('link[rel="stylesheet"][href*="holo_badge.css"]'))) l.href = l.href.replace('holo_badge.css', 'holo_badge_full.css');
-  };
-  swap();
-  new MutationObserver(swap).observe(document.head, { childList: true });
-}
