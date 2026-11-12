@@ -16,7 +16,7 @@ import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/p
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
 import { mountBackEditor } from './card_back_edit.js';
-import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import { loadCardData, loadCardDefaultBack, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -86,6 +86,8 @@ async function main() {
   /** 持っていて、その位置に使えるものの文字 @param {string} id @param {'pre' | 'post'} slot */
   const titleText = (id, slot) => { const t = owned.has(id) ? titleById(lang, id) : null; return t && usableIn(t, slot) ? t.text : ''; };
   const backEl = $('ce-card-back');
+  // 裏面の初期配置 (裏面の設定が無い間はこれが出る。裏のタブの編集もここから始める。読めなければ何も貼っていない裏面)
+  const defBack = await loadCardDefaultBack(data).catch(() => null);
   const draw = () => {
     const model = buildCardModel(data, st, titleText);
     SPSPPlayerCard.render(cardEl, model, { live: true });
@@ -403,7 +405,7 @@ async function main() {
     if (tab === 'back' && !backMounted) {
       backMounted = true;
       mountBackEditor({
-        uid, data, back: st.back ?? null, latin: st.latin ?? null,
+        uid, data, back: st.back ?? null, defBack, latin: st.latin ?? null,
         model: (latin, back) => buildCardModel(data, { ...st, latin, back }, titleText),
         onChange: patch => update(patch),
       }).then(api => {

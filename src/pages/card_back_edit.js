@@ -92,7 +92,7 @@ const SNAP_DEG = 4;
 const HISTORY_MAX = 100;
 
 /**
- * @param {{ uid: number, data: any, back: CardBack | null, latin: string | null,
+ * @param {{ uid: number, data: any, back: CardBack | null, defBack?: CardBack | null, latin: string | null,
  *   model: (latin: string | null, back: CardBack | null) => import('../../site/js/player_card.js').PCardModel,
  *   onChange: (patch: { back?: CardBack | null, latin?: string | null }) => void }} o
  * @returns {Promise<{ refresh: () => void }>}
@@ -105,10 +105,14 @@ export async function mountBackEditor(o) {
 
   // ── 裏面の土台 (シールなし。名前・文字の影は今の値で) ──
   let latin = o.latin;
-  let textTop = !!(o.back && o.back.text_top);
-  let stickerText = !!(o.back && o.back.sticker_text);
+  // 裏面の設定が無ければ初期配置 (o.defBack、js/card_stickers.js defaultBack) から始める。初期配置のまま (か、戻した) なら設定は null のまま返す
+  const def = o.defBack ? normBack(o.defBack) : null;
+  const defJson = def ? JSON.stringify(def) : '';
+  const start = o.back || def;
+  let textTop = !!(start && start.text_top);
+  let stickerText = !!(start && start.sticker_text);
   /** 名前・二つ名・順位の置き方 (真ん中からのずれ x・y、回転 r (度)、大きさ s (倍)) */
-  let pose = SPSPPlayerCard.textPoseOf(o.back);
+  let pose = SPSPPlayerCard.textPoseOf(start);
   const backPose = () => ({ text_xy: { x: pose.x, y: pose.y }, text_r: pose.r, text_s: pose.s, text_parts: pose.parts });
   /** 既定の置き方か (部品ごとのずれも無い) */
   const poseIsDefault = () => !pose.x && !pose.y && !pose.r && pose.s === 1 && !normParts(pose.parts);
@@ -254,11 +258,14 @@ export async function mountBackEditor(o) {
   }
 
   /** @type {Sticker[]} */
-  let stickers = (o.back ? o.back.stickers.map(s => ({ ...s })) : []).filter(s => byE.has(s.e));
+  let stickers = (start ? start.stickers.map(s => ({ ...s })) : []).filter(s => byE.has(s.e));
   /** @type {string | null} 選んでいるシール (シールのキー) */
   let sel = null;
   /** 今の裏面 (シール・文字を前に・文字の影) をカードの設定に返す */
-  function emit() { o.onChange({ back: normBack({ stickers, text_top: textTop, sticker_text: stickerText, ...backPose() }) }); }
+  function emit() {
+    const b = normBack({ stickers, text_top: textTop, sticker_text: stickerText, ...backPose() });
+    o.onChange({ back: defJson && JSON.stringify(b) === defJson ? null : b });
+  }
 
   // ── 元に戻す・やり直す (続けて動かしたものは 1 回にまとめる) ──
   const snap = () => JSON.stringify({ stickers, pose });
@@ -629,6 +636,20 @@ export async function mountBackEditor(o) {
     paintTray();
     const why = n >= randK ? 'placed' : stickers.length >= MAX_STICKERS ? 'placed_max' : 'placed_all';
     toast(i18n('card_back.toast.' + why, { n }), i18n('card_back.undo'), undo);
+  });
+  // 初期配置に戻す (初期配置のある人だけ。設定は null = いつも初期配置、に戻る)
+  const defBtn = /** @type {HTMLButtonElement} */ ($('bz-default'));
+  defBtn.hidden = !def;
+  defBtn.addEventListener('click', () => {
+    menu.open = false;
+    if (!def) return;
+    stickers = def.stickers.map(s => ({ ...s })).filter(s => byE.has(s.e));
+    textTop = def.text_top; stickerText = def.sticker_text;
+    pose = SPSPPlayerCard.textPoseOf(def);
+    target = 'all'; textSel = false; sel = null;
+    paintTextTop(); renderBase(); paintSx(); showTextPos();
+    changed(true); emit(); paintTray(); paintTools();
+    toast(i18n('card_back.toast.default'), i18n('card_back.undo'), undo);
   });
   $('bz-clear').addEventListener('click', () => {
     menu.open = false;

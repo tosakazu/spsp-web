@@ -324,7 +324,7 @@ const STICKER_PLAYER = { status: 200, body: { user_id: 4242, characters: [], tou
   { event_id: 1700000, sticker: 'rainbow' }, { event_id: null, parent_event_id: 1724470, class_letter: 'B', sticker: 'gold' },
   { event_id: 1800000, sticker: 'silver' }, { event_id: 1900000 } ] } };
 
-test('card_put: 裏面のシール (back) を確かめて保存。形が違えば bad_settings、何も無ければ欄なし', async () => {
+test('card_put: 裏面のシール (back) を確かめて保存。形が違えば bad_settings、送らなければ欄なし', async () => {
   const e = env({ player: STICKER_PLAYER });
   const token = await loginToken(e);
   let now = Date.parse('2026-10-20T00:00:00Z');
@@ -355,7 +355,11 @@ test('card_put: 裏面のシール (back) を確かめて保存。形が違え�
   assert.strictEqual(plain.settings.back.text_parts, undefined);   // 白フチでなければ捨てる
   e.nowMs = now += 60_000;   // 書き込み間隔
   const empty = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: false, outline: false } } });
-  assert.strictEqual('back' in empty.settings, false);
+  // 空でも欄は残す (全部剥がした = 何も貼らない。欄が無いと画面が初期配置を出す)
+  assert.deepStrictEqual(empty.settings.back, { stickers: [], text_top: false, outline: false, sticker_text: false });
+  e.nowMs = now += 60_000;
+  const none = await post(e, { action: 'card_put', token, settings: { ...GOOD } });
+  assert.strictEqual('back' in none.settings, false);
 });
 
 test('card_put: preview (cardOpenEdit) だけ、ログインなしで uid を指定して書ける', async () => {

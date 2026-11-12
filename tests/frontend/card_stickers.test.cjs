@@ -13,19 +13,19 @@ async function load() {
   return S;
 }
 
-test('normBack: 形が違うシールは外し、範囲に丸め、何も無ければ null', async () => {
+test('normBack: 形が違うシールは外し、範囲に丸め、設定が無ければ null (空の設定は残す)', async () => {
   const { normBack } = await load();
   assert.strictEqual(normBack(null), null);
-  assert.strictEqual(normBack({ stickers: [] }), null);
+  assert.deepStrictEqual(normBack({ stickers: [] }), { stickers: [], text_top: false, outline: false, sticker_text: false });   // 全部剥がした
   assert.deepStrictEqual(normBack({ stickers: [], text_top: true }), { stickers: [], text_top: true, outline: true, sticker_text: false });
   assert.strictEqual(normBack({ text_top: true, sticker_text: true }).outline, false);   // 白フチなら影なし
-  assert.strictEqual(normBack({ text_top: false, outline: true }), null);   // 前の設定の outline は見ない
+  assert.strictEqual(normBack({ text_top: false, outline: true }).outline, false);   // 前の設定の outline は見ない
   // 名前・二つ名・順位の位置: 真ん中 (0, 0) は書かない、幅の外は端に、小数 1 桁
-  assert.strictEqual(normBack({ text_xy: { x: 0, y: 0 } }), null);
+  assert.strictEqual(normBack({ text_xy: { x: 0, y: 0 } }).text_xy, undefined);
   assert.deepStrictEqual(normBack({ text_xy: { x: 12.34, y: -999 } }).text_xy, { x: 12.3, y: -167 });
   assert.strictEqual(normBack({ text_top: true, text_xy: { x: 'a', y: 1 } }).text_xy, undefined);
   // 回転・大きさ: 既定 (0°・1 倍) は書かない、幅の外は端に
-  assert.strictEqual(normBack({ text_r: 0, text_s: 1 }), null);
+  assert.deepStrictEqual(normBack({ text_r: 0, text_s: 1 }), { stickers: [], text_top: false, outline: false, sticker_text: false });
   assert.deepStrictEqual(normBack({ text_r: 370.04, text_s: 9 }), { stickers: [], text_top: false, outline: false, sticker_text: false, text_r: 10, text_s: 2 });
   assert.deepStrictEqual(normBack({ sticker_text: true }), { stickers: [], text_top: false, outline: false, sticker_text: true });
   // 部品ごとのずれ: 白フチのときだけ、既定の値・部品・知らない部品は書かない、幅の外は端に
@@ -79,7 +79,7 @@ test('ownedStickers / isOwned: 一番上の色から下は全部持っている'
   assert.strictEqual(isOwned(owned, '4:n'), false);
 });
 
-test('loadOwnedStickers: 大会記録に判定があればそれ、無ければプレビュー用の判定 (サイトの data/stickers_preview/)', async () => {
+test('loadOwnedStickers: 大会記録に判定があればそれ、無ければ (preview だけ) プレビュー用の判定 (サイトの data/stickers_preview/)', async () => {
   const { loadOwnedStickers, hasStickerData } = await load();
   /** @type {string[]} */
   const asked = [];
@@ -88,8 +88,39 @@ test('loadOwnedStickers: 大会記録に判定があればそれ、無ければ�
   assert.strictEqual(hasStickerData([{ event_id: 1 }]), false);
   assert.deepStrictEqual(await loadOwnedStickers(130, [{ event_id: 1, sticker: 'silver' }]), { 1: 's' });
   assert.deepStrictEqual(asked, []);
+  // プレビュー用の判定を読むのは preview の Worker だけ (本番では取りに行かない)
+  globalThis.location = /** @type {any} */ ({ hostname: 'spsp.games' });
+  assert.deepStrictEqual(await loadOwnedStickers(130, [{ event_id: 1 }]), {});
+  assert.deepStrictEqual(asked, []);
+  globalThis.location = /** @type {any} */ ({ hostname: 'spsp-web-preview.example.workers.dev' });
   assert.deepStrictEqual(await loadOwnedStickers(130, [{ event_id: 1 }]), { 5: 'g' });
   assert.deepStrictEqual(asked, ['/jp/data/stickers_preview/2.json']);   // 130 % 64
   globalThis.fetch = async () => ({ ok: false, json: async () => null });
   assert.deepStrictEqual(await loadOwnedStickers(1, []), {});
+});
+
+test('defaultBack: 順位評価の高い順に 20 大会・高いものが上・名前シールを上に。同じ選手なら何度作っても同じで、シールが増えても前からのシールは動かない', async () => {
+  const { defaultBack, defaultSticker, DEFAULT_BACK_N } = await load();
+  const tours = Array.from({ length: 30 }, (_, i) => ({ event_id: 1000 + i, tjpr_raw: i, sticker: 'gold' }));
+  tours.push({ event_id: 5000, tjpr_raw: 999, sticker: 'rainbow' });   // アイコンが無い大会は出さない
+  tours.push({ parent_event_id: 1029, class_letter: 'B', tjpr_raw: 500, sticker: 'silver' });
+  const owned = Object.fromEntries(tours.map(t => [t.event_id ? String(t.event_id) : `${t.parent_event_id}${t.class_letter}`, { gold: 'g', rainbow: 'r', silver: 's' }[t.sticker]]));
+  const tbl = { f: ['a.png'], e: Object.fromEntries(Array.from({ length: 30 }, (_, i) => [String(1000 + i), 0])) };
+  const a = defaultBack(77, tours, owned, tbl);
+  assert.strictEqual(a.stickers.length, DEFAULT_BACK_N);
+  assert.strictEqual(a.text_top, true); assert.strictEqual(a.sticker_text, true); assert.strictEqual(a.outline, false);
+  assert.strictEqual(a.stickers[a.stickers.length - 1].e, '1029B:s', 'いちばん高いものがいちばん上 (配列の最後)');
+  assert.strictEqual(a.stickers[a.stickers.length - 2].e, '1029:g');
+  assert.ok(!a.stickers.some(s => s.e.startsWith('5000')));
+  assert.deepStrictEqual(defaultBack(77, tours.slice().reverse(), owned, tbl), a, '大会記録の並びが変わっても同じ');
+  assert.deepStrictEqual(defaultBack('77', tours, owned, tbl), a);
+  assert.notDeepStrictEqual(defaultBack(78, tours, owned, tbl).stickers[0], a.stickers[0], '選手が違えば置き方も違う');
+  // シールが増えても、残っているシールの置き方は同じ
+  const more = [...tours, { event_id: 1005, tjpr_raw: 0 }, { event_id: 2000, tjpr_raw: 700, sticker: 'gold' }];
+  const b = defaultBack(77, more, { ...owned, 2000: 'g' }, { f: tbl.f, e: { ...tbl.e, 2000: 0 } });
+  for (const s of b.stickers) { const old = a.stickers.find(x => x.e === s.e); if (old) assert.deepStrictEqual(s, old); }
+  assert.deepStrictEqual(defaultSticker(77, '1029:g'), a.stickers.find(s => s.e === '1029:g'));
+  for (const s of a.stickers) assert.ok(['square', 'round'].includes(s.k) && s.x >= 0 && s.x <= 514 && s.y >= 0 && s.y <= 333);
+  assert.strictEqual(defaultBack(77, tours, {}, tbl), null);
+  assert.strictEqual(defaultBack(77, tours, owned, null), null);
 });

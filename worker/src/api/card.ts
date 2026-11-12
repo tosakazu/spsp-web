@@ -33,7 +33,7 @@ export interface CardSettings {
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
   title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
   latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)、文字 = 本人が書いたもの (自動と同じ綴りでも)
-  back?: CardBack;        // 裏面のシール (無ければ欄ごと無し = 貼っていない・既定)
+  back?: CardBack;        // 裏面のシール (欄ごと無し = 編集していない: 画面が初期配置を出す。空でも欄があれば何も貼らない)
 }
 
 /** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・影を付けるか・白フチのシールにするか (フロントの js/card_stickers.js と同じ規則) */
@@ -46,7 +46,8 @@ export interface CardSticker { e: string; x: number; y: number; s: number; r: nu
 export const STICKER_KEY = /^[1-9]\d{0,11}[A-J]?:[rgsn]$/;
 const STICKER_SHAPES = ['square', 'round', 'circle', 'hex', 'diamond'];
 
-/** 裏面を確かめて正規化 (数値は小数 1 桁 / 切り取りは 2 桁に丸める)。形が違えば undefined、何も無ければ null */
+/** 裏面を確かめて正規化 (数値は小数 1 桁 / 切り取りは 2 桁に丸める)。形が違えば undefined、欄が無ければ null (= 画面が初期配置を出す)。
+ * 欄があれば空 (シール 0 枚・どちらも既定) でもそのまま残す (全部剥がした = 何も貼らない。2026-11-12) */
 export function validateCardBack(v: unknown): CardBack | null | undefined {
   if (v === undefined || v === null) return null;
   if (typeof v !== 'object' || Array.isArray(v)) return undefined;
@@ -118,7 +119,7 @@ export function validateCardBack(v: unknown): CardBack | null | undefined {
     }
     if (sx && Object.keys(parts).length) back.text_parts = parts;
   }
-  return stickers.length || back.text_top || back.sticker_text || back.text_xy || back.text_r || back.text_s ? back : null;
+  return back;
 }
 
 /** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜45 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */
@@ -180,7 +181,7 @@ export function validateCardSettings(v: unknown): CardSettings | null {
   }
   const back = validateCardBack(o.back);
   if (back === undefined) return null;
-  // 裏面は貼っているときだけ欄を置く (前からの設定・応答の形を変えない)
+  // 裏面は送られてきたときだけ欄を置く (前からの設定・応答の形を変えない。欄が無い = 裏面を編集していない)
   return back ? { template: o.template, color: o.color, ach, tour, title, latin, back } : { template: o.template, color: o.color, ach, tour, title, latin };
 }
 

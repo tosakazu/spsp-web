@@ -20,7 +20,7 @@ import { achievementLabel, achievementLabelHidden } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
 import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
-import { normBack, ownedStickers, hasStickerData, isOwned } from './card_stickers.js';
+import { normBack, ownedStickers, hasStickerData, isOwned, loadOwnedStickers, loadIcons, defaultBack } from './card_stickers.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
@@ -285,7 +285,9 @@ export function buildCardModel(data, settings, titleText) {
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label, hidden: /** @type {any} */ (a).hidden })),
     latest,
     totalTournaments: tours.length,
-    back: ownBack(st.back || null, tours),   // 裏面のシール (js/card_stickers.js)。持っていないもの (判定が変わった等) は出さない
+    // 裏面のシール (js/card_stickers.js)。持っていないもの (判定が変わった等) は出さない。
+    // 裏面の設定が無い人は初期配置 (loadCardDefaultBack で data に足してあれば。足していなければ何も貼っていない裏面)
+    back: st.back ? ownBack(st.back, tours) : (/** @type {any} */ (data).defBack || null),
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: pickedTour ? i18n('player.card.picked') : bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
@@ -368,6 +370,21 @@ export async function loadCardReadings(data) {
   return !!r;
 }
 
+/** 裏面の初期配置 (js/card_stickers.js defaultBack) を data に足す (data.defBack。buildCardModel が、裏面の設定が無いときに使う)。
+ * 裏面の設定が無いと分かってから呼ぶ (設定のある人の分まで、使わないシールの絵を読まないように)。
+ * シールを 1 枚も持っていなければ、大会のアイコンの表も読まない。無ければ null
+ * @param {CardData} data @returns {Promise<import('./card_stickers.js').CardBack | null>} */
+export async function loadCardDefaultBack(data) {
+  const d = /** @type {any} */ (data);
+  if (d.defBack !== undefined) return d.defBack;
+  const tours = (d.player && d.player.tournaments) || [];
+  const owned = await loadOwnedStickers(Number(d.uid), tours);
+  if (!Object.keys(owned).length) return (d.defBack = null);
+  const tbl = await loadIcons();
+  if (!tbl) return null;   // 表が読めなかった: 今回は出さない (次に呼ばれたらやり直す)
+  return (d.defBack = defaultBack(d.uid, tours, owned, tbl));
+}
+
 // ── 設定の保存 (ブラウザの localStorage。選手ごと) ──
 const APPLIED_KEY = 'spsp_card_v1';
 const DRAFT_KEY = 'spsp_card_draft_v1';
@@ -443,5 +460,5 @@ export async function putApplied(uid, s) {
 /** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardReadings, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardReadings, loadCardDefaultBack, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
                  fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };

@@ -28,7 +28,7 @@ import SpspReportNotice from '../../site/js/report_notice.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import SpspLiveBrowser from '../../site/js/live_browser.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
-import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
+import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard, loadCardDefaultBack } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -830,8 +830,10 @@ function setupSubrankDetail() {
 
 // 最上部の選手カード (../js/player_card.js) に渡すデータ (中身の組み立ては ../js/player_card_model.js。編集ページと共有)
 /** @returns {import('../../site/js/player_card_model.js').CardData} */
+/** カードのデータに後から足すもの (裏面の初期配置 defBack)。cardData() は呼ぶたびに作り直すので、ここに持つ @type {any} */
+const CARD_DATA_EXTRA = { get uid() { return UID; }, get player() { return PLAYER; } };
 function cardData() {
-  return { uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
+  return { defBack: CARD_DATA_EXTRA.defBack, uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
            overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI, readings: NAME_READINGS };
 }
 
@@ -974,7 +976,12 @@ function render() {
       ? SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } return !!r; }, () => false)
       : Promise.resolve(true);
     // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
-    const settledP = settingsP.then(x => { if (x && x.settings) draw(x); return true; }, () => false);
+    // 裏面の設定が無い人は、持っているシールの初期配置を足してから (js/player_card_model.js loadCardDefaultBack。設定が届く前には読まない)
+    const settledP = settingsP.then(async x => {
+      const def = back && !(x && x.settings && x.settings.back) ? await loadCardDefaultBack(CARD_DATA_EXTRA).catch(() => null) : null;
+      if ((x && x.settings) || def) draw(x);
+      return true;
+    }).catch(() => false);
     // 全部そろって描き終わったら裏返しの紹介。読めなかったものがあれば紹介しない
     // それまではカードを指で動かせない (.pc-wait。裏返せるようになってから。読めなかったときも、そこで動かせるようにする)
     const settle = () => wrapEl?.classList.remove('pc-wait');

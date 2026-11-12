@@ -7,6 +7,8 @@
 //          text_parts: 白フチのときだけ、名前・二つ名・順位を 1 つずつずらす分 ({ name|title|rank: { x, y, r, s } }。その部品の真ん中を軸に
 //          動かしてから、全体の置き方 (text_xy・text_r・text_s) をまとめてかける。既定 (0・0・0°・1 倍) の値と部品は書かない)
 //   outline は選ばせず、前に出していて白フチでないときだけ付ける (2026-10-25 ユーザー指定。前の設定の値は見ない)
+//   back が無い人 (裏面を編集したことがない人) には、表示のときに初期配置 (defaultBack: 順位評価の高い 20 大会、名前シールを上に) を出す。
+//   保存はしない (シールが増えれば変わる)。置き方は選手とシールごとに決まっていて、開き直しても同じ
 //   Sticker = { e: シールのキー, x, y: 中心 (カードの座標 514×333), s: 一辺, r: 回転 (度), k: 形, c: 切り取り (0.35〜1) }
 //   シールのキー = "<大会キー>:<色 r|g|s|n>"。大会キー = event_id (下位クラスは "<親の event_id><クラスの文字 B〜J>")
 //   持っているシール = 選手の大会記録の sticker (ビルドの spsp/stickers.py。もらった一番上の色。下の色は全部持っている)。ownedStickers
@@ -48,7 +50,8 @@ export function normSticker(s) {
   return { e: s.e, x: r1(clamp(x, 0, CARD_W)), y: r1(clamp(y, 0, CARD_H)), s: r1(clamp(size, S_MIN, S_MAX)), r: r1(normRot(rot)),
            k: typeof s.k === 'string' && SHAPES[s.k] ? s.k : 'square', c: Math.round(clamp(Number.isFinite(s.c) ? s.c : 1, CROP_MIN, 1) * 100) / 100 };
 }
-/** 裏面の設定を正規化。何も無ければ (シール 0 枚・どちらも既定) null @param {any} b @returns {CardBack | null} */
+/** 裏面の設定を正規化。設定が無ければ null (= 初期配置 defaultBack を出す)。設定があれば空 (シール 0 枚・どちらも既定) でもそのまま返す
+ * (全部剥がした = 何も貼らない、を選べるように。2026-11-12) @param {any} b @returns {CardBack | null} */
 export function normBack(b) {
   if (!b || typeof b !== 'object') return null;
   const seen = new Set();
@@ -71,7 +74,7 @@ export function normBack(b) {
   if (n(b.text_s)) { const sc = Math.round(clamp(b.text_s, TEXT_S_MIN, TEXT_S_MAX) * 100) / 100; if (sc !== 1) back.text_s = sc; }
   const parts = sx ? normParts(b.text_parts) : null;
   if (parts) back.text_parts = parts;
-  return stickers.length || back.text_top || back.sticker_text || back.text_xy || back.text_r || back.text_s ? back : null;
+  return back;
 }
 
 /** 部品ごとのずれを正規化 (既定の値・部品は書かない)。何も無ければ null @param {any} v @returns {TextParts | null} */
@@ -141,6 +144,8 @@ export const hasStickerData = tours => (tours || []).some(t => t && 'sticker' in
  * @param {number} uid @param {any[]} tours @returns {Promise<Record<string, string>>} */
 export async function loadOwnedStickers(uid, tours) {
   if (hasStickerData(tours)) return ownedStickers(tours);
+  // プレビュー用の判定があるのは preview の Worker だけ (本番で、シールの無い人のたびに無いファイルを取りに行かない)
+  if (typeof location === 'undefined' || !/^spsp-web-preview\./.test(location.hostname)) return {};
   try {
     const r = await fetch(/** @type {any} */ (globalThis).SPSP.root + `data/stickers_preview/${uid % 64}.json`);
     const j = r.ok ? await r.json() : null;
@@ -154,10 +159,67 @@ export function isOwned(owned, e) {
   return !!top && TIERS.indexOf(/** @type {any} */ (e.slice(i + 1))) >= TIERS.indexOf(/** @type {any} */ (top));
 }
 
+// ── 初期配置 (裏面を編集したことがない人に、表示のときに出す。2026-11-12) ──
+/** 初期配置に貼る大会の数 */
+export const DEFAULT_BACK_N = 20;
+/** 初期配置の形 (四角・角丸だけ: 丸・六角形・ひし形はホロの素材が別で、読む量が増える) */
+const DEFAULT_SHAPES = ['square', 'round'];
+const S_DEF = 120;
+/** 文字列から決まる乱数 (同じ文字列なら同じ並び。FNV-1a → mulberry32) @param {string} str @returns {() => number} */
+function seededRandom(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/** 初期配置の 1 枚: 大きさ・場所・角度・形は選手と大会から決まる (編集の「ランダムに貼る」と同じ幅: 標準の 0.75〜1.35 倍、
+ * 半分より多くはカードの外に出ない所、±40°)。ほかのシールには左右されない (シールが増えても、前からのシールは動かない)
+ * @param {number | string} uid @param {string} e シールのキー @returns {Sticker} */
+export function defaultSticker(uid, e) {
+  const rnd = seededRandom(`${uid}:${e.slice(0, e.lastIndexOf(':'))}`);
+  const size = S_DEF * Math.exp(Math.log(0.75) + rnd() * Math.log(1.35 / 0.75)), h = size / 2;
+  const seen = (/** @type {number} */ c, /** @type {number} */ L) => (Math.min(L, c + h) - Math.max(0, c - h)) / size;
+  let x = CARD_W / 2, y = CARD_H / 2;
+  for (let i = 0; i < 50; i++) {
+    const tx = -h + rnd() * (CARD_W + size), ty = -h + rnd() * (CARD_H + size);
+    if (seen(tx, CARD_W) * seen(ty, CARD_H) >= 0.5) { x = tx; y = ty; break; }
+  }
+  const r = Math.round((rnd() * 2 - 1) * 40);
+  return /** @type {Sticker} */ (normSticker({ e, x, y, s: size, r, k: DEFAULT_SHAPES[Math.floor(rnd() * DEFAULT_SHAPES.length)], c: 1 }));
+}
+/** 初期配置: 持っているシール (大会ごとに一番上の色、アイコンのある大会だけ) を順位評価のポイント (大会記録の tjpr_raw) の高い順に
+ * DEFAULT_BACK_N 大会。高いものほど上に重ね、名前シール (白フチ) をいちばん上に。1 枚も無ければ null (= 何も貼っていない裏面)
+ * @param {number | string} uid @param {any[]} tours @param {Record<string, string>} owned @param {{ f: string[], e: Record<string, number> } | null} tbl
+ * @returns {CardBack | null} */
+export function defaultBack(uid, tours, owned, tbl) {
+  if (!tbl) return null;
+  const seen = new Set();
+  /** @type {{ e: string, k: string, pts: number }[]} */
+  const cand = [];
+  for (const t of tours || []) {
+    const k = tourKey(t), top = k ? owned[k] : undefined;
+    if (!top || seen.has(k)) continue;
+    const e = `${k}:${top}`, p = parseKey(e);
+    if (!p || !STICKER_KEY.test(e) || !iconUrl(p.eid, tbl)) continue;
+    seen.add(k);
+    cand.push({ e, k, pts: Number(t.tjpr_raw) || 0 });
+  }
+  if (!cand.length) return null;
+  cand.sort((a, b) => b.pts - a.pts || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+  // 配列の後ろが前面 = ポイントの高いものを後ろに
+  const stickers = cand.slice(0, DEFAULT_BACK_N).reverse().map(c => defaultSticker(uid, c.e));
+  return { stickers, text_top: true, outline: false, sticker_text: true };
+}
+
 /** 大会の event_id → アイコンの URL (無ければ null) @param {number} eid @param {{ f: string[], e: Record<string, number> } | null} [tbl] */
 export function iconUrl(eid, tbl = icons) {
   const k = tbl ? tbl.e[String(eid)] : undefined;
   return k != null && tbl && tbl.f[k] ? IMG_BASE + tbl.f[k] : null;
 }
 
-export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, parseKey, tourKey, ownedStickers, hasStickerData, loadOwnedStickers, isOwned, iconsNow, loadIcons, iconUrl };
+export default { CARD_W, CARD_H, S_MIN, S_MAX, MAX_STICKERS, TIERS, STICKER_KEY, IMG_BASE, normRot, normSticker, normBack, defaultSticker, defaultBack, DEFAULT_BACK_N, parseKey, tourKey, ownedStickers, hasStickerData, loadOwnedStickers, isOwned, iconsNow, loadIcons, iconUrl };

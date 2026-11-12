@@ -13,7 +13,7 @@
 import SPSPPlayerCard, { cardSettled, shownTitle } from './player_card.js';
 export { cardSettled };
 import SPSPViews from './views.js';
-import { buildCardModel, fetchAppliedCard, hideCardRanks, loadCardData, loadCardReadings, loadCardShared, noDataCardModel } from './player_card_model.js';
+import { buildCardModel, fetchAppliedCard, hideCardRanks, loadCardData, loadCardReadings, loadCardDefaultBack, loadCardShared, noDataCardModel } from './player_card_model.js';
 
 /** SPSP の順位を隠して描く (結果報告の「SPSP 順位を表示」、2026-11-11)。変えたら描いたカードを redrawCards で描き直す */
 let HIDE_RANKS = false;
@@ -180,7 +180,9 @@ export async function mountPlayerCard(el, uid, opts = {}) {
     (async () => {
       await Promise.race([cardSettled(el), new Promise(r => setTimeout(r, 3000))]);
       await idle();
-      const [readingsOk] = await Promise.all([loadCardReadings(data), ensureBackCss()]);
+      // 裏面の設定が無い人は初期配置 (持っているシールから。読めなければ何も貼っていない裏面)
+      const def = x && x.settings && x.settings.back ? null : loadCardDefaultBack(data).catch(() => null);
+      const [readingsOk] = await Promise.all([loadCardReadings(data), ensureBackCss(), def]);
       if (!el.isConnected || !back.isConnected) return;
       backDrawn = true;
       SPSPPlayerCard.renderBack(back, model(x));
