@@ -99,8 +99,8 @@ test('loadOwnedStickers: 大会記録に判定があればそれ、無ければ 
   assert.deepStrictEqual(await loadOwnedStickers(1, []), {});
 });
 
-test('defaultBack: 順位評価の高い順に 20 大会・高いものが上・名前シールを上に。同じ選手なら何度作っても同じで、シールが増えても前からのシールは動かない', async () => {
-  const { defaultBack, defaultSticker, DEFAULT_BACK_N } = await load();
+test('defaultBack: 順位評価の高い順に 20 大会・高いものが上・名前シールを上に。同じ大会記録なら何度作っても同じで、重なりすぎない', async () => {
+  const { defaultBack, DEFAULT_BACK_N } = await load();
   const tours = Array.from({ length: 30 }, (_, i) => ({ event_id: 1000 + i, tjpr_raw: i, sticker: 'gold' }));
   tours.push({ event_id: 5000, tjpr_raw: 999, sticker: 'rainbow' });   // アイコンが無い大会は出さない
   tours.push({ parent_event_id: 1029, class_letter: 'B', tjpr_raw: 500, sticker: 'silver' });
@@ -112,15 +112,16 @@ test('defaultBack: 順位評価の高い順に 20 大会・高いものが上・
   assert.strictEqual(a.stickers[a.stickers.length - 1].e, '1029B:s', 'いちばん高いものがいちばん上 (配列の最後)');
   assert.strictEqual(a.stickers[a.stickers.length - 2].e, '1029:g');
   assert.ok(!a.stickers.some(s => s.e.startsWith('5000')));
-  assert.deepStrictEqual(defaultBack(77, tours.slice().reverse(), owned, tbl), a, '大会記録の並びが変わっても同じ');
+  assert.deepStrictEqual(defaultBack(77, tours.slice().reverse(), owned, tbl), a, '大会記録の並びが変わっても同じ (開き直しても変わらない)');
   assert.deepStrictEqual(defaultBack('77', tours, owned, tbl), a);
   assert.notDeepStrictEqual(defaultBack(78, tours, owned, tbl).stickers[0], a.stickers[0], '選手が違えば置き方も違う');
-  // シールが増えても、残っているシールの置き方は同じ
-  const more = [...tours, { event_id: 1005, tjpr_raw: 0 }, { event_id: 2000, tjpr_raw: 700, sticker: 'gold' }];
-  const b = defaultBack(77, more, { ...owned, 2000: 'g' }, { f: tbl.f, e: { ...tbl.e, 2000: 0 } });
-  for (const s of b.stickers) { const old = a.stickers.find(x => x.e === s.e); if (old) assert.deepStrictEqual(s, old); }
-  assert.deepStrictEqual(defaultSticker(77, '1029:g'), a.stickers.find(s => s.e === '1029:g'));
-  for (const s of a.stickers) assert.ok(['square', 'round'].includes(s.k) && s.x >= 0 && s.x <= 514 && s.y >= 0 && s.y <= 333);
+  for (const s of a.stickers) assert.ok(['square', 'round'].includes(s.k) && s.x >= 0 && s.x <= 514 && s.y >= 0 && s.y <= 333 && s.s >= 60 && s.s <= 110, JSON.stringify(s));
+  // 重なりすぎない: どのシールも、ほかのシールの中心から一辺の 4 割は離れている (ばらばらに置くと半分以上が下に隠れていた)
+  for (const s of a.stickers) for (const q of a.stickers) if (s !== q) assert.ok(Math.hypot(s.x - q.x, s.y - q.y) > 0.4 * Math.min(s.s, q.s), `${s.e} ${q.e}`);
+  // 枚数が少なければ大きく
+  const few = defaultBack(77, tours.slice(0, 3), owned, tbl);
+  assert.strictEqual(few.stickers.length, 3);
+  for (const s of few.stickers) assert.ok(s.s > 105, String(s.s));
   assert.strictEqual(defaultBack(77, tours, {}, tbl), null);
   assert.strictEqual(defaultBack(77, tours, owned, null), null);
 });
