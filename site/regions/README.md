@@ -31,7 +31,7 @@ Every region must have exactly the same keys (and value types) as `JP`; only the
 | `regions` | URL of each regional site, used for the region switcher in the nav (`''` = no link). |
 | `analytics.gaId` | Google Analytics ID (`''` = none). |
 | `auth`, `vote`, `support` | start.gg login app per origin, vote test accounts, and the contact shown to users (`''` = hidden). |
-| `features` | Turns whole features on or off (`blog`, `vote`, `seeding`, `prefRanking`, `sim`, `titles`). |
+| `features` | Turns whole features on or off (`blog`, `vote`, `seeding`, `prefRanking`, `sim`, `titles`, `cardBack` = card back face: Latin name and tournament stickers, JP only). |
 | `geo.unitKey` | Geographic unit: `prefecture` (JP) or `state` (NA). |
 | `titleLang`, `titleDefault` | Player-card title list language and the fallback title. |
 | `calendar.weekendRealLabel` | Show Japan's "effective holiday / weekday" concept. |

@@ -1,0 +1,130 @@
+/* holo_badge.css — 実績バッジ (大会アイコンのホログラム、js/holo_badge.js)。Figma「spsp」の sticker (98:2) をそのまま再現
+   --hb-img = アイコンの画像、--hb-mask = 透過ありの型 (同じ画像の CORS 用 URL)、--hb-mx / --hb-my = ポインタの位置 (0〜1、ポインタを乗せたときの傾き・光が動く)
+   レイヤーの画像 = img/holo/l/ (Figma の画像を 740px の WebP に。名前は Figma のレイヤー名。切り抜きのある 2 枚は切り抜いた後)
+   重ね順と重ね方 (mix-blend-mode) は js/holo_badge.js の LAYERS (Figma のレイヤーのブレンドモードそのまま)
+   透過ありは形の外を出さない (Figma ではアイコンをマスクにしている)
+   レイヤーは画像 .hb-l-<レイヤー名> (js/holo_badge.js の renderBadge)。Figma の画像を 740px の AVIF (無ければ WebP) で。ラメ (虹の 2 番) は
+     質感を変えないよう WebP をそのまま。全部で約 1.7MB (金・銀のバッジは 1 種類 100KB 前後、虹はラメで +0.5〜0.7MB)
+   画像を使わない描き方 (.hb-c-*、約 124KB) と前の画像版 (.hb-o-*) の規則は、どこからも使っていないので削った (2026-11-12) */
+.hb {
+  --hb-mx: .5; --hb-my: .5;
+  position: relative; width: var(--hb-size, 160px); aspect-ratio: 1; overflow: hidden; isolation: isolate;
+  transition: transform .25s ease-out;
+}
+.hb > div, .hb-in > div { position: absolute; inset: 0; pointer-events: none; }
+/* .hb-in = 絵とホロ (透過ありはここをアイコンの形で切り抜く)。クラスの文字は透過なしなら中 (ホロの下)、透過ありなら外 (ホロの上) */
+.hb-in { isolation: isolate; }
+/* キャンバスに 1 枚に描いて差し替えたあと (js/holo_badge.js の flatten)。重ねた要素は隠す (光はそのまま上に重なる) */
+.hb .hb-flat { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hb-flattened > .hb-in, .hb-flattened > .hb-cls { display: none; }
+.hb-art { background: var(--hb-img) center / cover no-repeat; }
+.hb-l { background: center / 100% 100% no-repeat; }
+
+/* ポインタを乗せている間 (タッチは触っている間 = .hb-live) だけのキラキラ。デザインには無い。止まっているときはデザインどおり
+   傾き (ポインタの方へ少し倒す) + 虹色の斜めの筋 (ポインタで流れる、color-dodge) + ポインタの所の光だまり (overlay) */
+.hb-sheen, .hb-glare { opacity: 0; transition: opacity .2s; }
+.hb-sheen {
+  background: repeating-linear-gradient(calc(115deg + (var(--hb-mx) - .5) * 40deg),
+    transparent 0 5%, hsl(0 100% 70% / .8) 6%, hsl(55 100% 65% / .8) 6.8%, hsl(130 90% 60% / .8) 7.6%,
+    hsl(195 100% 65% / .8) 8.4%, hsl(275 90% 70% / .8) 9.2%, transparent 10.5% 14%);
+  background-size: 200% 200%;
+  background-position: calc(var(--hb-mx) * 100%) calc(var(--hb-my) * 100%);
+  mix-blend-mode: color-dodge;
+}
+.hb-glare {
+  background: radial-gradient(circle at calc(var(--hb-mx) * 100%) calc(var(--hb-my) * 100%),
+    rgba(255,255,255,.85) 0, rgba(255,255,255,.35) 22%, transparent 55%);
+  mix-blend-mode: overlay;
+}
+.hb:hover, .hb.hb-live {
+  transform: perspective(700px) rotateY(calc((var(--hb-mx) - .5) * 16deg)) rotateX(calc((.5 - var(--hb-my)) * 16deg));
+  transition: transform .06s linear;
+}
+.hb:hover .hb-sheen, .hb.hb-live .hb-sheen { opacity: .22; }
+.hb:hover .hb-glare, .hb.hb-live .hb-glare { opacity: .8; }
+@media (prefers-reduced-motion: reduce) {
+  .hb, .hb-sheen, .hb-glare { transition: none; }
+  .hb:hover, .hb.hb-live { transform: none; }
+}
+
+/* 透過あり: 形の外は出さない (アイコンの透明部分で切り抜く)。クラスの文字は切り抜かない (形の外にはみ出してよい) */
+.hb-shape .hb-in, .hb-shape > .hb-sheen, .hb-shape > .hb-glare {
+  -webkit-mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat;
+  mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat;
+}
+.hb-shape .hb-art { background-size: contain; }
+
+/* 透過なしの形と切り取り (js/holo_badge.js の renderBadge の shape / crop)。外形で .hb ごと切る (キャンバスに描いた絵・光・文字も)。
+   切り取りは絵だけ拡大し、ホロは形いっぱいのまま */
+.hb-square .hb-art { transform: scale(var(--hb-zoom, 1)); }
+/* 角丸と丸は clip-path でなく border-radius (+ .hb の overflow: hidden) で切る: Windows の Chrome (描画の高速化あり) で
+   clip-path: circle() とホロの重ね合わせ (mix-blend-mode) を一緒に使うと、ホロの層が描かれないことがあった (2026-10-20)。
+   border-radius でも丸で再発したので (10-21)、形で切ったものはいつもキャンバスに描く (js/holo_badge.js の renderBadge)。ここは描けないとき用 */
+.hb-square.hb-k-round { border-radius: 15%; }
+.hb-square.hb-k-circle { border-radius: 50%; }
+.hb-square.hb-k-hex { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
+.hb-square.hb-k-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+/* キャンバスに描いたあと (絵はもう形に切ってある) は外側で切らない (Android の Chrome で、角を丸く切った中のキャンバスが描かれないことが
+   あった)。ポインタの光だけを形で切る */
+.hb-square.hb-flattened { border-radius: 0; clip-path: none; overflow: visible; }
+.hb-flattened.hb-k-round > .hb-sheen, .hb-flattened.hb-k-round > .hb-glare { border-radius: 15%; }
+.hb-flattened.hb-k-circle > .hb-sheen, .hb-flattened.hb-k-circle > .hb-glare { border-radius: 50%; }
+.hb-flattened.hb-k-hex > .hb-sheen, .hb-flattened.hb-k-hex > .hb-glare { clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); }
+.hb-flattened.hb-k-diamond > .hb-sheen, .hb-flattened.hb-k-diamond > .hb-glare { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+
+/* クラスの文字 (B・C・D・E)。Figma の sticker (117:209 / 115:203) に合わせた位置と大きさ (740px のバッジで測って、em に直した)
+   フォント = Zalando Sans Expanded ExtraBold Italic (Figma と同じ。外形は Figma の書き出しと 1px 以内で一致)
+   透過なし: ホロの下に置く (ホロが文字にもかかる)。塗りなし・灰色 (#bab9b9) の線だけ。Figma は線を字の外側に 5px 引くが、
+     CSS の線は輪郭の内外に半分ずつなので、字を少し大きく (1.016 / 1.02 倍) して線の位置を合わせる
+   透過あり: ホロの上に置く。灰色 (不透明度 0.9) の塗り + 白の縁 */
+.hb .hb-cls {
+  inset: auto 0 0 auto; display: block; line-height: 1; white-space: nowrap; transform-origin: 100% 100%;
+  font-family: "Zalando Sans Expanded", sans-serif; font-weight: 800; font-style: italic;
+}
+.hb-square .hb-cls {
+  /* 形ごとに右下からずらして小さく (js/holo_badge.js の SHAPES) */
+  inset: auto calc(var(--hb-cls-dx, 0) * 100%) calc(var(--hb-cls-dy, 0) * 100%) auto;
+  font-size: calc(var(--hb-size, 160px) * 350 / 740 * var(--hb-cls-k, 1));
+  color: transparent; -webkit-text-stroke: .01429em #bab9b9;
+  transform: translate(-.0371em, .0514em) scale(1.016, 1.02);
+  /* 影 (Figma の指定は 黒 50%、2px ずらし、ぼかし 2px。見た目が Figma より薄かったので 75% に)。
+     線だけの字なので text-shadow (字の形が塗られる) ではなく drop-shadow */
+  filter: drop-shadow(.0057em .0057em .0057em rgb(0 0 0 / .75));
+}
+.hb-shape .hb-cls {
+  font-size: calc(var(--hb-size, 160px) * 220 / 740);
+  color: rgb(203 203 203 / .9); -webkit-text-stroke: .0273em #fff; paint-order: stroke fill;
+  transform: translate(-.0955em, -.5227em);
+}
+
+/* レイヤーの画像 (画像版: 740px の AVIF、対応していないブラウザは前の画像版の WebP。ラメ 2 枚は前の画像版の WebP そのまま) */
+.hb-l-sikaku_gin_1 { background-image: url("../img/holo/l740/sikaku_gin_1.86fbb127.webp"); background-image: image-set(url("../img/holo/l/sikaku_gin_1.a33a2976.avif") type("image/avif"), url("../img/holo/l740/sikaku_gin_1.86fbb127.webp") type("image/webp")); }
+.hb-l-sikaku_gin_2 { background-image: url("../img/holo/l740/sikaku_gin_2.7eea5763.webp"); background-image: image-set(url("../img/holo/l/sikaku_gin_2.0afacd4d.avif") type("image/avif"), url("../img/holo/l740/sikaku_gin_2.7eea5763.webp") type("image/webp")); }
+.hb-l-sikaku_gin_3 { background-image: url("../img/holo/l740/sikaku_gin_3.0d8ab2bb.webp"); background-image: image-set(url("../img/holo/l/sikaku_gin_3.d7962f46.avif") type("image/avif"), url("../img/holo/l740/sikaku_gin_3.0d8ab2bb.webp") type("image/webp")); }
+.hb-l-sikaku_gin_4 { background-image: url("../img/holo/l740/sikaku_gin_4.8a0a1e27.webp"); background-image: image-set(url("../img/holo/l/sikaku_gin_4.6bcc1b8a.avif") type("image/avif"), url("../img/holo/l740/sikaku_gin_4.8a0a1e27.webp") type("image/webp")); }
+.hb-l-sikaku_kin_1 { background-image: url("../img/holo/l740/sikaku_kin_1.b172995a.webp"); background-image: image-set(url("../img/holo/l/sikaku_kin_1.02cf3a8b.avif") type("image/avif"), url("../img/holo/l740/sikaku_kin_1.b172995a.webp") type("image/webp")); }
+.hb-l-sikaku_kin_2 { background-image: url("../img/holo/l740/sikaku_kin_2.e024900a.webp"); background-image: image-set(url("../img/holo/l/sikaku_kin_2.af0e350b.avif") type("image/avif"), url("../img/holo/l740/sikaku_kin_2.e024900a.webp") type("image/webp")); }
+.hb-l-sikaku_kin_3 { background-image: url("../img/holo/l740/sikaku_kin_3.2cb83730.webp"); background-image: image-set(url("../img/holo/l/sikaku_kin_3.0009d9af.avif") type("image/avif"), url("../img/holo/l740/sikaku_kin_3.2cb83730.webp") type("image/webp")); }
+.hb-l-sikaku_kin_4 { background-image: url("../img/holo/l740/sikaku_kin_4.ff568fb5.webp"); background-image: image-set(url("../img/holo/l/sikaku_kin_4.429ecd6e.avif") type("image/avif"), url("../img/holo/l740/sikaku_kin_4.ff568fb5.webp") type("image/webp")); }
+.hb-l-sikaku_nizi_1 { background-image: url("../img/holo/l740/sikaku_nizi_1.f2b1d162.webp"); background-image: image-set(url("../img/holo/l/sikaku_nizi_1.904d4d72.avif") type("image/avif"), url("../img/holo/l740/sikaku_nizi_1.f2b1d162.webp") type("image/webp")); }
+.hb-l-sikaku_nizi_3 { background-image: url("../img/holo/l740/sikaku_nizi_3.6429dcc5.webp"); background-image: image-set(url("../img/holo/l/sikaku_nizi_3.e8f93250.avif") type("image/avif"), url("../img/holo/l740/sikaku_nizi_3.6429dcc5.webp") type("image/webp")); }
+.hb-l-sikaku_nizi_4 { background-image: url("../img/holo/l740/sikaku_nizi_4.6fddc0c5.webp"); background-image: image-set(url("../img/holo/l/sikaku_nizi_4.be421fd9.avif") type("image/avif"), url("../img/holo/l740/sikaku_nizi_4.6fddc0c5.webp") type("image/webp")); }
+.hb-l-sikaku_nizi_5 { background-image: url("../img/holo/l740/sikaku_nizi_5.901d2c80.webp"); background-image: image-set(url("../img/holo/l/sikaku_nizi_5.9e474c2a.avif") type("image/avif"), url("../img/holo/l740/sikaku_nizi_5.901d2c80.webp") type("image/webp")); }
+.hb-l-touka_kin_2 { background-image: url("../img/holo/l740/touka_kin_2.d54862bb.webp"); background-image: image-set(url("../img/holo/l/touka_kin_2.919b7319.avif") type("image/avif"), url("../img/holo/l740/touka_kin_2.d54862bb.webp") type("image/webp")); }
+.hb-l-touka_kin_3 { background-image: url("../img/holo/l740/touka_kin_3.45c4dcdf.webp"); background-image: image-set(url("../img/holo/l/touka_kin_3.d501c2d0.avif") type("image/avif"), url("../img/holo/l740/touka_kin_3.45c4dcdf.webp") type("image/webp")); }
+.hb-l-touka_kin_4 { background-image: url("../img/holo/l740/touka_kin_4.97471ff0.webp"); background-image: image-set(url("../img/holo/l/touka_kin_4.61741633.avif") type("image/avif"), url("../img/holo/l740/touka_kin_4.97471ff0.webp") type("image/webp")); }
+.hb-l-touka_nizi_1 { background-image: url("../img/holo/l740/touka_nizi_1.f7a50bdd.webp"); background-image: image-set(url("../img/holo/l/touka_nizi_1.afe621e4.avif") type("image/avif"), url("../img/holo/l740/touka_nizi_1.f7a50bdd.webp") type("image/webp")); }
+.hb-l-touka_nizi_3 { background-image: url("../img/holo/l740/touka_nizi_3.f46661ea.webp"); background-image: image-set(url("../img/holo/l/touka_nizi_3.be515608.avif") type("image/avif"), url("../img/holo/l740/touka_nizi_3.f46661ea.webp") type("image/webp")); }
+.hb-l-sikaku_nizi_2 { background-image: url("../img/holo/l740/sikaku_nizi_2.9ef61ab7.webp"); }
+.hb-l-touka_nizi_2 { background-image: url("../img/holo/l740/touka_nizi_2.a8da273f.webp"); }
+/* 丸・六角形・ひし形のホロ (Figma の 図形_虹/金/銀 153:288 など、2026-10-21)。ラメ (虹の 2 番) は WebP そのまま */
+.hb-l-zukei_gin_2 { background-image: url("../img/holo/l740/zukei_gin_2.5b17effd.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_2.6bb9a1d1.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_2.5b17effd.webp") type("image/webp")); }
+.hb-l-zukei_gin_3 { background-image: url("../img/holo/l740/zukei_gin_3.5a4f631a.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_3.eea23555.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_3.5a4f631a.webp") type("image/webp")); }
+.hb-l-zukei_gin_4 { background-image: url("../img/holo/l740/zukei_gin_4.44095fa6.webp"); background-image: image-set(url("../img/holo/l/zukei_gin_4.8a7c992b.avif") type("image/avif"), url("../img/holo/l740/zukei_gin_4.44095fa6.webp") type("image/webp")); }
+.hb-l-zukei_kin_2 { background-image: url("../img/holo/l740/zukei_kin_2.9a45c066.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_2.88553b18.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_2.9a45c066.webp") type("image/webp")); }
+.hb-l-zukei_kin_3 { background-image: url("../img/holo/l740/zukei_kin_3.f9371640.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_3.f6a48bd0.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_3.f9371640.webp") type("image/webp")); }
+.hb-l-zukei_kin_4 { background-image: url("../img/holo/l740/zukei_kin_4.1f9f7d17.webp"); background-image: image-set(url("../img/holo/l/zukei_kin_4.e53101d8.avif") type("image/avif"), url("../img/holo/l740/zukei_kin_4.1f9f7d17.webp") type("image/webp")); }
+.hb-l-zukei_nizi_3 { background-image: url("../img/holo/l740/zukei_nizi_3.18ada745.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_3.bb55776a.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_3.18ada745.webp") type("image/webp")); }
+.hb-l-zukei_nizi_4 { background-image: url("../img/holo/l740/zukei_nizi_4.24183693.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_4.7b5f3a11.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_4.24183693.webp") type("image/webp")); }
+.hb-l-zukei_nizi_5 { background-image: url("../img/holo/l740/zukei_nizi_5.04ce102e.webp"); background-image: image-set(url("../img/holo/l/zukei_nizi_5.52657e66.avif") type("image/avif"), url("../img/holo/l740/zukei_nizi_5.04ce102e.webp") type("image/webp")); }
+.hb-l-zukei_nizi_2 { background-image: url("../img/holo/l740/zukei_nizi_2.9a8cc451.webp"); }

@@ -5,17 +5,20 @@
  *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
  *                                            title_text = 二つ名の文字 { pre, post } (null = 既定、"" = なし。設定が無ければ全体が null = 両方既定)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
+ *                       preview (CARD_OPEN_EDIT=1) だけ { uid, settings } でもよい (ログインなしで誰の分でも。見た目の確認用)
  *
  * card_put で書く uid はトークンの uid だけ (リクエストに uid を持たせない = 他人のカードは書けない)。
  * settings の中身 (実績の key) はサーバでは解釈しない。形と長さだけ確かめる。
  */
 import type { Config } from '../config.ts';
 import {
-  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_TEMPLATES,
+  CARD_ACH_KEY_MAX, CARD_ACH_MAX, CARD_COLORS, CARD_RATE_MAX_PER_DAY, CARD_RATE_MIN_INTERVAL_MS, CARD_STICKER_MAX, CARD_TEMPLATES,
 } from '../config.ts';
 import type { Store } from '../store.ts';
 import { bitsHas, titleById, usableIn } from './titles.ts';
 import type { HandlerResult } from './respond.ts';
+import type { DataFetch } from './vote.ts';
+import { bundledPlayer } from './vote.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
 import { dayKey, formatIso } from './time.ts';
@@ -30,7 +33,98 @@ export interface CardSettings {
   ach: string[] | null;
   tour: number | null;   // 「最高の大会結果」に出す大会の event_id。null = 自動 (順位評価のポイント最大の大会)
   title: CardTitle | null;   // 二つ名 (前半・後半)。null = 設定なし (両方とも既定)
+  latin: string | null;   // カードの裏面に出す英字の名前。null = 自動 (名前のかなをローマ字に。フロントの js/latin_name.js)、文字 = 本人が書いたもの (自動と同じ綴りでも)
+  back?: CardBack;        // 裏面のシール (欄ごと無し = 編集していない: 画面が初期配置を出す。空でも欄があれば何も貼らない)
 }
+
+/** 裏面: 貼ったシールと、名前・二つ名・順位をシールの上に出すか・影を付けるか・白フチのシールにするか (フロントの js/card_stickers.js と同じ規則) */
+export interface CardBack { stickers: CardSticker[]; text_top: boolean; outline: boolean; sticker_text: boolean; text_xy?: { x: number; y: number }; text_r?: number; text_s?: number; text_parts?: CardTextParts }
+/** 白フチの名前・二つ名・順位を 1 つずつずらす分 (フロントの js/card_stickers.js normParts と同じ規則) */
+export type CardTextParts = Partial<Record<'name' | 'title' | 'rank', { x?: number; y?: number; r?: number; s?: number }>>;
+/** シール 1 枚: e = "<大会キー>:<色>"、x・y = 中心 (カードの座標 514×333)、s = 一辺、r = 回転 (度)、k = 形、c = 切り取り */
+export interface CardSticker { e: string; x: number; y: number; s: number; r: number; k: string; c: number }
+/** シールのキー: event_id (下位クラスは親の event_id + クラスの文字 B〜J) と色 (r 虹・g 金・s 銀・n 素)。持っているかは card_put で選手のデータと突き合わせる */
+export const STICKER_KEY = /^[1-9]\d{0,11}[A-J]?:[rgsn]$/;
+const STICKER_SHAPES = ['square', 'round', 'circle', 'hex', 'diamond'];
+
+/** 裏面を確かめて正規化 (数値は小数 1 桁 / 切り取りは 2 桁に丸める)。形が違えば undefined、欄が無ければ null (= 画面が初期配置を出す)。
+ * 欄があれば空 (シール 0 枚・どちらも既定) でもそのまま残す (全部剥がした = 何も貼らない。2026-11-12) */
+export function validateCardBack(v: unknown): CardBack | null | undefined {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) if (k !== 'stickers' && k !== 'text_top' && k !== 'outline' && k !== 'sticker_text' && k !== 'text_xy' && k !== 'text_r' && k !== 'text_s' && k !== 'text_parts') return undefined;
+  if (o.text_top !== undefined && typeof o.text_top !== 'boolean') return undefined;
+  if (o.outline !== undefined && typeof o.outline !== 'boolean') return undefined;
+  if (o.sticker_text !== undefined && typeof o.sticker_text !== 'boolean') return undefined;
+  const list = o.stickers === undefined ? [] : o.stickers;
+  if (!Array.isArray(list) || list.length > CARD_STICKER_MAX) return undefined;
+  const num = (x: unknown, lo: number, hi: number): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi ? x : null);
+  const r1 = (x: number): number => Math.round(x * 10) / 10;
+  const seen = new Set<string>();
+  const stickers: CardSticker[] = [];
+  for (const it of list) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return undefined;
+    const s = it as Record<string, unknown>;
+    for (const k of Object.keys(s)) if (!['e', 'x', 'y', 's', 'r', 'k', 'c'].includes(k)) return undefined;
+    if (typeof s.e !== 'string' || !STICKER_KEY.test(s.e) || seen.has(s.e)) return undefined;
+    const x = num(s.x, 0, 514), y = num(s.y, 0, 333), size = num(s.s, 22, 520), rot = num(s.r, -180, 180);
+    const shape = s.k === undefined ? 'square' : s.k;
+    const crop = s.c === undefined ? 1 : num(s.c, 0.35, 1);
+    if (x === null || y === null || size === null || rot === null || crop === null) return undefined;
+    if (typeof shape !== 'string' || !STICKER_SHAPES.includes(shape)) return undefined;
+    seen.add(s.e);
+    stickers.push({ e: s.e, x: r1(x), y: r1(y), s: r1(size), r: r1(rot), k: shape, c: Math.round(crop * 100) / 100 });
+  }
+  // 文字の影 (outline) は選ばせず、前に出していて白フチでないときだけ (送られてきた値は見ない。前の画面が送っても通す)
+  const textTop = o.text_top === true, sx = o.sticker_text === true;
+  const back: CardBack = { stickers, text_top: textTop, outline: textTop && !sx, sticker_text: sx };
+  // 名前・二つ名・順位の位置 (真ん中からのずれ、カードの px。フロントの TEXT_DX/TEXT_DY と同じ幅)。真ん中なら書かない
+  if (o.text_xy !== undefined && o.text_xy !== null) {
+    const p = o.text_xy as Record<string, unknown>;
+    if (typeof p !== 'object' || Array.isArray(p) || Object.keys(p).some(k => k !== 'x' && k !== 'y')) return undefined;
+    const x = num(p.x, -257, 257), y = num(p.y, -167, 167);
+    if (x === null || y === null) return undefined;
+    if (r1(x) || r1(y)) back.text_xy = { x: r1(x), y: r1(y) };
+  }
+  // 回転 (度) と大きさ (0.5〜2 倍)。既定 (0°・1 倍) なら書かない
+  if (o.text_r !== undefined) {
+    const r = num(o.text_r, -180, 180);
+    if (r === null) return undefined;
+    if (r1(r)) back.text_r = r1(r);
+  }
+  if (o.text_s !== undefined) {
+    const sc = num(o.text_s, 0.5, 2);
+    if (sc === null) return undefined;
+    if (Math.round(sc * 100) !== 100) back.text_s = Math.round(sc * 100) / 100;
+  }
+  // 部品ごとのずれ (白フチのときだけ使う。普通の文字なら捨てる)。既定の値・部品は書かない
+  if (o.text_parts !== undefined && o.text_parts !== null) {
+    const tp = o.text_parts as Record<string, unknown>;
+    if (typeof tp !== 'object' || Array.isArray(tp)) return undefined;
+    const parts: CardTextParts = {};
+    const lim = { x: [-257, 257], y: [-167, 167], r: [-180, 180], s: [0.5, 2] } as const;
+    for (const [k, v] of Object.entries(tp)) {
+      if (k !== 'name' && k !== 'title' && k !== 'rank') return undefined;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+      const q = v as Record<string, unknown>;
+      if (Object.keys(q).some(f => f !== 'x' && f !== 'y' && f !== 'r' && f !== 's')) return undefined;
+      const t: { x?: number; y?: number; r?: number; s?: number } = {};
+      for (const f of ['x', 'y', 'r', 's'] as const) {
+        if (q[f] === undefined) continue;
+        const val = num(q[f], lim[f][0], lim[f][1]);
+        if (val === null) return undefined;
+        if (f === 's') { if (Math.round(val * 100) !== 100) t.s = Math.round(val * 100) / 100; } else if (r1(val)) t[f] = r1(val);
+      }
+      if (Object.keys(t).length) parts[k] = t;
+    }
+    if (sx && Object.keys(parts).length) back.text_parts = parts;
+  }
+  return back;
+}
+
+/** 英字名: 半角の英字・数字と一部の記号 (! ? . - _ ' & +) と空白、1〜45 文字、前後の空白・続けての空白なし、英字か数字が 1 文字は要る (フロントの latinNameValid と同じ) */
+export const LATIN_NAME = /^[A-Za-z0-9!?.\-_'&+]+(?: [A-Za-z0-9!?.\-_'&+]+)*$/;
 
 /** 二つ名の id (site/js/titles.js の一覧。言語-連番。前半・後半どちらに使えるかは一覧の part)。同じ id を前後両方に置くのは今は許す */
 // 各側: id / null =「なし」(空欄) / 'default' = 地域の既定 (スマブラSP / プレイヤー、フロントの region/config.js titleDefault)
@@ -43,12 +137,13 @@ const TITLE_ID = /^[a-z]{2}-\d{4}$/;
  *   template: CARD_TEMPLATES のどれか / color: CARD_COLORS のどれか
  *   ach: null (省略も null) か、文字列の配列 (0〜CARD_ACH_MAX 個、各 1〜CARD_ACH_KEY_MAX 文字、重複なし)
  *   tour: null (省略も null) か、大会の event_id (正の整数 1〜12 桁。数字の文字列も受けて整数にする)
+ *   latin: null (省略も null) か、英字名 (LATIN_NAME)
  * 知らない欄があれば弾く (黙って捨てると、フロントが増やした欄が保存されないことに気づけないため)。
  */
 export function validateCardSettings(v: unknown): CardSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title') return null;
+  for (const k of Object.keys(o)) if (k !== 'template' && k !== 'color' && k !== 'ach' && k !== 'tour' && k !== 'title' && k !== 'latin' && k !== 'back') return null;
   if (typeof o.template !== 'string' || !CARD_TEMPLATES.includes(o.template)) return null;
   if (typeof o.color !== 'string' || !CARD_COLORS.includes(o.color)) return null;
   let ach: string[] | null = null;
@@ -80,7 +175,68 @@ export function validateCardSettings(v: unknown): CardSettings | null {
     // 両方とも既定なら設定なし (null)。「なし / なし」(両方 null) は空欄として残す
     title = pre === TITLE_DEFAULT && post === TITLE_DEFAULT ? null : { pre, post };
   }
-  return { template: o.template, color: o.color, ach, tour, title };
+  let latin: string | null = null;
+  if (o.latin !== undefined && o.latin !== null) {
+    if (typeof o.latin !== 'string' || !LATIN_NAME.test(o.latin) || !/[A-Za-z0-9]/.test(o.latin) || o.latin.length > 45) return null;
+    latin = o.latin;
+  }
+  const back = validateCardBack(o.back);
+  if (back === undefined) return null;
+  // 裏面は送られてきたときだけ欄を置く (前からの設定・応答の形を変えない。欄が無い = 裏面を編集していない)
+  return back ? { template: o.template, color: o.color, ach, tour, title, latin, back } : { template: o.template, color: o.color, ach, tour, title, latin };
+}
+
+const TIER_ORDER = ['rainbow', 'gold', 'silver', 'normal'];
+const TIER_CODE: Record<string, number> = { r: 0, g: 1, s: 2, n: 3 };
+
+/**
+ * 貼ったシールをその選手が持っているか。選手のデータ (players/<uid>.json、ビルドが大会記録に sticker = もらった一番上の色を書く。
+ * spsp_scripts spsp/stickers.py) を読み、大会キー (event_id、下位クラスは親の event_id + クラスの文字) ごとに一番上の色を出し、
+ * 貼った色がそれ以下 (下の色は全部持っている) か確かめる。返り値: null = 全部持っている / 'not_owned' / 'unavailable' (データが読めない)
+ */
+export async function checkStickersOwned(dataFetch: DataFetch, uid: string, back: CardBack, preview = false): Promise<null | 'not_owned' | 'unavailable'> {
+  if (!back.stickers.length) return null;
+  // 参加の少ない選手は data/views/bundle/ にまとめてあり、個別のファイルは古いか無い (vote.ts bundledPlayer。画面の js/player_data.js と同じ順)
+  let rec = (await bundledPlayer(dataFetch, uid)) as { tournaments?: unknown } | null;
+  if (!rec) {
+    try {
+      const res = await dataFetch('/players/' + encodeURIComponent(uid) + '.json');
+      if (res.status === 404) return 'not_owned';
+      if (res.status !== 200) return 'unavailable';
+      rec = await res.json();
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+  const top = new Map<string, number>();
+  const tours = Array.isArray(rec && rec.tournaments) ? (rec as { tournaments: unknown[] }).tournaments : [];
+  // preview だけ: 選手のデータにまだ大会シールが無ければ (ビルドに入る前)、プレビュー用の判定 {uid: {大会キー: r|g|s|n}} で確かめる
+  if (preview && !tours.some(t => t && typeof t === 'object' && 'sticker' in (t as object))) {
+    try {
+      const res = await dataFetch(`/data/stickers_preview/${Number(uid) % 64}.json`);
+      if (res.status !== 200) return 'unavailable';
+      const shard = (await res.json()) as Record<string, Record<string, string>>;
+      for (const [k, c] of Object.entries((shard && shard[String(uid)]) || {})) if (c in TIER_CODE) top.set(k, TIER_CODE[c]);
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+  for (const t of tours) {
+    if (!t || typeof t !== 'object') continue;
+    const o = t as Record<string, unknown>;
+    const tier = TIER_ORDER.indexOf(String(o.sticker));
+    if (tier < 0) continue;
+    const key = o.event_id ? String(o.event_id) : o.parent_event_id && o.class_letter ? `${o.parent_event_id}${o.class_letter}` : '';
+    if (!key) continue;
+    const prev = top.get(key);
+    if (prev === undefined || tier < prev) top.set(key, tier);
+  }
+  for (const s of back.stickers) {
+    const i = s.e.lastIndexOf(':');
+    const have = top.get(s.e.slice(0, i));
+    if (have === undefined || TIER_CODE[s.e.slice(i + 1)] < have) return 'not_owned';
+  }
+  return null;
 }
 
 /** 二つ名の id が一覧にあり、その位置 (前半 / 後半) に使えるか (titles.js の usableIn)。 */
@@ -148,10 +304,12 @@ export async function handleCardGet(cfg: Config, store: Store, req: Record<strin
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
-export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+export async function handleCardPut(cfg: Config, store: Store, req: Record<string, unknown>, now: number, dataFetch?: DataFetch): Promise<HandlerResult> {
   const sess = await verifySessionToken(cfg, req.token, now);
-  if (!sess) return err('invalid_session', MSG_INVALID_SESSION);
-  const uid = validUid(sess.id);
+  // preview (CARD_OPEN_EDIT=1) だけ: ログインなしなら、リクエストの uid に書く (誰でも編集できる確認用)
+  const openUid = !sess && cfg.cardOpenEdit ? validUid(req.uid) : null;
+  if (!sess && !openUid) return err('invalid_session', MSG_INVALID_SESSION);
+  const uid = sess ? validUid(sess.id) : openUid;
   if (!uid) return err('invalid_session', MSG_INVALID_SESSION);
 
   let settings: CardSettings | null = null;
@@ -165,10 +323,18 @@ export async function handleCardPut(cfg: Config, store: Store, req: Record<strin
     const lang = cfg.titleLang || 'ja';
     if (!titleIdsValid(lang, settings.title)) return err('bad_settings', 'カードの設定の形式が不正です。', 'title_unknown');
     const ids = [settings.title.pre, settings.title.post].filter((id): id is string => id !== null && id !== TITLE_DEFAULT);
-    if (ids.length) {   //「なし」と既定だけなら記録は読まない
+    // preview の誰でも編集 (openUid) では持っているかは見ない (確認用。preview の記録は本番と揃っていないことがある)
+    if (ids.length && !openUid) {   //「なし」と既定だけなら記録は読まない
       const row = await store.getTitleOwned(uid, lang);
       for (const id of ids) if (!titleOwned(lang, row, id)) return err('title_not_owned', 'まだ持っていない二つ名です。', 'title_not_owned');
     }
+  }
+
+  // 裏面のシール: 持っているものだけ (選手のデータと突き合わせる。読めないときは保存しない)
+  if (settings && settings.back && settings.back.stickers.length) {
+    const r = dataFetch ? await checkStickersOwned(dataFetch, uid, settings.back, !!cfg.stickersPreview) : 'unavailable';
+    if (r === 'not_owned') return err('sticker_not_owned', 'まだ持っていないシールがあります。', 'sticker_not_owned');
+    if (r === 'unavailable') return err('internal', '選手のデータを読めませんでした。少し待ってからやり直してください。', 'sticker_check');
   }
 
   const updatedAt = formatIso(now, cfg.tsOffsetMin);

@@ -8,7 +8,7 @@ import { issueSessionToken } from '../src/api/session.ts';
 import { CARD_RATE_MIN_INTERVAL_MS, CARD_RATE_MAX_PER_DAY } from '../src/config.ts';
 
 const env = (o) => makeEnv(Object.assign({ token: OK_TOKEN, user: OK_USER }, o || {}));
-const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718, title: null };
+const GOOD = { template: 'standard', color: 'blue', ach: ['tour:{"name":"篝火#15"}', 'rank:top8'], tour: 1648718, title: null, latin: null };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限切れは invalid_session で記録しない', async () => {
@@ -32,8 +32,8 @@ test('me: 有効なトークンは中身 (user, exp) を返す。無効・期限
 
 test('validateCardSettings: 許す形と弾く形', () => {
   assert.deepStrictEqual(plain(validateCardSettings(GOOD)), GOOD);
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null, title: null });
-  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null, title: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red' })), { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null });
+  assert.deepStrictEqual(plain(validateCardSettings({ template: 'standard', color: 'red', ach: [] })), { template: 'standard', color: 'red', ach: [], tour: null, title: null, latin: null });
   for (const c of ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'yellow', 'gray']) assert.ok(validateCardSettings({ template: 'standard', color: c, ach: null }));
   const bads = [
     null, 'x', [], {},
@@ -147,6 +147,18 @@ test('card_get: 保存済みの行が壊れていれば無いものとして返�
   assert.deepStrictEqual(await post(e, { action: 'card_get', uid: '6' }), { ok: true, settings: null, updated_at: null, title_text: null });
 });
 
+test('validateCardSettings: latin は英字名 (半角の英字・数字・一部の記号と空白 1〜45 文字、前後・連続の空白なし) か null', () => {
+  const base = { template: 'standard', color: 'red' };
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'kaworu' }).latin, 'kaworu');
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'Mild na H.O' }).latin, 'Mild na H.O');
+  assert.strictEqual(validateCardSettings({ ...base, latin: "Fly High! K.O-kun's_2+&?" }).latin, "Fly High! K.O-kun's_2+&?");
+  assert.strictEqual(validateCardSettings({ ...base, latin: 'x'.repeat(45) }).latin, 'x'.repeat(45));
+  assert.strictEqual(validateCardSettings({ ...base, latin: null }).latin, null);
+  assert.strictEqual(validateCardSettings(base).latin, null);
+  for (const bad of ['', ' a', 'a ', 'a  b', 'x'.repeat(46), 'カヲル', 'ａｂ', 'a\tb', 'a\nb', 'a/b', 'a(b)', 'a#', '!!', 1, true, ['a']])
+    assert.strictEqual(validateCardSettings({ ...base, latin: bad }), null, JSON.stringify(bad));
+});
+
 test('validateCardSettings: tour は event_id (正の整数 1〜12 桁) か null。数字の文字列は整数にする', () => {
   const base = { template: 'standard', color: 'red', ach: null };
   assert.strictEqual(validateCardSettings({ ...base, tour: 1648718 }).tour, 1648718);
@@ -163,7 +175,7 @@ test('card_put: tour を文字列で送っても整数で保存・返す', async
   const e = env();
   const token = await loginToken(e);
   const put = await post(e, { action: 'card_put', token, settings: { template: 'standard', color: 'red', tour: '1702406' } });
-  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406, title: null });
+  assert.deepStrictEqual(put.settings, { template: 'standard', color: 'red', ach: null, tour: 1702406, title: null, latin: null });
   assert.strictEqual(JSON.parse(e.store.cards.get('4242').settings).tour, 1702406);
   assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings, put.settings);
 });
@@ -304,4 +316,96 @@ test('card_put: 「なし」(null) と既定 (default) は記録を見ずに保�
 test('titleTextOf: 既定は null、「なし」は ""、設定なしは null', () => {
   assert.strictEqual(titleTextOf('ja', null), null);
   assert.deepStrictEqual(titleTextOf('ja', { pre: 'default', post: null }), { pre: null, post: '' });
+});
+
+const PLAYER_NO_STICKER = { status: 200, body: { user_id: 4242, characters: [], tournaments: [{ event_id: 1700000 }] } };
+/** シールを持っている選手のデータ (ビルドの大会記録の sticker) */
+const STICKER_PLAYER = { status: 200, body: { user_id: 4242, characters: [], tournaments: [
+  { event_id: 1700000, sticker: 'rainbow' }, { event_id: null, parent_event_id: 1724470, class_letter: 'B', sticker: 'gold' },
+  { event_id: 1800000, sticker: 'silver' }, { event_id: 1900000 } ] } };
+
+test('card_put: 裏面のシール (back) を確かめて保存。形が違えば bad_settings、送らなければ欄なし', async () => {
+  const e = env({ player: STICKER_PLAYER });
+  const token = await loginToken(e);
+  let now = Date.parse('2026-10-20T00:00:00Z');
+  e.nowMs = now;
+  const back = { stickers: [{ e: '1724470B:g', x: 100.04, y: 50, s: 120, r: -10.26, k: 'circle', c: 0.6 }, { e: '1700000:r', x: 0, y: 333, s: 22, r: 180 }], text_top: true, outline: false };
+  const put = await post(e, { action: 'card_put', token, settings: { ...GOOD, back } });
+  assert.strictEqual(put.ok, true, JSON.stringify(put));
+  assert.deepStrictEqual(put.settings.back, { stickers: [{ e: '1724470B:g', x: 100, y: 50, s: 120, r: -10.3, k: 'circle', c: 0.6 },
+    { e: '1700000:r', x: 0, y: 333, s: 22, r: 180, k: 'square', c: 1 }], text_top: true, outline: true, sticker_text: false });
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '4242' })).settings.back, put.settings.back);
+  const bad = async (b) => (await post(e, { action: 'card_put', token, settings: { ...GOOD, back: b } })).error?.code;
+  for (const b of [{ stickers: [{ e: 'sample1:r', x: 1, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:x', x: 1, y: 1, s: 30, r: 0 }] },
+    { stickers: [{ e: '1:r', x: 600, y: 1, s: 30, r: 0 }] }, { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0, k: 'star' }] },
+    { stickers: [{ e: '1:r', x: 1, y: 1, s: 30, r: 0 }, { e: '1:r', x: 2, y: 2, s: 30, r: 0 }] }, { foo: 1 },
+    { text_xy: { x: 300, y: 0 } }, { text_r: 200 }, { text_s: 3 }, { text_s: '1' }, { text_xy: { x: 1 } }, { text_xy: { x: 1, y: 1, z: 1 } },
+    { text_parts: { foo: { x: 1 } } }, { text_parts: { name: { z: 1 } } }, { text_parts: { name: { s: 3 } } }, { text_parts: { name: 1 } }, { text_parts: [] },
+    { stickers: Array.from({ length: 51 }, (_, i) => ({ e: `${i + 1}:n`, x: 1, y: 1, s: 30, r: 0 })) }]) {
+    assert.strictEqual(await bad(b), 'bad_settings', JSON.stringify(b).slice(0, 80));
+  }
+  e.nowMs = now += 60_000;
+  const moved = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_xy: { x: -20.04, y: 15 }, text_r: -12.34, text_s: 1.234 } } });
+  assert.deepStrictEqual(moved.settings.back, { stickers: [], text_top: false, outline: false, sticker_text: false, text_xy: { x: -20, y: 15 }, text_r: -12.3, text_s: 1.23 });
+  e.nowMs = now += 60_000;
+  const parts = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], sticker_text: true, text_parts: { name: { x: 3.04, r: 0 }, title: { s: 1 }, rank: { r: -5, s: 0.8 } } } } });
+  assert.deepStrictEqual(parts.settings.back.text_parts, { name: { x: 3 }, rank: { r: -5, s: 0.8 } });
+  e.nowMs = now += 60_000;
+  const plain = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: true, text_parts: { name: { x: 3 } } } } });
+  assert.strictEqual(plain.settings.back.text_parts, undefined);   // 白フチでなければ捨てる
+  e.nowMs = now += 60_000;   // 書き込み間隔
+  const empty = await post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [], text_top: false, outline: false } } });
+  // 空でも欄は残す (全部剥がした = 何も貼らない。欄が無いと画面が初期配置を出す)
+  assert.deepStrictEqual(empty.settings.back, { stickers: [], text_top: false, outline: false, sticker_text: false });
+  e.nowMs = now += 60_000;
+  const none = await post(e, { action: 'card_put', token, settings: { ...GOOD } });
+  assert.strictEqual('back' in none.settings, false);
+});
+
+test('card_put: preview (cardOpenEdit) だけ、ログインなしで uid を指定して書ける', async () => {
+  const e = env();
+  e.nowMs = Date.parse('2026-10-20T00:00:00Z');
+  assert.strictEqual((await post(e, { action: 'card_put', uid: '777', settings: GOOD })).error.code, 'invalid_session', '本番は不可');
+  e.cfg.cardOpenEdit = true;
+  const put = await post(e, { action: 'card_put', uid: '777', settings: GOOD });
+  assert.strictEqual(put.ok, true, JSON.stringify(put));
+  assert.deepStrictEqual((await post(e, { action: 'card_get', uid: '777' })).settings, GOOD);  // 持っていない二つ名でも通す (preview の確認用)
+  e.nowMs += 60_000;
+  const t = await post(e, { action: 'card_put', uid: '777', settings: { ...GOOD, title: { pre: 'ja-0003', post: null } } });
+  assert.strictEqual(t.ok, true, JSON.stringify(t));
+});
+
+test('card_put: シールは持っているものだけ (選手のデータの sticker = 一番上の色、下の色は全部持っている)', async () => {
+  const e = env({ player: STICKER_PLAYER });
+  const token = await loginToken(e);
+  let now = Date.parse('2026-10-21T00:00:00Z');
+  const put = async (/** @type {string[]} */ keys) => {
+    e.nowMs = now += 60_000;
+    return post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: keys.map((k, i) => ({ e: k, x: 10 + i, y: 10, s: 50, r: 0 })) } } });
+  };
+  assert.strictEqual((await put(['1700000:r', '1700000:n', '1724470B:g', '1724470B:s', '1800000:s'])).ok, true);
+  for (const k of ['1724470B:r', '1800000:g', '1900000:n', '1724470:g', '1234567:n']) {
+    const r = await put([k]);
+    assert.strictEqual(r.error && r.error.code, 'sticker_not_owned', k);
+  }
+  // 選手のデータが読めないときは保存しない (シールが無ければ読まない)
+  const e2 = env({ player: { status: 500, body: {} } });
+  const t2 = await loginToken(e2);
+  e2.nowMs = now;
+  assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [{ e: '1700000:r', x: 1, y: 1, s: 30, r: 0 }] } } })).error.code, 'internal');
+  assert.strictEqual((await post(e2, { action: 'card_put', token: t2, settings: { ...GOOD, back: { stickers: [], text_top: true } } })).ok, true);
+});
+
+test('card_put: preview (stickersPreview) だけ、選手のデータにシールが無ければプレビュー用の判定で確かめる', async () => {
+  const e = env({ player: PLAYER_NO_STICKER });
+  const token = await loginToken(e);
+  e.nowMs = Date.parse('2026-10-22T00:00:00Z');
+  const put = (k) => post(e, { action: 'card_put', token, settings: { ...GOOD, back: { stickers: [{ e: k, x: 1, y: 1, s: 30, r: 0 }] } } });
+  assert.strictEqual((await put('1700000:g')).error.code, 'sticker_not_owned', '本番はプレビュー用を見ない');
+  e.cfg.stickersPreview = true;
+  e.previewShard = { 4242: { 1700000: 'g', '1724470B': 'n' } };
+  e.nowMs += 60_000;
+  assert.strictEqual((await put('1700000:s')).ok, true);
+  e.nowMs += 60_000;
+  assert.strictEqual((await put('1700000:r')).error.code, 'sticker_not_owned');
 });

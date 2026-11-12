@@ -1,6 +1,8 @@
 // @ts-check
 // src/pages/p_edit.js — site/p/edit.html (プレイヤーカードの編集、2026-09-30)。
 //   選べるもの: テンプレート (今は 1 種類)・色 (js/player_card.js COLORS)・カードに出す実績 (選んだ順に入る。入りきらないものは選べない)。
+//   表と裏はタブで切り替える (?tab=back で裏から)。裏 = 裏面の名前とシール (src/pages/card_back_edit.js)。「適用」で表も裏もまとめて保存。
+//   preview の Worker だけは、ログインなしで誰のカードでも編集・適用できる (見た目の確認用、js/login.js openEdit)。
 //   編集中の状態はこのブラウザに自動で保存し (下書き)、「適用」でサーバに保存してカードに出す (js/player_card_model.js)。
 //   本人確認: start.gg でログインし (js/login.js)、ログインした人がこの選手のときだけ編集できる (サーバも token の本人の分しか書かない)。
 //   API の無い ConoHa のプレビューでは本人確認を飛ばし、保存もこのブラウザ (見た目の確認用)。docs/login_design.md
@@ -13,7 +15,8 @@ import SpspLogin from '../../site/js/login.js';
 import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/player_card.js';
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
-import { loadCardData, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import { mountBackEditor } from './card_back_edit.js';
+import { loadCardData, loadCardDefaultBack, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, draftBackTouched, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -37,6 +40,7 @@ function notFound(msg) {
 /** @param {number} uid @returns {'ok' | 'login' | 'other'} */
 function ownerState(uid) {
   if (!SpspLogin.apiAvailable()) return 'ok';   // ConoHa のプレビュー (ログインできない) では確認しない
+  if (SpspLogin.openEdit() && !(SpspLogin.session() && SpspLogin.isSelf(uid))) return 'ok';   // preview の Worker: 誰でも
   if (!SpspLogin.session()) return 'login';
   return SpspLogin.isSelf(uid) ? 'ok' : 'other';
 }
@@ -54,7 +58,6 @@ async function main() {
 
   const name = SPSPFormat.stripTeamTag(data.rec.display);
   document.title = `${name} | SPSP`;
-  $('ce-name').textContent = name;
   /** @type {HTMLAnchorElement} */ ($('ce-back')).href = './' + (DISC ? '?d=' + encodeURIComponent(DISC) : '?uid=' + uid);
   $('loading').style.display = 'none';
   $('ce-root').style.display = '';
@@ -66,8 +69,12 @@ async function main() {
   const [appliedRes, ownedRec] = await Promise.all([fetchApplied(uid), titlesOn ? SpspTitleNotice.fetchOwned(uid) : Promise.resolve(null)]);
   /** @type {CardSettings | null} */
   let applied = appliedRes;
+  const draft = loadDraft(uid);
+  // 下書きの裏面は、その下書きで裏面を変えたときだけ使う (変えていなければ適用済みの裏面のまま)
+  let backTouched = !!draft && draftBackTouched(uid);
+  if (draft && !backTouched) draft.back = applied ? applied.back ?? null : null;
   /** @type {CardSettings} */
-  let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
+  let st = draft || applied || { ...DEFAULT_SETTINGS };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
   // 二つ名: 持っているものは記録 (D1、GET /api/titles)。API の無い ConoHa のプレビューだけは、記録の代わりに出た大会から計算して見た目を確かめる
@@ -82,7 +89,14 @@ async function main() {
   const owned = new Set(bitsTitles(lang, ownedBits).map(t => t.id));
   /** 持っていて、その位置に使えるものの文字 @param {string} id @param {'pre' | 'post'} slot */
   const titleText = (id, slot) => { const t = owned.has(id) ? titleById(lang, id) : null; return t && usableIn(t, slot) ? t.text : ''; };
-  const draw = () => SPSPPlayerCard.render(cardEl, buildCardModel(data, st, titleText), { live: true });
+  const backEl = $('ce-card-back');
+  // 裏面の初期配置 (裏面の設定が無い間はこれが出る。裏のタブの編集もここから始める。読めなければ何も貼っていない裏面)
+  const defBack = await loadCardDefaultBack(data).catch(() => null);
+  const draw = () => {
+    const model = buildCardModel(data, st, titleText);
+    SPSPPlayerCard.render(cardEl, model, { live: true });
+    SPSPPlayerCard.renderBack(backEl, model, { live: true });
+  };
   draw();
 
   const owner = ownerState(uid);
@@ -108,12 +122,16 @@ async function main() {
   const same = (/** @type {CardSettings | null} */ a, /** @type {CardSettings | null} */ b) => JSON.stringify(a) === JSON.stringify(b);
   /** @param {Partial<CardSettings>} patch */
   const update = patch => {
+    if ('back' in patch && !same(/** @type {any} */ (patch.back ?? null), /** @type {any} */ (st.back ?? null))) backTouched = true;
     st = { ...st, ...patch };
     if (st.ach && !st.ach.length) st.ach = null;   // 何も選んでいなければ自動
-    saveDraft(uid, st);
-    draw();
+    saveDraft(uid, st, backTouched);
+    // 裏のタブ (シールを貼っている間) はプレビューのカードが隠れているので描かない (シールを動かすたびに全部描き直すと重い)。表に戻るときに描く
+    if (curTab === 'back') previewStale = true;
+    else draw();
     paint();
   };
+  let previewStale = false;
 
   // テンプレート: 小さなカードの絵 (今の色で)
   const tplEl = $('ce-templates');
@@ -159,6 +177,7 @@ async function main() {
     const done = same(st, applied || DEFAULT_SETTINGS);   // 適用済みと同じなら押せない
     apply.disabled = done;
     apply.textContent = done ? i18n('card_edit.applied') : i18n('card_edit.apply');
+    $('ce-discard').hidden = done;
     ($('ce-reset')).style.visibility = picked.length ? '' : 'hidden';
     // 畳んだ見出しの右: 今の選択 (実績 = 自動か選んだ数、大会 = 自動か選んだ大会名)
     $('ce-ach-sum').textContent = picked.length ? i18n('card_edit.n_selected', { n: picked.length }) : i18n('card_edit.auto');
@@ -330,20 +349,99 @@ async function main() {
   });
   // リセットは見出しの行 (summary) の中にあるので、押しても欄が開閉しないようにする
   $('ce-reset').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); update({ ach: null }); });
-  // デフォルトに戻す: テンプレート・色・実績・大会を全部既定に (保存は「適用」で)
-  $('ce-default').addEventListener('click', () => update({ ...DEFAULT_SETTINGS }));
+  // プレビューを押すと表と裏が入れ替わる
+  const preview = $('ce-preview');
+  // カードの裏面の無い地域 (北米、region config features.cardBack) は裏返さず、裏のタブも出さない
+  const backOn = !(SPSP.site && SPSP.site.features && SPSP.site.features.cardBack === false);
+  preview.addEventListener('click', e => { if (backOn && !(/** @type {Element} */ (e.target)).closest('a')) preview.classList.toggle('flipped'); });
+  // デフォルトに戻す: 表 (テンプレート・色・実績・大会・二つ名) を既定に (保存は「適用」で)。裏 (名前・シール) はそのまま
+  $('ce-default').addEventListener('click', () => { update({ ...DEFAULT_SETTINGS, latin: st.latin ?? null, back: st.back ?? null }); });
+
+  // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
+  if (backOn) $('ce-tabs').style.display = '';
+  let backMounted = false;
+  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void, flush: () => void } | null} */
+  let backEditor = null;
+  /** @type {'front' | 'back' | null} */
+  let curTab = null;
+  /** 切り替えをプレイヤーページの裏返し (player_card.css .pcard-flip: rotateY 180°、0.5 秒 ease) と同じ見え方で:
+   * 今のカードを 90° まで回して隠し、入れ替えて、次のカードを反対側の 90° から戻す (表と裏でカードの場所が少し違うので 2 枚に分けて)
+   * @param {HTMLElement} from @param {() => HTMLElement} to 入れ替えたあとに回すもの @param {number} dir 1 = 表→裏、-1 = 裏→表 @param {() => void} swap */
+  const flip = async (from, to, dir, swap) => {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof from.animate !== 'function') { swap(); return; }
+    try {
+      await from.animate([{ transform: 'rotateY(0deg)' }, { transform: `rotateY(${90 * dir}deg)` }], { duration: 250, easing: 'ease-in' }).finished;
+    } catch (e) { /* 途中で止まっても入れ替える */ }
+    swap();
+    to().animate([{ transform: `rotateY(${-90 * dir}deg)` }, { transform: 'rotateY(0deg)' }], { duration: 250, easing: 'ease-out' });
+  };
+  /** @param {'front' | 'back'} tab */
+  const setTab = tab => {
+    if (tab === curTab) return;
+    const first = curTab === null;
+    curTab = tab;
+    preview.classList.remove('flipped');   // プレビューを押して裏を見ていたら表に戻してから回す
+    for (const b of $('ce-tabs').querySelectorAll('button')) {
+      const on = /** @type {HTMLElement} */ (b).dataset.tab === tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    }
+    const swap = () => {
+      $('ce-pane-front').style.display = tab === 'front' ? '' : 'none';
+      $('ce-pane-back').style.display = tab === 'back' ? '' : 'none';
+      preview.style.display = tab === 'front' ? '' : 'none';   // 裏のタブは自分のカード (シールを貼る台) を出す
+      $('ce-front-head').style.display = tab === 'front' ? '' : 'none';
+      // 表のカードは見えるようになってから描き直す: 隠れている間に描くと幅が測れず、長い名前が詰まらない
+      // (裏のタブで開いたとき、Web フォントを読み終えたあとの描き直しも隠れたままだった)
+      if (tab === 'front' && !first) { previewStale = false; draw(); }
+      // 裏のカードにも表で変えたもの (色・二つ名など) を出す
+      if (tab === 'back' && backEditor) backEditor.refresh();
+    };
+    const frontCard = () => /** @type {HTMLElement} */ (preview.querySelector('.pcard-flip'));
+    const backCard = () => $('bz-stage');
+    if (first) swap();
+    else if (tab === 'back') flip(frontCard(), backCard, 1, swap);
+    else flip(backCard(), frontCard, -1, swap);
+    try {
+      const u = new URL(location.href);
+      if (tab === 'back') u.searchParams.set('tab', 'back'); else u.searchParams.delete('tab');
+      history.replaceState(null, '', u.toString());
+    } catch (e) { /* URL を変えられなくても切り替えはできる */ }
+    if (tab === 'back' && !backMounted) {
+      backMounted = true;
+      mountBackEditor({
+        uid, data, back: st.back ?? null, defBack, latin: st.latin ?? null,
+        model: (latin, back) => buildCardModel(data, { ...st, latin, back }, titleText),
+        onChange: patch => update(patch),
+      }).then(api => {
+        backEditor = api;
+        // 組み立てが裏返しの途中 (裏の欄が隠れている間) だと名前の幅が測れないので、もう見えていれば描き直す (まだなら見せるときに描く)
+        if ($('ce-pane-back').style.display !== 'none') api.refresh();
+      }).catch(e => console.error(e));
+    }
+  };
+  for (const b of $('ce-tabs').querySelectorAll('button')) {
+    b.addEventListener('click', () => setTab(/** @type {'front' | 'back'} */ (/** @type {HTMLElement} */ (b).dataset.tab)));
+  }
+  setTab(backOn && params.get('tab') === 'back' ? 'back' : 'front');
+  // 適用していない変更を捨てる: 下書きを消して開き直す (適用済みの設定・初期配置から描き直す)
+  $('ce-discard').addEventListener('click', () => { clearDraft(uid); location.reload(); });
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;
+    if (backEditor) backEditor.flush();   // シールを動かした直後 (まとめ待ちの変更) も入れる
     const r = await putApplied(uid, st);
     if (r.ok) {
       // 適用したら編集ページを閉じてプレイヤーページへ (新しい設定のカードがすぐ出る)
       applied = { ...st }; clearDraft(uid);
-      location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href);
+      // 裏のタブで適用したら、プレイヤーページのカードを裏返して見せる
+      location.assign(/** @type {HTMLAnchorElement} */ ($('ce-back')).href + (curTab === 'back' ? '#back' : ''));
       return;
     }
     // 間隔が短すぎて断られたときは待てばよいことを伝える (それ以外は保存できなかった旨だけ)
-    alert(r.code === 'rate_limited' ? i18n('card_edit.apply_too_soon') : i18n('card_edit.apply_failed'));
+    alert(r.code === 'rate_limited' ? i18n('card_edit.apply_too_soon')
+      : r.code === 'sticker_not_owned' ? i18n('card_edit.sticker_not_owned') : i18n('card_edit.apply_failed'));
     paint();
   });
 

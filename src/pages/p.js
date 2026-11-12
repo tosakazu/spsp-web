@@ -2,6 +2,7 @@
 // src/pages/p.js — site/p/index.html のスクリプト。以前はインライン <script> と <script src> の並びだった (2026-09-14 に移動)。
 // import が依存 (default import = そのモジュールの api、副作用 import = グローバルに置くだけのもの)。tools/build/build_site.mjs が esbuild で束ねて dist/assets/p.js にする。
 import { escapeHtml } from '../../site/js/html.js';
+import SPSPLogo from '../../site/logo.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import SPSPLinks from '../../site/js/links.js';
@@ -19,6 +20,7 @@ import { charName } from '../../site/js/chars.js';
 import { achievementLabel } from '../../site/js/achievements.js';
 import SPSPGeo from '../../site/js/geo.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
+import SpspLatinName from '../../site/js/latin_name.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspMyNotice from '../../site/js/my_notice.js';
 import SpspLive from '../../site/js/live.js';
@@ -26,7 +28,7 @@ import SpspReportNotice from '../../site/js/report_notice.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import SpspLiveBrowser from '../../site/js/live_browser.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
-import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard } from '../../site/js/player_card_model.js';
+import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard, loadCardDefaultBack } from '../../site/js/player_card_model.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -93,6 +95,10 @@ function playerTourTag(t, kind) {
 }
 
 const params = new URLSearchParams(location.search);
+/** #back で来た (カード編集の裏で適用した): 裏を見せたら裏のまま止める。ふだんは裏を見せてから表に戻す */
+const CARD_KEEP_BACK = location.hash === '#back';
+/** カードの裏面 (英字名・大会シール) を使う地域か (北米はまだ無い: 裏返さない・裏を描かない。region config features.cardBack) */
+const CARD_BACK_ON = !(SPSP.site && SPSP.site.features && SPSP.site.features.cardBack === false);
 // 選手の指定: ?d=<start.gg discriminator> が既定 (2026-09-14)。?uid=<uid> と #<uid> も引き続き通る。
 // ?d= は data/discriminators.json (js/links.js が読む) で uid に解決してから読み込む。
 const DISC_PARAM = (params.get('d') || '').trim().toLowerCase();
@@ -570,6 +576,8 @@ let CHAR_IDX = null;       // character_index.json (loadData で fetch)
 /** カードの設定 (本人が編集ページで適用したもの)。選手データと並行して読み始め、カードはこれを待ってから 1 回だけ描く
  * (既定のカードを先に出すと、設定のあるカードに描き直すときに一瞬ちらつくため) @type {Promise<any> | null} */
 let CARD_SETTINGS = null;
+/** @type {Record<string, string> | null} */
+let NAME_READINGS = null;   // 漢字の名前の読み (data/name_readings.json、カード裏面の英字名。漢字の名前のときだけ読む)
 /** @type {Record<string, CharEmoji> | null} */
 let CHAR_EMOJI = null;     // data/char_emoji.json { char_id: {name, emoji} } (loadData で fetch)
 /** @type {Record<string, string> | null} */
@@ -822,9 +830,11 @@ function setupSubrankDetail() {
 
 // 最上部の選手カード (../js/player_card.js) に渡すデータ (中身の組み立ては ../js/player_card_model.js。編集ページと共有)
 /** @returns {import('../../site/js/player_card_model.js').CardData} */
+/** カードのデータに後から足すもの (裏面の初期配置 defBack)。cardData() は呼ぶたびに作り直すので、ここに持つ @type {any} */
+const CARD_DATA_EXTRA = { get uid() { return UID; }, get player() { return PLAYER; } };
 function cardData() {
-  return { uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
-           overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI };
+  return { defBack: CARD_DATA_EXTRA.defBack, uid: UID, player: PLAYER, rec: MAIN_REC, meta: META, subranks: PLAYER_SUBRANKS, prefs: PLAYER_PREF,
+           overseas: OVERSEAS_UIDS, charIdx: CHAR_IDX, charEmoji: CHAR_EMOJI, readings: NAME_READINGS };
 }
 
 function render() {
@@ -875,21 +885,125 @@ function render() {
   // まず既定で出し、設定が読めたら描き直す (読めなくてもカードは出す)
   // 設定の読み込みは loadData で選手データと一緒に始めてある。待つのは 2 秒まで (遅ければ既定のカードを出し、届いたら描き直す)。
   // 待つ間もカードの箱は aspect-ratio で場所を取っているので、下の欄は動かない
+  // カードの表はすぐ既定の設定で仮に描いて出し (読み込み中の表示 .pc-loading はそれまで)、設定が届いたら描き直す。
+  // 設定・英字名の読みの表・裏の準備 (シールの絵とホロ・強制ダークモードの画像) がそろったら、裏返して裏を見せ、
+  // 少ししたら表に戻す (#back で来たときは裏のまま)。それまでに自分で裏返していたら何もしない。
+  // 時間では打ち切らない (遅くても描き終わったら裏返す。描き終わる前には裏返さない)。どれかが読めなかったときだけ裏返さない
+  const wrapEl = document.getElementById('pcard-wrap');
+  let revealed = false;
+  let introDone = false;
+  const setFlipped = (/** @type {boolean} */ on) => {
+    if (!wrapEl) return;
+    wrapEl.classList.toggle('flipped', on);
+    document.getElementById('pcard')?.setAttribute('aria-hidden', String(on));
+    document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!on));
+  };
+  const reveal = () => {
+    if (revealed || !wrapEl) return;
+    revealed = true;
+    wrapEl.classList.remove('pc-loading');
+  };
+  // 紹介の段階: wait (裏返す前) → toBack (裏へ回っている 0.5 秒) → back (裏を見せている 1.2 秒) → toFront (表へ回っている 0.5 秒) → 終わり
+  /** @type {'' | 'wait' | 'toBack' | 'back' | 'toFront'} */
+  let introPhase = '';
+  /** @type {ReturnType<typeof setTimeout>[]} */
+  let introTimers = [];
+  const FLIP_MS = 500, SHOW_MS = 1200;
+  const intro = () => {
+    if (introDone || !wrapEl || !CARD_BACK_ON) return;
+    introDone = true;
+    if (wrapEl.classList.contains('flipped')) return;   // もう自分で裏返している
+    introPhase = 'wait';
+    const at = (/** @type {number} */ ms, /** @type {() => void} */ fn) => introTimers.push(setTimeout(fn, ms));
+    at(300, () => { introPhase = 'toBack'; setFlipped(true); });
+    at(300 + FLIP_MS, () => { introPhase = 'back'; });
+    if (CARD_KEEP_BACK) { at(300 + FLIP_MS + 1, () => { introPhase = ''; }); return; }
+    at(300 + FLIP_MS + SHOW_MS, () => { introPhase = 'toFront'; setFlipped(false); });
+    at(300 + FLIP_MS * 2 + SHOW_MS, () => { introPhase = ''; });
+  };
+  // 紹介の前・途中にカードを触ったら止める: 裏返す前・裏を見せている間はその面のまま、回っている途中なら回る前の面に戻す。
+  // まだ紹介が始まっていなければ、もうしない。止めるためのタップは、ボタンを出すタップにはしない
+  if (wrapEl) {
+    wrapEl.addEventListener('pointerdown', () => {
+      if (introDone && !introPhase) return;
+      introDone = true;
+      introTimers.forEach(clearTimeout);
+      introTimers = [];
+      const was = introPhase;
+      introPhase = '';
+      if (was === 'toBack') setFlipped(false);
+      else if (was === 'toFront') setFlipped(true);
+      if (was) {
+        const stop = (/** @type {Event} */ e) => { e.stopPropagation(); e.preventDefault(); };
+        wrapEl.addEventListener('click', stop, { capture: true, once: true });
+        setTimeout(() => wrapEl.removeEventListener('click', stop, { capture: true }), 600);
+      }
+    }, { capture: true });
+  }
+  setTimeout(reveal, 10000);
+  if (!card) reveal();
+  // 読み込み中の表示: SPSP のロゴのアニメーション (logo.js、ほかのページの読み込み中と同じ) と、その下に総合評価の順位
+  const loaderEl = document.getElementById('pc-loader');
+  if (loaderEl && !revealed) {
+    const logoBox = document.createElement('div');
+    loaderEl.appendChild(logoBox);
+    SPSPLogo.inline(logoBox, { sub: true });
+    const er = MAIN_REC && MAIN_REC.ranks ? MAIN_REC.ranks.ensemble : null;
+    if (er != null) {
+      const t = document.createElement('div');
+      t.className = 'pc-loader-rank';
+      t.innerHTML = `<span>${escapeHtml(i18n('ranking.tab.ensemble'))}</span><b>#${escapeHtml(String(er))}</b>`;
+      loaderEl.appendChild(t);
+    }
+  }
   if (card) {
     const settingsP = CARD_SETTINGS || Promise.resolve(null);
-    let drawn = false;
     // 二つ名の文字もサーバが返す (card_get の title_text。一覧 js/titles.js はこのページでは読まない)
-    const draw = (/** @type {any} */ x) => { drawn = true; SPSPPlayerCard.render(card, buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null)); };
-    const timer = setTimeout(() => { if (!drawn) draw(null); }, 2000);
-    settingsP.then(x => { clearTimeout(timer); if (!drawn || (x && x.settings)) draw(x); });
+    const back = CARD_BACK_ON ? document.getElementById('pcard-back') : null;
+    /** @type {any} */
+    let last = null;
+    const draw = (/** @type {any} */ x) => {
+      last = x;
+      const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
+      SPSPPlayerCard.render(card, model);
+      if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
+      reveal();
+    };
+    draw(null);   // 仮: 既定の設定ですぐ
+    // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す。読めたら true
+    const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
+    const readingsP = kanji
+      ? SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } return !!r; }, () => false)
+      : Promise.resolve(true);
+    // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
+    // 裏面の設定が無い人は、持っているシールの初期配置を足してから (js/player_card_model.js loadCardDefaultBack。設定が届く前には読まない)
+    const settledP = settingsP.then(async x => {
+      // (設定が読めなかったときは出さない: 自分で貼った人の裏面に、貼っていないシールを出さない)
+      const def = back && x && !x.failed && !(x.settings && x.settings.back) ? await loadCardDefaultBack(CARD_DATA_EXTRA).catch(() => null) : null;
+      if ((x && x.settings) || def) draw(x);
+      return true;
+    }).catch(() => false);
+    // 全部そろって描き終わったら裏返しの紹介。読めなかったものがあれば紹介しない
+    // それまではカードを指で動かせない (.pc-wait。裏返せるようになってから。読めなかったときも、そこで動かせるようにする)
+    const settle = () => wrapEl?.classList.remove('pc-wait');
+    if (back) { wrapEl?.classList.add('pc-wait'); setTimeout(settle, 15000); }   // 万一終わらなくても、いつまでも動かせないままにはしない
+    Promise.all([readingsP, settledP])
+      .then(([a, b]) => (a && b ? Promise.all([SPSPPlayerCard.ready(card), back ? SPSPPlayerCard.ready(back) : true]).then(r => r.every(Boolean)) : false))
+      .then(ok => { settle(); if (ok) intro(); }, settle);
   }
   // 編集ページへ (?d= は start.gg の discriminator、無ければ uid)
   const editBtn = /** @type {HTMLAnchorElement | null} */ (document.getElementById('pc-edit-btn'));
   if (editBtn) {
     editBtn.href = SPSP.pageHref('edit.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
+    // カードが裏を向いているときは、編集ページも裏のタブから
+    const editBase = editBtn.href;
+    editBtn.addEventListener('click', () => {
+      editBtn.href = editBase + (document.getElementById('pcard-wrap')?.classList.contains('flipped') ? '&tab=back' : '');
+    });
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
     // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
-    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable()) ? '' : 'none'; };
+    // preview (誰でも編集できる、CARD_OPEN_EDIT) はログインしていてもいなくても、どの選手でも出す
+    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable() || SpspLogin.openEdit()) ? '' : 'none'; };
     showEdit();
     SpspLogin.onChange(showEdit);
     SpspLogin.verify().then(showEdit).catch(() => {});
@@ -2175,7 +2289,7 @@ function downloadBlob(blob, name) {
 function onCardImage(btn, fn) {
   if (!btn) return;
   btn.addEventListener('click', async () => {
-    const card = document.getElementById('pcard');
+    const card = shownCard();
     if (!card || !MAIN_REC) return;
     const label = btn.querySelector('span');
     const orig = label ? label.textContent : '';
@@ -2191,6 +2305,49 @@ function onCardImage(btn, fn) {
     }
   });
 }
+/** 共有用: 表と裏の両方の PNG (今見えている面を先に)。裏面の無い地域・裏を描けなかったときは見えている面だけ
+ * @returns {Promise<Blob[]>} */
+async function captureBothFaces() {
+  const shown = shownCard();
+  if (!shown) return [];
+  const first = await SPSPPlayerCard.capture(shown);
+  if (!first) throw new Error('empty');
+  const otherId = shown.id === 'pcard' ? 'pcard-back' : 'pcard';
+  const other = CARD_BACK_ON ? document.getElementById(otherId) : null;
+  if (!other || !other.querySelector('.pc-in')) return [first];
+  try {
+    await SPSPPlayerCard.ready(other);   // 裏のシールの絵を読み終えてから
+    const second = await SPSPPlayerCard.capture(other);
+    return second ? [first, second] : [first];
+  } catch (e) { return [first]; }
+}
+/** 共有のボタン: 押している間は「生成中…」。表と裏の画像 (File) を fn に渡す
+ * @param {HTMLElement | null} btn @param {(files: File[]) => Promise<void>} fn */
+function onCardImages(btn, fn) {
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!shownCard() || !MAIN_REC) return;
+    const label = btn.querySelector('span');
+    const orig = label ? label.textContent : '';
+    btn.setAttribute('disabled', ''); if (label) label.textContent = i18n('share.s2');
+    try {
+      const blobs = await captureBothFaces();
+      const base = cardFileName();
+      let files = blobs.map((b, i) => new File([b], base + (blobs.length > 1 && i ? '_2' : '') + '.png', { type: 'image/png' }));
+      // 2 枚を渡せない共有シートなら 1 枚 (今見えている面) だけ
+      const nav = /** @type {any} */ (navigator);
+      if (files.length > 1 && nav.canShare && !nav.canShare({ files })) files = files.slice(0, 1);
+      await fn(files);
+    } catch (err) {
+      if (/** @type {any} */ (err).name !== 'AbortError') alert(i18n('player.card.capture_failed') + /** @type {Error} */ (err).message);
+    } finally {
+      btn.removeAttribute('disabled'); if (label) label.textContent = orig;
+    }
+  });
+}
+// 保存は今見えている面 (表か裏)、共有は表と裏の両方 (今見えている面が先) を画像にする
+const shownCard = () => document.getElementById(
+  document.getElementById('pcard-wrap')?.classList.contains('flipped') ? 'pcard-back' : 'pcard');
 // 保存はカードをタップして出るボタン
 for (const id of ['pc-ov-save']) onCardImage(document.getElementById(id), blob => downloadBlob(blob, cardFileName() + '.png'));
 // 共有: 画像つきの共有シートが使えれば (スマホなど) カードの画像とページの URL を渡す (X などアプリを選べる)。
@@ -2235,10 +2392,9 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   if (shareBtn && !canShareImage()) {
     SPSPShare.setup(shareBtn, shareData);
   } else {
-    onCardImage(shareBtn, async blob => {
+    onCardImages(shareBtn, async files => {
       const d = shareData();
-      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-      await /** @type {any} */ (navigator).share({ files: [file], title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
+      await /** @type {any} */ (navigator).share({ files, title: d.title, text: `${d.text}\n\n${d.url}` });   // URL は空行をはさんで次に
     });
   }
 }
@@ -2248,9 +2404,8 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
 {
   const btn = document.getElementById('lr-share-btn');
   if (btn && canShareImage()) {
-    onCardImage(btn, async blob => {
-      const file = new File([blob], cardFileName() + '.png', { type: 'image/png' });
-      await /** @type {any} */ (navigator).share({ files: [file], title: shareData().title, text: `${latestShareText()}\n\n${location.href}` });
+    onCardImages(btn, async files => {
+      await /** @type {any} */ (navigator).share({ files, title: shareData().title, text: `${latestShareText()}\n\n${location.href}` });
     });
   } else if (btn) {
     btn.addEventListener('click', async () => {
@@ -2262,16 +2417,134 @@ for (const id of ['pc-share-btn']) {   // 見出しの横
   }
 }
 
-// カードをタップすると、カードの上に編集 (本人のページだけ)・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+// カードをタップすると、カードの上に編集 (本人のページだけ)・裏返す・保存が出る (もう一度・カードの外をタップで消える)。カードの中のリンクはそのまま飛ぶ
+// #back で来たら (カード編集の裏で適用したとき) 裏返して出す
 {
   const wrap = document.getElementById('pcard-wrap');
+  // 裏面の無い地域では裏返すボタンを出さない
+  if (!CARD_BACK_ON) document.getElementById('pc-ov-flip')?.remove();
+  if (wrap && CARD_KEEP_BACK) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 残っても困らない */ }
+  }
   document.addEventListener('click', e => {
     if (!wrap) return;
     const el = /** @type {Element} */ (e.target);
+    if (el.closest('#pc-ov-flip') && !CARD_BACK_ON) return;
+    if (el.closest('#pc-ov-flip')) {
+      const flipped = wrap.classList.toggle('flipped');
+      document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
+      document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
+      return;
+    }
     if (el.closest('#pc-overlay')) return;
-    if (el.closest('#pcard') && !el.closest('a')) wrap.classList.toggle('show');
+    if (el.closest('#pcard, #pcard-back') && !el.closest('a')) wrap.classList.toggle('show');
     else wrap.classList.remove('show');
   });
+}
+
+// カードを指・マウスで動かす: ゆっくり動かすとその位置に合わせて傾き (裏面のシールがキラキラ = holo_badge.css の光)、
+// 横にはじくと裏返る。読み込み中 (.pc-loading) と裏の準備ができるまで (.pc-wait) は動かせない。縦の動きはページのスクロール (touch-action: pan-y)。動かしたあとはタップ (編集・裏返す・保存のボタン) にしない
+{
+  const wrap = document.getElementById('pcard-wrap');
+  const FLICK_PX = 40;        // はじいたとみなす横の距離 (画面の px)
+  const FLICK_V = 0.45;       // と速さ (px/ms、離す直前 80ms)
+  const TILT_DEG = 30;        // 傾きの最大 (端を押したとき)
+  if (wrap) {
+    /** @type {null | { id: number, x0: number, y0: number, pts: { x: number, t: number }[], moved: boolean }} */
+    let g = null;
+    let suppressClick = false;
+    const clamp01 = (/** @type {number} */ v) => Math.max(0, Math.min(1, v));
+    // 軽くするため: 傾きの値 (--card-mx / --card-my) はカード全体ではなく、使う所 (影 = 両面の .pcard、光の層 .pcb-glow) にだけ置く
+    // (全体に置くと、動かすたびにホロを重ねたシールまでスタイルを計算し直す)。指の動きは画面の描き換え 1 回につき 1 回
+    /** @type {HTMLElement[]} */
+    let varEls = [];
+    let pending = /** @type {{ x: number, y: number } | null} */ (null);
+    let raf = 0;
+    const applyTilt = () => {
+      raf = 0;
+      // 指を離したあと (戻したあと) に描き換え待ちの傾きが届いても置かない (置くと傾いたまま戻らなかった)
+      if (!pending || !g) { pending = null; return; }
+      const { x: cx, y: cy } = pending;
+      pending = null;
+      const r = wrap.getBoundingClientRect();
+      const mx = clamp01((cx - r.left) / r.width), my = clamp01((cy - r.top) / r.height);
+      for (const el of varEls) {
+        el.style.setProperty('--card-mx', mx.toFixed(3));
+        el.style.setProperty('--card-my', my.toFixed(3));
+      }
+      wrap.style.transform = `perspective(900px) rotateX(${((0.5 - my) * TILT_DEG).toFixed(2)}deg) rotateY(${((mx - 0.5) * TILT_DEG).toFixed(2)}deg)`;
+    };
+    // 傾けたまま一定時間 (指が動かない) ならまっすぐに戻す (指を離したのが届かず、傾いたまま残ることがあった)
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let idleTimer = null;
+    const IDLE_MS = 1500;
+    const tilt = (/** @type {number} */ cx, /** @type {number} */ cy) => {
+      pending = { x: cx, y: cy };
+      if (!raf) raf = requestAnimationFrame(applyTilt);
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        idleTimer = null;
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        pending = null;
+        g = null;
+        release();
+      }, IDLE_MS);
+    };
+    /** 傾け始め: 光の層を用意し (初めて傾けたときに作る、js/player_card.js ensureGlow)、値を置く所を集める */
+    const startTilt = () => {
+      const back = document.getElementById('pcard-back');
+      if (back && CARD_BACK_ON) SPSPPlayerCard.ensureGlow(back);
+      varEls = /** @type {HTMLElement[]} */ ([...wrap.querySelectorAll('.pcard, .pcb-glow')]);
+    };
+    const release = () => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      wrap.classList.remove('pc-tilt');
+      wrap.style.transition = 'transform .35s ease';
+      wrap.style.transform = '';
+      setTimeout(() => { if (!g) wrap.style.transition = ''; }, 400);
+    };
+    const flip = () => {
+      if (!CARD_BACK_ON) return;
+      const flipped = wrap.classList.toggle('flipped');
+      document.getElementById('pcard')?.setAttribute('aria-hidden', String(flipped));
+      document.getElementById('pcard-back')?.setAttribute('aria-hidden', String(!flipped));
+    };
+    wrap.addEventListener('pointerdown', e => {
+      if (g || (e.pointerType === 'mouse' && e.button !== 0) || wrap.classList.contains('pc-loading') || wrap.classList.contains('pc-wait')) return;
+      if (/** @type {Element} */ (e.target).closest('#pc-overlay')) return;
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, pts: [{ x: e.clientX, t: e.timeStamp }], moved: false };
+      wrap.style.transition = 'none';
+    });
+    wrap.addEventListener('pointermove', e => {
+      if (!g || e.pointerId !== g.id) return;
+      g.pts.push({ x: e.clientX, t: e.timeStamp });
+      while (g.pts.length > 2 && e.timeStamp - g.pts[0].t > 80) g.pts.shift();
+      if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 6) {
+        g.moved = true;
+        startTilt();
+        wrap.classList.add('pc-tilt');
+        try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても動く */ }
+      }
+      if (g.moved) tilt(e.clientX, e.clientY);
+    });
+    const end = (/** @type {PointerEvent} */ e) => {
+      if (!g || e.pointerId !== g.id) return;
+      const cur = g;
+      g = null;
+      if (!cur.moved) { wrap.style.transition = ''; return; }
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 350);
+      const dx = e.clientX - cur.x0, dy = e.clientY - cur.y0;
+      const p0 = cur.pts[0], dt = Math.max(1, e.timeStamp - p0.t);
+      const vx = (e.clientX - p0.x) / dt;
+      release();
+      if (e.type === 'pointerup' && Math.abs(dx) > FLICK_PX && Math.abs(vx) > FLICK_V && Math.abs(dx) > Math.abs(dy) * 1.2) flip();
+    };
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
+    // 動かしたあとのクリックは、カードのタップ (ボタンを出す) やリンクにしない
+    wrap.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
+  }
 }
 
 SPSPShare.setupSaveButton(document.getElementById('save-btn'), capturePng,

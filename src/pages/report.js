@@ -15,7 +15,8 @@ import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/c
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
 import SPSPViews from '../../site/js/views.js';
 import SPSPPlayerData from '../../site/js/player_data.js';
-import { cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, redrawCards, setCardRanksHidden, warmCards } from '../../site/js/player_card_embed.js';
+import { attachCardFlip } from '../../site/js/card_flip.js';
+import { cardBackOn, cardDataOf, cardSettled, cardTitleOf, mountNoDataCard, mountPlayerCard, redrawCards, setCardRanksHidden, warmCards } from '../../site/js/player_card_embed.js';
 import SpspLive from '../../site/js/live.js';
 import SpspLivePredict from '../../site/js/live_predict.js';
 import { LOWER_CLASS_NAME_PAT, makeGql } from '../../site/js/live_fetch.js';
@@ -520,9 +521,19 @@ function stationHtml(m) {
 /** VS のカード。読み込むまでは同じ大きさの空の枠、SPSP にデータが無い人 (初参加・start.gg のアカウントがつながっていない) は NO DATA のカード */
 function vsCardHtml(slot, cls, after) {
   if (!slot) return `<div class="rp-vs-side ${cls}"><div class="rp-plate"><span class="rp-plate-n">${escapeHtml(i18n('report.tbd'))}</span></div>${after || ''}</div>`;
-  const body = `<div class="rp-card rp-vs-card pcard rp-card-wait"${slot.uid ? ` data-card-uid="${escapeHtml(slot.uid)}"` : ''} data-card-name="${escapeHtml(slot.name)}"></div>`;
+  const front = `<div class="rp-card rp-vs-card pcard rp-card-wait"${slot.uid ? ` data-card-uid="${escapeHtml(slot.uid)}"` : ''} data-card-name="${escapeHtml(slot.name)}"></div>`;
+  // SPSP の選手は裏返せる (プレイヤーページと同じ裏面: 英字名・大会シール、2026-11-12)。動かし方もプレイヤーページと同じ (js/card_flip.js:
+  // 傾けるとシールが光る・横にはじくと裏返る・裏の準備ができたら 1 回だけ裏を見せる)。裏面は表を出したあとで読み (fillCards)、
+  // 読み終わるまで (.pc-wait、右上に小さなグルグル) は動かせないだけで、報告の操作はそのままできる。マッチングの演出・勝ちの演出は表だけ
+  const body = slot.uid && cardBackOn()
+    ? `<div class="rp-card rp-flip pcard-wrap" data-flip-uid="${escapeHtml(slot.uid)}"><div class="pcard-flip">${front}<div class="pcard pcard-back rp-vs-back" aria-hidden="true"></div></div></div>`
+    : front;
   return `<div class="rp-vs-side ${cls}">${body}${after || ''}</div>`;
 }
+/** 裏返しているカード (選手 ID)。画面を描き直しても裏のまま (裏面を読み終えたら戻す) @type {Set<string>} */
+const FLIPPED = new Set();
+/** 裏を見せる紹介を済ませたカード (選手 ID)。画面を描き直すたびにはやらない @type {Set<string>} */
+const INTRODUCED = new Set();
 function vsHtml(m) {
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
   return `<div class="rp-vs">${vsCardHtml(me, 'rp-me')}<div class="rp-vs-mid"><div class="rp-vs-mark">VS</div></div>${vsCardHtml(op, 'rp-op', showRankHtml())}</div>`;
@@ -607,9 +618,27 @@ function fillCards(root) {
   const noData = (el) => { mountNoDataCard(el, el.getAttribute('data-card-name') || ''); settle(el); };
   for (const el of root.querySelectorAll('.rp-vs-card:not([data-card-uid])')) noData(el);
   for (const el of root.querySelectorAll('[data-card-uid]')) {
-    mountPlayerCard(el, el.getAttribute('data-card-uid')).then((ok) => {
+    // VS のカードは裏面も (表のあとで。読み終えたら動かせるようにし、裏返していたカードは裏に戻す。初めてなら裏を 1 回見せる)
+    const wrap = /** @type {HTMLElement | null} */ (el.closest('.rp-flip'));
+    const back = wrap ? /** @type {HTMLElement | null} */ (wrap.querySelector('.rp-vs-back')) : null;
+    const fuid = (wrap && wrap.getAttribute('data-flip-uid')) || '';
+    const flip = wrap && back ? attachCardFlip(wrap, el, back, { onFlip: (on) => { if (on) FLIPPED.add(fuid); else FLIPPED.delete(fuid); } }) : null;
+    const onBack = (/** @type {boolean} */ ok) => {
+      if (!flip || !wrap || !wrap.isConnected) return;
+      flip.ready();
+      if (FLIPPED.has(fuid)) flip.setFlipped(true);
+      // 裏を 1 回見せるのは、マッチングの演出が終わってから (幕の下で回って、飛ばしたときに途中から見えないように。演出は裏面を待たない)
+      else if (ok && !INTRODUCED.has(fuid)) MATCH_ANIM.then(() => {
+        if (!wrap.isConnected || INTRODUCED.has(fuid) || FLIPPED.has(fuid)) return;
+        INTRODUCED.add(fuid);
+        flip.intro();
+      });
+    };
+    mountPlayerCard(el, el.getAttribute('data-card-uid'), { back, onBack }).then((ok) => {
       if (!el.isConnected) return;
       if (ok) { settle(el); return; }
+      if (wrap) wrap.classList.remove('pc-wait');   // 裏面は無い (グルグルを消す。動かせるが裏は空なので裏返さない)
+      if (wrap) wrap.classList.remove('pcard-wrap');
       if (el.hasAttribute('data-card-name')) noData(el);   // VS: SPSP にデータが無い人
       else el.remove();   // 次の相手の候補: 名前は上に出ているのでカードは出さない
     }).catch(() => { /* カードが出ないだけ */ });
@@ -910,7 +939,16 @@ function titleOf(uid, ms) {
   const p = cardTitleOf(uid).catch(() => '');
   return Promise.race([p, new Promise((r) => setTimeout(() => r(''), ms))]);
 }
-async function matchAnimation(m) {
+/** マッチングの演出が終わって (幕が消えて、カードの所までスクロールして) 落ち着いたら解ける。演出が無ければすぐ @type {Promise<unknown>} */
+let MATCH_ANIM = Promise.resolve();
+function matchAnimation(m) {
+  const p = runMatchAnimation(m);
+  // 前の演出がまだ出ていれば、それも待つ (もう見た試合でもう一度呼ばれても、出ている幕の下で始めない)
+  const prev = MATCH_ANIM;
+  MATCH_ANIM = p.then((skipped) => (skipped === undefined ? null : new Promise((r) => setTimeout(r, skipped ? 150 : 600))), () => null).then(() => prev);
+  return p;
+}
+async function runMatchAnimation(m) {
   if (!DEMO && seen(m.id)) return;
   if (!DEMO) markSeen(m.id);
   const me = m.slots[m.mySide]; const op = m.slots[1 - m.mySide];
@@ -961,6 +999,8 @@ async function matchAnimation(m) {
       over = true;
       clearTimeout(timer);
       document.removeEventListener('keydown', onKey);
+      // 飛ばしたときは、幕がまだ見えているうちに相手のカードの所へ動かしておく (幕が消えてから動かすと、前の位置が一瞬見えてから飛ぶ)
+      if (skip) scrollToMatch(m, true);
       ov.classList.add(skip ? 'skip' : 'out');
       setTimeout(() => { ov.remove(); res(!!skip); }, skip ? 120 : 350);
     };
@@ -991,7 +1031,9 @@ function scrollToMatch(m, instant) {
   const smooth = !reduce && !instant;
   window.scrollTo({ top: Math.max(0, y), behavior: smooth ? 'smooth' : 'auto' });
   if (!smooth) return;
-  const evs = ['touchstart', 'wheel', 'keydown', 'pointerdown'];
+  // 止めるのは、自分でスクロールし始めたとき (指を動かした・ホイール・キー) だけ。触れただけ (演出を飛ばそうとしたタップが
+  // 幕が消えたあとに届いた、など) では止めない (途中で止まって見えていた。2026-11-12)
+  const evs = ['touchmove', 'wheel', 'keydown'];
   const stop = () => { off(); window.scrollTo({ top: window.scrollY, behavior: 'auto' }); };
   const off = () => { for (const e of evs) window.removeEventListener(e, stop, true); };
   for (const e of evs) window.addEventListener(e, stop, { capture: true, passive: true });

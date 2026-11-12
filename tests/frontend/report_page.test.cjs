@@ -146,6 +146,60 @@ test('初参加の相手 (SPSP にデータが無い): NO DATA のカード', { 
   p.close();
 });
 
+test('VS のカードは裏返せる枠に入る (裏面はあとから、動かし方はプレイヤーページと同じ)。マッチングの演出のカードは表だけ。裏の準備ができるまでは動かせない (2026-11-12)', { skip }, async () => {
+  const rows = Array.from({ length: 20 }, (_, i) => [1000 + i, 'P' + (i + 1), i + 1, i + 1, i + 1, 3, 0, 0, null, null, 0, 0]);
+  const index = { format: 1, columns: ['uid', 'name', 'ens', 'tjpr', 'bt', 'lv', 'prov', 'ovs', 'char', 'pref', 'last', 'b'], rows };
+  const p = await open('?demo=match&anim=cards&p1=r3&p2=r10', { json: (u) => (/players_index\.json$/.test(u) ? index : null) });
+  await until(() => p.d.querySelector('.rp-match-ov .rp-match-card'));
+  assert.strictEqual(p.d.querySelector('.rp-match-ov .pcard-back'), null, '演出に裏面は無い');
+  assert.strictEqual(p.d.querySelector('.rp-match-ov .rp-flip'), null);
+  p.d.querySelector('.rp-match-ov').click();
+  await until(() => p.d.querySelector('.rp-current .rp-flip'));
+  const wrap = p.d.querySelector('.rp-current .rp-flip');
+  assert.ok(wrap.querySelector('.pcard-flip > .rp-vs-card') && wrap.querySelector('.pcard-flip > .pcard-back'), '表と裏');
+  assert.strictEqual(wrap.querySelector('button'), null, '裏返すボタンは無い');
+  assert.ok(!p.fetched.some((u) => /holo_badge|name_readings|event_icons/.test(u)), '裏面の物は読んでいない: ' + p.fetched.filter((u) => /holo|readings|icons/.test(u)).join(' '));
+  assert.deepStrictEqual(p.errs, []);
+  p.close();
+});
+
+test('カードを動かす (js/card_flip.js): 準備ができるまでは動かない・横にはじくと裏返る・紹介は裏を見せて表に戻る', { skip }, async () => {
+  const p = await open('?demo=match&anim=dark');
+  const code = require('esbuild').buildSync({ stdin: { contents: "import { attachCardFlip } from './site/js/card_flip.js'; window.__flip = attachCardFlip;", resolveDir: ROOT },
+    bundle: true, write: false, format: 'iife', platform: 'browser', target: 'esnext', charset: 'utf8', logLevel: 'silent', absWorkingDir: ROOT }).outputFiles[0].text;
+  p.w.eval(code);
+  const d = p.d;
+  const wrap = d.createElement('div');
+  wrap.className = 'pcard-wrap';
+  wrap.innerHTML = '<div class="pcard-flip"><div class="pcard" id="tf"></div><div class="pcard pcard-back" id="tb"></div></div>';
+  d.body.appendChild(wrap);
+  const f = p.w.__flip(wrap, d.getElementById('tf'), d.getElementById('tb'));
+  const ev = (type, x, t) => { const e = new p.w.MouseEvent(type, { bubbles: true, clientX: x, clientY: 10, button: 0 }); Object.defineProperty(e, 'pointerId', { value: 1 }); Object.defineProperty(e, 'timeStamp', { value: t }); wrap.dispatchEvent(e); };
+  const flick = () => { ev('pointerdown', 10, 0); ev('pointermove', 60, 20); ev('pointermove', 120, 40); ev('pointerup', 160, 50); };
+  assert.ok(wrap.classList.contains('pc-wait'));
+  flick();
+  assert.strictEqual(f.flipped(), false, '準備ができるまでは裏返らない');
+  f.ready();
+  flick();
+  assert.strictEqual(f.flipped(), true, 'はじくと裏返る');
+  assert.strictEqual(d.getElementById('tb').getAttribute('aria-hidden'), 'false');
+  flick();
+  assert.strictEqual(f.flipped(), false);
+  f.intro();
+  await sleep(500);
+  assert.strictEqual(f.flipped(), false, '触ったあとは紹介しない');
+  // 触っていないカードは、紹介で裏を見せて表に戻る
+  const wrap2 = wrap.cloneNode(true);
+  wrap2.className = 'pcard-wrap';
+  d.body.appendChild(wrap2);
+  const f2 = p.w.__flip(wrap2, wrap2.querySelector('.pcard'), wrap2.querySelector('.pcard-back'));
+  f2.ready();
+  f2.intro();
+  assert.ok(await until(() => f2.flipped()), '紹介で裏を見せる');
+  assert.ok(await until(() => !f2.flipped(), 4000), '表に戻る');
+  p.close();
+});
+
 test('カードのリンクは押せない (画面が移らない)', { skip }, async () => {
   const p = await open('?demo=match&anim=dark');
   await until(() => p.d.querySelector('.rp-match-ov'));

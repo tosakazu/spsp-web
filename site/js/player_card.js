@@ -3,12 +3,17 @@
 //   render(el, model)  model (下の PCardModel) からカードを組み立てて el に入れる。長い名前・大会名・大きい順位は文字サイズを詰め、
 //                      名前と大会名は必要なら 2 行にする (fit* 関数)。フォント読み込み後にもう一度詰め直す
 //   カードは 514×333 の座標系で描き、表示幅に合わせて transform: scale で縮める (css/player_card.css)
-//   capture(el)          カードだけを PNG にする (保存・共有)
+//   renderBack(el, model) 裏面 (Figma「back」: 二つ名・名前・総合順位。実績のバッジを貼る面)
+//   capture(el)          カードだけを PNG にする (保存・共有。表でも裏でも el に描いた面)
 //   makeAchFitTester(m)  編集ページ用: 実績の並び (選んだ順) がカードに入りきるかを確かめる
 //   COLORS / TEMPLATES   カードの色 (Figma の色違い) とテンプレート (今は 1 種類)
 import { escapeHtml } from './html.js';
+import { renderBadge, isTransparent, badgeToCanvas, preloadBadge, reflatten, shapePath, maskImage } from './holo_badge.js';
+import { parseKey, iconUrl, iconsNow, loadIcons } from './card_stickers.js';
 
 const W = 514;   // デザインの幅 (px)。高さは 333 (CSS の aspect-ratio)
+/** 画像にするときの倍率 (原寸の 3 倍 = 1542×999) */
+const CAPTURE_SCALE = 3;
 
 /** カードの色 (Figma「work」ページの色違い Frame 18〜21・34・36・41 と「submit」の赤)。変えるのはアクセント色 (--pc-red) だけ */
 export const COLORS = [
@@ -32,10 +37,11 @@ const colorHex = id => (COLORS.find(c => c.id === id) || COLORS[0]).hex;
  *              perfRank?: number | null, perfLv?: string, perfLvNum?: number, rankBefore?: number | null, rankAfter?: number | null }} PCardLatest */
 /** achMode: 'auto' = 上位 3 つを 1 行ずつ + 隙間埋め (既定) / 'manual' = achievements を選んだ順に行へ詰める (編集ページで選んだとき)
  * title = 二つ名 (前半・後半の文字。'' = なし (空欄)、null と title 自体が無いときは地域の既定。無くても名前の位置は同じ)
- * @typedef {{ name: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
+ * nameLatin = 裏面に出す英字の名前 (js/latin_name.js。無ければ name)
+ * @typedef {{ name: string, nameLatin?: string, title?: { pre: string | null, post: string | null } | null, loc?: { text: string, href?: string, rank?: number | null } | null, evalDate?: string, chars: PCardChar[],
  *              color?: string, achMode?: 'auto' | 'manual',
  *              rank: number | null, pills: { text: string, title?: string }[], achievements: PCardAch[], latest?: PCardLatest | null,
- *              totalTournaments: number, totalMatches: number,
+ *              totalTournaments: number, totalMatches: number, back?: import('./card_stickers.js').CardBack | null,
  *              labels: { evalDate: string, achievements: string, latest: string, overall: string, national: string, equivalent: string, noAch: string } }} PCardModel */
 
 // 数字・英字・記号の並びは欧文フォント (Zalando Sans) で組む (デザインの「Lv.5」「UF 10」「#3」と同じ)
@@ -119,6 +125,16 @@ function fitPillInner(p, maxW) {
   return false;
 }
 
+/** 二つ名「// 前半 後半」(Figma ver.1.5) の HTML。無ければ ''。表記は一覧のまま (表示の言語では変えない)。表と裏で同じ
+ * 二つ名を選んでいない側 (前半・後半ごと、値 'default') は地域の既定 (region/config.js titleDefault、「スマブラSP」「プレイヤー」)。既定の無い地域 (北米) は空のまま
+ * @param {PCardModel} m @param {string} cls */
+function titleHtml(m, cls) {
+  const tt = shownTitle(m);
+  if (!tt) return '';
+  return `<div class="${cls}"><span class="pc-title-sl">//</span>${
+    tt.pre ? `<span class="pc-title-pre">${escapeHtml(tt.pre)}</span>` : ''}${tt.post ? `<span class="pc-title-post">${escapeHtml(tt.post)}</span>` : ''}</div>`;
+}
+
 /** @param {PCardModel} m */
 function cardHtml(m) {
   const L = m.labels;
@@ -156,11 +172,8 @@ function cardHtml(m) {
       ${perf || upd ? '<div class="pc-vbar"></div>' : ''}
       <div class="pc-perf-box">${perf}${upd}</div>`;
   }
-  const tt = shownTitle(m);
-  const hasTitle = !!tt;
-  // 二つ名: 「// 前半 後半」(Figma ver.1.5)。表記は一覧のまま (表示の言語では変えない)
-  const title = tt ? `<div class="pc-title"><span class="pc-title-sl">//</span>${
-    tt.pre ? `<span class="pc-title-pre">${escapeHtml(tt.pre)}</span>` : ''}${tt.post ? `<span class="pc-title-post">${escapeHtml(tt.post)}</span>` : ''}</div>` : '';
+  const title = titleHtml(m, 'pc-title');
+  const hasTitle = !!title;
   const pills = m.pills.map(p => `<span class="pc-pill"${p.title ? ` title="${escapeHtml(p.title)}"` : ''}>${escapeHtml(p.text)}</span>`).join('');
   return `<div class="pc-in" style="--pc-red:${colorHex(m.color)}">
     <div class="pc-head${hasTitle ? ' pc-titled' : ''}">
@@ -182,6 +195,61 @@ function cardHtml(m) {
       <div class="pc-tot pc-tot-m"><span class="pc-tot-lbl">Total Matches</span><span class="pc-tot-line"></span><span class="pc-tot-v">${m.totalMatches.toLocaleString('en-US')}</span></div>
     </div>
   </div>`;
+}
+
+/** 裏面 (Figma「back」: 赤地に角の欠けた枠、中央に二つ名・英字の名前・総合順位)。実績のバッジはこの上に貼る (これから)
+ * @param {PCardModel} m */
+function backHtml(m) {
+  const title = titleHtml(m, 'pcb-title');
+  // 裏面のシール (js/card_stickers.js)。置き場所だけ書き、絵 (ホロ) は組み立てたあとに paintBackStickers で。
+  // 名前・二つ名・順位をシールの上に出すときは、シールの層を文字の列より前 (下) に置く
+  const b = m.back;
+  const st = b && b.stickers.length ? `<div class="pcb-st">${b.stickers.map((s, i) =>
+    `<div class="pcb-sk" data-i="${i}" data-x="${s.x}" data-y="${s.y}" data-s="${s.s}" data-r="${s.r}" style="left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)"></div>`).join('')}</div>` : '';
+  const col = `<div class="pcb-col">
+      ${title}
+      <div class="pcb-name"><span class="pcb-name-t">${escapeHtml(m.nameLatin || m.name)}</span></div>
+      <div class="pcb-rank"><span class="pcb-rank-h">#</span><span class="pcb-rank-n">${m.rank != null ? m.rank : '—'}</span></div>
+    </div>`;
+  return `<div class="pc-in pc-back${b && b.outline ? ' pcb-outline' : ''}${b && b.sticker_text ? ' pcb-sx' : ''}" style="--pc-red:${colorHex(m.color)}">
+    <span class="pcb-line pcb-t"></span><span class="pcb-line pcb-b"></span><span class="pcb-line pcb-l"></span><span class="pcb-line pcb-r"></span>
+    ${b && b.text_top ? st + col : col + st}
+  </div>`;
+}
+
+/** 名前・二つ名・順位の置き方 (設定 back.text_xy = 真ん中からのずれ (カードの px)・text_r = 回転 (度)・text_s = 大きさ (倍))
+ * parts = 白フチのとき、部品 (name・title・rank) ごとのずれ (back.text_parts。部品の真ん中を軸に動かしてから、全体の置き方をまとめてかける)
+ * @typedef {{ x: number, y: number, r: number, s: number, parts?: import('./card_stickers.js').TextParts }} TextPose */
+/** @param {import('./card_stickers.js').CardBack | null | undefined} b @returns {TextPose} */
+export const textPoseOf = b => ({ x: b && b.text_xy ? b.text_xy.x : 0, y: b && b.text_xy ? b.text_xy.y : 0,
+  r: (b && b.text_r) || 0, s: (b && b.text_s) || 1, ...(b && b.text_parts ? { parts: b.text_parts } : {}) });
+/** 名前・二つ名・順位を置き方どおりに置く。列 (.pcb-col) ごと上下左右にずらし、
+ *  白フチ (キャンバス) は 1 枚ずつ、カードの真ん中を軸に回して大きさを変えた所へ置き直す (列を transform で回すと、
+ *  html2canvas が変形した要素の中の回した絵の位置を誤る)。白フチでない文字は列を transform で回す
+ * @param {HTMLElement} col @param {TextPose} p */
+function applyTextPose(col, p) {
+  col.style.left = p.x + 'px'; col.style.right = -p.x + 'px';
+  col.style.top = p.y + 'px'; col.style.bottom = -p.y + 'px';
+  const cvs = /** @type {HTMLElement[]} */ (Array.from(col.querySelectorAll('.pcb-sx-l')));
+  col.style.transform = !cvs.length && (p.r || p.s !== 1) ? `rotate(${p.r}deg) scale(${p.s})` : '';
+  const rad = p.r * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), cx = W / 2, cy = 333 / 2;
+  for (const cv of cvs) {
+    const d = cv.dataset, q = (p.parts && d.part && p.parts[/** @type {'name' | 'title' | 'rank'} */ (d.part)]) || {}, k = q.s || 1;
+    const x = Number(d.x) + (q.x || 0) - cx, y = Number(d.y) + (q.y || 0) - cy, hw = Number(d.hw) * p.s, hh = Number(d.hh) * p.s;
+    const X = cx + p.s * (x * cs - y * sn), Y = cy + p.s * (x * sn + y * cs);
+    cv.style.cssText = `left:${(X - hw * k).toFixed(2)}px;top:${(Y - hh * k).toFixed(2)}px;width:${(hw * k * 2).toFixed(2)}px;height:${(hh * k * 2).toFixed(2)}px;transform:rotate(${(Number(d.rot) + p.r + (q.r || 0)).toFixed(2)}deg)`;
+  }
+}
+/** 描いてある裏面の、名前・二つ名・順位だけを置き直す (編集中のドラッグ。描き直さない) @param {HTMLElement} el renderBack した箱 @param {TextPose | null} p */
+export function setTextPos(el, p) {
+  const col = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-col'));
+  if (col) applyTextPose(col, p || { x: 0, y: 0, r: 0, s: 1 });
+  // 強制ダークモード用に重ねた画像は前の置き方のままなので外し、手が止まってから撮り直す (編集中の描き直しと同じ。
+  // 外さないと、動かす前の名前が画像に残って二重に見えた)
+  if (needsImage()) {
+    el.querySelector('.pc-img')?.remove();
+    scheduleImage(el, 1500);
+  }
 }
 
 // ── 文字サイズの自動調整 (スケール前の 514×333 座標で測る。transform は scrollWidth に影響しない) ──
@@ -295,6 +363,28 @@ function fitAll(root) {
   if (list) finishAch(list);
 }
 
+/** 裏面の詰め: 名前は 45px (Figma) から 36px まで 1 行で詰め、入らなければ区切り (「/」・空白・単語の境目) で 2 行にして
+ * 39px (Figma の 2 行の例) から詰める (どちらも 7px まで。区切りの無い長い名前は 1 行のまま小さくなる)。二つ名・順位も枠の内側 (445px) に収める
+ * @param {HTMLElement} root */
+function fitBack(root) {
+  const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (root.querySelector(sel));
+  const title = q('.pcb-title');
+  if (title) fitWidth(title, 445, 16, 9);
+  const name = q('.pcb-name');
+  const nameT = q('.pcb-name-t');
+  if (name && nameT && !fitWidth(name, 445, 45, 36)) {
+    const text = nameT.textContent || '';
+    const parts = splitTwo(text);
+    if (parts) {
+      nameT.innerHTML = escapeHtml(parts[0]) + '<br>' + escapeHtml(parts[1]);
+      name.classList.add('pc-wrap');
+      fitWidth(name, 445, 39, 7);
+    } else fitWidth(name, 445, 36, 7);   // 45 文字 (英字名の上限) の「WWW…」でも枠に収まる (約 8px)
+  }
+  const rank = q('.pcb-rank');
+  if (rank) fitWidth(rank, 445, 29, 14);
+}
+
 /** 上位 3 つは 1 行ずつ (長ければ詰める)。控え (4 つ目以降) は優先度の高い順に、入る行の左の隙間へ入れる。入らないものは出さない
  * @param {HTMLElement} list */
 function placeAuto(list) {
@@ -389,6 +479,10 @@ function applyScale(el) {
   const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
   if (!inner || !el.clientWidth) return;
   inner.style.transform = `scale(${el.clientWidth / W})`;
+  const glow = /** @type {HTMLElement | null} */ (el.querySelector('.pcb-glow'));
+  if (glow) glow.style.transform = inner.style.transform;
+  // 画像に描いたシール (丸・六角形など) は描いたときの大きさの絵なので、大きく表示するようになったら描き直す (粗くならないように)
+  for (const hb of /** @type {NodeListOf<HTMLElement>} */ (inner.querySelectorAll('.pcb-sk .hb'))) reflatten(hb);
 }
 
 /** @type {WeakSet<HTMLElement>} */
@@ -442,14 +536,352 @@ async function loadCardFonts(el) {
  * @param {{ live?: boolean }} [opts] live = 編集中のプレビュー (変えるたびに描き直す)。強制ダークモード用の画像は、
  *   古い画像を外して HTML のカードをすぐ見せ、手が止まってから (1.5 秒) 撮り直す */
 export function render(el, model, opts = {}) {
-  const live = !!opts.live;
+  mount(el, () => cardHtml(model), fitAll, !!opts.live);
+  trackReady(el, Promise.resolve());
+}
+
+// ── 描き終わりを待つ (プレイヤーページが、描きかけのカードを見せないように) ──
+/** @type {WeakMap<HTMLElement, Promise<boolean>>} */
+const readyOf = new WeakMap();
+/** 最後に描いたときの準備: Web フォント・(裏面のシールの絵とホロの素材)・(強制ダークモードなら重ねる画像)。
+ * extra が false で終わったら (シールの絵が読めなかった・間に合わなかった) 「描き終わっていない」
+ * @param {HTMLElement} el @param {Promise<unknown>} extra */
+function trackReady(el, extra) {
+  readyOf.set(el, (async () => {
+    const fonts = /** @type {any} */ (document).fonts;
+    if (fonts && fonts.ready) await fonts.ready.catch(() => {});
+    const ok = await extra.then(v => v !== false, () => false);
+    if (needsImage()) await cardSettled(el);   // 重ねる画像は詰め直しのあとに撮る (mount の settled に含む)
+    return ok;
+  })());
+}
+/** el のカードが描き終わるのを待つ (待つ間に描き直されたら、その分も待つ)。全部描けたら true、
+ * シールの絵などが読めなかった・間に合わなかったら false。描いていなければ true
+ * @param {HTMLElement} el @returns {Promise<boolean>} */
+export async function ready(el) {
+  for (let i = 0; i < 5; i++) {
+    const p = readyOf.get(el);
+    if (!p) return true;
+    const ok = await p;
+    if (readyOf.get(el) === p) return ok;
+  }
+  return false;
+}
+
+/** 裏面を el に描く (表の render と同じく、表示幅に合わせて縮め、強制ダークモードでは画像を重ねる)
+ * @param {HTMLElement} el @param {PCardModel} model @param {{ live?: boolean }} [opts] */
+export function renderBack(el, model, opts = {}) {
+  const want = !!(model.back && model.back.stickers.length);
+  // 光の層 (傾けたときのキラキラ) は初めて傾けたときに作る (ensureGlow)。描き直したら作り直す
+  glowModel.set(el, model);
+  mount(el, () => backHtml(model), root => {
+    fitBack(root);
+    if (model.back && model.back.sticker_text) paintNameStickers(root, model);
+    const col = /** @type {HTMLElement | null} */ (root.querySelector('.pcb-col'));
+    if (col) applyTextPose(col, textPoseOf(model.back));
+    if (want) paintBackStickers(root, model);
+  }, !!opts.live);
+  // 大会のアイコンの表がまだなら、読んでから描き直す (1 回だけ。描き直したらそちらの準備を待つ)
+  if (want && !iconsNow()) {
+    const again = loadIcons().then(t => { if (t && el.isConnected) renderBack(el, model, opts); return !!t; });
+    trackReady(el, again);
+    return;
+  }
+  // シールの絵とホロの素材 (と透過かどうか) を読み終えるまでを準備に入れる (時間では打ち切らない)。読めなかったら「描き終わっていない」
+  trackReady(el, want ? Promise.all((model.back?.stickers || []).map(s => {
+    const p = parseKey(s.e);
+    const src = p ? iconUrl(p.eid) : null;
+    return src && p ? preloadBadge(src, p.variant, s.k) : true;   // アイコンの無いシールは出さないので待たない
+  })).then(a => a.every(Boolean)) : Promise.resolve(true));
+}
+
+/** 裏面に描いたモデル (光の層を後から作る用) @type {WeakMap<HTMLElement, PCardModel>} */
+const glowModel = new WeakMap();
+/** 裏面の光の層を用意する (無ければ作る)。カードを傾け始めたときに呼ぶ (プレイヤーページ) @param {HTMLElement} el .pcard (裏面) */
+export function ensureGlow(el) {
+  const m = glowModel.get(el);
+  if (m && !el.querySelector('.pcb-glow')) paintGlow(el, m);
+}
+
+/** シールの光 (カードを傾けている間のキラキラ、.pc-tilt) の層。シールと同じ所・形に光 (holo_badge.css の .hb-sheen / .hb-glare) だけを置き、
+ * カードのいちばん上 (強制ダークモードでカードを画像に差し替えていても、その上) に重ねる。座標はカード (514×333) で、.pc-in と同じ倍率
+ * @param {HTMLElement} el .pcard @param {PCardModel} m */
+function paintGlow(el, m) {
+  el.querySelector('.pcb-glow')?.remove();
+  const list = (m.back && m.back.stickers) || [];
+  if (!list.length) return;
+  const glow = document.createElement('div');
+  glow.className = 'pcb-glow';
+  glow.setAttribute('aria-hidden', 'true');
+  /** @type {{ i: number, wrap: HTMLElement }[]} */
+  const lit = [];
+  for (const [i, s] of list.entries()) {
+    const p = parseKey(s.e);
+    const src = p ? iconUrl(p.eid) : null;
+    if (!p || !src || p.variant === 3) continue;   // 素 (ホロなし) のシールは光らせない
+    // 上に重なったシール (素も) と前に出した名前の所は光らせない: シールごとに、見えている所だけの型 (mask) をかけた箱に入れる。
+    // 型ができるまでは隠す
+    const wrap = document.createElement('div');
+    wrap.className = 'pcb-glow-m';
+    wrap.style.visibility = 'hidden';
+    lit.push({ i, wrap });
+    const g = document.createElement('div');
+    g.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.s}px;height:${s.s}px;transform:translate(-50%,-50%) rotate(${s.r}deg)`;
+    g.style.setProperty('--hb-img', `url("${src.replace(/"/g, '%22')}")`);
+    g.style.setProperty('--hb-mask', maskImage(src));
+    const shape = (/** @type {boolean} */ tr) => { g.className = tr ? 'hb hb-shape' : `hb hb-square hb-k-${s.k}`; };
+    shape(false);
+    isTransparent(src).then(tr => { if (tr) shape(true); });
+    // 光はシールの回転の逆に回した箱に入れる (どの角度のシールも、筋の向きと光だまりの位置が画面に対して同じになる。
+    // 回した箱が形を覆うよう |cos|+|sin| 倍に広げる。形で切るのは外側の g)
+    const a = Math.abs(s.r * Math.PI / 180), k = Math.abs(Math.cos(a)) + Math.abs(Math.sin(a));
+    g.innerHTML = `<div class="hb-turn" style="transform:rotate(${-s.r}deg) scale(${k.toFixed(4)})"><div class="hb-sheen"></div><div class="hb-glare"></div></div>`;
+    wrap.appendChild(g);
+    glow.appendChild(wrap);
+  }
+  el.appendChild(glow);
+  glowMasks(el, list, lit, !!(m.back && m.back.text_top)).catch(() => { for (const { wrap } of lit) wrap.style.visibility = ''; });
+  const inner = /** @type {HTMLElement | null} */ (el.querySelector('.pc-in'));
+  if (inner) glow.style.transform = inner.style.transform;
+}
+
+/** 光の型の細かさ (カードの px の倍) */
+const GLOW_MK = 2;
+/** シールの形を型に塗る (透過ありはアイコンの形。読めなければ四角) @param {CanvasRenderingContext2D} c @param {import('./card_stickers.js').Sticker} s
+ * @param {HTMLImageElement | null} img 透過ありのアイコン */
+function stickerShape(c, s, img) {
+  c.save();
+  c.translate(s.x, s.y); c.rotate(s.r * Math.PI / 180); c.translate(-s.s / 2, -s.s / 2);
+  if (img) {
+    const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1, k = Math.min(s.s / iw, s.s / ih);
+    c.drawImage(img, (s.s - iw * k) / 2, (s.s - ih * k) / 2, iw * k, ih * k);
+  } else { shapePath(c, s.s, s.k || 'square'); c.fill(); }
+  c.restore();
+}
+/** 光の箱ごとに、見えている所 (そのシールの形から、上のシールと前に出した名前を除いた所) の型をかける
+ * @param {HTMLElement} el .pcard @param {import('./card_stickers.js').Sticker[]} list @param {{ i: number, wrap: HTMLElement }[]} lit @param {boolean} textTop */
+async function glowMasks(el, list, lit, textTop) {
+  if (!lit.length) return;
+  // 透過ありのアイコン (形の型に使う。CORS で読めなければ四角)
+  const imgs = await Promise.all(list.map(async s => {
+    const p = parseKey(s.e), src = p ? iconUrl(p.eid) : null;
+    if (!src || !(await isTransparent(src))) return null;
+    return new Promise(res => {
+      const im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = () => res(im); im.onerror = () => res(null);
+      im.src = src + (src.includes('?') ? '&' : '?') + 'cors=1';   // holo_badge.js と同じ URL (キャッシュを使い回す)
+    });
+  }));
+  // 前に出した白フチの名前 (キャンバス)。普通の文字は箱が大きいので除かない
+  const names = textTop ? /** @type {HTMLCanvasElement[]} */ (Array.from(el.querySelectorAll('.pcb-sx-l'))) : [];
+  for (const { i, wrap } of lit) {
+    if (!wrap.isConnected) return;
+    const cv = document.createElement('canvas');
+    cv.width = W * GLOW_MK; cv.height = 333 * GLOW_MK;
+    const c = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+    c.scale(GLOW_MK, GLOW_MK);
+    c.fillStyle = '#000';
+    stickerShape(c, list[i], imgs[i]);
+    c.globalCompositeOperation = 'destination-out';
+    for (let j = i + 1; j < list.length; j++) stickerShape(c, list[j], imgs[j]);
+    for (const n of names) {
+      // 名前の絵の位置は列 (.pcb-col、置き方のずれだけ left/top で動かしてある) の中
+      const col = /** @type {HTMLElement | null} */ (n.parentElement), ox = col ? parseFloat(col.style.left) || 0 : 0, oy = col ? parseFloat(col.style.top) || 0 : 0;
+      const st = n.style, l = ox + (parseFloat(st.left) || 0), t = oy + (parseFloat(st.top) || 0), w = parseFloat(st.width) || 0, h = parseFloat(st.height) || 0;
+      const rot = parseFloat((/rotate\((-?[\d.]+)deg\)/.exec(st.transform) || [])[1] || '0');
+      c.save();
+      c.translate(l + w / 2, t + h / 2); c.rotate(rot * Math.PI / 180);
+      c.drawImage(n, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    // 型は PNG にして (toBlob は描き出しを待たせない。シールが多くても傾け始めで固まらないように) 指す
+    /** @type {Blob | null} */
+    let blob = null;
+    try { blob = await new Promise(res => cv.toBlob(res, 'image/png')); } catch (e) { /* 読めない画像で汚れた: 型なし */ }
+    if (!wrap.isConnected) return;
+    const url = blob ? URL.createObjectURL(blob) : '';
+    if (url) {
+      wrap.style.setProperty('-webkit-mask', `url("${url}") 0 0 / 100% 100% no-repeat`);
+      wrap.style.setProperty('mask', `url("${url}") 0 0 / 100% 100% no-repeat`);
+    }
+    wrap.style.visibility = '';
+  }
+}
+
+// ── 名前・二つ名・順位を白フチのシールにする (設定 back.sticker_text、Figma「work」Frame 52、2026-10-23) ──
+// 黒い字に白い縁 (字の外側に付け、角は丸い)、その形に影 (右下へ 1px・ぼかし 1px・黒 65%)。名前は 7.5° 右下がり、
+// 順位は名前の上・二つ名は名前の右下で、どちらも左上がり。縁と影を画面と画像で同じにするためキャンバスに描く
+// (CSS の縁取りは字の線の両側に付き、角も尖る)。文字の DOM (.pcb-col) は見えないまま残す (フォントの読み込みと読み上げ用)
+const SX_K = 3;   // キャンバスの細かさ (カードの px の 3 倍 = 画像と同じ)
+const SX_SHADOW = { dx: 1, dy: 1, blur: 1, color: 'rgba(0, 0, 0, .65)' };
+/** 名前: 中心・回転・縁は Figma の値。名前の箱 (行の高さ 1.214em) の上下の端から順位・二つ名の真ん中までの距離も Figma から
+ * (順位は真上 24.7px、二つ名は下 16.9px で右へ 51px。右へのずれは Figma の名前の幅 225px より短い名前では縮める) */
+const SX_NAME = { x: 239.7, y: 168.4, rot: 7.5, edge: 10, maxW: 400, refW: 225, rankGap: 24.7, titleGap: 16.9, titleDx: 51 };
+const SX_TITLE = { rot: -6.7, edge: 6, maxW: 420, gap: 4 };
+const SX_RANK = { rot: -4.8, edge: 6 };
+const SX_NAME_FONT = '"Zalando Sans Expanded", "IBM Plex Sans JP", sans-serif';
+const SX_TITLE_FONT = '"SPSP Title", "IBM Plex Sans JP", sans-serif';
+const SX_RANK_FONT = '"Zalando Sans", sans-serif';
+
+/** 白フチの文字を 1 枚描く。lines = 行ごとの文字の並び ({ t: 文字, font: CSS の font, gap: 前との間 px })、lh = 行送り (px)。
+ * 基準 (行の箱の真ん中) がキャンバスの真ん中に来るように描く (回転はその点まわり)
+ * @param {{ t: string, font: string, gap?: number }[][]} lines @param {number} lh @param {number} edge
+ * @returns {{ cv: HTMLCanvasElement, hw: number, hh: number, w: number, h: number }} hw・hh = キャンバスの半分の幅・高さ、w・h = 文字の箱 (カードの px) */
+function sxCanvas(lines, lh, edge) {
+  const mc = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  let asc = 0, desc = 0;
+  const ms = lines.map(runs => {
+    let w = 0;
+    /** @type {number[]} */
+    const xs = [];
+    runs.forEach((r, i) => {
+      mc.font = r.font;
+      const t = mc.measureText(r.t);
+      if (i) w += r.gap || 0;
+      xs.push(w);
+      w += t.width;
+      asc = Math.max(asc, t.fontBoundingBoxAscent ?? t.actualBoundingBoxAscent);
+      desc = Math.max(desc, t.fontBoundingBoxDescent ?? t.actualBoundingBoxDescent);
+    });
+    return { w, xs };
+  });
+  const w = Math.max(...ms.map(m => m.w)), h = lh * lines.length;
+  const pad = edge + 4;   // 縁と影の分
+  const hw = Math.ceil(w / 2 + pad), hh = Math.ceil(Math.max(h / 2, (asc + desc) / 2) + pad);
+  const cv = document.createElement('canvas');
+  cv.width = hw * 2 * SX_K; cv.height = hh * 2 * SX_K;
+  const lab = document.createElement('canvas');
+  lab.width = cv.width; lab.height = cv.height;
+  const c = /** @type {CanvasRenderingContext2D} */ (lab.getContext('2d'));
+  c.scale(SX_K, SX_K);
+  c.translate(hw, hh);
+  c.textBaseline = 'alphabetic';
+  /** @param {(r: { t: string, font: string }, x: number, y: number) => void} each */
+  const walk = each => lines.forEach((runs, li) => {
+    const y = -h / 2 + li * lh + lh / 2 + (asc - desc) / 2;   // 行の箱の上下の真ん中に、字の上下 (フォントの高さ) の真ん中を合わせる
+    const x0 = -ms[li].w / 2;
+    runs.forEach((r, i) => { c.font = r.font; each(r, x0 + ms[li].xs[i], y); });
+  });
+  // 縁 (線の太さ 2 倍 = 外側に edge) を全部描いてから字を塗る (隣の字の縁が字にかぶらないように)
+  c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = edge * 2; c.strokeStyle = '#fff';
+  walk((r, x, y) => c.strokeText(r.t, x, y));
+  c.fillStyle = '#000';
+  walk((r, x, y) => c.fillText(r.t, x, y));
+  const o = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
+  o.shadowColor = SX_SHADOW.color;
+  o.shadowOffsetX = SX_SHADOW.dx * SX_K; o.shadowOffsetY = SX_SHADOW.dy * SX_K; o.shadowBlur = SX_SHADOW.blur * SX_K;
+  o.drawImage(lab, 0, 0);
+  return { cv, hw, hh, w, h };
+}
+
+/** 文字の並びの幅 (px) @param {{ t: string, font: string, gap?: number }[]} runs */
+function sxWidth(runs) {
+  const mc = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+  return runs.reduce((w, r, i) => { mc.font = r.font; return w + mc.measureText(r.t).width + (i ? r.gap || 0 : 0); }, 0);
+}
+
+/** 白フチの名前・二つ名・順位を描く (描き直すときは前のを外す)。フォントがまだなら読んでから描き直す
+ * @param {HTMLElement} root .pc-in @param {PCardModel} m */
+function paintNameStickers(root, m) {
+  const col = root.querySelector('.pcb-col');
+  if (!col) return;
+  for (const old of Array.from(col.querySelectorAll('.pcb-sx-l'))) old.remove();
+  const fonts = [];
+  /** @param {HTMLCanvasElement} cv @param {number} hw @param {number} hh @param {number} x @param {number} y @param {number} rot @param {string} part */
+  const put = (cv, hw, hh, x, y, rot, part) => {
+    cv.className = 'pcb-sx-l';
+    cv.dataset.part = part;
+    cv.setAttribute('aria-hidden', 'true');
+    // 置き方 (回転・大きさ) をかける前の場所を持っておき、applyTextPose が置く
+    Object.assign(cv.dataset, { x: String(x), y: String(y), hw: String(hw), hh: String(hh), rot: String(rot) });
+    col.appendChild(cv);
+  };
+  // 名前: 50px で 1 行に入らなければ 40px まで詰め、それでも入らなければ 2 行 (44px から)。区切れなければ 1 行のまま小さく
+  const text = m.nameLatin || m.name;
+  const nf = (/** @type {number} */ px) => `700 ${px}px ${SX_NAME_FONT}`;
+  /** @param {string[]} ls @param {number} from @param {number} to */
+  const fit = (ls, from, to) => {
+    let px = from;
+    while (px > to && Math.max(...ls.map(t => sxWidth([{ t, font: nf(px) }]))) > SX_NAME.maxW) px--;
+    return px;
+  };
+  let lines = [text], px = fit(lines, 50, 40), lhK = 1.214;
+  if (sxWidth([{ t: text, font: nf(px) }]) > SX_NAME.maxW) {
+    const parts = splitTwo(text);
+    if (parts) { lines = parts; px = fit(lines, 44, 7); lhK = 1.1026; } else px = fit(lines, 40, 7);
+  }
+  fonts.push(nf(px));
+  const name = sxCanvas(lines.map(t => [{ t, font: nf(px) }]), px * lhK, SX_NAME.edge);
+  const rad = SX_NAME.rot * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad);
+  /** 名前の向きでのずれ (右へ dx・下へ dy) → カードの座標 @param {number} dx @param {number} dy */
+  const at = (dx, dy) => [SX_NAME.x + dx * cs - dy * sn, SX_NAME.y + dx * sn + dy * cs];
+  put(name.cv, name.hw, name.hh, SX_NAME.x, SX_NAME.y, SX_NAME.rot, 'name');
+  // 順位: 「#」(24px Black) と数字 (34px Bold) を同じ基準線に
+  const rank = sxCanvas([[{ t: '#', font: `900 24px ${SX_RANK_FONT}` }, { t: m.rank != null ? String(m.rank) : '—', font: `700 34px ${SX_RANK_FONT}` }]], 34 * 1.214, SX_RANK.edge);
+  // 名前と順位は傾きが逆なので、順位の左端が名前に寄る。長い順位でも Figma の左端と同じだけ (名前の箱の上端から 5.5px 内側まで) しか重ねない
+  const tanR = Math.tan((SX_NAME.rot - SX_RANK.rot) * Math.PI / 180);
+  const rh = 34 * 1.214, rl = Math.min(rank.w / 2, name.w / 2);
+  const [rx, ry] = at(0, Math.min(-(name.h / 2 + SX_NAME.rankGap), -name.h / 2 + 5.5 - rh / 2 - rl * tanR));
+  put(rank.cv, rank.hw, rank.hh, rx, ry, SX_RANK.rot, 'rank');
+  fonts.push(`900 24px ${SX_RANK_FONT}`, `700 34px ${SX_RANK_FONT}`);
+  // 二つ名 (「//」・前半・後半を 4px あけて。21px、長ければ 11px まで詰める)
+  const parts = Array.from(root.querySelectorAll('.pcb-title > span')).map(s => s.textContent || '').filter(Boolean);
+  if (parts.length) {
+    let tp = 21;
+    const runs = (/** @type {number} */ p) => parts.map(t => ({ t, font: `700 ${p}px ${SX_TITLE_FONT}`, gap: SX_TITLE.gap }));
+    while (tp > 11 && sxWidth(runs(tp)) > SX_TITLE.maxW) tp--;
+    const title = sxCanvas([runs(tp)], tp, SX_TITLE.edge);
+    // 二つ名の右端は名前に寄る (傾きが逆)。名前の右端の下で、Figma と同じだけ (名前の箱の下端から 6px 内側まで) しか重ねない
+    const tdx = SX_NAME.titleDx * Math.min(1, name.w / SX_NAME.refW);
+    const tanT = Math.tan((SX_NAME.rot - SX_TITLE.rot) * Math.PI / 180);
+    const xr = Math.min(name.w / 2, tdx + title.w / 2);
+    const [tx, ty] = at(tdx, Math.max(name.h / 2 + SX_NAME.titleGap, name.h / 2 - 6 + title.h / 2 + (xr - tdx) * tanT));
+    put(title.cv, title.hw, title.hh, tx, ty, SX_TITLE.rot, 'title');
+    fonts.push(`700 ${tp}px ${SX_TITLE_FONT}`);
+  }
+  // フォントが来ていなければ、読んでから描き直す (1 回だけ)
+  const F = /** @type {any} */ (document).fonts;
+  if (F && F.check && !root.dataset.sxWait && fonts.some(f => { try { return !F.check(f, text); } catch (e) { return false; } })) {
+    root.dataset.sxWait = '1';
+    Promise.all(fonts.map(f => F.load(f, text + parts.join('') + '#0123456789').catch(() => {})))
+      .then(() => { if (root.isConnected) { paintNameStickers(root, m); applyTextPose(/** @type {HTMLElement} */ (col), textPoseOf(m.back)); } });
+  }
+}
+
+/** シールの影 (player_card.css .pcb-sk の drop-shadow と同じ値。カードを画像にするときに絵に入れる) */
+const STICKER_SHADOW = { dx: 1, dy: 1, blur: 1, color: 'rgba(0, 0, 0, .3)' };
+
+/** 裏面のシールの絵 (js/holo_badge.js)。アイコンの無い大会のシールは出さない
+ * @param {HTMLElement} root .pc-in @param {PCardModel} m */
+function paintBackStickers(root, m) {
+  const list = (m.back && m.back.stickers) || [];
+  for (const el of /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('.pcb-sk'))) {
+    const s = list[Number(el.dataset.i)];
+    const p = s ? parseKey(s.e) : null;
+    const src = p ? iconUrl(p.eid) : null;
+    if (!s || !p || !src) { el.remove(); continue; }
+    const holder = document.createElement('div');
+    el.appendChild(holder);
+    const draw = (/** @type {boolean} */ tr) => renderBadge(holder, { src, variant: p.variant, transparent: tr, cls: p.cls, shape: s.k, crop: s.c });
+    // 透過かどうかが分かってから描く (先に透過なしで描くと、透過のアイコンが一度 四角・角丸の絵 (背景つき) で出て、
+    // 使わない方のホロの素材まで読んでいた。裏面は準備 (preloadBadge、同じ判定を待つ) ができるまで見せないので待ってよい)
+    // 判定が遅ければ (1.5 秒) 透過なしで描いておき、分かったら描き直す
+    let known = false;
+    const late = setTimeout(() => { if (!known && holder.isConnected) draw(false); }, 1500);
+    isTransparent(src).then(tr => tr, () => false).then(tr => { known = true; clearTimeout(late); if (holder.isConnected) draw(tr); });
+  }
+}
+
+/** @param {HTMLElement} el @param {() => string} html @param {(root: HTMLElement) => void} fit @param {boolean} live */
+function mount(el, html, fit, live) {
   // 組み立てと詰めは毎回まっさらな HTML から (詰めは実績の並べ替えや改行を入れるので、2 回目は作り直してからやる)
   const build = () => {
     // 重ねている画像 (強制ダークモード用) は撮り直すまで残す (消すと一瞬黒いカードが見える)。編集中は古い画像を外す
     const keep = live ? null : el.querySelector('.pc-img');
-    el.innerHTML = cardHtml(model);
+    el.innerHTML = html();
     if (keep) el.appendChild(keep);
-    fitAll(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
+    fit(/** @type {HTMLElement} */ (el.querySelector('.pc-in')));
     applyScale(el);
   };
   build();
@@ -518,6 +950,8 @@ function scheduleImage(el, delay) {
       node.style.height = '100%';
       el.appendChild(node);
       if (prev) prev.remove();
+      const glow = el.querySelector('.pcb-glow');
+      if (glow) el.appendChild(glow);   // シールの光は画像の上に
     }).catch(() => { /* 撮れなければ HTML のカードのまま */ }).then(() => { if (imageWaiters.get(el) === done) imageWaiters.delete(el); done(); });
   }, delay));
   return p;
@@ -579,16 +1013,68 @@ async function captureCanvas(el) {
   box.className = 'pcard pc-offscreen';   // 色の変数 (--pc-red など) は .pcard が持つ
   const clone = /** @type {HTMLElement} */ (src.cloneNode(true));
   clone.style.transform = 'none';
+  // 裏面のシール: html2canvas はホロの重ね方 (ブレンド)・マスク・形の切り取りを描けない (複製したキャンバスも空になる) ので、
+  // 1 枚ずつ自前で描いた絵 (3 倍の細かさ) に差し替える。描けなかったシールは外す。
+  // 絵は入れ物 (translate(-50%) + rotate の .pcb-sk) の中に入れず、カードの上の正しい位置に直接置いて回転だけかける
+  // (html2canvas は変形した要素の中の、はみ出して置いた子の位置を誤る。影の余白の分だけ右下にずれていた)
+  const sks = [...src.querySelectorAll('.pcb-sk')], cks = [...clone.querySelectorAll('.pcb-sk')];
+  await Promise.all(sks.map(async (sk, i) => {
+    const ck = /** @type {HTMLElement | undefined} */ (cks[i]);
+    if (!ck) return;
+    try {
+      const hb = /** @type {HTMLElement | null} */ (sk.querySelector('.hb'));
+      const cv = hb ? await badgeToCanvas(hb, (parseFloat(ck.style.width) || 100) * 3) : null;
+      if (!cv) throw new Error('no badge');
+      // 影 (画面の drop-shadow と同じ: 右下へ 1px・ぼかし 1px・黒 30%。html2canvas は filter を描かないので絵に入れる)。
+      // 影がはみ出す分だけ周りに余白を足す。絵ごと回すので影も一緒に回る (画面と同じ)
+      const k = cv.width / (parseFloat(ck.style.width) || 100);   // カードの px → 絵の px
+      const pad = Math.ceil(STICKER_SHADOW.blur * 2 * k + Math.max(STICKER_SHADOW.dx, STICKER_SHADOW.dy) * k);
+      const out = document.createElement('canvas');
+      out.width = out.height = cv.width + pad * 2;
+      const octx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
+      octx.shadowColor = STICKER_SHADOW.color;
+      octx.shadowOffsetX = STICKER_SHADOW.dx * k;
+      octx.shadowOffsetY = STICKER_SHADOW.dy * k;
+      octx.shadowBlur = STICKER_SHADOW.blur * k;
+      octx.drawImage(cv, pad, pad);
+      const img = document.createElement('img');
+      img.src = out.toDataURL('image/png');   // アイコンが CORS で読めずキャンバスが汚れていると、ここで例外
+      const p = pad / k;
+      const x = Number(ck.dataset.x), y = Number(ck.dataset.y), size = Number(ck.dataset.s), rot = Number(ck.dataset.r) || 0;
+      const box = size + 2 * p;
+      img.className = 'pcb-sk-img';
+      img.style.cssText = `display:block;position:absolute;left:${x - box / 2}px;top:${y - box / 2}px;width:${box}px;height:${box}px;max-width:none;transform:rotate(${rot}deg)`;
+      await img.decode().catch(() => {});
+      ck.replaceWith(img);
+    } catch (e) { ck.remove(); }
+  }));
+  // 名前・二つ名・順位の影 (.pcb-outline、player_card.css): html2canvas は文字の影のずらしは倍率 (3 倍) を掛けるのに、ぼかしは掛けない
+  // (1.4.1 の renderTextNode)。そのままだとぼかしが 3 分の 1 になって影がほとんど見えないので、複製だけぼかしを 3 倍にしておく
+  for (const n of /** @type {NodeListOf<HTMLElement>} */ (clone.querySelectorAll('.pcb-outline .pcb-name-t, .pcb-outline .pcb-rank, .pcb-outline .pcb-title'))) {
+    n.style.textShadow = `0 0 ${4 * CAPTURE_SCALE}px rgb(0 0 0 / .6)`;
+  }
+  // 白フチの名前・二つ名・順位 (キャンバス) は複製すると空になるので、絵にして差し替える
+  const sls = [...src.querySelectorAll('.pcb-sx-l')], cls = [...clone.querySelectorAll('.pcb-sx-l')];
+  await Promise.all(sls.map(async (c, i) => {
+    const ck = /** @type {HTMLElement | undefined} */ (cls[i]);
+    if (!ck) return;
+    const img = document.createElement('img');
+    img.className = ck.className;
+    img.style.cssText = ck.style.cssText;
+    img.src = /** @type {HTMLCanvasElement} */ (c).toDataURL('image/png');
+    await img.decode().catch(() => {});
+    ck.replaceWith(img);
+  }));
   box.appendChild(clone);
   document.body.appendChild(box);
   // html2canvas は画面のスクロール位置を動かすことがある (編集中に画面ごと動いて見えた)。前の位置に戻す
   const sx = window.scrollX, sy = window.scrollY;
   try {
-    return await withExactFontMetrics(() => w.html2canvas(clone, { backgroundColor: null, scale: 3, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 }));
+    return await withExactFontMetrics(() => w.html2canvas(clone, { backgroundColor: null, scale: CAPTURE_SCALE, useCORS: true, logging: false, width: W, height: 333, scrollX: 0, scrollY: 0 }));
   } finally {
     box.remove();
     if (window.scrollX !== sx || window.scrollY !== sy) window.scrollTo(sx, sy);
   }
 }
 
-export default { render, capture, shownTitle, makeAchFitTester, cardSettled, COLORS, TEMPLATES };
+export default { render, renderBack, setTextPos, textPoseOf, ready, ensureGlow, capture, shownTitle, makeAchFitTester, cardSettled, COLORS, TEMPLATES };

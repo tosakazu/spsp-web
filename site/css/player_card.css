@@ -159,6 +159,52 @@
 /* カードをタップすると出るボタン (右上に編集・保存)。画像にはカードの中身 (.pc-in) だけを撮るので写らない */
 .pcard-wrap { position: relative; margin: 0 0 12px; }
 .pcard-wrap .pcard { cursor: pointer; }
+/* 裏の準備ができて裏返せるようになるまで (.pc-wait、src/pages/p.js) は、カードのすぐ上の右端 (見出しの線との間の余白 14px) に小さなグルグル。
+   カードの中は詰まっているので外に出す。読み込み中の表示 (.pc-loading) の間は出さない */
+.pcard-wrap.pc-wait:not(.pc-loading)::after {
+  content: ''; position: absolute; right: 2px; top: -12px; width: 10px; height: 10px; box-sizing: border-box;
+  border: 2px solid #e5e7eb; border-top-color: #9ca3af; border-radius: 50%; animation: pc-spin .8s linear infinite; pointer-events: none;
+}
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pcard-wrap.pc-wait:not(.pc-loading)::after { animation-duration: 2s; } }
+/* カードの外の影 (浮いて見えるように)。プレイヤーページ・カード編集のプレビューと裏の台。表と裏の面それぞれに付く (裏返しで一緒に回る)。
+   傾けている間は、傾きと反対へ少しずらす (--card-mx / --card-my、src/pages/p.js) */
+.pcard-wrap .pcard, .ce-preview .pcard, .bz-stage > .pcard:not(.bz-text) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 8px 22px rgba(0, 0, 0, .16);
+}
+/* 傾けている間だけ、動かすことをブラウザに知らせる (中身を描き直さずに動かせる) */
+.pcard-wrap.pc-tilt { will-change: transform; }
+.pcard-wrap.pc-tilt .pcard {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12),
+    calc((.5 - var(--card-mx, .5)) * 16px) calc(10px + (.5 - var(--card-my, .5)) * 12px) 28px rgba(0, 0, 0, .22);
+}
+/* 描き終わるまで (src/pages/p.js) はカードを隠して読み込み中の表示。カードの箱 (aspect-ratio) は場所を取ったまま */
+.pc-loader { display: none; }
+.pcard-wrap.pc-loading .pcard-flip, .pcard-wrap.pc-loading .pc-overlay { visibility: hidden; }
+/* 中身は SPSP のロゴのアニメーション (logo.js inline) と総合評価の順位 (src/pages/p.js) */
+.pcard-wrap.pc-loading .pc-loader { display: flex; flex-direction: column; position: absolute; inset: 0; align-items: center; justify-content: center; gap: 2px; background: #fff; }
+.pc-loader .spsp-inline { padding: 0; }
+.pc-loader-rank { display: flex; align-items: baseline; gap: 8px; color: #6b7280; font-size: 13px; font-weight: 600; }
+.pc-loader-rank b { color: #111827; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* 指・マウスで動かす (src/pages/p.js): 横の動きはこちらで受け、縦はページのスクロール。傾けている間 (.pc-tilt) はシールに光 */
+.pcard-wrap .pcard-flip { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+/* シールの光の層 (player_card.js paintGlow): カードのいちばん上 (画像に差し替えていてもその上)、座標はカードの 514×333 */
+.pcb-glow { position: absolute; left: 0; top: 0; width: 514px; height: 333px; transform-origin: 0 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.pcb-glow-m { position: absolute; inset: 0; }
+.pcb-glow-m > .hb { position: absolute; aspect-ratio: auto; --hb-mx: var(--card-mx, .5); --hb-my: var(--card-my, .5); }
+.pcb-glow-m > .hb, .pcb-glow-m > .hb:hover { transform-origin: 50% 50%; transition: none; }
+/* 光はシールの回転の逆に回した箱 (.hb-turn) の中。透過ありの形 (アイコンの形) では外側の箱で切る (光と一緒に回さない) */
+.pcb-glow .hb-turn > div { position: absolute; inset: 0; pointer-events: none; }
+.pcb-glow-m > .hb-shape { -webkit-mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat; mask: var(--hb-mask, var(--hb-img)) center / contain no-repeat; }
+.pc-tilt .pcb-glow .hb-sheen { opacity: .22; }
+.pc-tilt .pcb-glow .hb-glare { opacity: .8; }
+@media (prefers-reduced-motion: reduce) { .pcard-wrap { transform: none !important; } }
+/* 表と裏: 裏面は表に重ねて裏向きに置き、.flipped で全体を回す (回っている間は両面の裏側を隠す) */
+.pcard-flip { position: relative; transition: transform .5s ease; transform-style: preserve-3d; }
+.pcard-flip .pcard { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.pcard-flip .pcard-back { position: absolute; left: 0; top: 0; width: 100%; transform: rotateY(180deg); }
+.flipped > .pcard-flip { transform: rotateY(180deg); }   /* プレイヤーページ (.pcard-wrap) と編集ページのプレビュー (.ce-preview) */
+@media (prefers-reduced-motion: reduce) { .pcard-flip { transition: none; } }
 .pc-overlay { position: absolute; top: 8px; right: 8px; display: none; gap: 6px; z-index: 2; }
 .pcard-wrap.show .pc-overlay { display: flex; }
 .pc-ov-btn {
@@ -174,3 +220,37 @@
 
 /* 強制ダークモードのときに重ねるカードの画像 (js/player_card.js scheduleImage) */
 .pcard .pc-img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+
+/* ── 裏面 (Figma「back」94:92。js/player_card.js renderBack)。赤地に、角 (32px 四方) を欠いた 5px の枠 (外から 15px)。
+   中央に二つ名・名前・総合順位を縦に並べる (箱の間 21px。Figma は字面の上下で詰めた箱なので、行の高さで合わせている) ── */
+.pc-in.pc-back { background: var(--pc-red); color: #f3f3f3; }
+.pc-in.pc-back::after { display: none; }
+.pcb-line { position: absolute; background: #d9d9d9; }
+.pcb-t, .pcb-b { left: 32px; width: 450px; height: 5px; }
+.pcb-t { top: 15px; }
+.pcb-b { top: 313px; }
+.pcb-l, .pcb-r { top: 32px; width: 5px; height: 269px; }
+.pcb-l { left: 15px; }
+.pcb-r { left: 494px; }
+.pcb-col { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 21px; }
+.pcb-title { display: flex; align-items: flex-end; gap: 4px; height: 12px; white-space: nowrap;
+  font-family: "SPSP Title", "IBM Plex Sans JP", sans-serif; font-weight: 700; font-size: 16px; line-height: 12px; color: #fff; }
+.pcb-name { max-width: 445px; font-size: 45px; text-align: center; white-space: nowrap; }
+.pcb-name-t { display: block; font-family: "Zalando Sans Expanded", "IBM Plex Sans JP", sans-serif; font-weight: 700; line-height: 1.214; }
+.pcb-name.pc-wrap .pcb-name-t { line-height: 1.1026; }   /* 2 行: 39px に行送り 43px (Figma) */
+.pcb-rank { display: flex; align-items: flex-end; height: 21px; font-family: "Zalando Sans", sans-serif; font-size: 29px; white-space: nowrap; }
+.pcb-rank-h { font-weight: 900; font-size: .655em; line-height: 1; }
+.pcb-rank-n { font-weight: 700; line-height: .724; }
+/* 裏面のシール (js/player_card.js paintBackStickers、設定 back)。カードからはみ出した所は切る。形・ホロは holo_badge.css */
+.pcb-st { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+/* 影は Figma の見本 (右下へ 1px・ぼかし 1px、2026-10-20 デザイナー指定。濃さはカードの見本 142:183 の 30%)。画像にしたときも同じ (player_card.js STICKER_SHADOW) */
+.pcb-sk { position: absolute; filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, .3)); }
+.pcb-sk > .hb { container-type: size; --hb-size: 100cqw; width: 100%; height: 100%; }
+.pcb-sk > .hb, .pcb-sk > .hb:hover { transform: none; transition: none; }
+.pcb-sk .hb-sheen, .pcb-sk .hb-glare { display: none; }
+/* 名前・二つ名・順位の影 (設定 back.outline。前は縁取りだったので設定の名前はそのまま)。縁取りは違和感が出やすいので、字の周りに濃いめの影を敷く
+   (Figma の見本 142:173: ずらし 0・ぼかし 4px・黒 60%、2026-10-20 デザイナー指定) */
+.pcb-outline .pcb-name-t, .pcb-outline .pcb-rank, .pcb-outline .pcb-title { text-shadow: 0 0 4px rgb(0 0 0 / .6); }
+/* 白フチの名前・二つ名・順位 (設定 back.sticker_text、js/player_card.js paintNameStickers が描くキャンバス)。文字の DOM は見えないまま (フォントの読み込みと読み上げ用) */
+.pcb-sx .pcb-col > :not(.pcb-sx-l) { visibility: hidden; }
+.pcb-sx-l { position: absolute; display: block; max-width: none; }

@@ -19,20 +19,25 @@ import { charName, mergeCharUses } from './chars.js';
 import { achievementLabel, achievementLabelHidden } from './achievements.js';
 import SpspLogin from './login.js';
 import SPSP_POST_CONFIG from './post_config.js';
+import { cardLatinName, latinNameValid, hasKanji, loadReadings } from './latin_name.js';
+import { normBack, ownedStickers, hasStickerData, isOwned, loadOwnedStickers, loadIcons, defaultBack } from './card_stickers.js';
 
 const i18n = SPSPI18n.t;
 const S = /** @type {any} */ (typeof window !== 'undefined' ? window : globalThis).SPSP || {};
 
 /** カードに要るデータ一式
  * @typedef {{ uid: number, player: any, rec: any, meta: any, subranks: any, prefs: any, overseas: Set<number> | null,
- *             charIdx: any, charEmoji: any }} CardData */
+ *             charIdx: any, charEmoji: any, readings?: Record<string, string> | null }} CardData */
 /** 編集ページで選ぶもの。ach = 選んだ実績の key (選んだ順)。null / 空なら自動
  * tour = カード左下に出す大会の event_id (編集ページで選んだもの)。null なら自動 (順位評価のポイント最大の大会)
  * title = 二つ名 (前半・後半の id、js/titles.js)。null / 片方 null なら付けない。持っていないものは出さない
- * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null }} CardSettings */
+ * latin = カードの裏面に出す英字の名前 (null = 自動 = こちらが用意したもの、js/latin_name.js。文字 = 本人が書いたもの、自動と同じ綴りでも残す)
+ * back = 裏面のシール (js/card_stickers.js、null = 貼っていない)
+ * @typedef {{ template: string, color: string, ach: string[] | null, tour?: number | null, title?: { pre: string | null, post: string | null } | null, latin?: string | null,
+ *   back?: import('./card_stickers.js').CardBack | null }} CardSettings */
 
 /** @type {CardSettings} */
-export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null };
+export const DEFAULT_SETTINGS = { template: 'standard', color: 'red', ach: null, tour: null, title: null, latin: null, back: null };
 
 /** この地域の二つ名の一覧の言語 (region/config.js titleLang。表示の言語では変えない) */
 export const titleLang = () => (S.site && S.site.titleLang) || 'ja';
@@ -188,6 +193,15 @@ function classSuffix(t) {
 //   場所 = 都道府県 (英語名、カードのデザインどおり「JAPAN, TOKYO」) と県内順位 / 海外勢は国名
 //   キャラ = メイン (使い手ランキング内順位つき) + サブ 1 つ、実績 = 既定は cardAchievements の並び (上位 3 つを 1 行ずつ、隙間に入る分を足す)
 //   左下の大会 = 順位評価のポイントが一番高い大会 (無ければ最新の集計対象大会)、合計 = 出場大会数と試合数 (勝ち + 負け)
+/** 裏面の設定から、持っていないシールを外す (選手の大会記録の sticker と突き合わせる)
+ * @param {import('./card_stickers.js').CardBack | null} back @param {any[]} tours */
+function ownBack(back, tours) {
+  if (!back || !back.stickers.length) return back;
+  if (!hasStickerData(tours)) return back;   // 判定がまだデータに無い (ビルドに入る前、preview)。保存のときサーバが確かめている
+  const owned = ownedStickers(tours);
+  return { ...back, stickers: back.stickers.filter(s => isOwned(owned, s.e)) };
+}
+
 /** @param {CardData} data @param {CardSettings | null} [settings] @param {TitleText} [titleText]
  * @returns {import('./player_card.js').PCardModel} */
 export function buildCardModel(data, settings, titleText) {
@@ -266,11 +280,14 @@ export function buildCardModel(data, settings, titleText) {
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ・「/name」無し (ランキング一覧・直対と同じ js/format.js shortName)
-    name: SPSPFormat.shortName(rec.display), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.shortName(rec.display), nameLatin: cardLatinName(SPSPFormat.shortName(rec.display), st.latin, data.readings), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label, hidden: /** @type {any} */ (a).hidden })),
     latest,
     totalTournaments: tours.length,
+    // 裏面のシール (js/card_stickers.js)。持っていないもの (判定が変わった等) は出さない。
+    // 裏面の設定が無い人は初期配置 (loadCardDefaultBack で data に足してあれば。足していなければ何も貼っていない裏面)
+    back: st.back ? ownBack(st.back, tours) : (/** @type {any} */ (data).defBack || null),
     totalMatches: tours.reduce((n, t) => n + (t.wins || 0) + (t.losses || 0), 0),
     labels: {
       evalDate: i18n('player.card.eval_date'), achievements: i18n('player.card.achievements'), latest: pickedTour ? i18n('player.card.picked') : bestMode ? i18n('player.card.best') : i18n('player.card.latest'),
@@ -329,15 +346,43 @@ export function loadCardShared() {
   }
   return SHARED;
 }
-/** @param {number} uid @returns {Promise<CardData | null>} 選手がいなければ null */
-export async function loadCardData(uid) {
+/** @param {number} uid @param {{ readings?: boolean }} [opts] readings: false = 裏面の英字名に使う読みの表を待たない
+ *   (表だけ先に描く所: 結果報告。裏面を描く前に loadCardReadings で読む) @returns {Promise<CardData | null>} 選手がいなければ null */
+export async function loadCardData(uid, opts = {}) {
   const base = /** @type {string} */ (S.data);
   const sharedP = loadCardShared();
   const [player, shared] = await Promise.all([SPSPPlayerData.load(base, uid), sharedP]);
   if (!player) return null;
   const { meta, overseas, charIdx, charEmoji, prefs, subranks } = shared;
   const p = /** @type {any} */ (player);
-  return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji };
+  // 漢字の名前だけ、裏面の英字名に使う読みの表を読む (js/latin_name.js)
+  const readings = opts.readings !== false && hasKanji(SPSPFormat.shortName(p.display || '')) ? await loadReadings() : null;
+  return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji, readings };
+}
+
+/** 裏面の英字名に使う読みの表を data に足す (漢字の名前だけ。loadCardData を readings: false で読んだとき用)。要らない・読めたら true
+ * @param {CardData} data @returns {Promise<boolean>} */
+export async function loadCardReadings(data) {
+  const d = /** @type {any} */ (data);
+  if (d.readings || !hasKanji(SPSPFormat.shortName((d.rec && d.rec.display) || (d.player && d.player.display) || ''))) return true;
+  const r = await loadReadings().catch(() => null);
+  if (r) d.readings = r;
+  return !!r;
+}
+
+/** 裏面の初期配置 (js/card_stickers.js defaultBack) を data に足す (data.defBack。buildCardModel が、裏面の設定が無いときに使う)。
+ * 裏面の設定が無いと分かってから呼ぶ (設定のある人の分まで、使わないシールの絵を読まないように)。
+ * シールを 1 枚も持っていなければ、大会のアイコンの表も読まない。無ければ null
+ * @param {CardData} data @returns {Promise<import('./card_stickers.js').CardBack | null>} */
+export async function loadCardDefaultBack(data) {
+  const d = /** @type {any} */ (data);
+  if (d.defBack !== undefined) return d.defBack;
+  const tours = (d.player && d.player.tournaments) || [];
+  const owned = await loadOwnedStickers(Number(d.uid), tours);
+  if (!Object.keys(owned).length) return (d.defBack = null);
+  const tbl = await loadIcons();
+  if (!tbl) return null;   // 表が読めなかった: 今回は出さない (次に呼ばれたらやり直す)
+  return (d.defBack = defaultBack(d.uid, tours, owned, tbl));
 }
 
 // ── 設定の保存 (ブラウザの localStorage。選手ごと) ──
@@ -361,7 +406,7 @@ function normalize(s) {
   return { template: typeof s.template === 'string' ? s.template : 'standard', color: typeof s.color === 'string' ? s.color : 'red',
            ach: Array.isArray(s.ach) ? s.ach.filter((/** @type {any} */ k) => typeof k === 'string') : null,
            tour: s.tour != null && Number.isFinite(Number(s.tour)) && Number(s.tour) > 0 ? Number(s.tour) : null,
-           title: normTitle(s.title) };
+           title: normTitle(s.title), latin: typeof s.latin === 'string' && latinNameValid(s.latin) ? s.latin : null, back: normBack(s.back) };
 }
 /** 二つ名の値はサーバ (worker/src/api/card.ts の設定の検査) と同じ: id / null =「なし」/ 'default' = 既定。両方既定は null (設定無しと同じ)、「なし / なし」は残す
  * @param {any} t @returns {{ pre: string | null, post: string | null } | null} */
@@ -379,33 +424,47 @@ export async function fetchApplied(uid) {
   return (await fetchAppliedCard(uid)).settings;
 }
 /** 適用済みの設定と、付けている二つ名の文字 (card_get の title_text。API の無い所では null = 二つ名は出さない)
- * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null }>} */
+ * failed = 読めなかった (設定が無いのとは別。裏面の初期配置は、設定が無いと分かったときだけ出す)
+ * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null, failed?: boolean }>} */
 export async function fetchAppliedCard(uid) {
   if (!SpspLogin.apiAvailable()) return { settings: loadLocalApplied(uid), titleText: null };
   try {
     // 本人が見るときはブラウザのキャッシュ (60 秒) を使わない: 編集ページで適用した直後に古い設定が出ないように
-    const self = SpspLogin.isSelf(uid);
+    // (preview は誰でも誰の分でも編集できるので、常に使わない)
+    const self = SpspLogin.isSelf(uid) || SpspLogin.openEdit();
     const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
                           self ? { cache: 'no-store' } : undefined);
     const j = r.ok ? await r.json() : null;
-    if (!j || !j.ok) return { settings: null, titleText: null };
+    if (!j || !j.ok) return { settings: null, titleText: null, failed: true };
     const tt = j.title_text;
     return { settings: normalize(j.settings),
              titleText: tt && typeof tt === 'object' ? { pre: String(tt.pre || ''), post: String(tt.post || '') } : null };
-  } catch (e) { return { settings: null, titleText: null }; }
+  } catch (e) { return { settings: null, titleText: null, failed: true }; }
 }
 /** 適用 (本人のログインが要る)。settings が null なら既定に戻す。{ ok, code? }
  * @param {number} uid @param {CardSettings | null} s @returns {Promise<{ ok: boolean, code?: string }>} */
 export async function putApplied(uid, s) {
   if (!SpspLogin.apiAvailable()) { writeOne(APPLIED_KEY, uid, s); return { ok: true }; }
+  // サーバに送る形: 裏面は貼っているときだけ (サーバの検査と同じ。無い欄は既定)
+  const body = s && !s.back ? (({ back: _b, ...rest }) => rest)(s) : s;
   const sess = SpspLogin.session();
-  if (!sess || !SpspLogin.isSelf(uid)) return { ok: false, code: 'not_owner' };
-  const r = await SpspLogin.api({ action: 'card_put', token: sess.token, settings: s });
+  if (!sess || !SpspLogin.isSelf(uid)) {
+    // preview だけ: ログインなしで誰の分でも (見た目の確認用)
+    if (!SpspLogin.openEdit()) return { ok: false, code: 'not_owner' };
+    const r = await SpspLogin.api({ action: 'card_put', uid: String(uid), settings: body });
+    return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
+  }
+  const r = await SpspLogin.api({ action: 'card_put', token: sess.token, settings: body });
   return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
 }
 /** @param {number} uid */ export const loadDraft = uid => normalize(readMap(DRAFT_KEY)[String(uid)]);
-/** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
+/** backTouched = この下書きで裏面を変えた (true のときだけ、下書きの back を信じる。draftBackTouched)
+ * @param {number} uid @param {CardSettings} s @param {boolean} [backTouched] */
+export const saveDraft = (uid, s, backTouched = false) => writeOne(DRAFT_KEY, uid, backTouched ? /** @type {any} */ ({ ...s, back_touched: true }) : s);
+/** 下書きで裏面を変えてあるか。変えていない下書き (表だけ編集した・裏面ができる前の下書き) の back は null で、「初期配置に戻した」と
+ * 区別できないので、適用済みの裏面を使う (下書きがサーバの裏面を隠して初期配置が出ていた。2026-11-12) @param {number} uid */
+export const draftBackTouched = uid => { const d = /** @type {any} */ (readMap(DRAFT_KEY)[String(uid)]); return !!(d && d.back_touched === true); };
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
-export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
-                 fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };
+export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardReadings, loadCardDefaultBack, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
+                 fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, draftBackTouched, clearDraft };
