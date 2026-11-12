@@ -487,6 +487,7 @@ function manualLockBarHtml() {
     + `<option value="pool"${kind === 'pool' ? ' selected' : ''}>${i18n('seed.core.t23')}</option>`
     + (W >= 2 ? `<option value="wave"${kind === 'wave' ? ' selected' : ''}>${i18n('seed.core.t24')}</option>` : '')
     + `<option value="seed"${kind === 'seed' ? ' selected' : ''}>${i18n('seed.core.lock_seed')}</option>`
+    + `<option value="dq"${kind === 'dq' ? ' selected' : ''}>${i18n('seed.core.lock_dq')}</option>`
     + `</select>`;
   let targetSel = '';
   if (kind === 'pool') {
@@ -736,6 +737,9 @@ const MANUAL_COL = {
       if (lkKind === 'seed') {
         lkLabel = i18n('seed.core.lock_seed');
         lkTitle = i18n('seed.core.lock_seed_title');
+      } else if (lkKind === 'dq') {
+        lkLabel = i18n('seed.core.lock_dq');
+        lkTitle = i18n('seed.core.lock_dq_title');
       } else if (lkKind === 'pool') {
         lkLabel = tgt != null && _mnPoolCtx ? poolLabel(tgt, _mnPoolCtx.waveMap) + i18n('seed.core.s12') : i18n('seed.core.s13');
         lkTitle = i18n('seed.core.s13') + (tgt != null && _mnPoolCtx ? ` (${poolLabel(tgt, _mnPoolCtx.waveMap)})` : '');
@@ -743,7 +747,7 @@ const MANUAL_COL = {
         lkLabel = tgt != null ? i18n('seed.core.s1') + waveLetter(tgt) + i18n('seed.core.s12') : i18n('seed.core.s14');
         lkTitle = i18n('seed.core.s14') + (tgt != null ? ` (${waveLetter(tgt)})` : '');
       }
-      if (lkKind !== 'seed') lkTitle += i18n('seed.core.s15');
+      if (lkKind !== 'seed' && lkKind !== 'dq') lkTitle += i18n('seed.core.s15');
     }
     if (S.MANUAL && S.MANUAL.editing) {
       const isLockSel = S.MANUAL.lockSel === u;
