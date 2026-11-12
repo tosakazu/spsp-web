@@ -594,7 +594,7 @@ function settingsSetup(HTML) {
     var SHIFT_LIMIT_IDS = ['so-shift0', 'so-shift1', 'so-shift2', 'so-shift3', 'so-shift4', 'so-shift5'];
     var _lastShiftPrefill = null;
     var SEEDOPT_SETTINGS_KEY = 'spsp_seedopt_settings_v1';
-    var SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-series-select']);
+    var SEEDOPT_SETTINGS_SKIP = new Set(['so-pools', 'so-waves', 'so-wave-order', 'so-series-select']);
     var SEEDOPT_DEFAULTS = null;
     var modeDefaultsCalls = 0;
     function applyModeDefaults() { modeDefaultsCalls++; document.getElementById('so-restarts').value = '15'; }

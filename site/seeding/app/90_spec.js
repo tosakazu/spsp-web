@@ -8,7 +8,7 @@ import { DATA, _csvNormDisc, manualMovedSet, manualOrder, manualParseUid, manual
 import { fetchAllSeeds, getToken, render, seedNodeToInfo } from './40_startgg.js';
 import { dropAppliedOrder, escHtml, resetSeedOptResultPanel, updateIntraToggleState } from './75_series_rematch.js';
 import { CSV_SEAT_COLS, _csvMatchRow, _csvNormName, _csvPick, _csvRecLookups, _csvRowLabel, csvTemplateLines, downloadCsvTemplate, isCsvTemplateSample } from './80_csv_source.js';
-import { currentWaveMap, poolLabel, waveLetter } from './85_waves.js';
+import { currentWaveMap, poolLabel, waveLetter, waveOrderReversed } from './85_waves.js';
 import SmashSeed from '../../seed-upload/seed_uploader.js';
 import { decodeCsvBytes } from '../../js/csv_text.js';
 import SeedOptimizer from '../seed_optimizer.js';
@@ -229,6 +229,16 @@ export function _applyCsvSettingColumns(rows) {
     if (el && Number.isFinite(v) && v >= 1 && String(v) !== String(el.value)) {
       el.value = String(v);
       settingNotes.push(`${label2}${i18n('seed.spec.t10')} ${v} ${i18n('seed.spec.t11')}`);
+    }
+  }
+  // ウェーブの並び (wave_order 列がある CSV だけ。rev = 逆から、空 = A から)
+  const orderRow = rows.find((r) => _csvPick(r, ['pools']) != null || _csvPick(r, ['waves']) != null);
+  const orderEl = /** @type {HTMLSelectElement | null} */ (document.getElementById('so-wave-order'));
+  if (orderEl && orderRow && rows.some((r) => Object.keys(r).some((k) => String(k).trim().toLowerCase() === 'wave_order'))) {
+    const v = String(_csvPick(orderRow, ['wave_order']) || '').trim().toLowerCase() === 'rev' ? 'rev' : '';
+    if (v !== orderEl.value) {
+      orderEl.value = v;
+      settingNotes.push(`${i18n('seed.skeleton.wave_order')}${i18n('seed.spec.t10')} ${i18n(v ? 'seed.skeleton.wave_order_b' : 'seed.skeleton.wave_order_a')} ${i18n('seed.spec.t11')}`);
     }
   }
   if (settingNotes.length) updateIntraToggleState();
@@ -478,6 +488,7 @@ async function loadSpecSource() {
 //   lock  : pool / wave / 空 (固定の種別。対象は seed 順から決まる)
 //   pool  : 参考表示 (A3 / P3。読み込み時は無視される)
 //   pools / waves : プール数・ウェーブ数 (1 行目のみ。読み込み時に設定へ反映)
+//   wave_order    : rev = ウェーブの並びが逆から (B, A, A, B, …)。1 行目のみ。空 = A から
 function exportSeedWorkCsv() {
   if (!DATA.length) { _specStatus(i18n('seed.spec.s15'), true); return; }
   const recs = orderedRecs();
@@ -489,7 +500,7 @@ function exportSeedWorkCsv() {
     const s = String(v == null ? '' : v);
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const lines = ['seed,name,discriminator,uid,lock,pool,pools,waves'];
+  const lines = ['seed,name,discriminator,uid,lock,pool,pools,waves,wave_order'];
   recs.forEach((r, i) => {
     const lk = locks[r.user_id];
     const kind = lk ? (lk.kind || lk) : '';
@@ -504,6 +515,7 @@ function exportSeedWorkCsv() {
       field(P >= 2 ? poolLabel(SeedOptimizer.poolOfSeed(i, P), waveMap) : ''),
       i === 0 ? P : '',
       i === 0 ? W : '',
+      i === 0 && waveOrderReversed() ? 'rev' : '',
     ].join(','));
   });
   const name = ((S.EVENT_CONTEXT && S.EVENT_CONTEXT.eventName) || (S.CSV_SOURCE && S.CSV_SOURCE.label) || 'seed')
@@ -808,4 +820,6 @@ export function applySeedLockChoice(uid) {
   if (poolsEl) poolsEl.addEventListener('input', () => renderManualUI());
   const wavesEl = document.getElementById('so-waves');
   if (wavesEl) wavesEl.addEventListener('input', () => renderManualUI());
+  const waveOrderEl = document.getElementById('so-wave-order');
+  if (waveOrderEl) waveOrderEl.addEventListener('change', () => renderManualUI());
 })();

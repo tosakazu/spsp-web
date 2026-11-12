@@ -631,7 +631,7 @@ test('静的: 作業状況の CSV エクスポートと適用順の配線', () =
     'work-bar の表示切替が無い');
   assert.ok(/function exportSeedWorkCsv\(/.test(APP_SRC), 'exportSeedWorkCsv が無い');
   // インポート側の列と一致するヘッダを出す。
-  assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves'/.test(APP_SRC), 'エクスポート列が想定と違う');
+  assert.ok(/'seed,name,discriminator,uid,lock,pool,pools,waves,wave_order'/.test(APP_SRC), 'エクスポート列が想定と違う');
   // 被り回避の反映中に編集を再開したら、最適化後の並びを手動調整の 1 手 ({ order }) として積む (base には畳み込まない。
   // 「元に戻す」で最適化前に戻せる、2026-11-11)。
   const unlock = APP_SRC.slice(APP_SRC.indexOf('function manualUnlock('), APP_SRC.indexOf('function manualCommit('));
@@ -729,6 +729,10 @@ test('app: interleaveWaveMap — 既定のウェーブの並びは交互 (篝火
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(8, 2)), [0, 1, 1, 0, 0, 1, 1, 0]);
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3)), [0, 1, 2, 2, 1, 0]);
   assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1)), [0, 0, 0, 0]);
+  // 逆から (2026-11-12): シード 1 のプールから B, A, A, B, B, A, A, B, …
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(11, 2, true)), [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(6, 3, true)), [2, 1, 0, 0, 1, 2]);
+  assert.deepStrictEqual(arr(ctx.interleaveWaveMap(4, 1, true)), [0, 0, 0, 0]);
   // プール 16・ウェーブ 2: シードは 1 つごとに A, B, B, A, …、一番下の段にも両方のウェーブが来る
   const wm = arr(ctx.interleaveWaveMap(16, 2));
   const waveOfSeed = (s1) => wm[SO.poolOfSeed(s1 - 1, 16)];

@@ -449,13 +449,22 @@ test('jsdom: 📌 指定 CSV の「ノーシード」と「◯◯の逆」(2026-
     function saveManual() {} function render() {} function resetSeedOptResultPanel() {} function dropAppliedOrder() {}
     function _specStatus(m) { document.getElementById('spec-status').innerHTML = m; }
     ${['CSV_NAME_COLS', 'CSV_SEAT_COLS', 'CSV_DISC_COLS', 'CSV_TPL_OUT_NAMES', 'CSV_TPL_NAMES', 'SPEC_WAVE_COLS', 'SPEC_FIX_COLS', 'WAVE_NONE_RE', 'WAVE_OPPOSITE_RE', 'NOSEED_RE', 'CSV_NAME_COLS_SPEC'].map(constLine).join('\n')}
-    ${['currentWaveMap', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
+    ${['currentWaveMap', 'waveOrderReversed', 'interleaveWaveMap', 'waveLetter', '_csvNormName', '_csvNormDisc', '_csvPick', '_csvRecLookups', '_csvMatchRow', '_csvRowLabel', 'isCsvTemplateSample',
        'parseWaveValue', 'parseFixValue', 'parseWaveOpposite', 'oppositeWave', '_specRefKey', 'buildSpecOrder', 'applySpecRows'].map((n) => extractFn(HTML, n)).join('\n')}
   `);
   // 16 人・4 プール・2 ウェーブ (既定は交互: プール 1 = A, 2 = B, 3 = B, 4 = A)。discriminator は d01〜d16
   for (let i = 1; i <= 16; i++) win.DATA.push({ user_id: i, display: 'P' + i, discriminator: ('0000000' + i.toString(16)).slice(-8).replace(/^0/, 'a'), ranks: { ensemble: i } });
   const disc = (i) => win.DATA[i - 1].discriminator;
   const waveOfSeat = (s) => win.eval('interleaveWaveMap(4, 2)')[win.SeedOptimizer.poolOfSeed(s, 4)];
+  // ウェーブの並び (so-wave-order、2026-11-12): 逆から = シード 1 のプールから B, A, A, B
+  assert.deepStrictEqual(Array.from(win.eval('currentWaveMap(4)')), [0, 1, 1, 0]);
+  const orderSel = win.document.createElement('select');
+  orderSel.id = 'so-wave-order';
+  orderSel.innerHTML = '<option value=""></option><option value="rev"></option>';
+  win.document.body.appendChild(orderSel);
+  orderSel.value = 'rev';
+  assert.deepStrictEqual(Array.from(win.eval('currentWaveMap(4)')), [1, 0, 0, 1]);
+  orderSel.remove();
   win.applySpecRows([
     { name: 'P3', discriminator: disc(3), seed: 'ノーシード', wave: '', lock: '' },
     { name: 'P5', discriminator: disc(5), seed: 'noseed', wave: '', lock: '' },
