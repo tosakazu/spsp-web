@@ -9,6 +9,7 @@
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SpspLogin from '../../site/js/login.js';
+import { loginFromBracket } from './bracket_login_return.js';
 import { SHARED_KEY } from './bracket_sgg.js';
 
 const t = (k, v) => SPSPI18n.t(k, v);
@@ -59,7 +60,14 @@ function mountButton() {
     if (!sess || !sess.token) {
       out.innerHTML = escapeHtml(t('bracket.share.need_login')) + ` <button type="button" class="bp-btn">${escapeHtml(t('bracket.sgg.login'))}</button>`;
       const lb = out.querySelector('button');
-      if (lb) lb.addEventListener('click', () => SpspLogin.startLogin(location.pathname + location.search + location.hash));
+      if (lb) lb.addEventListener('click', async (e) => {
+        const b = /** @type {HTMLButtonElement} */ (e.currentTarget);
+        b.disabled = true;
+        if (!(await loginFromBracket())) {   // 始められなかった (通信の失敗など): 黙って何もしないのをやめて一言出す
+          b.disabled = false;
+          if (!b.nextElementSibling || !b.nextElementSibling.classList.contains('bp-login-err')) b.insertAdjacentHTML('afterend', ` <span class="bp-login-err" style="color:#dc2626">${escapeHtml(t('bracket.sgg.login_failed'))}</span>`);
+        }
+      });
       return;
     }
     btn.disabled = true;

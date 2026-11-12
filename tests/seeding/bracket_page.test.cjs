@@ -49,6 +49,7 @@ test('依存スクリプトの読み込み順が正しい', () => {
   assert.deepStrictEqual(htmlOrder, ['../region/config.js', '../i18n/ja.js', '../region/i18n.js', '../assets/bracket.js']);
   const order = pageImports('bracket').map((s) => s.startsWith('bracket/') ? s.slice('bracket/'.length) : '../' + s);
   assert.deepStrictEqual(order, [
+    '../../src/pages/bracket_login_return.js',   // ログインから戻ったときに #d=… を付け直す。bracket_app.js より先 (2026-11-12)
     '../js/html.js',
     '../js/i18n.js',
     '../js/data.js',
@@ -420,4 +421,21 @@ test('プレビューのメニュー: もう一度押す・外を押す・Esc �
   win.document.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' }));
   assert.strictEqual(menu.hidden, true);
   assert.strictEqual($('bracket-preview').getAttribute('aria-expanded'), 'false');
+});
+
+// 2026-11-12: 長い共有 URL (#d=…) からのログイン。戻り先 (returnPath) は 512 字までなので # は入れず、sessionStorage に置いて付け直す
+test('bracket: ログインの戻り先に長い #d= を入れない (bracket_login_return.js)', () => {
+  const fs2 = require('node:fs'), path2 = require('node:path');
+  const rd = (p) => fs2.readFileSync(path2.resolve(__dirname, '../../', p), 'utf8');
+  const entry = rd('src/pages/bracket.js');
+  // bracket_app.js が location.hash を読む前に付け直すので、いちばん先に import する
+  assert.ok(entry.indexOf("import './bracket_login_return.js'") >= 0 && entry.indexOf("import './bracket_login_return.js'") < entry.indexOf('bracket_app.js'));
+  for (const f of ['src/pages/bracket_sgg.js', 'src/pages/bracket_share.js']) {
+    const s = rd(f);
+    assert.ok(/loginFromBracket\(\)/.test(s), f);
+    assert.ok(!/startLogin\(location\.pathname \+ location\.search \+ location\.hash\)/.test(s), f + ' が # 付きの戻り先を渡している');
+  }
+  const m = rd('src/pages/bracket_login_return.js');
+  assert.ok(/full\.length <= 512/.test(m));
+  assert.ok(/history\.replaceState\(history\.state, '', location\.pathname \+ location\.search \+ o\.hash\)/.test(m));
 });
