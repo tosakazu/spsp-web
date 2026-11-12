@@ -100,6 +100,8 @@ main.ce { max-width: 520px; margin: 0 auto; padding: 12px 16px 96px; }
 .ce-apply {
   flex: 1; max-width: 360px; height: 44px; border: 0; border-radius: 10px; background: #111827; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
 }
+.ce-discard { flex: none; height: 44px; border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 10px; padding: 0 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ce-discard[hidden] { display: none; }
 .ce-apply:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
 
 /* 本人確認 (ログイン) */

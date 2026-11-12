@@ -177,6 +177,7 @@ async function main() {
     const done = same(st, applied || DEFAULT_SETTINGS);   // 適用済みと同じなら押せない
     apply.disabled = done;
     apply.textContent = done ? i18n('card_edit.applied') : i18n('card_edit.apply');
+    $('ce-discard').hidden = done;
     ($('ce-reset')).style.visibility = picked.length ? '' : 'hidden';
     // 畳んだ見出しの右: 今の選択 (実績 = 自動か選んだ数、大会 = 自動か選んだ大会名)
     $('ce-ach-sum').textContent = picked.length ? i18n('card_edit.n_selected', { n: picked.length }) : i18n('card_edit.auto');
@@ -424,6 +425,8 @@ async function main() {
     b.addEventListener('click', () => setTab(/** @type {'front' | 'back'} */ (/** @type {HTMLElement} */ (b).dataset.tab)));
   }
   setTab(backOn && params.get('tab') === 'back' ? 'back' : 'front');
+  // 適用していない変更を捨てる: 下書きを消して開き直す (適用済みの設定・初期配置から描き直す)
+  $('ce-discard').addEventListener('click', () => { clearDraft(uid); location.reload(); });
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
     btn.disabled = true;
