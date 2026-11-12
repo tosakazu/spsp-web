@@ -458,8 +458,13 @@ export async function putApplied(uid, s) {
   return r && r.ok ? { ok: true } : { ok: false, code: (r && r.error && r.error.code) || 'unknown' };
 }
 /** @param {number} uid */ export const loadDraft = uid => normalize(readMap(DRAFT_KEY)[String(uid)]);
-/** @param {number} uid @param {CardSettings} s */ export const saveDraft = (uid, s) => writeOne(DRAFT_KEY, uid, s);
+/** backTouched = この下書きで裏面を変えた (true のときだけ、下書きの back を信じる。draftBackTouched)
+ * @param {number} uid @param {CardSettings} s @param {boolean} [backTouched] */
+export const saveDraft = (uid, s, backTouched = false) => writeOne(DRAFT_KEY, uid, backTouched ? /** @type {any} */ ({ ...s, back_touched: true }) : s);
+/** 下書きで裏面を変えてあるか。変えていない下書き (表だけ編集した・裏面ができる前の下書き) の back は null で、「初期配置に戻した」と
+ * 区別できないので、適用済みの裏面を使う (下書きがサーバの裏面を隠して初期配置が出ていた。2026-11-12) @param {number} uid */
+export const draftBackTouched = uid => { const d = /** @type {any} */ (readMap(DRAFT_KEY)[String(uid)]); return !!(d && d.back_touched === true); };
 /** @param {number} uid */ export const clearDraft = uid => writeOne(DRAFT_KEY, uid, null);
 
 export default { buildCardModel, hideCardRanks, titleLang, cardAchievements, loadCardData, loadCardReadings, loadCardDefaultBack, loadCardShared, perfInfoOf, achievementBadge, DEFAULT_SETTINGS,
-                 fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, clearDraft };
+                 fetchApplied, fetchAppliedCard, putApplied, loadDraft, saveDraft, draftBackTouched, clearDraft };

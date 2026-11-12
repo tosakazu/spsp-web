@@ -999,6 +999,8 @@ async function runMatchAnimation(m) {
       over = true;
       clearTimeout(timer);
       document.removeEventListener('keydown', onKey);
+      // 飛ばしたときは、幕がまだ見えているうちに相手のカードの所へ動かしておく (幕が消えてから動かすと、前の位置が一瞬見えてから飛ぶ)
+      if (skip) scrollToMatch(m, true);
       ov.classList.add(skip ? 'skip' : 'out');
       setTimeout(() => { ov.remove(); res(!!skip); }, skip ? 120 : 350);
     };

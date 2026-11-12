@@ -16,7 +16,7 @@ import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/p
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
 import { mountBackEditor } from './card_back_edit.js';
-import { loadCardData, loadCardDefaultBack, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, clearDraft } from '../../site/js/player_card_model.js';
+import { loadCardData, loadCardDefaultBack, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, draftBackTouched, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -69,8 +69,12 @@ async function main() {
   const [appliedRes, ownedRec] = await Promise.all([fetchApplied(uid), titlesOn ? SpspTitleNotice.fetchOwned(uid) : Promise.resolve(null)]);
   /** @type {CardSettings | null} */
   let applied = appliedRes;
+  const draft = loadDraft(uid);
+  // 下書きの裏面は、その下書きで裏面を変えたときだけ使う (変えていなければ適用済みの裏面のまま)
+  let backTouched = !!draft && draftBackTouched(uid);
+  if (draft && !backTouched) draft.back = applied ? applied.back ?? null : null;
   /** @type {CardSettings} */
-  let st = loadDraft(uid) || applied || { ...DEFAULT_SETTINGS };
+  let st = draft || applied || { ...DEFAULT_SETTINGS };
   const cardEl = $('ce-card');
   const all = cardAchievements(data);
   // 二つ名: 持っているものは記録 (D1、GET /api/titles)。API の無い ConoHa のプレビューだけは、記録の代わりに出た大会から計算して見た目を確かめる
@@ -118,9 +122,10 @@ async function main() {
   const same = (/** @type {CardSettings | null} */ a, /** @type {CardSettings | null} */ b) => JSON.stringify(a) === JSON.stringify(b);
   /** @param {Partial<CardSettings>} patch */
   const update = patch => {
+    if ('back' in patch && !same(/** @type {any} */ (patch.back ?? null), /** @type {any} */ (st.back ?? null))) backTouched = true;
     st = { ...st, ...patch };
     if (st.ach && !st.ach.length) st.ach = null;   // 何も選んでいなければ自動
-    saveDraft(uid, st);
+    saveDraft(uid, st, backTouched);
     // 裏のタブ (シールを貼っている間) はプレビューのカードが隠れているので描かない (シールを動かすたびに全部描き直すと重い)。表に戻るときに描く
     if (curTab === 'back') previewStale = true;
     else draw();
