@@ -22,9 +22,14 @@ let CURRENT_FILTER = (_urlFilter === 'auto' || _urlFilter === 'announcement') ? 
 // escapeHtml は ../js/html.js (サイト共通)
 // markdown-like bold/italic: **text** → <strong>, *text* → <em>. escapeHtml の後に適用.
 // 太字を先に消費するので入れ子は不可 (太字の中で強調したいときは斜体を使う).
+// http(s) の URL はリンクにする (空白・* ・閉じ括弧・句読点の手前まで。このサイト以外は別タブ)。
 /** @param {string} s @returns {string} */
 function renderMD(s) {
   return escapeHtml(s)
+    .replace(/https?:\/\/[^\s*<>"')）」。、]+/g, u => {
+      const own = /^https?:\/\/spsp\.games(\/|$)/.test(u);
+      return `<a href="${u}"${own ? '' : ' target="_blank" rel="noopener"'}>${u}</a>`;
+    })
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>');
 }

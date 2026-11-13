@@ -409,7 +409,7 @@ SPSPShare.setup(document.getElementById('share-icon-btn'), () => ({
   const nowMs = Date.now();
   /** news.json の 1 件 (時刻は JST) */
   /** @typedef {{ date?: string, datetime?: string, title?: string }} NewsItem */
-  fetch(SPSP.data + 'news.json').then(r => r.json()).then(data => {
+  fetch(SPSP.root + 'news.json').then(r => r.json()).then(data => {   // お知らせはサイトと一緒に配信 (site/news.json、2026-09-29 から)。データの置き場には無い
     /** @param {unknown} s */
     const escH = s => String(s ?? '').replace(/[&<>"']/g, c => (/** @type {Record<string, string>} */ ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}))[c]);
     /** @param {NewsItem[]} items @param {string} filter */
