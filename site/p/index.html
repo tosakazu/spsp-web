@@ -95,14 +95,14 @@
   /* スマッチのレート: 見出しの行 + ルールごとの欄 (1on1・特おま) */
   /* スマッチのレート: 実績の上の欄 (js/smatch_view.js) */
   #smatch-section[hidden] { display: none; }
-  a.smatch-line { color: #374151; text-decoration: none; }
-  a.smatch-line:hover .v { text-decoration: underline; }
-  a.smatch-line:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
-  .smatch-line .sm-go { width: 11px; height: 11px; margin-left: 3px; color: #9ca3af; vertical-align: -1px; }
+  #smatch-section .sm-link { color: inherit; text-decoration: none; }
+  #smatch-section .sm-link:hover { text-decoration: underline; }
+  #smatch-section .sm-link:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+  #smatch-section .sm-go { width: 11px; height: 11px; margin-left: 3px; color: #9ca3af; vertical-align: -1px; }
   .smatch-line .sm-val { text-align: right; }
   .smatch-line .sm-rank { margin-left: 5px; font-size: 11px; color: #6b7280; font-variant-numeric: tabular-nums; }
   .smatch-line .sm-meta { display: inline-block; margin-left: 8px; font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; }
-  a.smatch-line { padding: 3px 0; }
+  .smatch-line { padding: 3px 0; }
   #smatch-section h2 { margin-bottom: 2px; }
   .subrank-card[aria-expanded="true"] { border-color: #d1d5db; background: #fff; }
   .subrank-card .label { display: block; max-width: 2.3em; font-size: 11px; line-height: 1.3; color: #6b7280; letter-spacing: 0.06em; }
