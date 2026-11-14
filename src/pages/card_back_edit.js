@@ -17,7 +17,7 @@
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPFormat from '../../site/js/format.js';
 import SPSPPlayerCard from '../../site/js/player_card.js';
-import { autoLatin, latinNameValid } from '../../site/js/latin_name.js';
+import { autoLatin, latinNameValid, autoLatinUsable } from '../../site/js/latin_name.js';
 import { startGuide, maybeStartGuide } from './card_back_guide.js';
 import { isTransparent, renderBadge, reflatten, preloadAllHolo, SHAPES, CROP_MIN } from '../../site/js/holo_badge.js';
 import { CARD_W as W, CARD_H as H, S_MIN, S_MAX, MAX_STICKERS, TIERS, IMG_BASE, TEXT_DX, TEXT_DY, TEXT_S_MIN, TEXT_S_MAX, normRot, normBack, normParts, loadIcons, loadOwnedStickers, tourKey } from '../../site/js/card_stickers.js';
@@ -95,7 +95,8 @@ const HISTORY_MAX = 100;
  * @param {{ uid: number, data: any, back: CardBack | null, defBack?: CardBack | null, latin: string | null,
  *   model: (latin: string | null, back: CardBack | null) => import('../../site/js/player_card.js').PCardModel,
  *   onChange: (patch: { back?: CardBack | null, latin?: string | null }) => void }} o
- * @returns {Promise<{ refresh: () => void, flush: () => void }>} flush = 動かしている途中の変更 (まとめ待ち) を今すぐ返す
+ * @returns {Promise<{ refresh: () => void, flush: () => void, askLatin: () => void }>} flush = 動かしている途中の変更 (まとめ待ち) を今すぐ返す、
+ *   askLatin = 英字名を入れてもらう旨を出して欄へ
  */
 export async function mountBackEditor(o) {
   const { uid, data } = o;
@@ -220,23 +221,40 @@ export async function mountBackEditor(o) {
   const latinEl = /** @type {HTMLInputElement} */ ($('bz-latin'));
   const latinNote = $('bz-latin-note');
   const auto = autoLatin(SPSPFormat.shortName(data.rec.display), data.readings);
-  latinEl.value = latin || auto;
-  latinEl.placeholder = auto;
+  // 英字名は必須 (2026-11-15)。自動の英字名が使える人は最初から入っていて、そのままでよい。
+  // 使えない人 (読みの分からない漢字だけの名前など) は空の欄から始めて、入れるまで適用できない (p_edit.js が askLatin を呼ぶ)
+  const autoOk = autoLatinUsable(auto);
+  const fill = autoOk ? auto : '';
+  const latinReq = $('bz-latin-req');
+  const noteLatin = (/** @type {string} */ msg) => {
+    latinEl.classList.toggle('bad', !!msg);
+    latinNote.textContent = msg;
+    latinNote.classList.toggle('bad', !!msg);
+  };
+  // 「必須」の案内は、まだ英字名が無い間だけ (自動の英字名が使える人・入力済みの人には出さない)
+  const paintReq = () => {
+    const need = !autoOk && !latin;
+    latinReq.hidden = !need;
+    latinEl.classList.toggle('need', need);
+    latinEl.required = need;
+  };
+  latinEl.value = latin || fill;
+  latinEl.placeholder = autoOk ? auto : SPSPI18n.t('card_back.latin_placeholder');
+  paintReq();
   latinEl.addEventListener('input', () => {
     const v = latinEl.value.trim();
     const ok = v === '' || latinNameValid(v);
-    latinEl.classList.toggle('bad', !ok);
-    latinNote.textContent = ok ? '' : SPSPI18n.t('card_edit.latin_bad');
-    latinNote.classList.toggle('bad', !ok);
+    noteLatin(ok ? '' : SPSPI18n.t('card_edit.latin_bad'));
     if (!ok) return;
     const next = v === '' ? null : v;
     if (next === latin) return;
     latin = next;
+    paintReq();
     renderBase();
     o.onChange({ latin });
   });
-  // 空のまま離れたら自動の名前を入れて見せる
-  latinEl.addEventListener('blur', () => { if (!latinEl.value.trim()) { latinEl.value = auto; latinEl.classList.remove('bad'); latinNote.classList.remove('bad'); } });
+  // 空のまま離れたら自動の名前を入れて見せる (自動の名前が使えない人は空のまま)
+  latinEl.addEventListener('blur', () => { if (!latinEl.value.trim()) { latinEl.value = fill; noteLatin(''); } });
   latinEl.addEventListener('keydown', e => { if (e.key === 'Enter') latinEl.blur(); });
 
   // ── 持っているシール ──
@@ -1132,6 +1150,13 @@ export async function mountBackEditor(o) {
   // 表のタブで変えたもの (色・二つ名など) を裏のカードにも出す (裏のタブに戻ったときに p_edit.js が呼ぶ)
   // 使い方ガイド: ? のボタンで出す。初めてなら裏の欄を見せたとき (refresh) に出す
   $('bz-guide').addEventListener('click', () => { menu.open = false; startGuide(); });
-  return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); }, flush: flushHistory };
+  // 英字名がまだ無いまま適用しようとしたとき: 入れてもらう旨を出して欄へ
+  const askLatin = () => {
+    paintReq();
+    latinReq.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    latinReq.classList.remove('shake'); void latinReq.offsetWidth; latinReq.classList.add('shake');
+    latinEl.focus({ preventScroll: true });
+  };
+  return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); }, flush: flushHistory, askLatin };
 }
 

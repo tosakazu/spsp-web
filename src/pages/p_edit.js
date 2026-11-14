@@ -16,6 +16,7 @@ import SPSPPlayerCard, { COLORS, TEMPLATES, defaultTitle } from '../../site/js/p
 import SpspTitleNotice from '../../site/js/title_notice.js';
 import { TITLES, usableIn, titleById, bitsTitles, simulateTitles, obtainableCount } from '../../site/js/titles.js';
 import { mountBackEditor } from './card_back_edit.js';
+import { latinMissing } from '../../site/js/latin_name.js';
 import { loadCardData, loadCardDefaultBack, buildCardModel, cardAchievements, titleLang, DEFAULT_SETTINGS, fetchApplied, putApplied, loadDraft, saveDraft, draftBackTouched, clearDraft } from '../../site/js/player_card_model.js';
 
 'use strict';
@@ -360,8 +361,10 @@ async function main() {
   // ── 表と裏のタブ。裏は初めて開いたときに組み立てる (シールの一覧のデータを読むので) ──
   if (backOn) $('ce-tabs').style.display = '';
   let backMounted = false;
-  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void, flush: () => void } | null} */
+  /** 裏の編集 (組み立て終わったら) @type {{ refresh: () => void, flush: () => void, askLatin: () => void } | null} */
   let backEditor = null;
+  /** 裏の組み立てが終わったら英字名の欄へ案内する (組み立て前に適用を押したとき) */
+  let askLatinPending = false;
   /** @type {'front' | 'back' | null} */
   let curTab = null;
   /** 切り替えをプレイヤーページの裏返し (player_card.css .pcard-flip: rotateY 180°、0.5 秒 ease) と同じ見え方で:
@@ -416,6 +419,7 @@ async function main() {
         onChange: patch => update(patch),
       }).then(api => {
         backEditor = api;
+        if (askLatinPending) { askLatinPending = false; api.askLatin(); }
         // 組み立てが裏返しの途中 (裏の欄が隠れている間) だと名前の幅が測れないので、もう見えていれば描き直す (まだなら見せるときに描く)
         if ($('ce-pane-back').style.display !== 'none') api.refresh();
       }).catch(e => console.error(e));
@@ -429,6 +433,13 @@ async function main() {
   $('ce-discard').addEventListener('click', () => { clearDraft(uid); location.reload(); });
   $('ce-apply').addEventListener('click', async () => {
     const btn = /** @type {HTMLButtonElement} */ ($('ce-apply'));
+    // 裏面を編集したとき (裏のタブにいる・裏面を変えた) は英字名が必須。自動の英字名が使えない人 (読みの分からない漢字だけの名前など) は
+    // 入れるまで適用しない: 裏のタブの欄へ案内する (2026-11-15。表だけの変更は止めない)
+    const backTouched = curTab === 'back' || JSON.stringify(st.back ?? null) !== JSON.stringify((applied || DEFAULT_SETTINGS).back ?? null);
+    if (backOn && backTouched && latinMissing(SPSPFormat.shortName(data.rec.display), st.latin, data.readings)) {
+      if (backEditor) { setTab('back'); backEditor.askLatin(); } else { askLatinPending = true; setTab('back'); }
+      return;
+    }
     btn.disabled = true;
     if (backEditor) backEditor.flush();   // シールを動かした直後 (まとめ待ちの変更) も入れる
     const r = await putApplied(uid, st);

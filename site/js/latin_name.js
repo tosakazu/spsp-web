@@ -120,7 +120,13 @@ export function cardLatinName(name, own, readings) {
  * 前後・続けての空白なし、英字か数字が 1 文字は要る @param {string} s */
 export const latinNameValid = s => /^[A-Za-z0-9!?.\-_'&+]+(?: [A-Za-z0-9!?.\-_'&+]+)*$/.test(s) && /[A-Za-z0-9]/.test(s) && s.length <= 45;
 export const LATIN_NAME_MAX = 45;
+/** 自動の英字名がそのまま使えるか: 日本語の文字 (読みの分からない漢字など) が残っておらず、英字か数字が 1 文字はある。
+ * 使えない人 (「山崎尚」のように読みの表に無い漢字だけの名前) は、裏面の編集で英字名を入れてもらう (2026-11-15) @param {string} auto */
+export const autoLatinUsable = auto => !JA.test(auto) && /[A-Za-z0-9]/.test(auto);
+/** 英字名が要るのにまだ無いか (本人の英字名が無く、自動の英字名も使えない)
+ * @param {string} name @param {string | null | undefined} own @param {Record<string, string> | null} [readings] */
+export const latinMissing = (name, own, readings) => !tidy(String(own || '')) && !autoLatinUsable(autoLatin(name, readings));
 
-const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX, hasKanji, loadReadings, normName };
+const API = { autoLatin, cardLatinName, latinNameValid, LATIN_NAME_MAX, autoLatinUsable, latinMissing, hasKanji, loadReadings, normName };
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLatinName = API;
 export default API;

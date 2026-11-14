@@ -69,3 +69,14 @@ test('読みの表 (名前 → 漢字をひらがなにした名前) があれ�
   assert.strictEqual(L.autoLatin('ダークサムス様', { 'ダークサムス様': 'dark samus sama' }), 'dark samus sama');   // 確認ページで直した英字名
   assert.strictEqual(L.autoLatin('ハツカミ/初雷', {}), 'hatsukami');   // 飛ばした漢字の前の区切りは残さない
 });
+
+test('英字名が要るのにまだ無い人: 自動の英字名に日本語が残る・英数字が無い (裏面の編集で入れてもらう、2026-11-15)', () => {
+  assert.strictEqual(L.latinMissing('山崎尚', null, {}), true);        // 読みの表に無い漢字だけの名前
+  assert.strictEqual(L.latinMissing('山崎尚', 'Yamazaki Sho', {}), false);
+  assert.strictEqual(L.latinMissing('黒船', null, { 黒船: 'くろふね' }), false);   // 読みの表にある
+  assert.strictEqual(L.latinMissing('カヲル', null), false);            // かなは自動でよい (変えなくてよい)
+  assert.strictEqual(L.latinMissing('天マメ', null, {}), false);        // かなが 1 文字でも残ればよい
+  assert.strictEqual(L.latinMissing('Hurt', null), false);
+  assert.strictEqual(L.latinMissing('ºϖº', null), true);               // 英数字が 1 文字も無い
+  assert.ok(L.autoLatinUsable('mame') && !L.autoLatinUsable('法音院') && !L.autoLatinUsable(''));
+});
