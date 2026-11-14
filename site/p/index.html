@@ -93,7 +93,8 @@
   }
   .subrank-card:hover { background: #f3f4f6; }
   /* スマッチのレート: 見出しの行 + ルールごとの欄 (1on1・特おま) */
-  /* スマッチのレート: 記録の一覧 (デビュー戦の下) に同じ形の行で足す (js/smatch_view.js) */
+  /* スマッチのレート: 実績の上の欄 (js/smatch_view.js) */
+  #smatch-section[hidden] { display: none; }
   a.smatch-line { color: #374151; text-decoration: none; }
   a.smatch-line:hover .v { text-decoration: underline; }
   a.smatch-line:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
@@ -659,13 +660,15 @@
       <div id="upcoming-list"></div>
     </div>
 
+    <!-- スマッチ (オンラインのレート対戦) のレート。実績の上。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
+    <div class="section" id="smatch-section" hidden></div>
+
     <div class="section">
       <h2 data-i18n="player.sec.achievements">🏆 実績</h2>
       <div class="badges" id="badges"></div>
     </div>
 
     <div class="section">
-      <!-- スマッチのレートはこの一覧の末尾 (デビュー戦の下) に行として足す。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
       <div id="highlights"></div>
     </div>
     </div><!-- /#share-top -->
