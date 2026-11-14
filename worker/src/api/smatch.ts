@@ -235,7 +235,15 @@ export async function runSmatchImport(cfg: Config, store: Store, fetchFn: Fetch,
     upserts.push({ discriminator: p.discriminator, uid, smatch_id: p.smatch_id, data });
   }
   const unlink = [...prev.values()].filter(r => r.linked && !seen.has(r.discriminator)).map(r => r.discriminator);
-  await store.applySmatchImport(upserts, unlink, formatIso(nowMs, cfg.tsOffsetMin));
+  const ts = formatIso(nowMs, cfg.tsOffsetMin);
+  // シーズンごとの控え (smatch_season_stats): シーズンが変わっても前のシーズンの最後の値が残る。
+  // そのシーズンの最初の取り込みは全員、あとは変わった人だけ。smatch_players より先に書く (ここで失敗したら次の回も同じ差が出て書き直せる)
+  const season = payload.season ? { id: payload.season.id, name: payload.season.name } : { id: '', name: '' };
+  const changed = new Set(upserts.map(u => u.discriminator));
+  const first = (await store.countSmatchSeason(season.id)) === 0;
+  await store.putSmatchSeason(season, payload.players.filter(p => first || changed.has(p.discriminator))
+    .map(p => ({ discriminator: p.discriminator, uid: uidOf.get(p.discriminator) ?? null, data: playerData(p) })), ts);
+  await store.applySmatchImport(upserts, unlink, ts);
   const meta: SmatchMeta = { generated_at: payload.generated_at, season: payload.season, url_template: payload.url_template };
   await store.putPartnerSync(SMATCH_IMPORT, { ok_ms: nowMs, try_ms: nowMs, fails: 0, n: payload.players.length, error: '', meta: JSON.stringify(meta) });
   return { code: 'ok', n: payload.players.length };

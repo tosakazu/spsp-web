@@ -72,6 +72,13 @@ export class MemStore {
     for (const u of upserts) m.set(u.discriminator, { ...u, linked: 1, first_seen: (m.get(u.discriminator) || {}).first_seen || ts, updated_at: ts });
     for (const d of unlink) { const r = m.get(d); if (r) { r.linked = 0; r.updated_at = ts; } }
   }
+  async countSmatchSeason(id) { return [...(this.smatchSeasonStats ||= new Map()).keys()].filter((k) => k.startsWith(id + '|')).length; }
+  async putSmatchSeason(season, rows, ts) {
+    const s = (this.smatchSeasons ||= new Map());
+    s.set(season.id, { name: season.name, first_seen: (s.get(season.id) || {}).first_seen || ts, last_seen: ts });
+    const m = (this.smatchSeasonStats ||= new Map());
+    for (const r of rows) m.set(season.id + '|' + r.discriminator, { ...r, updated_at: ts });
+  }
   async getSmatchForUid(uid) {
     const r = [...(this.smatch ||= new Map()).values()].find((x) => x.uid === Number(uid) && x.linked);
     if (!r) return null;

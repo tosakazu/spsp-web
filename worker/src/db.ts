@@ -153,6 +153,22 @@ export class D1Store implements Store {
     for (let i = 0; i < stmts.length; i += 50) await this.db.batch(stmts.slice(i, i + 50));
   }
 
+  async countSmatchSeason(seasonId: string): Promise<number> {
+    const r = await this.db.prepare('SELECT COUNT(*) AS n FROM smatch_season_stats WHERE season_id = ?1').bind(seasonId).first<{ n: number }>();
+    return Number((r && r.n) || 0);
+  }
+
+  async putSmatchSeason(season: { id: string; name: string }, rows: { discriminator: string; uid: number | null; data: string }[], ts: string): Promise<void> {
+    const stmts = [this.db.prepare(
+      `INSERT INTO smatch_seasons (season_id, name, first_seen, last_seen) VALUES (?1, ?2, ?3, ?3)
+       ON CONFLICT (season_id) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen`).bind(season.id, season.name, ts)];
+    for (const r of rows) stmts.push(this.db.prepare(
+      `INSERT INTO smatch_season_stats (season_id, discriminator, uid, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT (season_id, discriminator) DO UPDATE SET uid = excluded.uid, data = excluded.data, updated_at = excluded.updated_at`)
+      .bind(season.id, r.discriminator, r.uid, r.data, ts));
+    for (let i = 0; i < stmts.length; i += 50) await this.db.batch(stmts.slice(i, i + 50));
+  }
+
   async getSmatchForUid(uid: string): Promise<{ data: string; meta: string; ok_ms: number; profile: string | null } | null> {
     const r = await this.db.prepare(
       `SELECT p.data AS data,
