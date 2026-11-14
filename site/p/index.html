@@ -93,7 +93,7 @@
   }
   .subrank-card:hover { background: #f3f4f6; }
   /* スマッチのレート: 見出しの行 + ルールごとの欄 (1on1・特おま) */
-  .smatch { display: block; margin: 8px 0 0; padding: 8px 10px 9px; background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; color: inherit; text-decoration: none; }
+  .smatch { display: block; margin: 10px 0 0; padding: 8px 10px 9px; background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; color: inherit; text-decoration: none; }
   .smatch[hidden] { display: none; }
   .smatch:hover { background: #f3f4f6; }
   .smatch:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
@@ -632,8 +632,6 @@
     </div>
     <div class="subrank-detail" id="subrank-detail" hidden></div>
 
-    <!-- スマッチ (オンラインのレート対戦) のレート。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
-    <a class="smatch" id="smatch-row" target="_blank" rel="noopener" hidden></a>
     <!-- 本人だけ: プロフィール編集 (スマッチのレートを出すか、など。src/pages/p_profile.js) -->
     <a class="profile-edit-link" id="profile-edit-link" href="profile.html" style="display:none" data-i18n="profile.edit_link">プロフィール編集</a>
 
@@ -674,6 +672,8 @@
 
     <div class="section">
       <div id="highlights"></div>
+      <!-- スマッチ (オンラインのレート対戦) のレート。デビュー戦の下。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
+      <a class="smatch" id="smatch-row" target="_blank" rel="noopener" hidden></a>
     </div>
     </div><!-- /#share-top -->
 
