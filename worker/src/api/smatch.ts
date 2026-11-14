@@ -2,7 +2,7 @@
  * スマッチ (オンラインのレート対戦サイト) との連携 (2026-11-15)。docs/smatch_partner.md
  *
  *   SPSP → スマッチ  GET /api/partner/smatch/players  (Authorization: Bearer <SMATCH_EXPORT_TOKENS のどれか>)
- *       ビルドが書いた一覧 (DATA_ORIGIN の /partner/smatch_players.json、公開済みの情報だけ) をそのまま返す。Worker では組み立てない。
+ *       ビルドが書いた一覧 (DATA_ORIGIN の /data/partner_smatch.json、公開済みの情報だけ) をそのまま返す。Worker では組み立てない。
  *   スマッチ → SPSP  定期実行が 1 日 1 回 SMATCH_IMPORT_URL を読んで D1 (smatch_players) に入れる (runSmatchImport)。
  *       読めない・形が違う・人数が急に減った → 何も書かず前の値のまま。失敗は partner_sync に残す。
  *   状態            GET /api/partner/smatch/status   (だれでも。経過時間と件数だけ。外形監視 tools/monitor/check.mjs が見る)
@@ -251,7 +251,7 @@ export async function handleSmatchExport(cfg: Config, store: Store, dataFetch: D
   if (!cfg.smatchExportTokens || !cfg.smatchExportTokens.length) return json(404, { error: 'not_configured' });
   if (!exportTokenOk(cfg, authorization)) return json(401, { error: 'unauthorized' });
   let res: Response;
-  try { res = await dataFetch('/partner/smatch_players.json'); } catch (_) { return json(503, { error: 'unavailable' }); }
+  try { res = await dataFetch('/data/partner_smatch.json'); } catch (_) { return json(503, { error: 'unavailable' }); }
   if (res.status !== 200) return json(503, { error: 'unavailable' });
   await store.putPartnerSync(SMATCH_EXPORT, { ok_ms: nowMs, try_ms: nowMs }).catch(() => {});
   return new Response(res.body, { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });

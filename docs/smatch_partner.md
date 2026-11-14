@@ -19,7 +19,7 @@
 - `players` は discriminator が分かっている選手だけ。`discriminators` は 1 つ目が今のアカウント、2 つ目以降は統合済みの旧アカウント。
 - `rank` = 総合評価の全国順位 (付いていなければ `null`)。`characters` = オフラインの使用キャラ (日本語名、多い順、空のこともある)。
 - `counted_at` (集計日)・`ranked_total` (順位の付いている人数)・`url_template` (プレイヤーページの URL) は全員共通なので先頭に 1 つ。
-- 中身は SPSP で公開済みの情報だけ。ビルド (spsp-build) が `partner/smatch_players.json` を書き、Worker はトークンを確かめてそのまま返す。
+- 中身は SPSP で公開済みの情報だけ。ビルド (spsp-build) が `data/partner_smatch.json` を書き、Worker はトークンを確かめてそのまま返す。
 
 ## スマッチ → SPSP
 

@@ -16,7 +16,7 @@ const payload = (players) => ({ version: 1, generated_at: 1794700000, season: { 
 const json = (status, body) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 const dataFetch = async (path) => path === '/data/discriminators.json' ? json(200, { 100: 'aaaaaaaa', 200: 'bbbbbbbb', 300: 'cccccccc' })
   : path === '/data/user_merges.json' ? json(200, { 300: 301 })
-  : path === '/partner/smatch_players.json' ? json(200, { version: 1, players: [] }) : json(404, {});
+  : path === '/data/partner_smatch.json' ? json(200, { version: 1, players: [] }) : json(404, {});
 const feed = (body, status = 200) => { const calls = []; const f = async (url, init) => { calls.push({ url, init }); return json(status, body); }; f.calls = calls; return f; };
 
 test('一覧の確認: 2 つのルール・見せない設定・1on1 だけの古い形。形が違えば全体を捨てる', () => {
