@@ -1006,12 +1006,8 @@ function render() {
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
     // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
     // preview (誰でも編集できる、CARD_OPEN_EDIT) はログインしていてもいなくても、どの選手でも出す
-    // プロフィール編集のリンクは本人だけ (preview は誰でも)。ログインしていない人には出さない
-    const profLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById('profile-edit-link'));
-    if (profLink) profLink.href = SPSP.pageHref('profile.html') + (discr ? '?d=' + encodeURIComponent(discr) : '?uid=' + UID);
     const showEdit = () => {
       editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable() || SpspLogin.openEdit()) ? '' : 'none';
-      if (profLink) profLink.style.display = SpspLogin.apiAvailable() && ((SpspLogin.session() && SpspLogin.isSelf(UID)) || SpspLogin.openEdit()) ? '' : 'none';
     };
     showEdit();
     SpspLogin.onChange(showEdit);
@@ -2270,10 +2266,6 @@ async function capturePng() {
   const myNotice = document.getElementById('my-notice');
   const myNoticeShown = myNotice && myNotice.style.display !== 'none';
   if (myNoticeShown) myNotice.style.display = 'none';
-  // プロフィール編集のリンクもシェア画像に含めない
-  const profLinkEl = document.getElementById('profile-edit-link');
-  const profLinkShown = profLinkEl && profLinkEl.style.display !== 'none';
-  if (profLinkEl && profLinkShown) profLinkEl.style.display = 'none';
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
     const target = document.getElementById('share-top') || document.getElementById('share-card');
@@ -2284,7 +2276,6 @@ async function capturePng() {
     if (yosouShown) yosou.style.display = '';
     if (latestresShown) latestres.style.display = '';
     if (myNoticeShown) myNotice.style.display = '';
-    if (profLinkEl && profLinkShown) profLinkEl.style.display = '';
   }
 }
 

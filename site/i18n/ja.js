@@ -47,6 +47,7 @@ window.SPSP_I18N.ja = {
   'nav.user.live_ev': '🔴 参加中: {name}',
   'nav.user.report_admin': '⚙ 結果報告の管理: {name}',
   'nav.user.card_edit': 'カードを編集',
+  'nav.user.profile_edit': 'プロフィール編集',
   'nav.user.new_titles': '🏷️ 新しい二つ名 ({n})',
   'nav.user.logout': 'ログアウト',
   // 自分のプレイヤーページへの共通リンク (me.html)
@@ -570,7 +571,6 @@ window.SPSP_I18N.ja = {
   'smatch.season_max': '今季最高 {n}',
   'smatch.max': '通算最高 {n}',
   'smatch.open': 'スマッチのページを開く',
-  'profile.edit_link': 'プロフィール編集',
   'page.p_profile.title': 'プロフィール編集 | SPSP',
   'profile.title': 'プロフィール編集',
   'profile.back': 'プレイヤーページに戻る',

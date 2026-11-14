@@ -450,6 +450,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
       `<a href="${prefix}${pageHref('me.html')}" role="menuitem">${t('nav.user.mypage')}</a>` +   // 自分のプレイヤーページへの共通リンク
       `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
+      `<a href="${prefix}${pageHref('p/profile.html')}?uid=${uid}" role="menuitem">${t('nav.user.profile_edit')}</a>` +   // スマッチのレートを出すか、など (p_profile.js)
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
     // 開催中の大会: 名前の下 (マイページの上) に「結果報告: 大会」(受付中のもの) と「参加中: 大会」(それ以外)。押すと報告ページ / 自分の速報

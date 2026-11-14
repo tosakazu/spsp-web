@@ -45,6 +45,7 @@ window.SPSP_I18N.en = {
   'nav.user.live_ev': '🔴 Playing: {name}',
   'nav.user.report_admin': '⚙ Manage reports: {name}',
   'nav.user.card_edit': 'Edit card',
+  'nav.user.profile_edit': 'Edit profile',
   'nav.user.new_titles': '🏷️ New titles ({n})',
   'nav.user.logout': 'Log out',
   // 自分のプレイヤーページへの共通リンク (me.html)
@@ -567,7 +568,6 @@ window.SPSP_I18N.en = {
   'smatch.season_max': 'Season peak {n}',
   'smatch.max': 'All-time peak {n}',
   'smatch.open': 'Open the Smatch page',
-  'profile.edit_link': 'Edit profile',
   'page.p_profile.title': 'Edit profile | SPSP',
   'profile.title': 'Edit profile',
   'profile.back': 'Back to the player page',
