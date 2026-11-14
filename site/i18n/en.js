@@ -559,7 +559,6 @@ window.SPSP_I18N.en = {
   'card_edit.discard': 'Discard changes',
   'card_edit.back_mypage': 'Back to my page',
   // スマッチとの連携・プロフィール編集 (2026-11-15)
-  'smatch.title': 'Smatch',
   'smatch.heading': '🌐 Smatch',
   'smatch.as_of': 'as of {date}',
   'smatch.mode.1on1': '1v1',

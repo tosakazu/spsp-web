@@ -562,7 +562,6 @@ window.SPSP_I18N.ja = {
   'card_edit.discard': '変更を取り消す',
   'card_edit.back_mypage': 'マイページに戻る',
   // スマッチとの連携・プロフィール編集 (2026-11-15)
-  'smatch.title': 'スマッチ',
   'smatch.heading': '🌐 スマッチ',
   'smatch.as_of': '{date} 時点',
   'smatch.mode.1on1': '1on1',
