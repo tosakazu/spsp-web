@@ -225,14 +225,22 @@ export async function mountBackEditor(o) {
   // 使えない人 (読みの分からない漢字だけの名前など) は空の欄から始めて、入れるまで適用できない (p_edit.js が askLatin を呼ぶ)
   const autoOk = autoLatinUsable(auto);
   const fill = autoOk ? auto : '';
+  const latinReq = $('bz-latin-req');
   const noteLatin = (/** @type {string} */ msg) => {
     latinEl.classList.toggle('bad', !!msg);
     latinNote.textContent = msg;
     latinNote.classList.toggle('bad', !!msg);
   };
+  // 「必須」の案内は、まだ英字名が無い間だけ (自動の英字名が使える人・入力済みの人には出さない)
+  const paintReq = () => {
+    const need = !autoOk && !latin;
+    latinReq.hidden = !need;
+    latinEl.classList.toggle('need', need);
+    latinEl.required = need;
+  };
   latinEl.value = latin || fill;
   latinEl.placeholder = autoOk ? auto : SPSPI18n.t('card_back.latin_placeholder');
-  latinEl.required = true;
+  paintReq();
   latinEl.addEventListener('input', () => {
     const v = latinEl.value.trim();
     const ok = v === '' || latinNameValid(v);
@@ -241,15 +249,12 @@ export async function mountBackEditor(o) {
     const next = v === '' ? null : v;
     if (next === latin) return;
     latin = next;
+    paintReq();
     renderBase();
     o.onChange({ latin });
   });
-  // 空のまま離れたら自動の名前を入れて見せる (自動の名前が使えない人は空のまま、入れてもらう旨を出す)
-  latinEl.addEventListener('blur', () => {
-    if (latinEl.value.trim()) return;
-    latinEl.value = fill;
-    noteLatin(autoOk ? '' : SPSPI18n.t('card_back.latin_required'));
-  });
+  // 空のまま離れたら自動の名前を入れて見せる (自動の名前が使えない人は空のまま)
+  latinEl.addEventListener('blur', () => { if (!latinEl.value.trim()) { latinEl.value = fill; noteLatin(''); } });
   latinEl.addEventListener('keydown', e => { if (e.key === 'Enter') latinEl.blur(); });
 
   // ── 持っているシール ──
@@ -1147,8 +1152,9 @@ export async function mountBackEditor(o) {
   $('bz-guide').addEventListener('click', () => { menu.open = false; startGuide(); });
   // 英字名がまだ無いまま適用しようとしたとき: 入れてもらう旨を出して欄へ
   const askLatin = () => {
-    noteLatin(SPSPI18n.t('card_back.latin_required'));
-    latinEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    paintReq();
+    latinReq.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    latinReq.classList.remove('shake'); void latinReq.offsetWidth; latinReq.classList.add('shake');
     latinEl.focus({ preventScroll: true });
   };
   return { refresh: () => { renderBase(); paintTextSel(); maybeStartGuide(root); }, flush: flushHistory, askLatin };

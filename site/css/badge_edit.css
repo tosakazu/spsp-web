@@ -131,10 +131,11 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
   .bz-row { gap: 6px; }
 }
 
-/* 裏面の名前 (英字名)。欄の右端に「必須」の印 */
-.bz-latin-wrap { position: relative; display: block; flex: 1 1 auto; min-width: 0; }
-.bz-latin-wrap .bz-latin { width: 100%; padding-right: 46px; }
-.bz-req { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); padding: 1px 5px; border-radius: 4px; background: #fee2e2; color: #b91c1c; font-size: 10px; font-weight: 700; line-height: 1.5; pointer-events: none; }
+/* 裏面の名前 (英字名)。まだ無い人には、欄の上に枠で囲った「必須」の案内 */
+.bz-latin-req { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; padding: 8px 10px; border: 2px solid #dc2626; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.bz-latin-req[hidden] { display: none; }
+.bz-latin-req b { flex: 0 0 auto; padding: 0 7px; border-radius: 4px; background: #dc2626; color: #fff; font-size: 12px; font-weight: 700; }
+.bz-latin.need { border: 2px solid #dc2626; background: #fef2f2; }
 .bz-latin { display: block; width: 100%; height: 34px; box-sizing: border-box; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; font-size: 16px; font-weight: 600; }
 .bz-latin:focus { outline: none; border-color: #111827; }
 .bz-latin.bad { border-color: #dc2626; }
@@ -220,3 +221,7 @@ main.bz { max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
 .bzg-btns .bzg-skip { border-color: transparent; color: #6b7280; padding: 0 6px; }
 .bzg-btns .bzg-next { background: #111827; border-color: #111827; color: #fff; }
 @media (prefers-reduced-motion: reduce) { .bzg-hole, .bzg-tip { transition: none; } }
+/* 英字名が無いまま適用を押したとき、案内を揺らして気づかせる */
+@keyframes bz-req-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+.bz-latin-req.shake { animation: bz-req-shake .4s; }
+@media (prefers-reduced-motion: reduce) { .bz-latin-req.shake { animation: none; } }

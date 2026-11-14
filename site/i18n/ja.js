@@ -569,7 +569,7 @@ window.SPSP_I18N.ja = {
   // カード編集の裏 (src/pages/card_back_edit.js・p/edit.html の裏のタブ)
   'card_edit.tab_front': '表',
   'card_edit.tab_back': '裏',
-  'card_back.latin_label': '裏面の名前 (英字・必須)',
+  'card_back.latin_label': '裏面の名前',
   'card_back.latin_req': '必須',
   'card_back.latin_placeholder': '英字で名前を入力',
   'card_back.latin_required': '裏面の名前を英字で入力してください (大会でこの表記が使われることがあります)',

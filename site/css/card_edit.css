@@ -142,7 +142,7 @@ a.ce-login { display: inline-flex; align-items: center; text-decoration: none; }
 .ce-tabs button.on { background: #fff; color: #111827; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 /* 裏: 道具の行 = 左に裏面の名前の欄 (残りの幅いっぱい)、右にボタン */
 .ce-pane-back .bz-head { gap: 6px; min-height: 36px; }
-.ce-pane-back .bz-latin-wrap { flex: 1 1 auto; min-width: 0; }
+.ce-pane-back .bz-latin { flex: 1 1 auto; width: auto; min-width: 0; }
 .ce-pane-back .bz-head-btns { margin-left: 0; flex: 0 0 auto; }
 /* カードの上の余白を表 (.ce-preview の上 6px) とそろえる */
 .ce-pane-back .bz-top { padding-top: 6px; }

@@ -566,7 +566,7 @@ window.SPSP_I18N.en = {
   // Card editor, back tab (src/pages/card_back_edit.js, p/edit.html)
   'card_edit.tab_front': 'Front',
   'card_edit.tab_back': 'Back',
-  'card_back.latin_label': 'Name on the back (letters, required)',
+  'card_back.latin_label': 'Name on the back',
   'card_back.latin_req': 'Required',
   'card_back.latin_placeholder': 'Your name in letters',
   'card_back.latin_required': 'Please enter your name in Latin letters (tournaments may use this spelling)',
