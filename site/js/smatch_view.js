@@ -25,7 +25,7 @@ export function smatchHtml(view) {
   for (const m of MODES) {
     const s = view.modes[m];
     if (!s) continue;
-    const rate = num(s.rate), rank = num(s.rank), smax = num(s.season_max), max = num(s.max);
+    const rate = num(s.rate), smax = num(s.season_max), max = num(s.max);
     if (rate === null || num(s.games) === 0) continue;   // 今季の対戦数が 0 のルールは出さない
     const meta = [];
     if (smax !== null) meta.push(t('smatch.season_max', { n: smax }));
@@ -33,7 +33,7 @@ export function smatchHtml(view) {
     rows.push('<div class="stat-row smatch-line">' +
       `<span>${escapeHtml(t('smatch.mode.' + m))}</span>` +
       '<span class="sm-val">' +
-        `<span class="v">${rate}</span>${rank !== null ? `<span class="sm-rank">${escapeHtml(t('smatch.rank', { n: rank }))}</span>` : ''}` +
+        `<span class="v">${rate}</span>` +   // スマッチ内の順位 (rank) は出さない
         meta.map(x => `<span class="sm-meta">${escapeHtml(x)}</span>`).join('') +
       '</span></div>');
   }

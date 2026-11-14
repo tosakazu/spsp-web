@@ -19,9 +19,10 @@ const V = load();
 const view = (o) => ({ url: 'https://smatch-jp.com/user/1/', name: 'x', season: 'シーズン12', as_of: 1794700000,
   modes: { '1on1': { rate: 1650, rank: 120, season_max: 1700, max: 1720 }, tokuoma: { rate: 1500, rank: 40, season_max: 1510, max: 1600 } }, ...(o || {}) });
 
-test('2 つのルールのレート・順位・最高と、シーズン・日付が出る', () => {
+test('2 つのルールのレート・最高と、シーズン・日付が出る', () => {
   const h = V.smatchHtml(view());
-  for (const s of ['スマッチ', '1on1', '特おま', '1650', '120 位', '今季最高 1700', '通算最高 1720', '1500', '40 位', 'シーズン12', '時点']) assert.ok(h.includes(s), s);
+  for (const s of ['スマッチ', '1on1', '特おま', '1650', '今季最高 1700', '通算最高 1720', '1500', 'シーズン12', '時点']) assert.ok(h.includes(s), s);
+  assert.ok(!h.includes('120') && !h.includes('位'), 'スマッチ内の順位は出さない');
 });
 
 test('最高レートを見せない人 (season_max・max が null) は最高を出さない。今季の対戦数が 0 のルールは出さない', () => {

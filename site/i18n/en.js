@@ -564,7 +564,6 @@ window.SPSP_I18N.en = {
   'smatch.as_of': 'as of {date}',
   'smatch.mode.1on1': '1v1',
   'smatch.mode.tokuoma': 'Tokuoma',
-  'smatch.rank': '#{n}',
   'smatch.season_max': 'Season peak {n}',
   'smatch.max': 'All-time peak {n}',
   'smatch.open': 'Open the Smatch page',

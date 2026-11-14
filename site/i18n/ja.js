@@ -567,7 +567,6 @@ window.SPSP_I18N.ja = {
   'smatch.as_of': '{date} 時点',
   'smatch.mode.1on1': '1on1',
   'smatch.mode.tokuoma': '特おま',
-  'smatch.rank': '{n} 位',
   'smatch.season_max': '今季最高 {n}',
   'smatch.max': '通算最高 {n}',
   'smatch.open': 'スマッチのページを開く',
