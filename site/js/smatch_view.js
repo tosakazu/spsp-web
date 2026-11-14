@@ -19,7 +19,8 @@ export function smatchHtml(view) {
   if (!view || !smatchUrlOk(view.url) || !view.modes) return '';
   const d = num(view.as_of) ? new Date(view.as_of * 1000 + 9 * 3600e3) : null;   // 日本時間の日付
   const date = d ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}` : '';
-  const sub = [view.season ? String(view.season) : '', date ? t('smatch.as_of', { date }) : ''].filter(Boolean).join(' ・ ');
+  // 区切りの記号は入れず、間を空けて並べる
+  const sub = [view.season ? String(view.season) : '', date ? t('smatch.as_of', { date }) : ''].filter(Boolean).map(x => `<span class="lr-date">${escapeHtml(x)}</span>`).join('');
   const rows = [];
   for (const m of MODES) {
     const s = view.modes[m];
@@ -35,11 +36,11 @@ export function smatchHtml(view) {
         '<svg class="sm-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg></span>' +
       '<span class="sm-val">' +
         `<span class="v">${rate === null ? '—' : rate}</span>${rank !== null ? `<span class="sm-rank">${escapeHtml(t('smatch.rank', { n: rank }))}</span>` : ''}` +
-        (meta.length ? `<span class="sm-meta">${escapeHtml(meta.join(' ・ '))}</span>` : '') +
+        meta.map(x => `<span class="sm-meta">${escapeHtml(x)}</span>`).join('') +
       '</span></a>');
   }
   if (!rows.length) return '';
-  return `<h2>${escapeHtml(t('smatch.heading'))}${sub ? ` <span class="lr-date">${escapeHtml(sub)}</span>` : ''}</h2>` + rows.join('');
+  return `<h2>${escapeHtml(t('smatch.heading'))}${sub}</h2>` + rows.join('');
 }
 
 /** @param {HTMLElement | null} section 実績の上の欄 (#smatch-section) @param {any} view */
