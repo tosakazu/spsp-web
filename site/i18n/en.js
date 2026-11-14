@@ -565,7 +565,7 @@ window.SPSP_I18N.en = {
   'smatch.mode.tokuoma': 'Tokuoma',
   'smatch.rank': '#{n}',
   'smatch.season_max': 'Season peak {n}',
-  'smatch.max': 'Peak {n}',
+  'smatch.max': 'All-time peak {n}',
   'smatch.no_rate': 'No games this season',
   'smatch.open': 'Open the Smatch page',
   'profile.edit_link': 'Edit profile',

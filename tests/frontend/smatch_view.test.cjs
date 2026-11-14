@@ -21,14 +21,14 @@ const view = (o) => ({ url: 'https://smatch-jp.com/user/1/', name: 'x', season: 
 
 test('2 つのルールのレート・順位・最高と、シーズン・日付が出る', () => {
   const h = V.smatchHtml(view());
-  for (const s of ['スマッチ', '1on1', '特おま', '1650', '120 位', '今期最高 1700', '最高 1720', '1500', '40 位', 'シーズン12', '時点']) assert.ok(h.includes(s), s);
+  for (const s of ['スマッチ', '1on1', '特おま', '1650', '120 位', '今季最高 1700', '通算最高 1720', '1500', '40 位', 'シーズン12', '時点']) assert.ok(h.includes(s), s);
 });
 
-test('最高レートを見せない人 (season_max・max が null) は最高を出さない。今期まだ対戦していない人は「—」', () => {
+test('最高レートを見せない人 (season_max・max が null) は最高を出さない。今季まだ対戦していない人は「—」', () => {
   const h = V.smatchHtml(view({ modes: { '1on1': { rate: 1650, rank: 120, season_max: null, max: null } } }));
   assert.ok(h.includes('1650') && !h.includes('最高') && !h.includes('特おま'));
   const n = V.smatchHtml(view({ modes: { '1on1': { rate: null, rank: null, season_max: null, max: 1720 } } }));
-  assert.ok(n.includes('—') && n.includes('今期の対戦なし') && n.includes('最高 1720'));
+  assert.ok(n.includes('—') && n.includes('今季の対戦なし') && n.includes('通算最高 1720'));
 });
 
 test('出すものが無い・リンク先がスマッチでないときは何も出さない。名前などは HTML として解釈しない', () => {
