@@ -38,6 +38,8 @@ SPSP の Worker が 1 日 1 回 (日本時間 5〜20 時の間) `SMATCH_IMPORT_U
 - `max_hidden` = スマッチで「最高レートを見せない」設定。その人の `season_max`・`max` は D1 にだけ置き、ページには出さない。
 - 知らない欄は無視する。1on1 だけの古い形 (`rate`・`rank`・`max_rate` を 1 人の直下に置く) も読める。
 
+- シーズンごとの控え: `smatch_players` は「いま」の 1 行だけなので、別に `smatch_season_stats` (シーズン × 人) と `smatch_seasons` を持つ (migration 0031)。そのシーズンの最初の取り込みで全員、あとは変わった人だけ上書き。シーズンが変わっても前のシーズンの最後の値が残る。
+
 ### 取り込みの決まり (worker/src/api/smatch.ts)
 
 - 読めない (200 以外)・JSON でない・形が違う (1 人でも)・人数が前回の半分未満 → 何も書かず前の値を使い続ける。

@@ -232,6 +232,10 @@ export interface Store {
   listSmatchPlayers(): Promise<{ discriminator: string; uid: number | null; linked: number; data: string }[]>;
   /** 取り込み: upserts を入れ (linked = 1)、unlink の人を linked = 0 にする (行は消さない) */
   applySmatchImport(upserts: { discriminator: string; uid: number | null; smatch_id: number; data: string }[], unlink: string[], ts: string): Promise<void>;
+  /** そのシーズンの行数 (0 = まだ何も入れていない → 全員分を入れる) */
+  countSmatchSeason(seasonId: string): Promise<number>;
+  /** シーズンごとの控え: シーズンの行 (名前・最後に見た時刻) と、渡した人の行を入れる (同じ人は上書き。ほかの行・ほかのシーズンは触らない) */
+  putSmatchSeason(season: { id: string; name: string }, rows: { discriminator: string; uid: number | null; data: string }[], ts: string): Promise<void>;
   /** その選手のスマッチの行 (連携中だけ) と、取り込みの状態・本人のプロフィールの設定。連携していなければ null */
   getSmatchForUid(uid: string): Promise<{ data: string; meta: string; ok_ms: number; profile: string | null } | null>;
   /** プロフィールの設定 (JSON)。無ければ null */

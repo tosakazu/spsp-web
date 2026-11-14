@@ -57,6 +57,16 @@ test('取り込み: uid を付けて入れる (統合済みは統合先)。変�
   assert.strictEqual(after.bbbbbbbb.linked, 0);
   assert.ok(after.bbbbbbbb.data, '解除した人の行は消さない');
   assert.strictEqual(await store.getSmatchForUid('200'), null, '解除した人は表示に出ない');
+  // シーズンごとの控え: 最初の取り込みは全員、翌日は変わった人だけ上書き。解除した人の行も残る
+  const S = store.smatchSeasonStats;
+  assert.deepStrictEqual([...S.keys()].sort(), ['12|aaaaaaaa', '12|bbbbbbbb', '12|cccccccc', '12|dddddddd']);
+  assert.ok(S.get('12|aaaaaaaa').data.includes('1700'));
+  // シーズンが変わったら、値が同じ人も含めて全員を新しいシーズンに入れる。前のシーズンの行はそのまま
+  const f3 = feed({ ...payload([P('aaaaaaaa', 1, { modes: { '1on1': { rate: 1700, rank: 90, season_max: 1700, max: 1720 } } }), P('cccccccc', 3), P('dddddddd', 4)]), season: { id: 13, name: 'シーズン13' } });
+  assert.strictEqual((await runSmatchImport(cfg(), store, f3, dataFetch, NOON + 48 * 3600e3)).code, 'ok');
+  assert.deepStrictEqual([...S.keys()].filter((k) => k.startsWith('13|')).sort(), ['13|aaaaaaaa', '13|cccccccc', '13|dddddddd']);
+  assert.strictEqual([...S.keys()].filter((k) => k.startsWith('12|')).length, 4);
+  assert.deepStrictEqual([...store.smatchSeasons.keys()], ['12', '13']);
 });
 
 test('取り込みの失敗: 読めない・形が違う・人数が急に減った → 前の値のまま、失敗を数える。次に成功したら 0 に戻る', async () => {
