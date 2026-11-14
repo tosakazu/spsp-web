@@ -577,6 +577,8 @@ let CHAR_IDX = null;       // character_index.json (loadData で fetch)
 /** カードの設定 (本人が編集ページで適用したもの)。選手データと並行して読み始め、カードはこれを待ってから 1 回だけ描く
  * (既定のカードを先に出すと、設定のあるカードに描き直すときに一瞬ちらつくため) @type {Promise<any> | null} */
 let CARD_SETTINGS = null;
+/** @type {any} スマッチのレート (card_get の smatch)。記録の一覧を描いたあとに足す */
+let SMATCH_VIEW = null;
 /** @type {Record<string, string> | null} */
 let NAME_READINGS = null;   // 漢字の名前の読み (data/name_readings.json、カード裏面の英字名。漢字の名前のときだけ読む)
 /** @type {Record<string, CharEmoji> | null} */
@@ -622,7 +624,8 @@ async function loadData() {
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
   CARD_SETTINGS = fetchAppliedCard(UID).catch(() => null);
   // スマッチのレート (カードの設定と同じ応答に入っている。連携していない人・出さない設定の人は何も出ない)
-  CARD_SETTINGS.then((/** @type {any} */ c) => renderSmatch(document.getElementById('smatch-row'), c && c.smatch)).catch(() => {});
+  // 記録の一覧 (デビュー戦の下) に行として足す。一覧を描く前に届いたら、描いたあとでもう一度足す (SMATCH_VIEW)
+  CARD_SETTINGS.then((/** @type {any} */ c) => { SMATCH_VIEW = (c && c.smatch) || null; renderSmatch(document.getElementById('highlights'), SMATCH_VIEW); }).catch(() => {});
   const MERGED_TO = mergedTarget(UID);   // ほかのデータと並べて読む (旧 uid の古い選手ファイルが R2 に残っていても飛ばす)
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
@@ -1191,6 +1194,7 @@ function render() {
     }
     return `<div class="stat-row"><span>${k}</span><span>${v}</span></div>`;
   }).join('');
+  renderSmatch(highlightsEl, SMATCH_VIEW);   // スマッチのレート (先に届いていた分)
 
   const ELO_PER_UNIT = (META.params && META.params.ELO_PER_UNIT) || 29.48;
   const TJPR_SCALE = (META.params && META.params.TJPR_ELO_SCALE) || 17.5;

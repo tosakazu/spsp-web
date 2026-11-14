@@ -93,20 +93,14 @@
   }
   .subrank-card:hover { background: #f3f4f6; }
   /* スマッチのレート: 見出しの行 + ルールごとの欄 (1on1・特おま) */
-  .smatch { display: block; margin: 10px 0 0; padding: 8px 10px 9px; background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; color: inherit; text-decoration: none; }
-  .smatch[hidden] { display: none; }
-  .smatch:hover { background: #f3f4f6; }
-  .smatch:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
-  .sm-head { display: flex; align-items: baseline; gap: 8px; }
-  .sm-title { font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: 0.06em; }
-  .sm-sub { flex: 1 1 auto; min-width: 0; font-size: 10px; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sm-go { flex: 0 0 auto; align-self: center; width: 13px; height: 13px; color: #9ca3af; }
-  .sm-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 14px; margin-top: 4px; }
-  .sm-mode { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; min-width: 0; }
-  .sm-label { font-size: 11px; color: #6b7280; }
-  .sm-rate { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .sm-rate small { font-size: 11px; font-weight: 600; color: #6b7280; margin-left: 4px; }
-  .sm-meta { grid-column: 1 / -1; font-size: 10.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
+  /* スマッチのレート: 記録の一覧 (デビュー戦の下) に同じ形の行で足す (js/smatch_view.js) */
+  a.smatch-line { color: #374151; text-decoration: none; }
+  a.smatch-line:hover .v { text-decoration: underline; }
+  a.smatch-line:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+  .smatch-line .sm-go { width: 11px; height: 11px; margin-left: 3px; color: #9ca3af; vertical-align: -1px; }
+  .smatch-line .sm-val { text-align: right; }
+  .smatch-line .sm-rank { margin-left: 5px; font-size: 11px; color: #6b7280; font-variant-numeric: tabular-nums; }
+  .smatch-line .sm-meta { display: block; font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; line-height: 1.5; }
   .profile-edit-link { display: inline-block; margin: 8px 0 0; font-size: 12px; color: #6b7280; text-decoration: underline; text-underline-offset: 2px; }
   .profile-edit-link:hover { color: #111827; }
   .subrank-card[aria-expanded="true"] { border-color: #d1d5db; background: #fff; }
@@ -671,9 +665,8 @@
     </div>
 
     <div class="section">
+      <!-- スマッチのレートはこの一覧の末尾 (デビュー戦の下) に行として足す。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
       <div id="highlights"></div>
-      <!-- スマッチ (オンラインのレート対戦) のレート。デビュー戦の下。スマッチで start.gg を連携している人だけ (js/smatch_view.js、2026-11-15) -->
-      <a class="smatch" id="smatch-row" target="_blank" rel="noopener" hidden></a>
     </div>
     </div><!-- /#share-top -->
 
