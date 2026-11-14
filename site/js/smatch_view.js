@@ -1,7 +1,7 @@
 // @ts-check
 // smatch_view.js — プレイヤーページに出すスマッチ (オンラインのレート対戦サイト) のレート (2026-11-15)。
 //   データは card_get の smatch (worker/src/api/smatch.ts の SmatchView): { url, name, season, as_of (秒), modes: { '1on1'?: {...}, tokuoma?: {...} } }
-//   1 つのルール = { rate, rank, season_max, max } (どれも null のことがある。「最高レートを見せない」人は season_max・max が null)
+//   1 つのルール = { rate, rank, season_max, max, games } (games = 今季の対戦数。0 のルールは出さない。どれも null のことがある。「最高レートを見せない」人は season_max・max が null)
 //   renderSmatch(section, view) section = 実績の上の欄 (#smatch-section)。見出し + ルールごとに 1 行 (行ごとスマッチのユーザーページへのリンク)。出すものが無ければ欄ごと隠す
 import { escapeHtml } from './html.js';
 import SPSPI18n from './i18n.js';
@@ -26,16 +26,15 @@ export function smatchHtml(view) {
     const s = view.modes[m];
     if (!s) continue;
     const rate = num(s.rate), rank = num(s.rank), smax = num(s.season_max), max = num(s.max);
-    if (rate === null && max === null && smax === null) continue;
+    if (rate === null || num(s.games) === 0) continue;   // 今季の対戦数が 0 のルールは出さない
     const meta = [];
-    if (rate === null) meta.push(t('smatch.no_rate'));
     if (smax !== null) meta.push(t('smatch.season_max', { n: smax }));
     if (max !== null) meta.push(t('smatch.max', { n: max }));
     rows.push(`<a class="stat-row smatch-line" href="${escapeHtml(view.url)}" target="_blank" rel="noopener" aria-label="${escapeHtml(t('smatch.open'))}">` +
       `<span>${escapeHtml(t('smatch.mode.' + m))}` +
         '<svg class="sm-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg></span>' +
       '<span class="sm-val">' +
-        `<span class="v">${rate === null ? '—' : rate}</span>${rank !== null ? `<span class="sm-rank">${escapeHtml(t('smatch.rank', { n: rank }))}</span>` : ''}` +
+        `<span class="v">${rate}</span>${rank !== null ? `<span class="sm-rank">${escapeHtml(t('smatch.rank', { n: rank }))}</span>` : ''}` +
         meta.map(x => `<span class="sm-meta">${escapeHtml(x)}</span>`).join('') +
       '</span></a>');
   }

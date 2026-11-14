@@ -569,7 +569,6 @@ window.SPSP_I18N.ja = {
   'smatch.rank': '{n} 位',
   'smatch.season_max': '今季最高 {n}',
   'smatch.max': '通算最高 {n}',
-  'smatch.no_rate': '今季の対戦なし',
   'smatch.open': 'スマッチのページを開く',
   'profile.edit_link': 'プロフィール編集',
   'page.p_profile.title': 'プロフィール編集 | SPSP',

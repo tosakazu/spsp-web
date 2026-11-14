@@ -29,11 +29,11 @@ SPSP の Worker が 1 日 1 回 (日本時間 5〜20 時の間) `SMATCH_IMPORT_U
 { "version": 1, "generated_at": 1794700000, "season": { "id": 12, "name": "シーズン12" },
   "url_template": "https://smatch-jp.com/user/{smatch_id}/",
   "players": [ { "discriminator": "a1b2c3d4", "smatch_id": 123, "name": "名前", "max_hidden": false,
-      "modes": { "1on1":    { "rate": 1650, "rank": 120, "season_max": 1700, "max": 1720 },
-                 "tokuoma": { "rate": 1500, "rank": 40,  "season_max": 1510, "max": 1600 } } } ] }
+      "modes": { "1on1":    { "rate": 1650, "rank": 120, "season_max": 1700, "max": 1720, "games": 84 },
+                 "tokuoma": { "rate": 1500, "rank": 40,  "season_max": 1510, "max": 1600, "games": 12 } } } ] }
 ```
 
-- `rate`・`rank`・`season_max` は今のシーズン (対戦していなければ `null`)、`max` は全シーズンの最高。ルールごと (`1on1`・`tokuoma` = 特おま)。対戦したことのないルールは欄ごと無くてよい。
+- `rate`・`rank`・`season_max`・`games` (対戦数) は今のシーズン (対戦していなければ `null`、`games` は 0)、`max` は全シーズンの最高。今シーズンの対戦数が 0 のルールはページに出さない (`games` が無い古い形では `rate` が `null` のルール)。ルールごと (`1on1`・`tokuoma` = 特おま)。対戦したことのないルールは欄ごと無くてよい。
 - `max_hidden` = スマッチで「最高レートを見せない」設定。その人の `season_max`・`max` は D1 にだけ置き、ページには出さない。
 - 知らない欄は無視する。1on1 だけの古い形 (`rate`・`rank`・`max_rate` を 1 人の直下に置く) も読める。
 

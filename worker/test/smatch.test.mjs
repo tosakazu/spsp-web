@@ -11,7 +11,7 @@ import { handleCardGet } from '../src/api/card.ts';
 const NOON = Date.UTC(2026, 10, 15, 3, 0, 0);   // 日本時間 12:00
 const cfg = (o) => ({ tsOffsetMin: 540, smatchImportUrl: 'https://smatch-jp.com/api/partner/spsp/players', smatchImportToken: 'IN-TOKEN', smatchExportTokens: ['OUT-1', 'OUT-2'], cardOpenEdit: true, titleLang: 'ja', ...(o || {}) });
 const P = (d, id, extra) => ({ discriminator: d, smatch_id: id, name: 'n' + id, max_hidden: false,
-  modes: { '1on1': { rate: 1650, rank: 120, season_max: 1700, max: 1720 }, tokuoma: { rate: 1500, rank: 40, season_max: 1510, max: 1600 } }, ...(extra || {}) });
+  modes: { '1on1': { rate: 1650, rank: 120, season_max: 1700, max: 1720, games: 84 }, tokuoma: { rate: 1500, rank: 40, season_max: 1510, max: 1600, games: 12 } }, ...(extra || {}) });
 const payload = (players) => ({ version: 1, generated_at: 1794700000, season: { id: 12, name: 'シーズン12' }, url_template: 'https://smatch-jp.com/user/{smatch_id}/', players });
 const json = (status, body) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 const dataFetch = async (path) => path === '/data/discriminators.json' ? json(200, { 100: 'aaaaaaaa', 200: 'bbbbbbbb', 300: 'cccccccc' })
@@ -23,10 +23,10 @@ test('一覧の確認: 2 つのルール・見せない設定・1on1 だけの�
   const ok = parseSmatchPayload(payload([P('AAAAAAAA', 1), P('bbbbbbbb', 2, { max_hidden: true, modes: { '1on1': { rate: null, rank: null, season_max: null, max: 1800 } } })]));
   assert.strictEqual(typeof ok, 'object');
   assert.strictEqual(ok.players[0].discriminator, 'aaaaaaaa');
-  assert.deepStrictEqual(ok.players[1].modes, { '1on1': { rate: null, rank: null, season_max: null, max: 1800 } });
+  assert.deepStrictEqual(ok.players[1].modes, { '1on1': { rate: null, rank: null, season_max: null, max: 1800, games: null } });
   assert.deepStrictEqual(ok.season, { id: '12', name: 'シーズン12' });
   const old = parseSmatchPayload({ generated_at: 1794700000, players: [{ discriminator: 'aaaaaaaa', smatch_id: 1, name: 'x', rate: 1650, rank: 120, max_rate: 1720, max_hidden: false }] });
-  assert.deepStrictEqual(old.players[0].modes, { '1on1': { rate: 1650, rank: 120, season_max: null, max: 1720 } });
+  assert.deepStrictEqual(old.players[0].modes, { '1on1': { rate: 1650, rank: 120, season_max: null, max: 1720, games: null } });
   assert.strictEqual(old.url_template, 'https://smatch-jp.com/user/{smatch_id}/');
   for (const bad of [null, [], {}, { ...payload([]), version: 2 }, { ...payload([]), generated_at: 'x' }, { ...payload([]), url_template: 'https://evil.example/{smatch_id}' },
     payload([P('zzz', 1)]), payload([P('aaaaaaaa', 1), P('aaaaaaaa', 2)]), payload([P('aaaaaaaa', 0)]), payload([P('aaaaaaaa', 1, { modes: { '1on1': { rate: 'high' } } })])]) {
@@ -97,9 +97,11 @@ test('表示: card_get に smatch が付く。最高レートを見せない人�
   await runSmatchImport(cfg(), store, feed(payload([P('aaaaaaaa', 1), P('bbbbbbbb', 2, { max_hidden: true })])), dataFetch, NOON);
   const a = (await handleCardGet(cfg(), store, { uid: '100' }, NOON)).body;
   assert.deepStrictEqual(a.smatch, { url: 'https://smatch-jp.com/user/1/', name: 'n1', season: 'シーズン12', as_of: 1794700000,
-    modes: { '1on1': { rate: 1650, rank: 120, season_max: 1700, max: 1720 }, tokuoma: { rate: 1500, rank: 40, season_max: 1510, max: 1600 } } });
+    modes: { '1on1': { rate: 1650, rank: 120, season_max: 1700, max: 1720, games: 84 }, tokuoma: { rate: 1500, rank: 40, season_max: 1510, max: 1600, games: 12 } } });
   const b = (await handleCardGet(cfg(), store, { uid: '200' }, NOON)).body;
-  assert.deepStrictEqual(b.smatch.modes['1on1'], { rate: 1650, rank: 120, season_max: null, max: null });
+  assert.deepStrictEqual(b.smatch.modes['1on1'], { rate: 1650, rank: 120, season_max: null, max: null, games: 84 });
+  // 今シーズンの対戦数が 0 のルールは出さない (どのルールも 0 なら smatch ごと null)
+  assert.strictEqual(smatchViewOf({ data: JSON.stringify({ smatch_id: 1, name: 'x', max_hidden: false, modes: { '1on1': { rate: 1500, rank: null, season_max: null, max: 1720, games: 0 }, tokuoma: { rate: null, rank: null, season_max: null, max: 1600 } } }), meta: JSON.stringify({ generated_at: 1, season: null, url_template: 'https://smatch-jp.com/user/{smatch_id}/' }), ok_ms: NOON, profile: null }, NOON), null);
   assert.ok(!JSON.stringify(b).includes('1720'), '見せない最高レートは応答に無い');
   assert.ok((await store.listSmatchPlayers()).find((r) => r.discriminator === 'bbbbbbbb').data.includes('1720'), 'D1 には有る');
   assert.strictEqual((await handleCardGet(cfg(), store, { uid: '999' }, NOON)).body.smatch, null);

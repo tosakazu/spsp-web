@@ -39,8 +39,9 @@ export const SMATCH_SHRINK_MIN_PREV = 20;
 
 export const SMATCH_MODES = ['1on1', 'tokuoma'] as const;
 export type SmatchMode = typeof SMATCH_MODES[number];
-/** 1 つのルールの成績。rate・rank・season_max は今シーズン (対戦していなければ null)、max は全シーズンの最高 */
-export interface SmatchModeStat { rate: number | null; rank: number | null; season_max: number | null; max: number | null }
+/** 1 つのルールの成績。rate・rank・season_max・games (対戦数) は今シーズン (対戦していなければ null、games は 0)、max は全シーズンの最高。
+ *  games が来ていない (古い形) ときは null */
+export interface SmatchModeStat { rate: number | null; rank: number | null; season_max: number | null; max: number | null; games: number | null }
 export interface SmatchPlayer {
   discriminator: string; smatch_id: number; name: string; max_hidden: boolean;
   modes: Partial<Record<SmatchMode, SmatchModeStat>>;
@@ -60,9 +61,10 @@ function parseMode(v: unknown): SmatchModeStat | null | undefined {
   const o = v as Record<string, unknown>;
   const rate = numOrNull(o.rate, 0, 99999), rank = numOrNull(o.rank, 1, 9999999);
   const seasonMax = numOrNull(o.season_max, 0, 99999), max = numOrNull(o.max, 0, 99999);
-  if (rate === undefined || rank === undefined || seasonMax === undefined || max === undefined) return undefined;
+  const games = numOrNull(o.games, 0, 9999999);
+  if (rate === undefined || rank === undefined || seasonMax === undefined || max === undefined || games === undefined) return undefined;
   if (rate === null && rank === null && seasonMax === null && max === null) return null;
-  return { rate, rank, season_max: seasonMax, max };
+  return { rate, rank, season_max: seasonMax, max, games };
 }
 
 /** スマッチの URL だけ通す (https://smatch-jp.com/ 配下、{smatch_id} を 1 つ含む) */
@@ -121,14 +123,15 @@ export function parseSmatchPayload(v: unknown): SmatchPayload | string {
 /** D1 に置く 1 人分 (並びを固定して、前回と同じなら書かない) */
 export function playerData(p: SmatchPlayer): string {
   const modes: Record<string, SmatchModeStat> = {};
-  for (const m of SMATCH_MODES) { const s = p.modes[m]; if (s) modes[m] = { rate: s.rate, rank: s.rank, season_max: s.season_max, max: s.max }; }
+  for (const m of SMATCH_MODES) { const s = p.modes[m]; if (s) modes[m] = { rate: s.rate, rank: s.rank, season_max: s.season_max, max: s.max, games: s.games ?? null }; }
   return JSON.stringify({ smatch_id: p.smatch_id, name: p.name, max_hidden: p.max_hidden, modes });
 }
 
-/** 表示用 (だれにでも返す形)。最高レートを見せない人は season_max・max を出さない */
+/** 表示用 (だれにでも返す形)。最高レートを見せない人は season_max・max を出さない。
+ *  今シーズンの対戦数が 0 のルール (games が 0、または games が無くて rate が null) は欄ごと出さない */
 export interface SmatchView {
   url: string; name: string; season: string; as_of: number;
-  modes: Partial<Record<SmatchMode, { rate: number | null; rank: number | null; season_max: number | null; max: number | null }>>;
+  modes: Partial<Record<SmatchMode, SmatchModeStat>>;
 }
 export function smatchViewOf(row: { data: string; meta: string; ok_ms: number; profile: string | null } | null, nowMs: number): SmatchView | null {
   if (!row || !row.ok_ms || nowMs - row.ok_ms > SMATCH_STALE_MS) return null;
@@ -141,7 +144,9 @@ export function smatchViewOf(row: { data: string; meta: string; ok_ms: number; p
   for (const m of SMATCH_MODES) {
     const s = d.modes && d.modes[m];
     if (!s) continue;
-    modes[m] = { rate: s.rate, rank: s.rank, season_max: d.max_hidden ? null : s.season_max, max: d.max_hidden ? null : s.max };
+    const games = typeof s.games === 'number' ? s.games : null;
+    if (games === 0 || s.rate === null) continue;
+    modes[m] = { rate: s.rate, rank: s.rank, season_max: d.max_hidden ? null : s.season_max, max: d.max_hidden ? null : s.max, games };
   }
   if (!Object.keys(modes).length) return null;
   return { url: meta.url_template.replace('{smatch_id}', String(d.smatch_id)), name: String(d.name || ''), season: meta.season ? meta.season.name : '', as_of: meta.generated_at, modes };
