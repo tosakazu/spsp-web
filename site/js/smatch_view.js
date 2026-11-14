@@ -1,0 +1,56 @@
+// @ts-check
+// smatch_view.js — プレイヤーページに出すスマッチ (オンラインのレート対戦サイト) のレート (2026-11-15)。
+//   データは card_get の smatch (worker/src/api/smatch.ts の SmatchView): { url, name, season, as_of (秒), modes: { '1on1'?: {...}, tokuoma?: {...} } }
+//   1 つのルール = { rate, rank, season_max, max, games } (games = 今季の対戦数。0 のルールは出さない。どれも null のことがある。「最高レートを見せない」人は season_max・max が null)
+//   renderSmatch(section, view) section = 実績の上の欄 (#smatch-section)。見出し (「スマッチ」がスマッチのユーザーページへのリンク) + ルールごとに 1 行。出すものが無ければ欄ごと隠す
+import { escapeHtml } from './html.js';
+import SPSPI18n from './i18n.js';
+
+const MODES = ['1on1', 'tokuoma'];
+const num = (/** @type {any} */ v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** スマッチのページだけ (応答が書き換えられても別の所へは飛ばさない) @param {any} u */
+export const smatchUrlOk = u => typeof u === 'string' && /^https:\/\/smatch-jp\.com\//.test(u);
+
+/** 実績の上の欄の中身。見出し (シーズン・日付つき) + 1 つのルール = 1 行 (最高レートも同じ行)。リンクは見出しだけ
+ *  @param {any} view @returns {string} 欄の中身の HTML (出すものが無ければ '') */
+export function smatchHtml(view) {
+  const t = SPSPI18n.t;
+  if (!view || !smatchUrlOk(view.url) || !view.modes) return '';
+  const d = num(view.as_of) ? new Date(view.as_of * 1000 + 9 * 3600e3) : null;   // 日本時間の日付
+  const date = d ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}` : '';
+  // 区切りの記号は入れず、間を空けて並べる
+  const sub = [view.season ? String(view.season) : '', date ? t('smatch.as_of', { date }) : ''].filter(Boolean).map(x => `<span class="lr-date">${escapeHtml(x)}</span>`).join('');
+  const rows = [];
+  for (const m of MODES) {
+    const s = view.modes[m];
+    if (!s) continue;
+    const rate = num(s.rate), smax = num(s.season_max), max = num(s.max);
+    if (rate === null || num(s.games) === 0) continue;   // 今季の対戦数が 0 のルールは出さない
+    const meta = [];
+    if (smax !== null) meta.push(t('smatch.season_max', { n: smax }));
+    if (max !== null) meta.push(t('smatch.max', { n: max }));
+    rows.push('<div class="stat-row smatch-line">' +
+      `<span>${escapeHtml(t('smatch.mode.' + m))}</span>` +
+      '<span class="sm-val">' +
+        `<span class="v">${rate}</span>` +   // スマッチ内の順位 (rank) は出さない
+        meta.map(x => `<span class="sm-meta">${escapeHtml(x)}</span>`).join('') +
+      '</span></div>');
+  }
+  if (!rows.length) return '';
+  // スマッチのユーザーページへのリンクは見出しの「スマッチ」に付ける (行には付けない)
+  return `<h2><a class="sm-link" href="${escapeHtml(view.url)}" target="_blank" rel="noopener" aria-label="${escapeHtml(t('smatch.open'))}">${escapeHtml(t('smatch.heading'))}` +
+    '<svg class="sm-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg></a>' + `${sub}</h2>` + rows.join('');
+}
+
+/** @param {HTMLElement | null} section 実績の上の欄 (#smatch-section) @param {any} view */
+export function renderSmatch(section, view) {
+  if (!section) return;
+  const html = smatchHtml(view);
+  section.innerHTML = html;
+  section.hidden = !html;
+}
+
+const API = { renderSmatch, smatchHtml, smatchUrlOk };
+if (typeof window !== 'undefined') /** @type {any} */ (window).SpspSmatchView = API;
+export default API;

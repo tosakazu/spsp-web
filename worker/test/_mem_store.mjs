@@ -60,6 +60,27 @@ export class MemStore {
     return true;
   }
 
+  // ── スマッチとの連携 ──
+  async getPartnerSync(name) { const r = (this.partnerSync ||= new Map()).get(name); return r ? { ...r } : null; }
+  async putPartnerSync(name, patch) {
+    const m = (this.partnerSync ||= new Map());
+    m.set(name, { ok_ms: 0, try_ms: 0, fails: 0, n: 0, error: '', meta: '', ...(m.get(name) || {}), ...patch });
+  }
+  async listSmatchPlayers() { return [...(this.smatch ||= new Map()).values()].map((r) => ({ discriminator: r.discriminator, uid: r.uid, linked: r.linked, data: r.data })); }
+  async applySmatchImport(upserts, unlink, ts) {
+    const m = (this.smatch ||= new Map());
+    for (const u of upserts) m.set(u.discriminator, { ...u, linked: 1, first_seen: (m.get(u.discriminator) || {}).first_seen || ts, updated_at: ts });
+    for (const d of unlink) { const r = m.get(d); if (r) { r.linked = 0; r.updated_at = ts; } }
+  }
+  async getSmatchForUid(uid) {
+    const r = [...(this.smatch ||= new Map()).values()].find((x) => x.uid === Number(uid) && x.linked);
+    if (!r) return null;
+    const s = (this.partnerSync ||= new Map()).get('smatch_import');
+    return { data: r.data, meta: s ? s.meta : '', ok_ms: s ? s.ok_ms : 0, profile: (this.profiles ||= new Map()).get(String(uid)) ?? null };
+  }
+  async getProfileSettings(uid) { return (this.profiles ||= new Map()).get(String(uid)) ?? null; }
+  async putProfileSettings(uid, settings) { (this.profiles ||= new Map()).set(String(uid), settings); }
+
   async getCardSettings(uid) {
     const r = this.cards.get(String(uid));
     return r ? { ...r } : null;

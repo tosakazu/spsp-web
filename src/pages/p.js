@@ -29,6 +29,7 @@ import SpspLivePredict from '../../site/js/live_predict.js';
 import SpspLiveBrowser from '../../site/js/live_browser.js';
 import SpspTourIcons from '../../site/js/tour_icons.js';
 import { buildCardModel, perfInfoOf, achievementBadge, fetchAppliedCard, loadCardDefaultBack } from '../../site/js/player_card_model.js';
+import { renderSmatch } from '../../site/js/smatch_view.js';
 
 if (window.luxon && window.luxon.Settings) { window.luxon.Settings.defaultZone = 'Asia/Tokyo'; }  // チャートの日付は閲覧者の場所に依らず JST
 
@@ -620,6 +621,8 @@ async function loadData() {
   }
   if (!UID || UID < 1) { showNotFound(i18n('player.no_uid')); return; }
   CARD_SETTINGS = fetchAppliedCard(UID).catch(() => null);
+  // スマッチのレート (カードの設定と同じ応答に入っている。連携していない人・出さない設定の人は何も出ない)
+  CARD_SETTINGS.then((/** @type {any} */ c) => renderSmatch(document.getElementById('smatch-section'), c && c.smatch)).catch(() => {});
   const MERGED_TO = mergedTarget(UID);   // ほかのデータと並べて読む (旧 uid の古い選手ファイルが R2 に残っていても飛ばす)
   try {
     // 選手 JSON は安定部分 (players/) + 揮発部分 (players_current.json) + 履歴 (history/) に分かれている。
@@ -1003,7 +1006,9 @@ function render() {
     // 編集は本人のページだけ (API の無い ConoHa のプレビューでは確認用に出す)。ログイン状態が変わったら出し直す
     // ログインしていなければどの選手でも出す (押すと編集ページでログインを求める)。ログイン中は自分のカードだけ
     // preview (誰でも編集できる、CARD_OPEN_EDIT) はログインしていてもいなくても、どの選手でも出す
-    const showEdit = () => { editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable() || SpspLogin.openEdit()) ? '' : 'none'; };
+    const showEdit = () => {
+      editBtn.style.display = (!SpspLogin.session() || SpspLogin.isSelf(UID) || !SpspLogin.apiAvailable() || SpspLogin.openEdit()) ? '' : 'none';
+    };
     showEdit();
     SpspLogin.onChange(showEdit);
     SpspLogin.verify().then(showEdit).catch(() => {});

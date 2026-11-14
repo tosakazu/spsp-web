@@ -74,6 +74,27 @@ await check('API (Worker)', async () => {
   return '応答あり';
 });
 
+// スマッチとの受け渡し (worker/src/api/smatch.ts)。設定してある向きだけ見る: 取り込みが 36 時間成功していない・スマッチが 36 時間読みに来ていない
+const MAX_PARTNER_AGE_H = Number(process.env.MAX_PARTNER_AGE_H || 36);
+await check('スマッチとの受け渡し', async () => {
+  const res = await get(SITE + '/api/partner/smatch/status');
+  if (res.status !== 200) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  if (!j || j.ok !== true) throw new Error('想定外の応答: ' + JSON.stringify(j).slice(0, 120));
+  const out = [];
+  if (j.import) {
+    // スマッチ側の API が動き出す前 (一度も成功していない) は問題にしない。一度動いてから止まったときだけ知らせる
+    if (j.import.ok_age_h === null) out.push(`取り込みはまだ一度も成功していない (スマッチ側の準備待ち、${j.import.fails} 回失敗)`);
+    else if (j.import.ok_age_h > MAX_PARTNER_AGE_H) throw new Error(`取り込みが ${j.import.ok_age_h} 時間成功していない (続けて ${j.import.fails} 回失敗)。D1 の partner_sync.error に理由`);
+    else out.push(`取り込み ${j.import.ok_age_h} 時間前・${j.import.n} 人`);
+  }
+  if (j.export) {
+    if (j.export.read_age_h !== null && j.export.read_age_h > MAX_PARTNER_AGE_H) throw new Error(`スマッチが ${j.export.read_age_h} 時間読みに来ていない`);
+    out.push(j.export.read_age_h === null ? 'スマッチはまだ読みに来ていない' : `スマッチの読み出し ${j.export.read_age_h} 時間前`);
+  }
+  return out.length ? out.join('、') : '未設定';
+});
+
 for (const s of ok) console.log('ok   ' + s);
 for (const s of problems) console.log('FAIL ' + s);
 if (problems.length) {

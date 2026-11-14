@@ -425,7 +425,8 @@ export async function fetchApplied(uid) {
 }
 /** 適用済みの設定と、付けている二つ名の文字 (card_get の title_text。API の無い所では null = 二つ名は出さない)
  * failed = 読めなかった (設定が無いのとは別。裏面の初期配置は、設定が無いと分かったときだけ出す)
- * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null, failed?: boolean }>} */
+ * smatch = スマッチのレート (連携していて、本人が出さない設定にしていなければ。worker/src/api/smatch.ts の SmatchView。js/smatch_view.js が描く)
+ * @param {number} uid @returns {Promise<{ settings: CardSettings | null, titleText: { pre: string, post: string } | null, smatch?: any, failed?: boolean }>} */
 export async function fetchAppliedCard(uid) {
   if (!SpspLogin.apiAvailable()) return { settings: loadLocalApplied(uid), titleText: null };
   try {
@@ -438,7 +439,8 @@ export async function fetchAppliedCard(uid) {
     if (!j || !j.ok) return { settings: null, titleText: null, failed: true };
     const tt = j.title_text;
     return { settings: normalize(j.settings),
-             titleText: tt && typeof tt === 'object' ? { pre: String(tt.pre || ''), post: String(tt.post || '') } : null };
+             titleText: tt && typeof tt === 'object' ? { pre: String(tt.pre || ''), post: String(tt.post || '') } : null,
+             smatch: j.smatch && typeof j.smatch === 'object' ? j.smatch : null };
   } catch (e) { return { settings: null, titleText: null, failed: true }; }
 }
 /** 適用 (本人のログインが要る)。settings が null なら既定に戻す。{ ok, code? }

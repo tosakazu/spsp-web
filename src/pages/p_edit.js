@@ -60,6 +60,7 @@ async function main() {
   const name = SPSPFormat.stripTeamTag(data.rec.display);
   document.title = `${name} | SPSP`;
   /** @type {HTMLAnchorElement} */ ($('ce-back')).href = './' + (DISC ? '?d=' + encodeURIComponent(DISC) : '?uid=' + uid);
+  /** @type {HTMLAnchorElement} */ ($('ce-to-profile')).href = SPSP.pageHref('profile.html') + (DISC ? '?d=' + encodeURIComponent(DISC) : '?uid=' + uid);
   $('loading').style.display = 'none';
   $('ce-root').style.display = '';
 
@@ -118,6 +119,7 @@ async function main() {
     return;
   }
   $('ce-form').style.display = '';
+  SpspLogin.smatchReady().then(ready => { if (ready) $('ce-to-profile').style.display = ''; });   // プロフィール編集へ (スマッチとの連携が動き出してから)
 
   // 選択を変えたら: 下書きに保存 → カードと選択肢を描き直す
   const same = (/** @type {CardSettings | null} */ a, /** @type {CardSettings | null} */ b) => JSON.stringify(a) === JSON.stringify(b);

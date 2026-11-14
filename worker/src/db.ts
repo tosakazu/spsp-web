@@ -6,7 +6,7 @@
  * 書き込まれた行数で通ったかを判定する。
  */
 import type { LoginRow, ReportDqRow, ReportNoshowRow, ReportStartRow, ReportEventPublic, ReportEventRow, ReportGrantRow, ReportHealthRow, ReportManualRow, ReportSnapshotRow, ReportPresetRow, ReportPushSubRow, ReportSetRow, ReportSubmissionRow,
-  CardRow, CspRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
+  CardRow, CspRow, PartnerSyncRow, TitleOwnedRow, TitleOwnedWrite, ClassBracketRow, ClassInsertResult, ClassMineItem, ClassRecord, ClassWaitItem, ErrorRow, PostRow, RateGuard, RecentActivity, Store, ToolLogRow, VoteRow,
 } from './store.ts';
 
 const VOTE_COLS = 'ts, ts_ms, user_id, user_slug, gamer_tag, char_id, char_name, status';
@@ -122,6 +122,58 @@ export class D1Store implements Store {
       this.db.prepare('INSERT OR IGNORE INTO used_states (key, expires_ms) VALUES (?, ?)').bind(key, expiresMs),
     ]);
     return (ins.meta?.changes ?? 0) > 0;
+  }
+
+  async getPartnerSync(name: string): Promise<PartnerSyncRow | null> {
+    const r = await this.db.prepare('SELECT ok_ms, try_ms, fails, n, error, meta FROM partner_sync WHERE name = ?').bind(name).first<PartnerSyncRow>();
+    return r ? { ok_ms: Number(r.ok_ms), try_ms: Number(r.try_ms), fails: Number(r.fails), n: Number(r.n), error: String(r.error), meta: String(r.meta) } : null;
+  }
+
+  async putPartnerSync(name: string, patch: Partial<PartnerSyncRow>): Promise<void> {
+    const cols = (['ok_ms', 'try_ms', 'fails', 'n', 'error', 'meta'] as const).filter((k) => patch[k] !== undefined);
+    if (!cols.length) return;
+    const vals = cols.map((k) => patch[k] as string | number);
+    await this.db.prepare(
+      `INSERT INTO partner_sync (name, ${cols.join(', ')}) VALUES (?1, ${cols.map((_, i) => '?' + (i + 2)).join(', ')})
+       ON CONFLICT (name) DO UPDATE SET ${cols.map((k) => `${k} = excluded.${k}`).join(', ')}`)
+      .bind(name, ...vals).run();
+  }
+
+  async listSmatchPlayers(): Promise<{ discriminator: string; uid: number | null; linked: number; data: string }[]> {
+    const r = await this.db.prepare('SELECT discriminator, uid, linked, data FROM smatch_players').all<{ discriminator: string; uid: number | null; linked: number; data: string }>();
+    return (r.results || []).map((x) => ({ discriminator: String(x.discriminator), uid: x.uid === null ? null : Number(x.uid), linked: Number(x.linked), data: String(x.data) }));
+  }
+
+  async applySmatchImport(upserts: { discriminator: string; uid: number | null; smatch_id: number; data: string }[], unlink: string[], ts: string): Promise<void> {
+    const stmts = upserts.map((u) => this.db.prepare(
+      `INSERT INTO smatch_players (discriminator, uid, smatch_id, linked, data, first_seen, updated_at) VALUES (?1, ?2, ?3, 1, ?4, ?5, ?5)
+       ON CONFLICT (discriminator) DO UPDATE SET uid = excluded.uid, smatch_id = excluded.smatch_id, linked = 1, data = excluded.data, updated_at = excluded.updated_at`)
+      .bind(u.discriminator, u.uid, u.smatch_id, u.data, ts));
+    for (const d of unlink) stmts.push(this.db.prepare('UPDATE smatch_players SET linked = 0, updated_at = ?2 WHERE discriminator = ?1').bind(d, ts));
+    for (let i = 0; i < stmts.length; i += 50) await this.db.batch(stmts.slice(i, i + 50));
+  }
+
+  async getSmatchForUid(uid: string): Promise<{ data: string; meta: string; ok_ms: number; profile: string | null } | null> {
+    const r = await this.db.prepare(
+      `SELECT p.data AS data,
+              (SELECT meta FROM partner_sync WHERE name = 'smatch_import') AS meta,
+              (SELECT ok_ms FROM partner_sync WHERE name = 'smatch_import') AS ok_ms,
+              (SELECT settings FROM profile_settings WHERE uid = ?1) AS profile
+       FROM smatch_players p WHERE p.uid = ?1 AND p.linked = 1 ORDER BY p.updated_at DESC LIMIT 1`)
+      .bind(Number(uid)).first<{ data: string; meta: string | null; ok_ms: number | null; profile: string | null }>();
+    return r ? { data: String(r.data), meta: String(r.meta || ''), ok_ms: Number(r.ok_ms || 0), profile: r.profile === null ? null : String(r.profile) } : null;
+  }
+
+  async getProfileSettings(uid: string): Promise<string | null> {
+    const r = await this.db.prepare('SELECT settings FROM profile_settings WHERE uid = ?').bind(Number(uid)).first<{ settings: string }>();
+    return r ? String(r.settings) : null;
+  }
+
+  async putProfileSettings(uid: string, settings: string, updatedAt: string): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO profile_settings (uid, settings, updated_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT (uid) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at`)
+      .bind(Number(uid), settings, updatedAt).run();
   }
 
   async getCardSettings(uid: string): Promise<CardRow | null> {

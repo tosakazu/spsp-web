@@ -101,6 +101,9 @@ DATA_ORIGIN = "https://data.spsp.games/jp"
 VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト用 uid (とさかず)。免除分は status=debug で集計しない
 CARD_OPEN_EDIT = "1"           # preview だけ: カードの設定をログインなしで誰の分でも書ける (見た目の確認用、本番の vars には置かない)
 CARD_STICKERS_PREVIEW = "1"    # preview だけ: 選手のデータに大会シールが無ければ、サイトに置いたプレビュー用の判定 (data/stickers_preview/) で持ち物を確かめる
+# スマッチとの連携 (docs/smatch_partner.md)。preview には定期実行が無いので読みに行かない (表示の確認用に D1 へ見本を入れてある)。
+# 本番は [vars] に同じ行を足し、secret SMATCH_IMPORT_TOKEN・SMATCH_EXPORT_TOKENS を入れると動き出す
+SMATCH_IMPORT_URL = "https://smatch-jp.com/api/partner/spsp/players"
 SITE_PREFIX = "/jp"
 TS_OFFSET = "+09:00"
 SESSION_TTL_MS = "15552000000"

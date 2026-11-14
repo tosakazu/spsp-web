@@ -53,6 +53,9 @@ export interface RateGuard {
   maxPerDay: number;
 }
 
+/** partner_sync の 1 行 (ok_ms = 最後に成功した時刻、try_ms = 最後に試した時刻、fails = 続けて失敗した回数、n = 件数) */
+export interface PartnerSyncRow { ok_ms: number; try_ms: number; fails: number; n: number; error: string; meta: string }
+
 /** card_settings の 1 行。settings は検証済みの JSON 文字列。 */
 export interface CardRow {
   settings: string;
@@ -220,6 +223,20 @@ export interface Store {
   listCsp(): Promise<CspRow[]>;
   /** プレイヤーカードの設定。無ければ null。 */
   getCardSettings(uid: string): Promise<CardRow | null>;
+  // ── スマッチとの連携 (api/smatch.ts) ──
+  /** 受け渡しの状態。無ければ null */
+  getPartnerSync(name: string): Promise<PartnerSyncRow | null>;
+  /** 受け渡しの状態を書く (渡した欄だけ。行が無ければ作る) */
+  putPartnerSync(name: string, patch: Partial<PartnerSyncRow>): Promise<void>;
+  /** 取り込み済みの全員 (前回との差を取る) */
+  listSmatchPlayers(): Promise<{ discriminator: string; uid: number | null; linked: number; data: string }[]>;
+  /** 取り込み: upserts を入れ (linked = 1)、unlink の人を linked = 0 にする (行は消さない) */
+  applySmatchImport(upserts: { discriminator: string; uid: number | null; smatch_id: number; data: string }[], unlink: string[], ts: string): Promise<void>;
+  /** その選手のスマッチの行 (連携中だけ) と、取り込みの状態・本人のプロフィールの設定。連携していなければ null */
+  getSmatchForUid(uid: string): Promise<{ data: string; meta: string; ok_ms: number; profile: string | null } | null>;
+  /** プロフィールの設定 (JSON)。無ければ null */
+  getProfileSettings(uid: string): Promise<string | null>;
+  putProfileSettings(uid: string, settings: string, updatedAt: string): Promise<void>;
   /**
    * 連投条件 (card_writes で判定) を満たすときだけ、書き込みを記録して設定を置き換える
    * (settings が null なら行を消す)。書いたら true、連投で弾いたら false。
