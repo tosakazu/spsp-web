@@ -63,5 +63,5 @@ SPSP の Worker が 1 日 1 回 (日本時間 5〜20 時の間) `SMATCH_IMPORT_U
 
 ## 画面
 
-- プレイヤーページ: 実績の上に「スマッチ」の欄 (ルールごとに 1 行) (site/js/smatch_view.js)。データは `GET /api/card` の応答の `smatch` (追加の通信なし)。
+- プレイヤーページ: 実績の上にスマッチのレート (見出しなし、ルールごとに 1 行) (site/js/smatch_view.js)。データは `GET /api/card` の応答の `smatch` (追加の通信なし)。
 - プロフィール編集 (`p/profile`、src/pages/p_profile.js): スマッチのレートを出すかどうか。カードの編集とは別のページで、互いにリンクがある。
