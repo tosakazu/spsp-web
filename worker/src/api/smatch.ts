@@ -268,6 +268,8 @@ export async function handleSmatchStatus(cfg: Config, store: Store, nowMs: numbe
   const imp = cfg.smatchImportUrl && cfg.smatchImportToken ? await store.getPartnerSync(SMATCH_IMPORT) : null;
   const exp = cfg.smatchExportTokens && cfg.smatchExportTokens.length ? await store.getPartnerSync(SMATCH_EXPORT) : null;
   return ok({
+    // ready = スマッチの一覧を一度でも取り込めた (それまではプロフィール編集への入口を出さない。site/js/login.js の smatchReady)
+    ready: !!(imp && imp.ok_ms),
     import: cfg.smatchImportUrl && cfg.smatchImportToken ? { ok_age_h: imp ? age(imp.ok_ms) : null, try_age_h: imp ? age(imp.try_ms) : null, fails: imp ? imp.fails : 0, n: imp ? imp.n : 0 } : null,
     export: cfg.smatchExportTokens && cfg.smatchExportTokens.length ? { read_age_h: exp ? age(exp.ok_ms) : null } : null,
   });

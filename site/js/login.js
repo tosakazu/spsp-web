@@ -38,6 +38,31 @@ export async function api(body) {
 const listeners = new Set();
 const notify = () => listeners.forEach(fn => { try { fn(); } catch (e) { /* 他の購読者は続ける */ } });
 /** @param {() => void} fn */
+/** @type {Promise<boolean> | null} */
+let smatchReadyP = null;
+/** スマッチとの連携が動いているか (一覧を一度でも取り込めたか。GET /api/partner/smatch/status の ready)。
+ *  動き出すまでは「プロフィール編集」への入口 (人型のメニュー・カード編集) を出さない。結果は 1 時間おぼえる (タブごと)
+ *  @returns {Promise<boolean>} */
+export function smatchReady() {
+  if (smatchReadyP) return smatchReadyP;
+  smatchReadyP = (async () => {
+    if (!apiAvailable()) return false;
+    const KEY = 'spsp_smatch_ready';
+    try {
+      const c = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+      if (c && typeof c.v === 'boolean' && Date.now() - c.t < 3600e3) return c.v;
+    } catch (e) { /* 使えなければ読みに行く */ }
+    try {
+      const r = await fetch(CFG.GAS_ENDPOINT + '/partner/smatch/status');
+      const j = r.ok ? await r.json() : null;
+      const v = !!(j && j.ok && j.ready);
+      try { sessionStorage.setItem(KEY, JSON.stringify({ v, t: Date.now() })); } catch (e) { /* おぼえられなくてもよい */ }
+      return v;
+    } catch (e) { return false; }
+  })();
+  return smatchReadyP;
+}
+
 export function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', e => { if (e.key === SpspAuth.KEY) notify(); });   // 別のタブでのログイン・ログアウト
@@ -166,7 +191,7 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   }
 }
 
-const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api, claimHandoff, HANDOFF_KEY };
+const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api, claimHandoff, smatchReady, HANDOFF_KEY };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むときは import がグローバル参照になるため)
 if (typeof window !== 'undefined') {
   /** @type {any} */ (window).SpspLogin = API;

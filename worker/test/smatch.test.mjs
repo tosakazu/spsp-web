@@ -143,5 +143,6 @@ test('受け渡し (SPSP → スマッチ): Bearer トークン (新旧 2 本)�
   const st = (await handleSmatchStatus(cfg(), store, NOON + 3 * 3600e3)).body;
   assert.deepStrictEqual(st.export, { read_age_h: 3 });
   assert.deepStrictEqual(st.import, { ok_age_h: null, try_age_h: null, fails: 0, n: 0 });
-  assert.deepStrictEqual((await handleSmatchStatus(cfg({ smatchImportUrl: undefined, smatchExportTokens: [] }), store, NOON)).body, { ok: true, import: null, export: null });
+  assert.strictEqual(st.ready, false, '一度も取り込めていない間は ready でない');
+  assert.deepStrictEqual((await handleSmatchStatus(cfg({ smatchImportUrl: undefined, smatchExportTokens: [] }), store, NOON)).body, { ok: true, ready: false, import: null, export: null });
 });

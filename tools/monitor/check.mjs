@@ -83,8 +83,10 @@ await check('スマッチとの受け渡し', async () => {
   if (!j || j.ok !== true) throw new Error('想定外の応答: ' + JSON.stringify(j).slice(0, 120));
   const out = [];
   if (j.import) {
-    if (j.import.ok_age_h === null || j.import.ok_age_h > MAX_PARTNER_AGE_H) throw new Error(`取り込みが ${j.import.ok_age_h ?? '一度も'} 時間成功していない (続けて ${j.import.fails} 回失敗)。D1 の partner_sync.error に理由`);
-    out.push(`取り込み ${j.import.ok_age_h} 時間前・${j.import.n} 人`);
+    // スマッチ側の API が動き出す前 (一度も成功していない) は問題にしない。一度動いてから止まったときだけ知らせる
+    if (j.import.ok_age_h === null) out.push(`取り込みはまだ一度も成功していない (スマッチ側の準備待ち、${j.import.fails} 回失敗)`);
+    else if (j.import.ok_age_h > MAX_PARTNER_AGE_H) throw new Error(`取り込みが ${j.import.ok_age_h} 時間成功していない (続けて ${j.import.fails} 回失敗)。D1 の partner_sync.error に理由`);
+    else out.push(`取り込み ${j.import.ok_age_h} 時間前・${j.import.n} 人`);
   }
   if (j.export) {
     if (j.export.read_age_h !== null && j.export.read_age_h > MAX_PARTNER_AGE_H) throw new Error(`スマッチが ${j.export.read_age_h} 時間読みに来ていない`);

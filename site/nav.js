@@ -449,10 +449,19 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     trigger.innerHTML = `<span class="nav-user-icon">${USER_SVG_IN}</span>`;
     menu.innerHTML = `<div class="nav-user-name">${escHTML(name)}</div>` +
       `<a href="${prefix}${pageHref('me.html')}" role="menuitem">${t('nav.user.mypage')}</a>` +   // 自分のプレイヤーページへの共通リンク
-      `<a href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
-      `<a href="${prefix}${pageHref('p/profile.html')}?uid=${uid}" role="menuitem">${t('nav.user.profile_edit')}</a>` +   // スマッチのレートを出すか、など (p_profile.js)
+      `<a class="nav-user-card" href="${prefix}${pageHref('p/edit.html')}?uid=${uid}" role="menuitem">${t('nav.user.card_edit')}</a>` +
       vote +
       `<button type="button" class="nav-logout" role="menuitem">${t('nav.user.logout')}</button>`;
+    // プロフィール編集 (スマッチのレートを出すか、など。p_profile.js): スマッチとの連携が動き出してから、カードを編集の下に出す
+    if (SpspLogin && SpspLogin.smatchReady) {
+      const myId0 = String(sess.user.id);
+      SpspLogin.smatchReady().then((/** @type {boolean} */ ready) => {
+        const now = SpspLogin && SpspLogin.session();
+        if (!ready || !now || String(now.user.id) !== myId0 || menu.querySelector('.nav-user-profile')) return;
+        const card = menu.querySelector('.nav-user-card');
+        if (card) card.insertAdjacentHTML('afterend', `<a class="nav-user-profile" href="${prefix}${pageHref('p/profile.html')}?uid=${uid}" role="menuitem">${t('nav.user.profile_edit')}</a>`);
+      }).catch(() => {});
+    }
     // 開催中の大会: 名前の下 (マイページの上) に「結果報告: 大会」(受付中のもの) と「参加中: 大会」(それ以外)。押すと報告ページ / 自分の速報
     renderMyEvents(menu, String(sess.user.id));
     // 新しい二つ名があれば: アイコンに赤い点、メニューの先頭 (名前の下) に「新しい二つ名」(押すとカードの編集へ。見たら消える)

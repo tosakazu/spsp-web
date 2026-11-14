@@ -119,7 +119,7 @@ async function main() {
     return;
   }
   $('ce-form').style.display = '';
-  if (SpspLogin.apiAvailable()) $('ce-to-profile').style.display = '';   // プロフィール編集へ (API のある所だけ)
+  SpspLogin.smatchReady().then(ready => { if (ready) $('ce-to-profile').style.display = ''; });   // プロフィール編集へ (スマッチとの連携が動き出してから)
 
   // 選択を変えたら: 下書きに保存 → カードと選択肢を描き直す
   const same = (/** @type {CardSettings | null} */ a, /** @type {CardSettings | null} */ b) => JSON.stringify(a) === JSON.stringify(b);
