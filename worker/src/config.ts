@@ -39,6 +39,10 @@ export interface Env {
   CHALLONGE_CLIENT_SECRET?: string;
   /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
   TITLE_SYNC_KEY?: string;
+  /** スマッチとの連携 (api/smatch.ts)。URL は [vars]、トークン 2 つは secret。EXPORT_TOKENS はカンマ区切り (入れ替えの間は新旧 2 本) */
+  SMATCH_IMPORT_URL?: string;
+  SMATCH_IMPORT_TOKEN?: string;
+  SMATCH_EXPORT_TOKENS?: string;
   /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -202,6 +206,10 @@ export interface Config {
   cardOpenEdit?: boolean;
   /** CARD_STICKERS_PREVIEW="1" (preview だけ): シールの持ち物はプレビュー用の判定でも確かめる */
   stickersPreview?: boolean;
+  /** スマッチとの連携。読みに行く URL とトークン、読みに来るスマッチのトークン (どれも無ければ連携は動かない) */
+  smatchImportUrl?: string;
+  smatchImportToken?: string;
+  smatchExportTokens?: string[];
 }
 
 function intOr(v: string | undefined, dflt: number): number {
@@ -239,6 +247,9 @@ export function configFromEnv(env: Env): Config {
     voteTesterUids: String(env.VOTE_TESTER_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean),
     cardOpenEdit: env.CARD_OPEN_EDIT === '1',
     stickersPreview: env.CARD_STICKERS_PREVIEW === '1',
+    smatchImportUrl: /^https:\/\//.test(String(env.SMATCH_IMPORT_URL || '')) ? String(env.SMATCH_IMPORT_URL) : undefined,
+    smatchImportToken: env.SMATCH_IMPORT_TOKEN || undefined,
+    smatchExportTokens: String(env.SMATCH_EXPORT_TOKENS || '').split(',').map((s) => s.trim()).filter(Boolean),
   };
 }
 

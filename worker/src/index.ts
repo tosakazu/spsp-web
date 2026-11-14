@@ -15,6 +15,7 @@ import type { Env } from './config.ts';
 import { configFromEnv } from './config.ts';
 import { D1Store } from './db.ts';
 import { runReportAutoStart, runReportEntrants } from './api/report.ts';
+import { runSmatchImport } from './api/smatch.ts';
 
 /**
  * 旧 URL (spsp.games 直下 / gh-pages の /spsp/ 直下にあったもの) の先頭セグメント。
@@ -198,5 +199,13 @@ export default {
     ctx.waitUntil(runReportEntrants(configFromEnv(env), new D1Store(env.DB), (input, init) => fetch(input, init), Date.now())
       .then((r) => { for (const x of r) console.log('entrants', x.code, x.n); })
       .catch((e) => console.log('entrants error', String(e))));
+    // スマッチの一覧の取り込み (1 日 1 回。設定が無ければ何もしない。api/smatch.ts、2026-11-15)
+    const cfg = configFromEnv(env);
+    if (cfg.smatchImportUrl && cfg.smatchImportToken) {
+      const origin = String(env.DATA_ORIGIN || '').replace(/\/+$/, '');
+      ctx.waitUntil(runSmatchImport(cfg, new D1Store(env.DB), (input, init) => fetch(input, init), (path) => fetch(origin + path, { headers: { Accept: 'application/json' } }), Date.now())
+        .then((r) => { if (r.code !== 'skip') console.log('smatch_import', r.code, r.n); })
+        .catch((e) => console.log('smatch_import error', String(e))));
+    }
   },
 } satisfies ExportedHandler<Env>;

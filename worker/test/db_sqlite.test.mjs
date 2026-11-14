@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql', '0022_report_snapshot_meta.sql', '0023_report_ended.sql', '0024_bracket_shares.sql', '0025_bracket_shares_owner.sql', '0026_report_auto_start.sql', '0027_login_handoffs.sql', '0028_report_snapshot_checked.sql', '0029_report_entrants.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql', '0022_report_snapshot_meta.sql', '0023_report_ended.sql', '0024_bracket_shares.sql', '0025_bracket_shares_owner.sql', '0026_report_auto_start.sql', '0027_login_handoffs.sql', '0028_report_snapshot_checked.sql', '0029_report_entrants.sql', '0030_smatch.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -372,4 +372,24 @@ test('0018: 見つからないの押し直し (回数・時刻・通知の時刻
   const id = await store.insertReportDq({ code: 'c1', entrant_id: '4', name: 'P4', scope: 'l', status: 'open', done_sets: '', note: '', created_by: '1', created_ms: 1, updated_ms: 1 });
   await store.updateReportDq('c1', id, 'done', '103', '', 5);
   assert.deepStrictEqual((await store.listReportDqs('c1')).map((x) => [x.status, x.done_sets]), [['done', '103']]);
+});
+
+test('スマッチとの連携: 取り込み・解除・状態・プロフィールの設定 (0030)', { skip: !DatabaseSync }, async () => {
+  const { store } = fresh();
+  assert.strictEqual(await store.getPartnerSync('smatch_import'), null);
+  await store.putPartnerSync('smatch_import', { ok_ms: 5, try_ms: 5, n: 2, meta: '{"m":1}' });
+  await store.putPartnerSync('smatch_import', { try_ms: 9, fails: 1, error: 'http_500' });
+  assert.deepStrictEqual(await store.getPartnerSync('smatch_import'), { ok_ms: 5, try_ms: 9, fails: 1, n: 2, error: 'http_500', meta: '{"m":1}' });
+  await store.applySmatchImport([{ discriminator: 'aaaaaaaa', uid: 100, smatch_id: 1, data: '{"a":1}' }, { discriminator: 'bbbbbbbb', uid: null, smatch_id: 2, data: '{"b":1}' }], [], '2026-11-15T12:00:00+09:00');
+  assert.deepStrictEqual(await store.getSmatchForUid('100'), { data: '{"a":1}', meta: '{"m":1}', ok_ms: 5, profile: null });
+  assert.strictEqual(await store.getSmatchForUid('999'), null);
+  await store.putProfileSettings('100', '{"smatch":false}', '2026-11-15T12:00:00+09:00');
+  await store.putProfileSettings('100', '{"smatch":true}', '2026-11-15T12:01:00+09:00');
+  assert.strictEqual((await store.getSmatchForUid('100')).profile, '{"smatch":true}');
+  assert.strictEqual(await store.getProfileSettings('100'), '{"smatch":true}');
+  await store.applySmatchImport([{ discriminator: 'bbbbbbbb', uid: 200, smatch_id: 2, data: '{"b":2}' }], ['aaaaaaaa'], '2026-11-16T12:00:00+09:00');
+  const rows = await store.listSmatchPlayers();
+  assert.deepStrictEqual(rows.sort((x, y) => x.discriminator.localeCompare(y.discriminator)), [
+    { discriminator: 'aaaaaaaa', uid: 100, linked: 0, data: '{"a":1}' }, { discriminator: 'bbbbbbbb', uid: 200, linked: 1, data: '{"b":2}' }]);
+  assert.strictEqual(await store.getSmatchForUid('100'), null);
 });

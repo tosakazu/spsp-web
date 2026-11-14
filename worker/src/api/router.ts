@@ -21,6 +21,7 @@ import type { Store } from '../store.ts';
 import { handleBracketStructure } from './bracket_sim.ts';
 import { handleBracketShareCreate, handleBracketShareGet } from './bracket_share.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
+import { handleProfileGet, handleProfilePut, handleSmatchExport, handleSmatchImportNow, handleSmatchStatus } from './smatch.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
@@ -95,7 +96,15 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
         // ページを開くたびに呼ばれる確認。期限切れは普通に起きるので記録しない。
         return (await handleMe(ctx.cfg, r, now)).body;
       case 'card_get':
-        return (await handleCardGet(ctx.cfg, ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
+        return (await handleCardGet(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ (だれでも)。記録しない
+      case 'profile_get':
+        return (await handleProfileGet(ctx.cfg, ctx.store, r, now)).body;   // 読むだけ (本人)。記録しない
+      case 'profile_put':
+        res = await handleProfilePut(ctx.cfg, ctx.store, r, now); break;
+      case 'smatch_status':
+        return (await handleSmatchStatus(ctx.cfg, ctx.store, now)).body;
+      case 'smatch_import':
+        res = await handleSmatchImportNow(ctx.cfg, ctx.store, ctx.fetch, ctx.dataFetch, r, now); break;
       case 'title_get':
         return (await handleTitleGet(ctx.store, r)).body;   // 読むだけ (だれでも)。記録しない
       case 'title_sync':
@@ -314,6 +323,13 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
       const body = await dispatch(ctx, { action: 'title_get', uid: url.searchParams.get('uid') || '', lang: url.searchParams.get('lang') || '' });
       return jsonResponse(body, body.ok ? 'public, max-age=60' : 'no-store');
     }
+    // スマッチとの受け渡し (api/smatch.ts)。一覧は Bearer トークン、状態はだれでも (経過時間と件数だけ)
+    if (sub === 'partner/smatch/players') {
+      return handleSmatchExport(ctx.cfg, ctx.store, ctx.dataFetch, request.headers.get('authorization'), ctx.now());
+    }
+    if (sub === 'partner/smatch/status') {
+      return jsonResponse(await dispatch(ctx, { action: 'smatch_status' }));
+    }
     if (sub === 'card') {
       const body = await dispatch(ctx, { action: 'card_get', uid: url.searchParams.get('uid') || '' });
       return jsonResponse(body, body.ok ? 'public, max-age=60' : 'no-store');
@@ -361,7 +377,7 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
   // POST /api/<action> は body に action が無ければパスから補う (同じ名前を使う)。
   if (sub && req && typeof req === 'object' && !Array.isArray(req)
       && (req as Record<string, unknown>).action === undefined) {
-    (req as Record<string, unknown>).action = sub;
+    (req as Record<string, unknown>).action = sub === 'partner/smatch/import' ? 'smatch_import' : sub;
   }
   if (sub === 'title_sync' && text.length > MAX_BODY_BYTES
       && !(req && typeof req === 'object' && (req as Record<string, unknown>).action === 'title_sync')) {

@@ -2,7 +2,8 @@
  * プレイヤーカードの設定と、ログイン状態の確認 (docs/login_design.md「バックエンド (Worker) に足すもの」)。
  *
  *   action: "me"        { token }            → { user:{id, slug, gamerTag}, exp } / invalid_session
- *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text }  (GET /api/card?uid= と同じ)
+ *   action: "card_get"  { uid }              → { settings | null, updated_at | null, title_text, smatch? }  (GET /api/card?uid= と同じ)
+ *                                            smatch = スマッチのレート (api/smatch.ts の SmatchView。連携を設定した所だけ。出すものが無ければ null)
  *                                            title_text = 二つ名の文字 { pre, post } (null = 既定、"" = なし。設定が無ければ全体が null = 両方既定)。プレイヤーページが一覧 (titles.js) を読まずに出せるように
  *   action: "card_put"  { token, settings }  → { settings, updated_at }  (settings:null で既定に戻す)
  *                       preview (CARD_OPEN_EDIT=1) だけ { uid, settings } でもよい (ログインなしで誰の分でも。見た目の確認用)
@@ -22,6 +23,7 @@ import { bundledPlayer } from './vote.ts';
 import { err, ok } from './respond.ts';
 import { verifySessionToken } from './session.ts';
 import { dayKey, formatIso } from './time.ts';
+import { smatchViewOf } from './smatch.ts';
 
 const MSG_INVALID_SESSION = 'ログインが無効か期限切れです。もう一度ログインしてください。';
 const MSG_RATE = '保存の間隔が短すぎます。少し待ってからやり直してください。';
@@ -295,12 +297,15 @@ export function titleTextOf(lang: string, t: CardTitle | null): { pre: string | 
 }
 
 /** action: "card_get" — だれでも読める。 */
-export async function handleCardGet(cfg: Config, store: Store, req: Record<string, unknown>): Promise<HandlerResult> {
+export async function handleCardGet(cfg: Config, store: Store, req: Record<string, unknown>, now: number = Date.now()): Promise<HandlerResult> {
   const uid = validUid(req.uid);
   if (!uid) return err('bad_request', '選手の指定が不正です。');
-  const body = rowToBody(await store.getCardSettings(uid));
+  // スマッチのレート (連携していて、本人が出さない設定にしていなければ。api/smatch.ts)。連携を設定していない所 (北米など) では読まない
+  const smatchOn = !!(cfg.smatchImportUrl && cfg.smatchImportToken);
+  const [row, sm] = await Promise.all([store.getCardSettings(uid), smatchOn ? store.getSmatchForUid(uid).catch(() => null) : Promise.resolve(null)]);
+  const body = rowToBody(row);
   const s = body.settings as CardSettings | null;
-  return ok({ ...body, title_text: titleTextOf(cfg.titleLang || 'ja', s ? s.title : null) });
+  return ok({ ...body, title_text: titleTextOf(cfg.titleLang || 'ja', s ? s.title : null), ...(smatchOn ? { smatch: smatchViewOf(sm, now) } : {}) });
 }
 
 /** action: "card_put" — 本人だけ。書く uid はトークン由来のみ。 */
