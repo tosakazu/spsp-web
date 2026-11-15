@@ -949,10 +949,13 @@ function scheduleImage(el, delay) {
   const p = new Promise(r => { done = () => { r(undefined); }; });
   imageWaiters.set(el, done);
   if (prevWaiter) p.then(prevWaiter);   // 前の回を待っていた人は、この回が終わるまで待つ
+  const gen = renderGen.get(el);
   imageTimers.set(el, setTimeout(() => {
     // Samsung Internet のダークモードは <img> も暗くするので、canvas をそのまま重ねる (canvas は暗くされない。実機で確認)
     captureCanvas(el).then(node => {
       if (!node) return;
+      // 撮っている間に描き直されていたら、この画像 (前の中身) は重ねない (新しい方が撮る)
+      if (renderGen.get(el) !== gen) return;
       const prev = el.querySelector('.pc-img');
       node.classList.add('pc-img');
       // html2canvas は canvas に原寸の幅・高さ (514px など) を直接書くので、カードの箱いっぱいに合わせ直す

@@ -965,30 +965,36 @@ function render() {
     const back = CARD_BACK_ON ? document.getElementById('pcard-back') : null;
     /** @type {any} */
     let last = null;
+    let drawn = false;
     const draw = (/** @type {any} */ x) => {
-      last = x;
+      last = x; drawn = true;
       const model = buildCardModel(cardData(), x ? x.settings : null, x ? x.titleText : null);
       SPSPPlayerCard.render(card, model);
       if (back) SPSPPlayerCard.renderBack(back, model);   // 裏面 (裏返すボタンで見える)
     };
-    // 仮: 既定の設定で先に組み立てておく (フォントを早く読み始める)。まだ見せない (読み込み中の表示のまま):
-    // 既定の色で一度見せてから本人の色に描き直すと、ちらついて見えていた (2026-11-16)。見せるのは設定が届いて描き直してから
-    draw(null);
-    setTimeout(reveal, 5000);   // 設定がなかなか届かないときは、既定のカードを見せておく (届いたら描き直す)
+    // 設定が届くまでは描かない (読み込み中の表示のまま)。既定の色・二つ名で先に描くと、見せていなくても、ダークモードで重ねる画像
+    // (js/player_card.js の .pc-img) が既定のカードで撮られ、本人の設定で描き直したあとも撮り直すまでそれが見えていた (2026-11-16)。
+    // 見せるのは描き終わってから (フォントの詰め直しと、重ねる画像まで。3 秒で打ち切る)
+    const show = () => {
+      if (!drawn) draw(last);
+      Promise.race([SPSPPlayerCard.ready(card), new Promise(r => setTimeout(r, 3000))]).then(reveal, reveal);
+    };
+    const fallback = setTimeout(show, 5000);   // 設定がなかなか届かないときは、既定のカードを見せておく (届いたら描き直す)
     // 漢字の名前は、裏面の英字名に使う読みの表 (js/latin_name.js) が届いたら描き直す。読めたら true
     const kanji = SpspLatinName.hasKanji(SPSPFormat.stripTeamTag(MAIN_REC.display));
     const readingsP = kanji
-      ? SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; draw(last); } return !!r; }, () => false)
+      ? SpspLatinName.loadReadings().then(r => { if (r && NAME_READINGS !== r) { NAME_READINGS = r; if (drawn) draw(last); } return !!r; }, () => false)
       : Promise.resolve(true);
     // 設定 (本人が適用したもの) が届いたら描き直す (設定が無い人は既定のまま)
     // 裏面の設定が無い人は、持っているシールの初期配置を足してから (js/player_card_model.js loadCardDefaultBack。設定が届く前には読まない)
     const settledP = settingsP.then(async x => {
       // (設定が読めなかったときは出さない: 自分で貼った人の裏面に、貼っていないシールを出さない)
       const def = back && x && !x.failed && !(x.settings && x.settings.back) ? await loadCardDefaultBack(CARD_DATA_EXTRA).catch(() => null) : null;
-      if ((x && x.settings) || def) draw(x);
-      reveal();
+      clearTimeout(fallback);
+      if (!drawn || (x && x.settings) || def) draw(x);
+      show();
       return true;
-    }).catch(() => { reveal(); return false; });
+    }).catch(() => { clearTimeout(fallback); show(); return false; });
     // 全部そろって描き終わったら裏返しの紹介。読めなかったものがあれば紹介しない
     // それまではカードを指で動かせない (.pc-wait。裏返せるようになってから。読めなかったときも、そこで動かせるようにする)
     const settle = () => wrapEl?.classList.remove('pc-wait');
