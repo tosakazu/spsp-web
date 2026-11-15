@@ -8,7 +8,7 @@
  *   状態            GET /api/partner/smatch/status   (だれでも。経過時間と件数だけ。外形監視 tools/monitor/check.mjs が見る)
  *   手動の取り込み   POST /api/partner/smatch/import { key }  (EXPORT_KEY。preview には定期実行が無い)
  *   表示            card_get の応答に smatch を足す (smatchViewOf。プレイヤーページが追加の通信なしで出せるように)
- *   プロフィールの設定 action profile_get { token } / profile_put { token, settings }  ({ smatch: false } = スマッチのレートを出さない)
+ *   プロフィールの設定 action profile_get { token } / profile_put { token, settings }  ({ smatch_1on1: false } = スマッチの 1on1 のレートを出さない。特おまは smatch_tokuoma)
  *
  * 「最高レートを見せない」(max_hidden) 人の最高レートは D1 の data にだけ置き、応答 (smatchViewOf) には出さない。
  * 連携を解除した人 (一覧から消えた人) は linked = 0 にして出さない。行は消さない。
@@ -150,7 +150,7 @@ export interface SmatchView {
 }
 export function smatchViewOf(row: { data: string; meta: string; ok_ms: number; profile: string | null } | null, nowMs: number): SmatchView | null {
   if (!row || !row.ok_ms || nowMs - row.ok_ms > SMATCH_STALE_MS) return null;
-  if (!profileOf(row.profile).smatch) return null;
+  const prof = profileOf(row.profile);
   let d: { smatch_id: number; name: string; max_hidden: boolean; modes: Record<string, SmatchModeStat> };
   let meta: SmatchMeta;
   try { d = JSON.parse(row.data); meta = JSON.parse(row.meta); } catch (_) { return null; }
@@ -158,7 +158,7 @@ export function smatchViewOf(row: { data: string; meta: string; ok_ms: number; p
   const modes: SmatchView['modes'] = {};
   for (const m of SMATCH_MODES) {
     const s = d.modes && d.modes[m];
-    if (!s) continue;
+    if (!s || !prof[SMATCH_SHOW_KEY[m]]) continue;   // 本人が出さないルールは飛ばす
     const games = typeof s.games === 'number' ? s.games : null;
     if (games === 0 || s.rate === null) continue;
     modes[m] = { rate: s.rate, rank: s.rank, season_max: d.max_hidden ? null : s.season_max, max: d.max_hidden ? null : s.max, games };
@@ -167,9 +167,11 @@ export function smatchViewOf(row: { data: string; meta: string; ok_ms: number; p
   return { url: meta.url_template.replace('{smatch_id}', String(d.smatch_id)), name: String(d.name || ''), season: meta.season ? meta.season.name : '', as_of: meta.generated_at, modes };
 }
 
-/** プロフィールの設定。smatch = スマッチのレートを自分のページに出すか (既定は出す) */
-export interface ProfileSettings { smatch: boolean }
-export const DEFAULT_PROFILE: ProfileSettings = { smatch: true };
+/** プロフィールの設定。smatch_1on1・smatch_tokuoma = スマッチのそのルールのレートを自分のページに出すか (既定は出す)。
+ *  古い形 { smatch: false } (ルールを分ける前、2026-11-15 まで) は両方出さないとして読む。 */
+export interface ProfileSettings { smatch_1on1: boolean; smatch_tokuoma: boolean }
+export const DEFAULT_PROFILE: ProfileSettings = { smatch_1on1: true, smatch_tokuoma: true };
+const SMATCH_SHOW_KEY: Record<SmatchMode, keyof ProfileSettings> = { '1on1': 'smatch_1on1', tokuoma: 'smatch_tokuoma' };
 export function profileOf(json: string | null | undefined): ProfileSettings {
   if (!json) return { ...DEFAULT_PROFILE };
   try { const v = validateProfile(JSON.parse(json)); return v || { ...DEFAULT_PROFILE }; } catch (_) { return { ...DEFAULT_PROFILE }; }
@@ -177,9 +179,12 @@ export function profileOf(json: string | null | undefined): ProfileSettings {
 export function validateProfile(v: unknown): ProfileSettings | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (k !== 'smatch') return null;
-  if (o.smatch !== undefined && typeof o.smatch !== 'boolean') return null;
-  return { smatch: o.smatch !== false };
+  for (const k of Object.keys(o)) {
+    if (k !== 'smatch' && k !== 'smatch_1on1' && k !== 'smatch_tokuoma') return null;
+    if (o[k] !== undefined && typeof o[k] !== 'boolean') return null;
+  }
+  const all = o.smatch !== false;   // 古い形。ルールごとの指定があればそちらを使う
+  return { smatch_1on1: typeof o.smatch_1on1 === 'boolean' ? o.smatch_1on1 : all, smatch_tokuoma: typeof o.smatch_tokuoma === 'boolean' ? o.smatch_tokuoma : all };
 }
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;

@@ -41,7 +41,7 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- プロフィール編集 (カードの編集とは別。いまはスマッチのレートを出すかどうか)。中身は src/pages/p_profile.js -->
+<!-- プロフィール編集 (カードの編集とは別。いまはスマッチのレートをルールごとに出すかどうか)。中身は src/pages/p_profile.js -->
 <main class="pf">
   <div id="loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
   <div id="not-found" class="empty-msg" style="display:none" data-i18n="player.not_found">プレイヤーが見つかりません。URL を確認してください。</div>
@@ -72,8 +72,13 @@
         <h2><span data-i18n="profile.smatch.title">スマッチ</span><span class="pf-chip" id="pf-smatch-chip"></span></h2>
         <p data-i18n="profile.smatch.body">スマッチ (オンラインのレート対戦サイト) で start.gg を連携していると、レートがプレイヤーページに出ます。</p>
         <label class="pf-switch">
-          <span data-i18n="profile.smatch.show">スマッチのレートをプレイヤーページに表示する</span>
-          <input type="checkbox" id="pf-smatch-show" disabled>
+          <span data-i18n="profile.smatch.show_1on1">1on1 のレートを表示する</span>
+          <input type="checkbox" id="pf-smatch-show-1on1" data-key="smatch_1on1" disabled>
+          <span class="pf-track" aria-hidden="true"></span>
+        </label>
+        <label class="pf-switch">
+          <span data-i18n="profile.smatch.show_tokuoma">特おまのレートを表示する</span>
+          <input type="checkbox" id="pf-smatch-show-tokuoma" data-key="smatch_tokuoma" disabled>
           <span class="pf-track" aria-hidden="true"></span>
         </label>
         <div class="pf-status" id="pf-status" role="status"></div>

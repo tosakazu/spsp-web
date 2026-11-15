@@ -64,7 +64,7 @@ async function main() {
   }
   $('pf-form').style.display = '';
 
-  const box = /** @type {HTMLInputElement} */ ($('pf-smatch-show'));
+  const boxes = /** @type {HTMLInputElement[]} */ ([$('pf-smatch-show-1on1'), $('pf-smatch-show-tokuoma')]);
   const status = $('pf-status');
   const say = (/** @type {string} */ msg, bad = false) => { status.textContent = msg; status.classList.toggle('bad', bad); };
   const r = await SpspLogin.api({ action: 'profile_get', ...who(uid) });
@@ -74,16 +74,20 @@ async function main() {
   chip.textContent = linked ? i18n('profile.smatch.linked') : i18n('profile.smatch.unlinked');
   chip.classList.toggle('on', linked);
   if (!linked) $('pf-smatch-note').style.display = '';
-  let saved = !(r.settings && r.settings.smatch === false);
-  box.checked = saved;
-  box.disabled = false;
-  // 切り替えたらすぐ保存。失敗したら元に戻す
-  box.addEventListener('change', async () => {
-    const want = box.checked;
-    box.disabled = true; say('');
-    const w = await SpspLogin.api({ action: 'profile_put', ...who(uid), settings: { smatch: want } });
-    box.disabled = false;
-    if (w && w.ok) { saved = want; say(i18n('profile.saved')); } else { box.checked = saved; say(i18n('profile.save_failed'), true); }
+  // ルールごと (1on1・特おま) に出す・出さない。設定は { smatch_1on1, smatch_tokuoma } (既定はどちらも出す)
+  const key = (/** @type {HTMLInputElement} */ b) => String(b.dataset.key);
+  /** @type {Record<string, boolean>} */
+  let saved = {};
+  for (const b of boxes) { saved[key(b)] = !(r.settings && r.settings[key(b)] === false); b.checked = saved[key(b)]; b.disabled = false; }
+  // 切り替えたらすぐ保存 (2 つまとめて送る)。失敗したら元に戻す
+  for (const box of boxes) box.addEventListener('change', async () => {
+    /** @type {Record<string, boolean>} */
+    const want = {};
+    for (const b of boxes) { want[key(b)] = b.checked; b.disabled = true; }
+    say('');
+    const w = await SpspLogin.api({ action: 'profile_put', ...who(uid), settings: want });
+    for (const b of boxes) b.disabled = false;
+    if (w && w.ok) { saved = want; say(i18n('profile.saved')); } else { for (const b of boxes) b.checked = saved[key(b)]; say(i18n('profile.save_failed'), true); }
   });
 }
 
