@@ -12,9 +12,8 @@
 <meta property="og:description" content="これから開かれるスマブラSP の大会と参加予定者" data-i18n-attr="content:page.upcoming.og_description">
 <meta property="og:url" content="https://tosakazu.github.io/spsp/upcoming/">
 <link rel="stylesheet" href="../css/site.css">
-<link rel="stylesheet" href="../css/player.css">
 <style>
-/* ── 一覧: 大会一覧 (events/index.html) と同じ見た目 (表・チップ・スマホの折りたたみ) ── */
+/* 大会一覧 (events/index.html) と同じ見た目 (表・チップ・スマホの折りたたみ)。列は シリーズ が無いだけ */
 
   .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 10px; }
 
@@ -152,65 +151,6 @@
       flex: 1 1 100%; order: 6; width: auto;
     }
   }
-
-/* ── 大会ごと: 大会ページ (t/index.html) と同じ見た目 (幅 480px・hero・見出しつきの欄・tour-item の行) ── */
-  #up-detail-view { max-width: 480px; margin: 0 auto; padding: 16px; }
-  .up-back { display: inline-block; font-size: 12px; color: #6b7280; text-decoration: none; margin: 0 0 10px; }
-  .up-back:hover { color: #dc2626; }
-  .hero .name-row { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
-  .hero .name { font-size: 22px; font-weight: 700; color: #111827; line-height: 1.25; word-break: break-word; flex: 1; }
-  .hero .event { font-size: 13px; color: #6b7280; margin-top: 4px; }
-  .hero .meta-line { margin-top: 8px; font-size: 12px; color: #374151; }
-  .hero .meta-line .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #f3f4f6; font-size: 11px; margin-right: 4px; cursor: default; border: 0; color: #374151; }
-  .hero .meta-line .chip.wk { background: #dbeafe; color: #1e40af; }
-  .hero .meta-line .chip.wd { background: #f3f4f6; color: #6b7280; }
-  .hero .meta-line .chip.pre { background: #f3e8ff; color: #6b21a8; }
-  .hero .meta-line .chip.res { background: #ffe4e6; color: #be123c; }
-  .hero .meta-line .chip.lc  { background: #e0f2fe; color: #0369a1; }
-  .hero .meta-line .chip.rs  { background: #f3f4f6; color: #4b5563; }
-  /* 数字 (プレイヤーページの数字の並びと同じ: 小さい見出しの下に太い数字) */
-  .up-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin: 14px 0 0; }
-  .up-stats div { background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 10px; padding: 8px 6px; text-align: center; }
-  .up-stats dt { font-size: 10px; color: #6b7280; }
-  .up-stats dd { margin: 2px 0 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .up-stats dd small { font-size: 10px; font-weight: 400; color: #9ca3af; margin-left: 1px; }
-  .section h2 .cnt { color: #9ca3af; font-weight: 400; margin-left: 6px; text-transform: none; letter-spacing: 0; }
-  /* 行 (tour-item): 左 = 数字、中 = 名前と補足、右 = 値 */
-  .tour-item { display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; align-items: center; transition: background 0.1s; }
-  .tour-item:hover { background: #f3f4f6; }
-  .tour-item .meta { font-size: 12px; color: #374151; min-width: 0; word-break: break-word; }
-  .tour-item .meta a, .tour-item .meta .nm { color: #dc2626; text-decoration: none; font-weight: 500; font-size: 13px; }
-  .tour-item .meta .nm { color: #111827; }
-  .tour-item .meta a:hover { text-decoration: underline; }
-  .tour-item .meta .sub { color: #9ca3af; font-size: 10px; margin-top: 1px; }
-  .tour-item .v { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; color: #374151; font-size: 13px; line-height: 1.1; min-width: 56px; white-space: nowrap; }
-  .tour-item .v.dim, .tour-item .place.dim { color: #9ca3af; }
-  .tour-item .place.dim { font-size: 13px; font-weight: 400; }
-  /* 使い手・地域: 押すと開く組 (大会ページの順位表の行と同じ動き) */
-  .tour-group { border-bottom: 1px solid #f3f4f6; }
-  .tour-group .tour-item { border-bottom: none; cursor: pointer; width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; font: inherit; text-align: left; color: inherit; }
-  .tour-group .chevron { color: #d1d5db; font-size: 10px; margin-left: 4px; transition: transform 0.15s; display: inline-block; }
-  .tour-matches .tour-item { grid-template-columns: 46px 1fr auto; padding: 5px 8px; cursor: default; }
-  .tour-matches .tour-item .place { font-size: 13px; }
-  .tour-group .tour-item:focus-visible, .up-more:focus-visible, .standings-controls input:focus-visible, .standings-controls select:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
-  .standings-controls { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
-  .standings-controls input, .standings-controls select {
-    flex: 1; min-width: 110px; padding: 7px 10px; background: #f9fafb; color: #111827;
-    border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; font-family: inherit;
-  }
-  .std-note { font-size: 11px; color: #6b7280; margin: -4px 0 6px; }
-  .up-more { display: block; width: 100%; margin-top: 8px; background: #ffffff; color: #6b7280; border: 1px solid #e5e7eb; padding: 7px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit; }
-  .up-more:hover { color: #dc2626; border-color: #dc2626; }
-  /* 分布: 横棒 (1 色。数は棒の右) */
-  .up-dist h3 { font-size: 11px; color: #6b7280; font-weight: 600; margin: 10px 0 6px; }
-  .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; font-size: 12px; }
-  .up-bars .lb { color: #374151; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .up-bars .bar { height: 12px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
-  .up-bars .bar i { display: block; height: 100%; background: #dc2626; border-radius: 3px; }
-  .up-bars .bar.none i { background: #9ca3af; }
-  .up-bars .v { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
-  .up-bars .v small { font-weight: 400; color: #9ca3af; margin-left: 4px; font-size: 10px; }
-  .up-note { font-size: 11px; color: #9ca3af; margin: 18px 0 0; line-height: 1.7; }
 </style>
 <link rel="stylesheet" href="../region/site.css">
 </head>
@@ -221,97 +161,53 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- 今後の大会 (参加予定者のまとめ)。中身は src/pages/upcoming.js。?e=<event id> で大会ごと -->
-<!-- 一覧 (大会一覧と同じ形) -->
-<div id="up-list-view" hidden>
-  <div class="header">
-    <h1 data-i18n="nav.ranking.upcoming">今後の大会</h1>
-    <p class="subtitle" data-i18n="upcoming.subtitle">これから開かれる大会と参加予定者。大会名を押すと、参加予定者を実力順・使い手・地域で見られます。</p>
+<!-- 今後の大会の一覧 (大会一覧と同じ形)。中身は src/pages/upcoming.js。大会名を押すと entrants.html?e=<event id> -->
+<div class="header">
+  <h1 data-i18n="nav.ranking.upcoming">今後の大会</h1>
+  <p class="subtitle" data-i18n="upcoming.subtitle">これから開かれる大会と参加予定者。大会名を押すと、参加予定者を実力順・使い手・地域で見られます。</p>
 
-    <div class="filter-section">
-      <span class="filter-label" data-i18n="events.filter.nent">参加者数:</span>
-      <div class="filter-chips" id="filter-nent" style="display:inline-flex">
-        <span class="chip active" data-nent="0" data-i18n="common.all">すべて</span>
-        <span class="chip" data-nent="8">8+</span>
-        <span class="chip" data-nent="16">16+</span>
-        <span class="chip" data-nent="32">32+</span>
-        <span class="chip" data-nent="64">64+</span>
-        <span class="chip" data-nent="128">128+</span>
-      </div>
-    </div>
-
-    <div class="filter-section">
-      <span class="filter-label" data-i18n="events.filter.tags">タグ:</span>
-      <div class="filter-chips" id="filter-tags" style="display:inline-flex">
-        <span class="chip" data-tag="weekend" data-i18n="events.tag.weekend_only">休日のみ</span>
-        <span class="chip" data-tag="weekday" data-i18n="events.tag.weekday_only">平日のみ</span>
-      </div>
-    </div>
-
-    <div class="controls">
-      <input type="search" id="search" placeholder="大会名で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_events">
-      <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+  <div class="filter-section">
+    <span class="filter-label" data-i18n="events.filter.nent">参加者数:</span>
+    <div class="filter-chips" id="filter-nent" style="display:inline-flex">
+      <span class="chip active" data-nent="0" data-i18n="common.all">すべて</span>
+      <span class="chip" data-nent="8">8+</span>
+      <span class="chip" data-nent="16">16+</span>
+      <span class="chip" data-nent="32">32+</span>
+      <span class="chip" data-nent="64">64+</span>
+      <span class="chip" data-nent="128">128+</span>
     </div>
   </div>
 
-  <div class="table-wrap">
-    <table id="eventstable">
-      <thead>
-        <tr>
-          <th class="col-date sortable sorted-asc" data-sort="date" data-i18n="events.col.date">開催日</th>
-          <th class="col-name sortable" data-sort="name" data-i18n="events.col.name">大会名</th>
-          <th class="col-nent sortable" data-sort="nent" data-i18n="events.col.nent">参加者</th>
-          <th class="col-city sortable" data-sort="city" data-i18n="events.col.city">開催地</th>
-          <th class="col-tags" data-i18n="common.col.tags">タグ</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+  <div class="filter-section">
+    <span class="filter-label" data-i18n="events.filter.tags">タグ:</span>
+    <div class="filter-chips" id="filter-tags" style="display:inline-flex">
+      <span class="chip" data-tag="weekend" data-i18n="events.tag.weekend_only">休日のみ</span>
+      <span class="chip" data-tag="weekday" data-i18n="events.tag.weekday_only">平日のみ</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="大会名で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_events">
+    <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
   </div>
 </div>
 
-<!-- 大会ごと (大会ページと同じ形) -->
-<main id="up-detail-view" hidden>
-  <a class="up-back" href="./" data-i18n="upcoming.back">← 今後の大会の一覧</a>
-  <div class="hero">
-    <div class="name-row">
-      <div class="name" id="up-name"></div>
-      <a class="share-icon-btn" id="up-startgg" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path><path d="M21 14v7H3V3h7"></path></svg>
-      </a>
-    </div>
-    <div class="event" id="up-event"></div>
-    <div class="meta-line" id="up-meta"></div>
-  </div>
-  <dl class="up-stats" id="up-stats"></dl>
+<div class="table-wrap">
+  <table id="eventstable">
+    <thead>
+      <tr>
+        <th class="col-date sortable sorted-asc" data-sort="date" data-i18n="events.col.date">開催日</th>
+        <th class="col-name sortable" data-sort="name" data-i18n="events.col.name">大会名</th>
+        <th class="col-nent sortable" data-sort="nent" data-i18n="events.col.nent">参加者</th>
+        <th class="col-city sortable" data-sort="city" data-i18n="events.col.city">開催地</th>
+        <th class="col-tags" data-i18n="common.col.tags">タグ</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
 
-  <div class="section">
-    <h2 data-i18n="upcoming.sec.dist">📊 実力分布</h2>
-    <div class="up-dist" id="up-dist"></div>
-  </div>
-  <div class="section">
-    <h2><span data-i18n="upcoming.sec.char">🎮 使い手</span><span class="cnt" id="up-char-n"></span></h2>
-    <div id="up-chars"></div>
-  </div>
-  <div class="section">
-    <h2><span data-i18n="upcoming.sec.pref">🗾 地域</span><span class="cnt" id="up-pref-n"></span></h2>
-    <div id="up-prefs"></div>
-  </div>
-  <div class="section">
-    <h2><span data-i18n="upcoming.sec.rank">🏅 実力順</span><span class="cnt" id="up-rank-n"></span></h2>
-    <div class="std-note" data-i18n="upcoming.rank_note">左の数字は SPSP の総合評価の順位です。</div>
-    <div class="standings-controls">
-      <input type="search" id="up-pq" placeholder="名前で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_players,aria-label:upcoming.search_players">
-      <select id="up-fchar" aria-label="使い手" data-i18n-attr="aria-label:upcoming.all_chars"></select>
-      <select id="up-fpref" aria-label="地域" data-i18n-attr="aria-label:upcoming.all_prefs"></select>
-    </div>
-    <div id="up-rank"></div>
-  </div>
-  <p class="up-note" data-i18n="upcoming.note">順位・Lv・使用キャラ・地域は SPSP の集計によるものです。順位は総合評価の順位で、SPSP に載っていない人は「順位なし」です。参加予定者は start.gg の登録にもとづき、1 日に何度か更新します。</p>
-</main>
-
-<div id="up-loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
-<div id="up-empty" class="empty-msg" hidden></div>
+<div class="footer" id="footer-info"></div>
 
 <script src="../assets/upcoming.js"></script>
 </body>
