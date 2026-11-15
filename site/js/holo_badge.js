@@ -138,7 +138,8 @@ export function isTransparent(src) {
   let p = cache.get(src);
   if (!p) {
     p = new Promise(resolve => {
-      const img = new Image();
+      let img = new Image();
+      let tries = 0;
       img.crossOrigin = 'anonymous';   // data.spsp.games は CORS *。読めないと getImageData が例外になる
       img.onload = async () => {
         // 絵にほどき終わってから縮める: 読めた直後に描くと、ブラウザ (iPhone の Safari など) によっては何も描かれず
@@ -154,7 +155,20 @@ export function isTransparent(src) {
           resolve(r.edge > 0.3 || r.all > 0.1);
         } catch (e) { resolve(false); }
       };
-      img.onerror = () => { cache.delete(src); resolve(false); };
+      // 読めなければ少し待って 2 回までやり直す (1 回の失敗で、透過のシールが四角い絵で出ていた)
+      img.onerror = () => {
+        if (tries++ < 2) {
+          const prev = img;
+          setTimeout(() => {
+            img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = prev.onload; img.onerror = prev.onerror;
+            img.src = corsUrl(src);
+          }, tries === 1 ? 500 : 1500);
+          return;
+        }
+        cache.delete(src); resolve(false);
+      };
       img.src = corsUrl(src);
     });
     cache.set(src, p);
@@ -259,12 +273,16 @@ function loadImage(url, cors = false) {
   let p = imgCache.get(url);
   if (!p) {
     p = new Promise((resolve, reject) => {
-      const im = new Image();
-      if (cors) im.crossOrigin = 'anonymous';
-      // 読めたら絵にほどいておく (decode。描くときにほどくと、その分そのとき重い)
-      im.onload = () => { if (im.decode) im.decode().then(() => resolve(im), () => resolve(im)); else resolve(im); };
-      im.onerror = () => reject(new Error('image ' + url));
-      im.src = cors ? corsUrl(url) : url;
+      // 読めなければ少し待って 2 回までやり直す (1 枚の失敗で、そのシールが出ないままになっていた。2026-11-16)
+      const go = (/** @type {number} */ n) => {
+        const im = new Image();
+        if (cors) im.crossOrigin = 'anonymous';
+        // 読めたら絵にほどいておく (decode。描くときにほどくと、その分そのとき重い)
+        im.onload = () => { if (im.decode) im.decode().then(() => resolve(im), () => resolve(im)); else resolve(im); };
+        im.onerror = () => { if (n < 2) setTimeout(() => go(n + 1), n ? 1500 : 500); else reject(new Error('image ' + url)); };
+        im.src = cors ? corsUrl(url) : url;
+      };
+      go(0);
     });
     imgCache.set(url, p);
     p.catch(() => imgCache.delete(url));

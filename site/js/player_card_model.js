@@ -433,9 +433,18 @@ export async function fetchAppliedCard(uid) {
     // 本人が見るときはブラウザのキャッシュ (60 秒) を使わない: 編集ページで適用した直後に古い設定が出ないように
     // (preview は誰でも誰の分でも編集できるので、常に使わない)
     const self = SpspLogin.isSelf(uid) || SpspLogin.openEdit();
-    const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
-                          self ? { cache: 'no-store' } : undefined);
-    const j = r.ok ? await r.json() : null;
+    // 読めなかったら (通信の失敗・5xx) 少し待って 2 回までやり直す: 1 回の失敗で、裏面のシールも色も無いカードになっていた (2026-11-16)
+    /** @type {any} */
+    let j = null;
+    for (let i = 0; i < 3 && !j; i++) {
+      if (i) await new Promise(res => setTimeout(res, i === 1 ? 500 : 1500));
+      try {
+        const r = await fetch(SPSP_POST_CONFIG.GAS_ENDPOINT + '/card?uid=' + encodeURIComponent(String(uid)) + (self ? '&t=' + Date.now() : ''),
+                              self ? { cache: 'no-store' } : undefined);
+        if (r.ok) j = await r.json();
+        else if (r.status < 500) break;   // 4xx はやり直しても同じ
+      } catch (e) { /* やり直す */ }
+    }
     if (!j || !j.ok) return { settings: null, titleText: null, failed: true };
     const tt = j.title_text;
     return { settings: normalize(j.settings),
