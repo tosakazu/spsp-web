@@ -69,6 +69,8 @@ TS_OFFSET = "+09:00"
 # セッションの有効期間 (180 日) と state の有効期間 (30 分)。ミリ秒。
 SESSION_TTL_MS = "15552000000"
 STATE_TTL_MS = "1800000"
+# スマッチの一覧を読む URL (docs/smatch_partner.md)。secret SMATCH_IMPORT_TOKEN と両方あるときだけ定期実行が読みに行く (2026-11-15 から)
+SMATCH_IMPORT_URL = "https://smatch-jp.com/api/partner/spsp/players"
 
 # ── preview (workers.dev で確認する。本番と別の D1) ──
 [env.preview]
@@ -102,7 +104,6 @@ VOTE_TESTER_UIDS = "1941489"   # 投票の資格判定を免除するテスト�
 CARD_OPEN_EDIT = "1"           # preview だけ: カードの設定をログインなしで誰の分でも書ける (見た目の確認用、本番の vars には置かない)
 CARD_STICKERS_PREVIEW = "1"    # preview だけ: 選手のデータに大会シールが無ければ、サイトに置いたプレビュー用の判定 (data/stickers_preview/) で持ち物を確かめる
 # スマッチとの連携 (docs/smatch_partner.md)。preview には定期実行が無いので読みに行かない (表示の確認用に D1 へ見本を入れてある)。
-# 本番は [vars] に同じ行を足し、secret SMATCH_IMPORT_TOKEN・SMATCH_EXPORT_TOKENS を入れると動き出す
 SMATCH_IMPORT_URL = "https://smatch-jp.com/api/partner/spsp/players"
 SITE_PREFIX = "/jp"
 TS_OFFSET = "+09:00"
