@@ -12,48 +12,98 @@
 <meta property="og:description" content="これから開かれるスマブラSP の大会と参加予定者" data-i18n-attr="content:page.upcoming.og_description">
 <meta property="og:url" content="https://tosakazu.github.io/spsp/upcoming/">
 <link rel="stylesheet" href="../css/site.css">
+<link rel="stylesheet" href="../css/player.css">
 <style>
-  /* 今後の大会: 一覧 (大会ごとの行) と、大会を選んだときの詳細 (数字 → 見方の切り替え → 実力順 / 使い手 / 地域 / 分布)。1 カラム、最大 1100px */
-  .up { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
-  .up h1 { font-size: 22px; margin: 0 0 4px; overflow-wrap: anywhere; }
-  .up-sub { font-size: 13px; color: #6b7280; margin: 0 0 12px; }
-  .up-back { display: inline-block; font-size: 13px; color: #6b7280; text-decoration: none; margin: 0 0 8px; }
-  .up-back:hover { color: #dc2626; }
-  .up a { color: #dc2626; text-decoration: none; }
-  .up a:hover { text-decoration: underline; }
-  .up-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 12px; }
-  .up input[type="search"], .up select {
-    padding: 8px 12px; border: 1px solid #e5e7eb; background: #fff; color: #111827;
-    border-radius: 6px; font-size: 14px; font-family: inherit; min-height: 40px; box-sizing: border-box;
+/* ── 一覧: 大会一覧 (events/index.html) と同じ見た目 (表・チップ・スマホの折りたたみ) ── */
+
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 10px; }
+
+  .filter-section {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 4px;
   }
-  .up input[type="search"] { flex: 1 1 220px; min-width: 0; max-width: 360px; }
-  .up select { flex: 0 1 auto; max-width: 100%; }
-  .up input:focus-visible, .up select:focus-visible, .up-tab:focus-visible, .chip:focus-visible, .up-more:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
-  .filter-label { font-size: 11px; color: #6b7280; }
+  .filter-label { font-size: 11px; color: #6b7280; flex-shrink: 0; }
+  .filter-chips {
+    display: inline-flex; gap: 6px; flex-wrap: wrap; margin: 0;
+  }
   .chip {
-    padding: 4px 10px; border-radius: 14px; font-size: 12px; font-family: inherit;
-    background: #f3f4f6; color: #6b7280; cursor: pointer; border: 1px solid transparent;
+    padding: 4px 10px; border-radius: 14px; font-size: 11px;
+    background: #f3f4f6; color: #6b7280; cursor: pointer; user-select: none;
+    border: 1px solid transparent;
   }
   .chip:hover { background: #e5e7eb; color: #111827; }
   .chip.active { background: #dc2626; color: #fff; border-color: #dc2626; }
-  .up-count { font-size: 12px; color: #6b7280; }
-  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
 
-  /* 一覧 */
-  .up-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid #e5e7eb; }
-  .up-ev { display: grid; grid-template-columns: 96px 1fr auto; gap: 2px 14px; padding: 12px 4px; border-bottom: 1px solid #f3f4f6; align-items: baseline; }
-  .up-ev:hover { background: #f9fafb; }
-  .up-ev-date { font-size: 13px; color: #374151; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .up-ev-date small { display: block; font-size: 11px; color: #9ca3af; }
-  .up-ev-main { min-width: 0; }
-  .up-ev-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-  .up-ev-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
-  .up-ev-top { font-size: 12px; color: #6b7280; margin-top: 3px; overflow-wrap: anywhere; }
-  .up-ev-top b { color: #111827; font-weight: 600; }
-  .up-ev-top .rk { color: #9ca3af; font-size: 11px; margin-left: 2px; }
-  .up-ev-n { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
-  .up-ev-n small { font-size: 11px; font-weight: 400; color: #6b7280; margin-left: 1px; }
-  .tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-right: 3px; white-space: nowrap; }
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0;
+  }
+  input, button, select {
+    padding: 8px 12px; border: 1px solid #e5e7eb;
+    background: #ffffff; color: #111827;
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  input[type="search"] { min-width: 280px; flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; background: #ffffff; color: #374151;
+    padding: 10px 8px; border-bottom: 2px solid #e5e7eb;
+    user-select: none; cursor: pointer; font-weight: 600;
+    position: sticky; top: 56px; z-index: 2;
+  }
+  th:hover { color: #dc2626; }
+  th.sortable::after { content: "↕"; opacity: 0.3; margin-left: 4px; font-size: 10px; }
+  th.sorted-asc::after { content: "↑"; opacity: 1; }
+  th.sorted-desc::after { content: "↓"; opacity: 1; }
+  td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+
+  tr.event-row { transition: background 0.1s; }
+  tr.event-row:hover { background: #f9fafb; }
+  tr.event-row td.col-name a {
+    color: #dc2626; font-weight: 500; text-decoration: none;
+  }
+  tr.event-row td.col-name a:hover { text-decoration: underline; }
+  tr.event-row td.col-name .no-detail {
+    color: #6b7280; font-weight: 500;
+  }
+  /* 主な参加者 (top 3) 行 */
+  .top-players {
+    margin-top: 3px; font-size: 11px; color: #9ca3af;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .top-players a { color: #6b7280; text-decoration: none; }
+  .top-players a:hover { color: #dc2626; text-decoration: underline; }
+  .top-players .place {
+    color: #111827; font-weight: 600; margin-right: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .top-players .rank { color: #9ca3af; font-size: 10px; margin-left: 2px; }
+  .top-players .sep { color: #d1d5db; margin: 0 5px; }
+  @media (max-width: 720px) {
+    .top-players { font-size: 10px; white-space: normal; }
+  }
+
+  th.col-date, td.col-date {
+    width: 110px; font-variant-numeric: tabular-nums;
+  }
+  th.col-name, td.col-name {
+    width: auto; min-width: 220px;
+  }
+  td.col-name .event-suffix { color: #9ca3af; font-size: 11px; margin-left: 4px; }
+  th.col-nent, td.col-nent {
+    width: 80px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  th.col-city, td.col-city {
+    width: 110px; color: #6b7280; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  th.col-tags, td.col-tags { width: 240px; }
+
+  .tag {
+    display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 8px;
+    margin-right: 3px; margin-bottom: 2px; white-space: nowrap;
+  }
   .tag-wk { background: rgba(220, 38, 38, 0.08); color: #dc2626; }
   .tag-wd { background: rgba(107, 114, 128, 0.10); color: #6b7280; }
   .tag-pre { background: rgba(168, 85, 247, 0.12); color: #6b21a8; }
@@ -61,67 +111,106 @@
   .tag-low { background: rgba(8, 145, 178, 0.10); color: #0e7490; }
   .tag-uchi { background: rgba(168, 85, 247, 0.12); color: #6b21a8; }
   .tag-special { background: rgba(236, 72, 153, 0.10); color: #be185d; }
+  .tag-small { background: rgba(107, 114, 128, 0.12); color: #4b5563; }
+  .tag-gf { background: #ffedd5; color: #9a3412; font-weight: 600; }
+  .tag-resume { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
 
-  /* 詳細: 数字 */
-  .up-stats { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 12px 0 16px; padding: 0; }
-  .up-stats div { display: flex; flex-direction: column-reverse; }
-  .up-stats dt { font-size: 11px; color: #6b7280; }
-  .up-stats dd { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
-  .up-stats dd small { font-size: 12px; font-weight: 400; color: #6b7280; margin-left: 2px; }
-  /* 詳細: 見方の切り替え */
-  .up-tabs { display: flex; gap: 4px; border-bottom: 2px solid #e5e7eb; margin: 0 0 12px; overflow-x: auto; }
-  .up-tab {
-    font: inherit; font-size: 14px; font-weight: 600; padding: 10px 14px; min-height: 44px; border: 0; background: none; color: #6b7280;
-    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap;
+  .empty-msg { padding: 24px; text-align: center; color: #6b7280; }
+  .footer a { color: #dc2626; text-decoration: none; }
+
+  /* Mobile */
+  @media (max-width: 720px) {
+    .subtitle { font-size: 11px; }
+    .controls { gap: 6px; }
+    input[type="search"] { min-width: 0; width: 100%; flex: 1 1 100%; font-size: 14px; padding: 8px 10px; }
+    table, thead, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tr.event-row {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+      padding: 10px 8px; border-bottom: 1px solid #f3f4f6;
+    }
+    tr.event-row td { padding: 0; border: none; min-width: 0; text-align: left; }
+    tr.event-row td.col-date {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280; order: 1;
+    }
+    tr.event-row td.col-nent {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280; order: 2;
+      text-align: left;
+    }
+    tr.event-row td.col-nent::before { content: "👥 "; color: #9ca3af; }
+    tr.event-row td.col-name {
+      flex: 1 1 100%; font-size: 14px; font-weight: 500;
+      word-break: break-all; order: 3;
+    }
+    tr.event-row td.col-city {
+      flex: 0 0 auto; font-size: 11px; color: #6b7280;
+      width: auto; order: 4;
+    }
+    tr.event-row td.col-city:empty { display: none; }
+    tr.event-row td.col-city::before { content: "📍 "; color: #9ca3af; }
+    tr.event-row td.col-tags {
+      flex: 1 1 100%; order: 6; width: auto;
+    }
   }
-  .up-tab:hover { color: #111827; }
-  .up-tab[aria-selected="true"] { color: #dc2626; border-bottom-color: #dc2626; }
-  /* 実力順 */
-  .up-table-wrap { overflow-x: auto; }
-  .up-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .up-table th { text-align: left; color: #374151; font-weight: 600; padding: 8px 6px; border-bottom: 2px solid #e5e7eb; white-space: nowrap; }
-  .up-table td { padding: 8px 6px; border-bottom: 1px solid #f3f4f6; }
-  .up-table .c-no, .up-table .c-rank { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; width: 1%; }
-  .up-table .c-no { color: #9ca3af; }
-  .up-table .c-rank { font-weight: 600; }
-  .up-table .c-lv { white-space: nowrap; width: 1%; color: #374151; }
-  .up-table .c-name { min-width: 120px; overflow-wrap: anywhere; font-weight: 500; }
-  .up-table .c-char, .up-table .c-pref { color: #6b7280; white-space: nowrap; }
-  .up-none { color: #9ca3af; }
-  /* 使い手・地域 */
-  .up-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-  .up-group { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #fff; min-width: 0; }
-  .up-group h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; margin: 0 0 6px; }
-  .up-group h3 span:first-child { min-width: 0; overflow-wrap: anywhere; }
-  .up-group h3 .n { font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .up-group h3 .n small { font-size: 11px; font-weight: 400; color: #6b7280; margin-left: 1px; }
-  .up-group ol { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-  .up-group li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-  .up-group li a { min-width: 0; overflow-wrap: anywhere; }
-  .up-group li .rk { color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; }
-  .up-more { font: inherit; font-size: 12px; margin-top: 6px; padding: 4px 0; border: 0; background: none; color: #6b7280; cursor: pointer; text-decoration: underline; }
-  .up-more:hover { color: #dc2626; }
-  /* 分布: 横棒 (1 色。数は棒の右に書く) */
-  .up-dist { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px 32px; }
-  .up-dist h3 { font-size: 14px; margin: 0 0 8px; }
-  .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
+
+/* ── 大会ごと: 大会ページ (t/index.html) と同じ見た目 (幅 480px・hero・見出しつきの欄・tour-item の行) ── */
+  #up-detail-view { max-width: 480px; margin: 0 auto; padding: 16px; }
+  .up-back { display: inline-block; font-size: 12px; color: #6b7280; text-decoration: none; margin: 0 0 10px; }
+  .up-back:hover { color: #dc2626; }
+  .hero .name-row { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
+  .hero .name { font-size: 22px; font-weight: 700; color: #111827; line-height: 1.25; word-break: break-word; flex: 1; }
+  .hero .event { font-size: 13px; color: #6b7280; margin-top: 4px; }
+  .hero .meta-line { margin-top: 8px; font-size: 12px; color: #374151; }
+  .hero .meta-line .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #f3f4f6; font-size: 11px; margin-right: 4px; cursor: default; border: 0; color: #374151; }
+  .hero .meta-line .chip.wk { background: #dbeafe; color: #1e40af; }
+  .hero .meta-line .chip.wd { background: #f3f4f6; color: #6b7280; }
+  .hero .meta-line .chip.pre { background: #f3e8ff; color: #6b21a8; }
+  .hero .meta-line .chip.res { background: #ffe4e6; color: #be123c; }
+  .hero .meta-line .chip.lc  { background: #e0f2fe; color: #0369a1; }
+  .hero .meta-line .chip.rs  { background: #f3f4f6; color: #4b5563; }
+  /* 数字 (プレイヤーページの数字の並びと同じ: 小さい見出しの下に太い数字) */
+  .up-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin: 14px 0 0; }
+  .up-stats div { background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 10px; padding: 8px 6px; text-align: center; }
+  .up-stats dt { font-size: 10px; color: #6b7280; }
+  .up-stats dd { margin: 2px 0 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .up-stats dd small { font-size: 10px; font-weight: 400; color: #9ca3af; margin-left: 1px; }
+  .section h2 .cnt { color: #9ca3af; font-weight: 400; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+  /* 行 (tour-item): 左 = 数字、中 = 名前と補足、右 = 値 */
+  .tour-item { display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; align-items: center; transition: background 0.1s; }
+  .tour-item:hover { background: #f3f4f6; }
+  .tour-item .meta { font-size: 12px; color: #374151; min-width: 0; word-break: break-word; }
+  .tour-item .meta a, .tour-item .meta .nm { color: #dc2626; text-decoration: none; font-weight: 500; font-size: 13px; }
+  .tour-item .meta .nm { color: #111827; }
+  .tour-item .meta a:hover { text-decoration: underline; }
+  .tour-item .meta .sub { color: #9ca3af; font-size: 10px; margin-top: 1px; }
+  .tour-item .v { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; color: #374151; font-size: 13px; line-height: 1.1; min-width: 56px; white-space: nowrap; }
+  .tour-item .v.dim, .tour-item .place.dim { color: #9ca3af; }
+  .tour-item .place.dim { font-size: 13px; font-weight: 400; }
+  /* 使い手・地域: 押すと開く組 (大会ページの順位表の行と同じ動き) */
+  .tour-group { border-bottom: 1px solid #f3f4f6; }
+  .tour-group .tour-item { border-bottom: none; cursor: pointer; width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; font: inherit; text-align: left; color: inherit; }
+  .tour-group .chevron { color: #d1d5db; font-size: 10px; margin-left: 4px; transition: transform 0.15s; display: inline-block; }
+  .tour-matches .tour-item { grid-template-columns: 46px 1fr auto; padding: 5px 8px; cursor: default; }
+  .tour-matches .tour-item .place { font-size: 13px; }
+  .tour-group .tour-item:focus-visible, .up-more:focus-visible, .standings-controls input:focus-visible, .standings-controls select:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+  .standings-controls { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+  .standings-controls input, .standings-controls select {
+    flex: 1; min-width: 110px; padding: 7px 10px; background: #f9fafb; color: #111827;
+    border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; font-family: inherit;
+  }
+  .std-note { font-size: 11px; color: #6b7280; margin: -4px 0 6px; }
+  .up-more { display: block; width: 100%; margin-top: 8px; background: #ffffff; color: #6b7280; border: 1px solid #e5e7eb; padding: 7px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit; }
+  .up-more:hover { color: #dc2626; border-color: #dc2626; }
+  /* 分布: 横棒 (1 色。数は棒の右) */
+  .up-dist h3 { font-size: 11px; color: #6b7280; font-weight: 600; margin: 10px 0 6px; }
+  .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; font-size: 12px; }
   .up-bars .lb { color: #374151; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .up-bars .bar { height: 14px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+  .up-bars .bar { height: 12px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
   .up-bars .bar i { display: block; height: 100%; background: #dc2626; border-radius: 3px; }
   .up-bars .bar.none i { background: #9ca3af; }
   .up-bars .v { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
-  .up-bars .v small { font-weight: 400; color: #6b7280; margin-left: 4px; }
-  .up-note { font-size: 12px; color: #6b7280; margin: 16px 0 0; line-height: 1.7; }
-
-  @media (max-width: 640px) {
-    .up { padding: 14px 12px 32px; }
-    .up-ev { grid-template-columns: 1fr auto; }
-    .up-ev-date { grid-column: 1 / -1; font-size: 12px; }
-    .up-ev-date small { display: inline; margin-left: 6px; }
-    .up-table .c-pref { display: none; }
-    .up-stats { gap: 10px 20px; }
-    .up-stats dd { font-size: 20px; }
-  }
+  .up-bars .v small { font-weight: 400; color: #9ca3af; margin-left: 4px; font-size: 10px; }
+  .up-note { font-size: 11px; color: #9ca3af; margin: 18px 0 0; line-height: 1.7; }
 </style>
 <link rel="stylesheet" href="../region/site.css">
 </head>
@@ -132,52 +221,97 @@
 <script src="../i18n/ja.js"></script>
 <script src="../region/i18n.js"></script>
 
-<!-- 今後の大会 (参加予定者のまとめ)。中身は src/pages/upcoming.js。?e=<event id> で大会ごとの詳細 -->
-<main class="up">
-  <!-- 一覧 -->
-  <div id="up-list-view" hidden>
+<!-- 今後の大会 (参加予定者のまとめ)。中身は src/pages/upcoming.js。?e=<event id> で大会ごと -->
+<!-- 一覧 (大会一覧と同じ形) -->
+<div id="up-list-view" hidden>
+  <div class="header">
     <h1 data-i18n="nav.ranking.upcoming">今後の大会</h1>
-    <p class="up-sub" data-i18n="upcoming.subtitle">これから開かれる大会と、いま分かっている参加予定者。大会を選ぶと、使い手・地域・実力順・実力分布で見られます。</p>
-    <div class="up-controls">
-      <input type="search" id="up-q" placeholder="大会名で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_events,aria-label:upcoming.search_events">
+    <p class="subtitle" data-i18n="upcoming.subtitle">これから開かれる大会と参加予定者。大会名を押すと、参加予定者を実力順・使い手・地域で見られます。</p>
+
+    <div class="filter-section">
       <span class="filter-label" data-i18n="events.filter.nent">参加者数:</span>
-      <span id="up-nent" role="group">
-        <button type="button" class="chip active" data-nent="0" data-i18n="common.all">すべて</button>
-        <button type="button" class="chip" data-nent="16">16+</button>
-        <button type="button" class="chip" data-nent="32">32+</button>
-        <button type="button" class="chip" data-nent="64">64+</button>
-        <button type="button" class="chip" data-nent="128">128+</button>
-      </span>
-      <span class="up-count" id="up-list-count"></span>
+      <div class="filter-chips" id="filter-nent" style="display:inline-flex">
+        <span class="chip active" data-nent="0" data-i18n="common.all">すべて</span>
+        <span class="chip" data-nent="8">8+</span>
+        <span class="chip" data-nent="16">16+</span>
+        <span class="chip" data-nent="32">32+</span>
+        <span class="chip" data-nent="64">64+</span>
+        <span class="chip" data-nent="128">128+</span>
+      </div>
     </div>
-    <ul class="up-list" id="up-list"></ul>
+
+    <div class="filter-section">
+      <span class="filter-label" data-i18n="events.filter.tags">タグ:</span>
+      <div class="filter-chips" id="filter-tags" style="display:inline-flex">
+        <span class="chip" data-tag="weekend" data-i18n="events.tag.weekend_only">休日のみ</span>
+        <span class="chip" data-tag="weekday" data-i18n="events.tag.weekday_only">平日のみ</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input type="search" id="search" placeholder="大会名で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_events">
+      <span class="status" id="status" data-i18n="common.loading">読み込み中…</span>
+    </div>
   </div>
 
-  <!-- 大会ごとの詳細 -->
-  <div id="up-detail-view" hidden>
-    <a class="up-back" id="up-back" href="./" data-i18n="upcoming.back">← 今後の大会の一覧</a>
-    <h1 id="up-title"></h1>
-    <p class="up-sub" id="up-meta"></p>
-    <dl class="up-stats" id="up-stats"></dl>
-    <div class="up-tabs" role="tablist" id="up-tabs">
-      <button type="button" class="up-tab" role="tab" data-view="rank" aria-selected="true" data-i18n="upcoming.view.rank">実力順</button>
-      <button type="button" class="up-tab" role="tab" data-view="char" aria-selected="false" data-i18n="upcoming.view.char">使い手</button>
-      <button type="button" class="up-tab" role="tab" data-view="pref" aria-selected="false" data-i18n="upcoming.view.pref">地域</button>
-      <button type="button" class="up-tab" role="tab" data-view="dist" aria-selected="false" data-i18n="upcoming.view.dist">実力分布</button>
+  <div class="table-wrap">
+    <table id="eventstable">
+      <thead>
+        <tr>
+          <th class="col-date sortable sorted-asc" data-sort="date" data-i18n="events.col.date">開催日</th>
+          <th class="col-name sortable" data-sort="name" data-i18n="events.col.name">大会名</th>
+          <th class="col-nent sortable" data-sort="nent" data-i18n="events.col.nent">参加者</th>
+          <th class="col-city sortable" data-sort="city" data-i18n="events.col.city">開催地</th>
+          <th class="col-tags" data-i18n="common.col.tags">タグ</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 大会ごと (大会ページと同じ形) -->
+<main id="up-detail-view" hidden>
+  <a class="up-back" href="./" data-i18n="upcoming.back">← 今後の大会の一覧</a>
+  <div class="hero">
+    <div class="name-row">
+      <div class="name" id="up-name"></div>
+      <a class="share-icon-btn" id="up-startgg" target="_blank" rel="noopener" title="start.gg" aria-label="start.gg" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path><path d="M21 14v7H3V3h7"></path></svg>
+      </a>
     </div>
-    <div class="up-controls" id="up-rank-controls">
+    <div class="event" id="up-event"></div>
+    <div class="meta-line" id="up-meta"></div>
+  </div>
+  <dl class="up-stats" id="up-stats"></dl>
+
+  <div class="section">
+    <h2 data-i18n="upcoming.sec.dist">📊 実力分布</h2>
+    <div class="up-dist" id="up-dist"></div>
+  </div>
+  <div class="section">
+    <h2><span data-i18n="upcoming.sec.char">🎮 使い手</span><span class="cnt" id="up-char-n"></span></h2>
+    <div id="up-chars"></div>
+  </div>
+  <div class="section">
+    <h2><span data-i18n="upcoming.sec.pref">🗾 地域</span><span class="cnt" id="up-pref-n"></span></h2>
+    <div id="up-prefs"></div>
+  </div>
+  <div class="section">
+    <h2><span data-i18n="upcoming.sec.rank">🏅 実力順</span><span class="cnt" id="up-rank-n"></span></h2>
+    <div class="std-note" data-i18n="upcoming.rank_note">左の数字は SPSP の総合評価の順位です。</div>
+    <div class="standings-controls">
       <input type="search" id="up-pq" placeholder="名前で検索…" autocomplete="off" data-i18n-attr="placeholder:upcoming.search_players,aria-label:upcoming.search_players">
-      <select id="up-fchar" aria-label="使い手" data-i18n-attr="aria-label:upcoming.view.char"></select>
-      <select id="up-fpref" aria-label="地域" data-i18n-attr="aria-label:upcoming.view.pref"></select>
-      <span class="up-count" id="up-rank-count"></span>
+      <select id="up-fchar" aria-label="使い手" data-i18n-attr="aria-label:upcoming.all_chars"></select>
+      <select id="up-fpref" aria-label="地域" data-i18n-attr="aria-label:upcoming.all_prefs"></select>
     </div>
-    <div id="up-body"></div>
-    <p class="up-note" data-i18n="upcoming.note">順位・Lv・使用キャラ・地域は SPSP の集計によるものです。順位は総合評価の順位で、SPSP に載っていない人は「順位なし」です。参加予定者は start.gg の登録にもとづき、1 日に何度か更新します。</p>
+    <div id="up-rank"></div>
   </div>
-
-  <div id="up-loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
-  <div id="up-empty" class="empty-msg" hidden></div>
+  <p class="up-note" data-i18n="upcoming.note">順位・Lv・使用キャラ・地域は SPSP の集計によるものです。順位は総合評価の順位で、SPSP に載っていない人は「順位なし」です。参加予定者は start.gg の登録にもとづき、1 日に何度か更新します。</p>
 </main>
+
+<div id="up-loading" class="empty-msg" data-i18n="common.loading">読み込み中…</div>
+<div id="up-empty" class="empty-msg" hidden></div>
 
 <script src="../assets/upcoming.js"></script>
 </body>
