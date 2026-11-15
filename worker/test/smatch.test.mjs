@@ -128,8 +128,13 @@ test('表示: card_get に smatch が付く。最高レートを見せない人�
   // 本人が出さない設定にした
   assert.strictEqual((await handleProfilePut(cfg(), store, { uid: '100', settings: { smatch: false } }, NOON)).body.ok, true);
   assert.strictEqual((await handleCardGet(cfg(), store, { uid: '100' }, NOON)).body.smatch, null);
-  assert.deepStrictEqual((await handleProfileGet(cfg(), store, { uid: '100' }, NOON)).body, { ok: true, settings: { smatch: false }, smatch: { linked: true } });
-  assert.deepStrictEqual((await handleProfileGet(cfg(), store, { uid: '999' }, NOON)).body, { ok: true, settings: { smatch: true }, smatch: { linked: false } });
+  assert.deepStrictEqual((await handleProfileGet(cfg(), store, { uid: '100' }, NOON)).body, { ok: true, settings: { smatch_1on1: false, smatch_tokuoma: false }, smatch: { linked: true } });
+  assert.deepStrictEqual((await handleProfileGet(cfg(), store, { uid: '999' }, NOON)).body, { ok: true, settings: { smatch_1on1: true, smatch_tokuoma: true }, smatch: { linked: false } });
+  // ルールごと: 特おまだけ出さない → 1on1 だけ出る。逆も
+  await handleProfilePut(cfg(), store, { uid: '100', settings: { smatch_1on1: true, smatch_tokuoma: false } }, NOON);
+  assert.deepStrictEqual(Object.keys((await handleCardGet(cfg(), store, { uid: '100' }, NOON)).body.smatch.modes), ['1on1']);
+  await handleProfilePut(cfg(), store, { uid: '100', settings: { smatch_1on1: false, smatch_tokuoma: true } }, NOON);
+  assert.deepStrictEqual(Object.keys((await handleCardGet(cfg(), store, { uid: '100' }, NOON)).body.smatch.modes), ['tokuoma']);
   // 取り込みが 7 日止まったら出さない
   assert.strictEqual((await handleCardGet(cfg(), store, { uid: '200' }, NOON + SMATCH_STALE_MS + 1)).body.smatch, null);
   assert.strictEqual(smatchViewOf(null, NOON), null);
@@ -142,7 +147,10 @@ test('プロフィールの設定: 本人だけ (preview の誰でも編集を�
   assert.strictEqual((await handleProfileGet(closed, store, { uid: '100' }, NOON)).body.error.code, 'invalid_session');
   assert.strictEqual((await handleProfilePut(cfg(), store, { uid: '100', settings: { smatch: 'no' } }, NOON)).body.error.code, 'bad_settings');
   assert.strictEqual(validateProfile({ other: 1 }), null);
-  assert.deepStrictEqual(validateProfile({}), { smatch: true });
+  assert.deepStrictEqual(validateProfile({}), { smatch_1on1: true, smatch_tokuoma: true });
+  assert.deepStrictEqual(validateProfile({ smatch: false }), { smatch_1on1: false, smatch_tokuoma: false }, '古い形');
+  assert.deepStrictEqual(validateProfile({ smatch_tokuoma: false }), { smatch_1on1: true, smatch_tokuoma: false });
+  assert.strictEqual(validateProfile({ smatch_1on1: 1 }), null);
 });
 
 test('受け渡し (SPSP → スマッチ): Bearer トークン (新旧 2 本)。ビルドの一覧をそのまま返し、読みに来た時刻を残す', async () => {
