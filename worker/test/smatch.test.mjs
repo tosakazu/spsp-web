@@ -67,6 +67,14 @@ test('取り込み: uid を付けて入れる (統合済みは統合先)。変�
   assert.deepStrictEqual([...S.keys()].filter((k) => k.startsWith('13|')).sort(), ['13|aaaaaaaa', '13|cccccccc', '13|dddddddd']);
   assert.strictEqual([...S.keys()].filter((k) => k.startsWith('12|')).length, 4);
   assert.deepStrictEqual([...store.smatchSeasons.keys()], ['12', '13']);
+  // 通算最高の持ち越し: 今季まだ対戦していないルールは届かない (シーズンの変わり目は modes が空) → 前に置いた max を写す。表示には出ない
+  const f4 = feed({ ...payload([P('aaaaaaaa', 1, { modes: {} }), P('cccccccc', 3), P('dddddddd', 4)]), season: { id: 14, name: 'シーズン14' } });
+  assert.strictEqual((await runSmatchImport(cfg(), store, f4, dataFetch, NOON + 72 * 3600e3)).code, 'ok');
+  const kept = { '1on1': { rate: null, rank: null, season_max: null, max: 1720, games: 0 }, tokuoma: { rate: null, rank: null, season_max: null, max: 1600, games: 0 } };
+  const a4 = (await store.listSmatchPlayers()).find((r) => r.discriminator === 'aaaaaaaa');
+  assert.deepStrictEqual(JSON.parse(a4.data).modes, kept);
+  assert.deepStrictEqual(JSON.parse(S.get('14|aaaaaaaa').data).modes, kept, 'シーズンの行にも入る');
+  assert.strictEqual(await smatchViewOf(await store.getSmatchForUid('100'), NOON + 72 * 3600e3), null, '対戦していないルールだけなら欄は出ない');
 });
 
 test('取り込みの失敗: 読めない・形が違う・人数が急に減った → 前の値のまま、失敗を数える。次に成功したら 0 に戻る', async () => {
