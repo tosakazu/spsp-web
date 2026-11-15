@@ -127,6 +127,21 @@ export function playerData(p: SmatchPlayer): string {
   return JSON.stringify({ smatch_id: p.smatch_id, name: p.name, max_hidden: p.max_hidden, modes });
 }
 
+/** 通算最高 (max) の持ち越し。スマッチは今季まだ対戦していないルールを送ってこない (シーズンの変わり目は全員の modes が空) ので、
+ *  前回 D1 に置いた max を、届かなかったルール・max が null のルールに写す。届かなかったルールは { rate: null, games: 0, max } になり、表示には出ない。 */
+export function carrySmatchMax(p: SmatchPlayer, oldData: string | null | undefined): void {
+  if (!oldData) return;
+  let old: { modes?: Record<string, { max?: unknown }> } | null = null;
+  try { old = JSON.parse(oldData); } catch (_) { return; }
+  for (const m of SMATCH_MODES) {
+    const om = old && old.modes && old.modes[m] ? old.modes[m].max : null;
+    if (typeof om !== 'number') continue;
+    const cur = p.modes[m];
+    if (!cur) p.modes[m] = { rate: null, rank: null, season_max: null, max: om, games: 0 };
+    else if (cur.max === null) cur.max = om;
+  }
+}
+
 /** 表示用 (だれにでも返す形)。最高レートを見せない人は season_max・max を出さない。
  *  今シーズンの対戦数が 0 のルール (games が 0、または games が無くて rate が null) は欄ごと出さない */
 export interface SmatchView {
@@ -229,6 +244,7 @@ export async function runSmatchImport(cfg: Config, store: Store, fetchFn: Fetch,
   const seen = new Set<string>();
   for (const p of payload.players) {
     seen.add(p.discriminator);
+    carrySmatchMax(p, prev.get(p.discriminator)?.data);
     const data = playerData(p), uid = uidOf.get(p.discriminator) ?? null;
     const old = prev.get(p.discriminator);
     if (old && old.linked && old.data === data && old.uid === uid) continue;   // 変わっていなければ書かない
