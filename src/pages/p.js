@@ -974,9 +974,11 @@ function render() {
     };
     // 設定が届くまでは描かない (読み込み中の表示のまま)。既定の色・二つ名で先に描くと、見せていなくても、ダークモードで重ねる画像
     // (js/player_card.js の .pc-img) が既定のカードで撮られ、本人の設定で描き直したあとも撮り直すまでそれが見えていた (2026-11-16)。
-    // 見せるのは描き終わってから (フォントの詰め直しと、重ねる画像まで。3 秒で打ち切る)
+    // 見せるのは本人の設定で描いたらすぐ (フォントや裏面は待たない)。画像を重ねる端末 (ダークモード) だけは、その画像が
+    // できるまで待つ (3 秒で打ち切る): 先に見せると、ブラウザが色を変えたカードが一瞬見える
     const show = () => {
       if (!drawn) draw(last);
+      if (!SPSPPlayerCard.needsImage()) { reveal(); return; }
       Promise.race([SPSPPlayerCard.ready(card), new Promise(r => setTimeout(r, 3000))]).then(reveal, reveal);
     };
     const fallback = setTimeout(show, 5000);   // 設定がなかなか届かないときは、既定のカードを見せておく (届いたら描き直す)

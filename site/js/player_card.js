@@ -1090,4 +1090,4 @@ async function captureCanvas(el) {
   }
 }
 
-export default { render, renderBack, setTextPos, textPoseOf, ready, ensureGlow, capture, shownTitle, makeAchFitTester, cardSettled, COLORS, TEMPLATES };
+export default { render, renderBack, setTextPos, textPoseOf, ready, ensureGlow, capture, shownTitle, makeAchFitTester, cardSettled, needsImage, COLORS, TEMPLATES };
