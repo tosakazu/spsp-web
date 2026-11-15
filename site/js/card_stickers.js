@@ -114,7 +114,18 @@ export const iconsNow = () => icons;
 export function loadIcons() {
   if (!iconsP) {
     const S = /** @type {any} */ (globalThis).SPSP;
-    const get = (/** @type {string} */ base) => fetch(base + 'data/event_icons.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+    // 通信の失敗・5xx は少し待って 2 回までやり直す (表が読めないと、裏面のシールが 1 枚も出ない)。404 (その場所に無い) はやり直さない
+    const get = async (/** @type {string} */ base) => {
+      for (let i = 0; i < 3; i++) {
+        if (i) await new Promise(res => setTimeout(res, i === 1 ? 500 : 1500));
+        try {
+          const r = await fetch(base + 'data/event_icons.json');
+          if (r.ok) return await r.json();
+          if (r.status < 500) return null;
+        } catch (e) { /* やり直す */ }
+      }
+      return null;
+    };
     // データ (R2、ビルドが作る) に無ければ、サイトに置いた表 (preview だけ、公開前の確認用) を使う
     iconsP = get(S.data).then(j => (j && j.f && j.e ? j : S.root !== S.data ? get(S.root) : null))
       .then(j => (icons = j && j.f && j.e ? j : null)).catch(() => null)
