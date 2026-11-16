@@ -578,6 +578,17 @@
             "null"
           ],
           "description": "start.gg の phase bracket type (ROUND_ROBIN / SWISS / DOUBLE_ELIMINATION …)。global_bracket_label が日本語のカテゴリ名のとき js/match.js が辞書で出す"
+        },
+        "opp_uid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "相手の uid。start.gg のアカウントが無い相手 (opp_guest) は null"
+        },
+        "opp_guest": {
+          "type": "boolean",
+          "description": "相手が start.gg のアカウントの無い参加者のとき true (その行だけ付く)。名前は opp_display (取れていなければ空で、js/player_data.js が決まった文言を入れる)"
         }
       },
       "additionalProperties": true

@@ -159,11 +159,23 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
         out.peak_ranks_1y = cur.peak_ranks_1y || stable.peak_ranks_1y || {};
       } else if (k === 'peak_ranks' || k === 'peak_ranks_1y') {
         continue;   // radar のところで入れた
+      } else if (k === 'recent_matches' || k === 'top_bt_gains') {
+        out[k] = withGuestNames(stable[k]);
       } else {
         out[k] = stable[k];
       }
     }
     return out;
+  }
+
+  // start.gg のアカウントが無い相手との試合 (opp_guest: true、opp_uid は null)。名前が取れていない試合 (古いデータ) は
+  // 決まった文言を名前にする。そういう試合が無ければ元の配列をそのまま返す
+  function withGuestNames(list) {
+    if (!Array.isArray(list) || !list.some(function (m) { return m && m.opp_guest && !m.opp_display; })) return list;
+    var label = SPSPI18n.t('player.guest_opponent');
+    return list.map(function (m) {
+      return (m && m.opp_guest && !m.opp_display) ? Object.assign({}, m, { opp_display: label }) : m;
+    });
   }
 
   function insertAfter(obj, afterKey, key, value) {
