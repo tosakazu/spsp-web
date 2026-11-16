@@ -1,10 +1,12 @@
 // @ts-check
 // src/pages/upcoming_entrants.js — site/upcoming/entrants.html のスクリプト。今後の大会 1 つの参加予定者 (?e=<event id>)。
-// 見た目は大会ページ (t/) と同じ (HTML の形・CSS とも t/index.html のもの): hero → 上位 3 人 → 見出しつきの欄。
-//   上位 3 人     総合評価の順位が高い 3 人 (大会ページの表彰台と同じ箱)
+// 上 (hero・実力分布・地域・使い手) は大会ページ (t/) と同じ形 (HTML・CSS とも t/index.html のもの)、下の参加予定者はランキングのページと同じ表。
 //   実力分布      Lv の表記と同じ区切りの帯ごとの人数
-//   使い手・地域  人数の多い順に 5 件ずつ (ページ送りは js/pager.js)。行を押すとその組の人が開く
-//   参加予定者    順位の高い順の全員 (大会ページの全順位表と同じ行)。名前の検索、キャラ・地域の絞り込み
+//   地域          人数の多い順に 5 件ずつ (ページ送りは js/pager.js)。行を押すとその組の人が開く
+//   使い手        キャラ投票 (vote.html) と同じキャラ選択。押すと下の表をそのキャラの使い手に絞る。「サブ使用も含める」で
+//                 サブで使う人 (data/character_index.json の sub_by_char) も数える・絞り込みに入れる
+//   参加予定者    ランキングの表 (js/ranking_page.js。行は js/views.js の rowsByUids)。順位は全国の順位のまま (大会の中で付け直さない)。
+//                 ランキングに居ない人は名前だけの行で後ろに並ぶ
 // データと小さい部品は js/upcoming_common.js、集計は js/upcoming_stats.js。シード (entrants の seed) は公開前のことがあるので出さない。
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
@@ -13,6 +15,15 @@ import SPSPTags from '../../site/js/tags.js';
 import SPSPPager from '../../site/js/pager.js';
 import Stats from '../../site/js/upcoming_stats.js';
 import Up from '../../site/js/upcoming_common.js';
+import SPSPViews from '../../site/js/views.js';
+import SPSPCharEmoji from '../../site/js/char_emoji.js';
+import { charName } from '../../site/js/chars.js';
+import '../../site/js/links.js';
+import '../../site/js/data.js';
+import '../../site/js/player_data.js';
+import '../../site/ranking-table.js';
+import '../../site/player-detail.js';
+import SPSPRankingPage from '../../site/js/ranking_page.js';
 import '../../site/nav.js';
 
 const i18n = SPSPI18n.t;
@@ -20,8 +31,9 @@ SPSPI18n.apply(document);
 const S = /** @type {any} */ (window).SPSP;
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** @typedef {import('../../site/js/upcoming_stats.js').UpRow} UpRow */
-/** @type {{ rows: UpRow[], q: string, char: string, pref: string }} */
-const ST = { rows: [], q: '', char: '', pref: '' };
+/** char: '' = すべて、'none' = 不明、それ以外はキャラ id。sub = サブ使用も含める。subs = uid → サブで使うキャラ id (読めるまで空)
+ * @type {{ rows: UpRow[], byUid: Map<number, UpRow>, char: string, pref: string, sub: boolean, subs: Map<number, Set<number>>, table: any }} */
+const ST = { rows: [], byUid: new Map(), char: '', pref: '', sub: false, subs: new Map(), table: null };
 
 /** 絞り込みの値: '' = すべて、'none' = 不明、それ以外は id の数字 */
 const matches = (/** @type {number | null} */ v, /** @type {string} */ f) => !f || (f === 'none' ? v === null : v === Number(f));
@@ -88,12 +100,80 @@ function distHtml() {
       <span class="n">${x.n}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`).join('')}</div>`;
 }
 
-function renderList() {
-  const q = norm(ST.q);
-  const rows = ST.rows.filter(r => matches(r.char, ST.char) && matches(r.pref, ST.pref) && (!q || norm(r.name).includes(q)));
-  $('up-rank-n').textContent = rows.length === ST.rows.length ? String(rows.length) : `${rows.length} / ${ST.rows.length}`;
-  $('std-list').innerHTML = rows.map(playerRow).join('')
-    || `<div class="empty-msg" style="padding:12px">${escapeHtml(ST.rows.length ? i18n('upcoming.no_match') : i18n('upcoming.no_entrants'))}</div>`;
+/** その人がキャラ f の使い手か (サブ込みのときはサブも) @param {UpRow} r @param {string} f */
+function usesChar(r, f) {
+  if (!f) return true;
+  if (f === 'none') return r.char === null;
+  const id = Number(f);
+  if (r.char === id) return true;
+  const s = ST.sub ? ST.subs.get(r.uid) : null;
+  return !!(s && s.has(id));
+}
+
+/** 使い手の選択 (キャラ投票と同じボタンの並び)。人数の多い順、最後に不明 */
+function renderChars() {
+  /** @type {Map<number, number>} */
+  const n = new Map();
+  let none = 0;
+  for (const r of ST.rows) {
+    const ids = new Set(r.char === null ? [] : [r.char]);
+    if (ST.sub) for (const c of ST.subs.get(r.uid) || []) ids.add(c);
+    if (r.char === null) none++;
+    for (const c of ids) n.set(c, (n.get(c) || 0) + 1);
+  }
+  const list = [...n.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  $('up-char-n').textContent = String(list.length);
+  const btn = (/** @type {string} */ id, /** @type {string} */ em, /** @type {string} */ name, /** @type {number} */ cnt) =>
+    `<button type="button" class="vt-char${ST.char === id ? ' sel' : ''}" data-id="${id}" data-name="${escapeHtml(name)}">
+      <span class="em">${escapeHtml(em)}</span><span class="nm">${escapeHtml(name)}</span><span class="ct">${cnt}</span></button>`;
+  $('up-char-grid').innerHTML = btn('', '👥', i18n('common.all'), ST.rows.length)
+    + list.map(([id, cnt]) => btn(String(id), SPSPCharEmoji.emojiOf(id) || '🎮', charName(id, String(id)), cnt)).join('')
+    + (none ? btn('none', '❔', i18n('upcoming.unknown'), none) : '');
+  applyCharSearch();
+}
+function applyCharSearch() {
+  const q = norm(/** @type {HTMLInputElement} */ ($('up-char-search')).value);
+  for (const b of $('up-char-grid').children) /** @type {HTMLElement} */ (b).hidden = !!q && !norm(/** @type {HTMLElement} */ (b).dataset.name || '').includes(q);
+}
+
+/** キャラ・地域の絞り込みを表に反映 */
+function applyFilter() {
+  const chip = $('up-char-chip');
+  chip.classList.toggle('on', !!ST.char);
+  chip.textContent = ST.char ? i18n('upcoming.char_chip', { char: ST.char === 'none' ? i18n('upcoming.unknown') : Up.charLabel(Number(ST.char)) }) : '';
+  if (!ST.table) return;
+  ST.table.setRowFilter(!ST.char && !ST.pref ? null : (/** @type {any} */ rec) => {
+    const r = ST.byUid.get(rec.user_id);
+    return !!r && usesChar(r, ST.char) && matches(r.pref, ST.pref);
+  });
+}
+
+/** 参加予定者の表 (ランキングのページと同じ)。行は views の rowsByUids、ランキングに居ない人は名前だけの行 */
+async function setupTable() {
+  const RP = SPSPRankingPage;
+  const tbody = $('tbody');
+  if (!ST.rows.length) { tbody.innerHTML = `<tr><td colspan="11" class="empty-msg">${escapeHtml(i18n('upcoming.no_entrants'))}</td></tr>`; $('status').textContent = ''; return; }
+  const manifest = await SPSPViews.manifest().catch(() => null);
+  /** @type {any[]} */
+  let recs = [];
+  if (manifest) recs = await SPSPViews.rowsByUids(ST.rows.filter(r => r.rank !== null).map(r => r.uid), { plain: true }).catch(() => []);
+  const have = new Set(recs.map(r => r.user_id));
+  // ランキングに居ない人 (と、行が読めなかった人) は名前だけ
+  const rest = ST.rows.filter(r => !have.has(r.uid)).map(r => ({ user_id: r.uid, display: r.name, unranked: true, ranks: {}, scores: {}, counts: {} }));
+  const data = [...recs, ...rest];
+  const { TJPR_SCORE_COL, BT_SCORE_COL } = RP.scoreColumns('inline');
+  ST.table = RP.createTable({
+    rows: data, method: 'ensemble', sort: { key: 'rank', dir: 'asc' }, pageSize: 100,
+    totalForRankFrac: () => (manifest && manifest.n_players) || data.length,
+    playerHrefPrefix: S.langRoot,
+    columns: ['rank', 'display', BT_SCORE_COL, TJPR_SCORE_COL, 'tour_count', 'rank_tjpr', 'rank_bt_gated'],
+    rankCaretExpand: false,
+    statusEl: $('status'), statusTotal: () => data.length,
+  });
+  RP.applyState(ST.table, { rows: data, method: 'ensemble', filterText: /** @type {HTMLInputElement} */ ($('search')).value, sort: { key: 'rank', dir: 'asc' } });
+  RP.bindSearch((/** @type {string} */ text) => ST.table.setFilterText(text, RP.searchById()));
+  RP.bindMethodTabs((/** @type {string} */ m) => ST.table.setMethod(m));
+  applyFilter();
 }
 
 function render(/** @type {any} */ ev) {
@@ -115,19 +195,48 @@ function render(/** @type {any} */ ev) {
   const s = Stats.summary(ST.rows);
   $('up-summary').textContent = s.ranked ? i18n('upcoming.summary', { top100: s.top100, top1000: s.top1000, median: s.median === null ? '—' : s.median.toLocaleString() }) : '';
   $('up-dist').innerHTML = distHtml();
-  setupGroups('char');
   setupGroups('pref');
-  // 絞り込みの選択肢: この大会に居るキャラ・地域だけ (人数の多い順)
-  const opts = (/** @type {'char' | 'pref'} */ key, /** @type {(k: number | null) => string} */ label, /** @type {string} */ all) =>
-    `<option value="">${escapeHtml(all)}</option>` + Stats.groupBy(ST.rows, key).map(g =>
-      `<option value="${g.key === null ? 'none' : g.key}">${escapeHtml(label(g.key))} (${g.rows.length})</option>`).join('');
-  const fchar = /** @type {HTMLSelectElement} */ ($('up-fchar')), fpref = /** @type {HTMLSelectElement} */ ($('up-fpref'));
-  fchar.innerHTML = opts('char', Up.charLabel, i18n('upcoming.all_chars'));
-  fpref.innerHTML = opts('pref', Up.prefLabel, i18n('upcoming.all_prefs'));
-  fchar.addEventListener('change', () => { ST.char = fchar.value; renderList(); });
-  fpref.addEventListener('change', () => { ST.pref = fpref.value; renderList(); });
-  $('std-search').addEventListener('input', e => { ST.q = /** @type {HTMLInputElement} */ (e.target).value; renderList(); });
-  renderList();
+  for (const r of ST.rows) ST.byUid.set(r.uid, r);
+  $('up-rank').style.display = '';
+  $('up-rank-n').textContent = String(ST.rows.length);
+  // 使い手: キャラ投票と同じ選択。もう一度押すと外れる
+  renderChars();
+  $('up-char-grid').addEventListener('click', e => {
+    const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('.vt-char'));
+    if (!b) return;
+    ST.char = ST.char === String(b.dataset.id) ? '' : String(b.dataset.id);
+    for (const c of $('up-char-grid').children) c.classList.toggle('sel', /** @type {HTMLElement} */ (c).dataset.id === ST.char);
+    applyFilter();
+  });
+  $('up-char-search').addEventListener('input', applyCharSearch);
+  $('up-char-chip').addEventListener('click', () => { ST.char = ''; renderChars(); applyFilter(); });
+  // サブ使用も含める: 初めてチェックしたときにサブの表を読む
+  const subCb = /** @type {HTMLInputElement} */ ($('up-sub'));
+  subCb.checked = false;
+  let subLoaded = false;
+  subCb.addEventListener('change', async () => {
+    if (subCb.checked && !subLoaded) {
+      subLoaded = true;
+      const j = await fetch(S.data + 'data/character_index.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+      for (const [cid, uids] of Object.entries((j && j.sub_by_char) || {})) {
+        for (const u of /** @type {number[]} */ (uids)) {
+          if (!ST.byUid.has(u)) continue;
+          const s = ST.subs.get(u) || new Set();
+          s.add(Number(cid));
+          ST.subs.set(u, s);
+        }
+      }
+    }
+    ST.sub = subCb.checked;
+    renderChars();
+    applyFilter();
+  });
+  // 地域の絞り込み: この大会に居る地域だけ (人数の多い順)
+  const fpref = /** @type {HTMLSelectElement} */ ($('up-fpref'));
+  fpref.innerHTML = `<option value="">${escapeHtml(i18n('upcoming.all_prefs'))}</option>` + Stats.groupBy(ST.rows, 'pref').map(g =>
+    `<option value="${g.key === null ? 'none' : g.key}">${escapeHtml(Up.prefLabel(g.key))} (${g.rows.length})</option>`).join('');
+  fpref.addEventListener('change', () => { ST.pref = fpref.value; applyFilter(); });
+  setupTable().catch(e => { console.error(e); $('tbody').innerHTML = `<tr><td colspan="11" class="empty-msg">${escapeHtml(i18n('upcoming.load_failed'))}</td></tr>`; });
 }
 
 async function main() {
