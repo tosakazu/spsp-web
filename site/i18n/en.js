@@ -45,6 +45,7 @@ window.SPSP_I18N.en = {
   'upcoming.band': '{from}–{to}',
   'upcoming.band_from': '{from}+',
   'upcoming.cut_line': 'Advance line ({n})',
+  'upcoming.n_people': '{n}',
   'upcoming.chip.char': 'Main',
   'upcoming.chip.pref': 'Region',
   'upcoming.sec.dist': '📊 Strength distribution',
