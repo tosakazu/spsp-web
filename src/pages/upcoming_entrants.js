@@ -126,9 +126,10 @@ function distHtml() {
     return `<i style="width:${pct(cut.within)}%"></i><i class="out" style="width:${pct(x.n - cut.within)}%"></i>`;
   };
   const tag = `<span class="up-cut-tag">${escapeHtml(i18n('upcoming.cut_line', { n: /** @type {number} */ (ST.advance) }))}</span>`;
-  return `<div class="up-bars">${items.map((x, i) => { const c = cut && i === cut.index ? ' cut' : ''; return `<span class="lb${c}">${x.label}${c ? tag : ''}</span>
-      <span class="bar${x.none ? ' none' : ''}${c}">${bar(x, i)}</span>
-      <span class="n${c}">${escapeHtml(i18n('upcoming.n_people', { n: x.n }))}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`; }).join('')}</div>`;
+  // 1 帯 = 1 行の箱 (列は外の grid に揃える)。ラインが掛かる帯は行ごと色を付け、札は行の中の 2 段目
+  return `<div class="up-bars">${items.map((x, i) => { const c = cut && i === cut.index; return `<div class="up-row${c ? ' cut' : ''}"><span class="lb">${x.label}</span>
+      <span class="bar${x.none ? ' none' : ''}">${bar(x, i)}</span>
+      <span class="n">${escapeHtml(i18n('upcoming.n_people', { n: x.n }))}<small>${(x.n / total * 100).toFixed(0)}%</small></span>${c ? tag : ''}</div>`; }).join('')}</div>`;
 }
 
 /** その人がキャラ f の使い手か (サブ込みのときはサブも) @param {UpRow} r @param {string} f */
