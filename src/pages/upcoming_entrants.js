@@ -113,16 +113,6 @@ function render(/** @type {any} */ ev) {
   const chips = [SPSPTags.dayTag(ev, { wk: 'chip wk', wd: 'chip wd' }), ...SPSPTags.flagTags(ev, { pre: 'chip pre', res: 'chip res', lc: 'chip lc', rs: 'chip rs' })];
   $('meta-line').innerHTML = `${escapeHtml(i18n('upcoming.date_time', { ymd: w.ymd, wd: w.wd, hm: w.hm }))} · ${Up.cityOf(ev) ? '📍' + escapeHtml(Up.cityOf(ev)) + ' · ' : ''}`
     + `<b style="color:#111827">${Math.max(ST.rows.length, Up.nentOf(ev))}</b> ${escapeHtml(i18n('common.unit_people'))} ${chips.join('')}`;
-  // 上位 3 人 (大会ページの表彰台と同じ箱。銀・金・銅の並び)
-  const top3 = Stats.topOf(ST.rows.filter(r => r.rank !== null), 3);
-  const order = [top3[1], top3[0], top3[2]], cls = ['silver', 'gold', 'bronze'], medals = ['🥈', '🥇', '🥉'];
-  $('podium').innerHTML = top3.length ? order.map((r, i) => (r ? `<div class="podium-card ${cls[i]}">
-      <div class="medal">${medals[i]}</div>
-      <div class="place">${escapeHtml(i18n('common.national'))} #${r.rank}</div>
-      <div class="player">${Up.playerLink(r)}</div>
-      <div class="grank">${escapeHtml([SPSPFormat.lvLabel(r.lv, r.rank), r.char === null ? '' : Up.charLabel(r.char)].filter(Boolean).join(' '))}</div>
-    </div>` : '<div></div>')).join('') : '';
-  $('podium').style.display = top3.length ? '' : 'none';
   const s = Stats.summary(ST.rows);
   $('up-summary').textContent = s.ranked ? i18n('upcoming.summary', { top100: s.top100, top1000: s.top1000, median: s.median === null ? '—' : s.median.toLocaleString() }) : '';
   $('up-dist').innerHTML = distHtml();

@@ -44,33 +44,6 @@
   .hero .meta-line .chip.gf  { background: #ffedd5; color: #9a3412; font-weight: 600; }
   .chip.resume { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
 
-  /* Podium (Top 3) */
-  .podium {
-    display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 6px;
-    align-items: end; margin: 16px 0;
-  }
-  .podium-card {
-    background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 10px;
-    padding: 10px 6px; text-align: center;
-  }
-  .podium-card.gold { background: linear-gradient(135deg, #fde68a, #f9fafb); border-color: #fbbf24; }
-  .podium-card.silver { background: linear-gradient(135deg, #f3f4f6, #f9fafb); border-color: #9ca3af; }
-  .podium-card.bronze { background: linear-gradient(135deg, #ddd6fe, #f9fafb); border-color: #a78bfa; }
-  .podium-card { transition: background 0.15s, border-color 0.15s; }
-  .podium-card:hover { background: #f3f4f6; border-color: #d1d5db; }
-  .podium-card.gold:hover { background: linear-gradient(135deg, #fcd34d, #f3f4f6); }
-  .podium-card.silver:hover { background: linear-gradient(135deg, #e5e7eb, #f3f4f6); }
-  .podium-card.bronze:hover { background: linear-gradient(135deg, #c4b5fd, #f3f4f6); }
-  .podium-card .medal { font-size: 22px; line-height: 1; }
-  .podium-card .place { font-size: 11px; color: #6b7280; margin: 2px 0; }
-  .podium-card .player {
-    font-size: 12px; color: #111827; font-weight: 600;
-    word-break: break-word; line-height: 1.2;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .podium-card .player a { color: #111827; text-decoration: none; transition: color 0.1s; }
-  .podium-card .player a:hover { color: #dc2626; text-decoration: underline; }
-  .podium-card .grank { font-size: 10px; color: #9ca3af; margin-top: 4px; }
 
   /* Sections — player page と同じスタイル */
   /* tour-item (player page と統一): 左 place 列 + center meta + 右 value */
@@ -273,7 +246,6 @@
       <div class="meta-line" id="meta-line"></div>
     </div>
 
-    <div class="podium" id="podium"></div>
 
     <div class="section">
       <h2 data-i18n="upcoming.sec.dist">📊 実力分布</h2>

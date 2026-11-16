@@ -1,6 +1,6 @@
 // @ts-check
 // src/pages/upcoming.js — site/upcoming/index.html のスクリプト。今後の大会の一覧。
-// 見た目・操作は大会一覧 (events/) と同じ (チップ・検索・見出しで並べ替え・スマホは 1 件ずつ)。大会名の下に、順位の高い参加予定者 3 人。
+// 見た目・操作は大会一覧 (events/) と同じ (チップ・検索・見出しで並べ替え・スマホは 1 件ずつ)。大会名の下に、順位の高い参加予定者 3 人 (結果に見えないようメダルは付けない)。
 // 大会名を押すと、その大会の参加予定者のページ (entrants.html?e=<event id>、src/pages/upcoming_entrants.js)。
 // データと小さい部品は js/upcoming_common.js、集計は js/upcoming_stats.js。
 import { escapeHtml } from '../../site/js/html.js';
@@ -34,14 +34,13 @@ function render() {
     : LIST.sortKey === 'city' ? Up.cityOf(x.ev) : Number(x.ev.start_at));
   list.sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * dir || a.ev.start_at - b.ev.start_at || Up.nentOf(b.ev) - Up.nentOf(a.ev); });
   $('status').textContent = i18n('upcoming.n_events', { n: list.length });
-  const medal = ['🥇', '🥈', '🥉'];
   const page = S.pageHref('entrants.html');
   $('tbody').innerHTML = list.map(({ eid, ev }) => {
     const top = Stats.topOf(Up.rowsOf(ev).filter(r => r.rank !== null), 3);
     const tags = [SPSPTags.dayTag(ev, { wk: 'tag tag-wk', wd: 'tag tag-wd' }),
       ...SPSPTags.flagTags(ev, { pre: 'tag tag-pre', res: 'tag tag-restr', lc: 'tag tag-low', uchi: 'tag tag-uchi', special: 'tag tag-special' })].join('');
-    const topHtml = top.length ? `<div class="top-players">${top.map((r, i) =>
-      `<span><span class="place">${medal[i]}</span>${Up.playerLink(r)}<span class="rank">#${r.rank}</span></span>`).join('<span class="sep">·</span>')}</div>` : '';
+    const topHtml = top.length ? `<div class="top-players">${top.map(r =>
+      `<span>${Up.playerLink(r)}<span class="rank">#${r.rank}</span></span>`).join('<span class="sep">·</span>')}</div>` : '';
     return `<tr class="event-row">
       <td class="col-date">${Up.when(ev.start_at).ymd}</td>
       <td class="col-name"><a href="${escapeHtml(page)}?e=${encodeURIComponent(eid)}">${escapeHtml(ev.tournament_name || '')}</a>${topHtml}</td>

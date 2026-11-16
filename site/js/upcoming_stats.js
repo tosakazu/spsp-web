@@ -3,7 +3,7 @@
 //   joinEntrants(ev, index)   参加予定者 (data/upcoming_entrants.json の entrants) に、選手の一覧 (js/views.js の index) の順位・Lv・キャラ・地域を付ける。
 //                             総合評価の順位の高い順 (順位の無い人は後ろ、名前順)。同じ uid は 1 回だけ
 //   summary(rows)             人数・順位のある人数・上位の人数・順位の中央値
-//   rankBands(rows)           順位の帯ごとの人数 (BANDS の順、最後が「順位なし」)
+//   rankBands(rows)           順位の帯ごとの人数 (BANDS の順、最後が「順位なし」)。参加者のいる帯の範囲だけ (上と下の 0 人の帯は出さない)
 //   lvCounts(rows)            Lv ごとの人数 (5 → 1、最後が Lv なし)
 //   groupBy(rows, key)        'char' / 'pref' ごとにまとめる (人数の多い順、同数は最上位の人の順位順。値の無い人は最後の 1 組 key = null)
 //   topOf(rows, n)            上から n 人
@@ -11,8 +11,8 @@ const global = typeof window !== 'undefined' ? window : globalThis;
 
 /** @typedef {{ uid: number, name: string, rank: number | null, lv: number | null, char: number | null, pref: number | null, ovs: boolean }} UpRow */
 
-/** 順位の帯の上端 (この順位まで)。最後の帯はそれより下 */
-export const BANDS = [10, 50, 100, 300, 1000, 3000];
+/** 順位の帯の上端 (この順位まで)。Lv の区切りと同じ 2 のべき (js/format.js の lvSuffix)。最後の帯はそれより下 */
+export const BANDS = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 
 /** @param {{ entrants?: { uid?: number | null, tag?: string | null }[] } | null | undefined} ev
  *  @param {{ get: (uid: number) => any } | null | undefined} index @returns {UpRow[]} */
@@ -56,7 +56,11 @@ export function rankBands(rows) {
     const i = BANDS.findIndex(to => /** @type {number} */ (r.rank) <= to);
     out[i < 0 ? BANDS.length : i].n++;
   }
-  return [.../** @type {{ from: number | null, to: number | null, n: number }[]} */ (out), none];
+  // 参加者に合わせる: 人のいる最初の帯から最後の帯まで (間の 0 人は残す)
+  const a = out.findIndex(x => x.n > 0);
+  let b = out.length - 1;
+  while (b >= 0 && !out[b].n) b--;
+  return [.../** @type {{ from: number | null, to: number | null, n: number }[]} */ (a < 0 ? [] : out.slice(a, b + 1)), none];
 }
 
 /** @param {UpRow[]} rows @returns {{ lv: number | null, n: number }[]} */
