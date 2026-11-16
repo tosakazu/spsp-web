@@ -54,9 +54,27 @@ function playerRow(r) {
   </div></div>`;
 }
 
+/** @type {Record<'char' | 'pref', { key: number | null, rows: UpRow[] }[]>} */
+const GROUPS = { char: [], pref: [] };
+const BOUND = { char: false, pref: false };
+/** サブ使用も含めた使い手の組 (1 人がメインとサブの各キャラの組に入る)。並びは Stats.groupBy と同じ */
+function charGroupsWithSub() {
+  /** @type {Map<number | null, UpRow[]>} */
+  const m = new Map();
+  for (const r of ST.rows) {
+    const ids = new Set(/** @type {(number | null)[]} */ ([r.char]));
+    for (const c of ST.subs.get(r.uid) || []) ids.add(c);
+    for (const c of ids) { const a = m.get(c); if (a) a.push(r); else m.set(c, [r]); }
+  }
+  const best = (/** @type {UpRow[]} */ a) => (a[0].rank === null ? Infinity : a[0].rank);
+  return [...m.entries()].map(([key, rows]) => ({ key, rows }))
+    .sort((a, b) => (a.key === null ? 1 : 0) - (b.key === null ? 1 : 0) || b.rows.length - a.rows.length || best(a.rows) - best(b.rows));
+}
+
 /** 使い手・地域 (5 件ずつ。行を押すと中の人が開く) @param {'char' | 'pref'} key */
 function setupGroups(key) {
-  const groups = Stats.groupBy(ST.rows, key);
+  const groups = key === 'char' && ST.sub ? charGroupsWithSub() : Stats.groupBy(ST.rows, key);
+  GROUPS[key] = groups;
   const label = key === 'char' ? Up.charLabel : Up.prefLabel;
   const elId = key === 'char' ? 'up-chars' : 'up-prefs';
   $(key === 'char' ? 'up-char-n' : 'up-pref-n').textContent = String(groups.filter(g => g.key !== null).length);
@@ -70,13 +88,15 @@ function setupGroups(key) {
       <div class="tour-matches"></div>
     </div>`;
   }).join(''), i18n('upcoming.no_entrants'));
+  if (BOUND[key]) return;   // 描き直し (サブ使用も含める の切り替え) では付け直さない
+  BOUND[key] = true;
   // 行を押すと開く (中の人は開いたときに描く。大会ページの順位表と同じ動き)
   $(elId).addEventListener('click', e => {
     const item = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('.up-g'));
     const box = item && /** @type {HTMLElement | null} */ (item.closest('.tour-group'));
     if (!item || !box) return;
     const inner = /** @type {HTMLElement} */ (box.querySelector('.tour-matches'));
-    const g = groups.find(x => (x.key === null ? 'none' : String(x.key)) === box.dataset.key);
+    const g = GROUPS[key].find(x => (x.key === null ? 'none' : String(x.key)) === box.dataset.key);
     if (!inner.innerHTML && g) inner.innerHTML = g.rows.map(playerRow).join('');
     box.classList.toggle('expanded');
     $(elId).style.minHeight = '';   // 開いた分で高さが変わる (ページ送りの高さ固定を外す)
@@ -211,26 +231,32 @@ function render(/** @type {any} */ ev) {
   $('up-char-search').addEventListener('input', applyCharSearch);
   $('up-char-chip').addEventListener('click', () => { ST.char = ''; renderChars(); applyFilter(); });
   // サブ使用も含める: 初めてチェックしたときにサブの表を読む
-  const subCb = /** @type {HTMLInputElement} */ ($('up-sub'));
-  subCb.checked = false;
+  // チェックは 2 か所 (使い手の欄・キャラ選択の中)。どちらを変えても両方に効く
+  const subCbs = /** @type {HTMLInputElement[]} */ ([$('up-sub'), $('up-sub2')]);
   let subLoaded = false;
-  subCb.addEventListener('change', async () => {
-    if (subCb.checked && !subLoaded) {
-      subLoaded = true;
-      const j = await fetch(S.data + 'data/character_index.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
-      for (const [cid, uids] of Object.entries((j && j.sub_by_char) || {})) {
-        for (const u of /** @type {number[]} */ (uids)) {
-          if (!ST.byUid.has(u)) continue;
-          const s = ST.subs.get(u) || new Set();
-          s.add(Number(cid));
-          ST.subs.set(u, s);
+  for (const cb of subCbs) {
+    cb.checked = false;
+    cb.addEventListener('change', async () => {
+      const on = cb.checked;
+      for (const o of subCbs) o.checked = on;
+      if (on && !subLoaded) {
+        subLoaded = true;
+        const j = await fetch(S.data + 'data/character_index.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+        for (const [cid, uids] of Object.entries((j && j.sub_by_char) || {})) {
+          for (const u of /** @type {number[]} */ (uids)) {
+            if (!ST.byUid.has(u)) continue;
+            const s = ST.subs.get(u) || new Set();
+            s.add(Number(cid));
+            ST.subs.set(u, s);
+          }
         }
       }
-    }
-    ST.sub = subCb.checked;
-    renderChars();
-    applyFilter();
-  });
+      ST.sub = subCbs[0].checked;
+      setupGroups('char');
+      renderChars();
+      applyFilter();
+    });
+  }
   // 地域の絞り込み: この大会に居る地域だけ (人数の多い順)
   const fpref = /** @type {HTMLSelectElement} */ ($('up-fpref'));
   fpref.innerHTML = `<option value="">${escapeHtml(i18n('upcoming.all_prefs'))}</option>` + Stats.groupBy(ST.rows, 'pref').map(g =>
