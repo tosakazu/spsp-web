@@ -109,6 +109,51 @@ export function groupBy(rows, key) {
 /** @param {UpRow[]} rows @param {number} n */
 export const topOf = (rows, n) => rows.slice(0, n);
 
-const api = { BANDS, lvOfRank, joinEntrants, summary, rankBands, cutBand, lvCounts, groupBy, topOf };
+/** @typedef {{ id: string, ident: string, url: string, wave: string | null, startAt: number | null, n: number, order: number }} UpPool */
+/** @typedef {{ id: string, startAt: number | null, n: number }} UpWave */
+/** シードとプール (start.gg でトーナメントとシードが公開されている大会だけ。smash_database が bracket と entrants[].seed / pg を付ける)。
+ *  出ていない大会は null。シードが登録順のまま (参加者の並びとちょうど逆順 = 主催者がまだ並べていない) の大会も null (プレイヤーページと同じ判定)。
+ *  pools は ウェーブ → プール名の順 (数字は数として比べる。order = その位置)、人のいるプールだけ。waves はウェーブのある大会だけ
+ *  @param {any} ev @returns {{ byUid: Map<number, { seed: number, pool: UpPool | null }>, pools: UpPool[], waves: UpWave[] } | null} */
+export function seedInfo(ev) {
+  const b = ev && ev.bracket;
+  const en = /** @type {any[]} */ ((ev && ev.entrants) || []);
+  if (!b || !b.pools || typeof b.pools !== 'object') return null;
+  const s = en.map(x => x && x.seed);
+  if (s.length >= 2 && s.every((v, i) => typeof v === 'number' && (i === 0 || v === s[i - 1] - 1))) return null;
+  /** @type {Map<string, UpPool>} */
+  const pools = new Map();
+  /** @type {Map<number, { seed: number, pool: UpPool | null }>} */
+  const byUid = new Map();
+  for (const e of en) {
+    const uid = Number(e && e.uid);
+    if (!Number.isInteger(uid) || uid <= 0 || byUid.has(uid) || typeof e.seed !== 'number' || !(e.seed > 0)) continue;
+    const pid = e.pg === null || e.pg === undefined ? '' : String(e.pg);
+    let pool = pools.get(pid) || null;
+    if (!pool && pid && Object.prototype.hasOwnProperty.call(b.pools, pid)) {
+      const p = b.pools[pid] || {};
+      const str = (/** @type {any} */ v) => (typeof v === 'string' || typeof v === 'number' ? String(v) : '');
+      pool = { id: pid, ident: str(p.ident), url: /^https:\/\/www\.start\.gg\//.test(str(p.url)) ? str(p.url) : '',
+               wave: str(p.wave) || null, startAt: typeof p.start_at === 'number' && p.start_at > 0 ? p.start_at : null, n: 0, order: 0 };
+      pools.set(pid, pool);
+    }
+    if (pool) pool.n++;
+    byUid.set(uid, { seed: e.seed, pool });
+  }
+  if (!byUid.size) return null;
+  const nat = (/** @type {string} */ a, /** @type {string} */ c) => a.localeCompare(c, undefined, { numeric: true });
+  const list = [...pools.values()].sort((a, c) => (a.wave === null ? 1 : 0) - (c.wave === null ? 1 : 0) || nat(a.wave || '', c.wave || '') || nat(a.ident, c.ident) || nat(a.id, c.id));
+  list.forEach((p, i) => { p.order = i; });
+  /** @type {UpWave[]} */
+  const waves = [];
+  for (const p of list) {
+    if (p.wave === null) continue;
+    const w = waves.find(x => x.id === p.wave);
+    if (w) { w.n += p.n; if (w.startAt === null || (p.startAt !== null && p.startAt < w.startAt)) w.startAt = p.startAt; } else waves.push({ id: p.wave, startAt: p.startAt, n: p.n });
+  }
+  return { byUid, pools: list, waves };
+}
+
+const api = { BANDS, lvOfRank, joinEntrants, summary, rankBands, cutBand, lvCounts, groupBy, topOf, seedInfo };
 /** @type {any} */ (global).SpspUpcomingStats = api;
 export default api;

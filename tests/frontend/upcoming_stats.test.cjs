@@ -67,3 +67,19 @@ test('使い手・地域ごと: 人数の多い順、同数は最上位の人の
   const p = St.groupBy(rows, 'pref');
   assert.deepStrictEqual(plain(p.map((g) => [g.key, g.rows.map((r) => r.uid)])), [[13, [1, 3]], [27, [2]], [null, [4, 9]]]);
 });
+
+test('シードとプール: 公開されている大会だけ。プールはウェーブ → 名前の順 (数字は数として)、登録順のままのシードは出さない', () => {
+  const pools = { 11: { ident: 'B100', url: 'https://www.start.gg/x/11', wave: 'B', start_at: 200 }, 12: { ident: 'A1000', url: 'https://www.start.gg/x/12', wave: 'A', start_at: 100 },
+                  13: { ident: 'A200', url: 'javascript:alert(1)', wave: 'A', start_at: 100 }, 14: { ident: 'C1', url: 'https://www.start.gg/x/14' } };
+  const e = { bracket: { pools }, entrants: [{ uid: 1, tag: 'a', seed: 3, pg: 11 }, { uid: 2, tag: 'b', seed: 1, pg: 12 }, { uid: 3, tag: 'c', seed: 2, pg: 13 },
+                                             { uid: 4, tag: 'd', seed: 4, pg: 12 }, { uid: 5, tag: 'e' }, { uid: null, tag: 'x', seed: 9, pg: 11 }, { uid: 6, tag: 'f', seed: 5, pg: 99 }] };
+  const si = St.seedInfo(e);
+  assert.deepStrictEqual(plain(si.pools.map((p) => [p.ident, p.wave, p.n, p.order])), [['A200', 'A', 1, 0], ['A1000', 'A', 2, 1], ['B100', 'B', 1, 2]], '人のいるプールだけ');
+  assert.deepStrictEqual(plain(si.waves), [{ id: 'A', startAt: 100, n: 3 }, { id: 'B', startAt: 200, n: 1 }]);
+  assert.strictEqual(si.pools[0].url, '', 'start.gg 以外のリンクは捨てる');
+  assert.deepStrictEqual(plain([1, 2, 5, 6].map((u) => { const x = si.byUid.get(u); return x ? [x.seed, x.pool && x.pool.ident] : null; })), [[3, 'B100'], [1, 'A1000'], null, [5, null]]);
+  assert.strictEqual(St.seedInfo({ entrants: [{ uid: 1, seed: 1 }] }), null, 'トーナメントが公開されていない');
+  assert.strictEqual(St.seedInfo({ bracket: { pools }, entrants: [{ uid: 1, seed: 3, pg: 11 }, { uid: 2, seed: 2, pg: 11 }, { uid: 3, seed: 1, pg: 11 }] }), null, '登録順のまま');
+  const one = St.seedInfo({ bracket: { pools: { 7: { ident: '1' } } }, entrants: [{ uid: 1, seed: 2, pg: 7 }, { uid: 2, seed: 1, pg: 7 }, { uid: 3, seed: 3, pg: 7 }] });
+  assert.deepStrictEqual(plain([one.pools.length, one.waves.length, one.byUid.get(3).seed]), [1, 0, 3]);
+});
