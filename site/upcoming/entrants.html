@@ -208,7 +208,20 @@
   /* 分布: 横棒 (1 色。数は棒の右) */
   .up-dist h3 { font-size: 11px; color: #6b7280; font-weight: 600; margin: 10px 0 6px; }
   .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; font-size: 12px; }
-  .up-bars .lb { color: #374151; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .up-bars .lb { color: #374151; white-space: nowrap; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
+  .up-bars .lb small { color: #9ca3af; font-size: 10px; }
+  /* Lv のバッジ (プレイヤーページ p/index.html と同じ) */
+  .lv-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background: #e5e7eb; color: #6b7280; letter-spacing: 0.04em;
+  }
+  .lv-pill.lv-5 { background: #fef3c7; color: #92400e; }
+  .lv-pill.lv-4 { background: #ede9fe; color: #6b21a8; }
+  .lv-pill.lv-3 { background: #dbeafe; color: #1d4ed8; }
+  .lv-pill.lv-2 { background: #dcfce7; color: #15803d; }
+  .lv-pill.lv-1 { background: #f3f4f6; color: #6b7280; }
+  .lv-pill.lv-0 { background: #f9fafb; color: #9ca3af; }
   .up-bars .bar { height: 12px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
   .up-bars .bar i { display: block; height: 100%; background: #dc2626; border-radius: 3px; }
   .up-bars .bar.none i { background: #9ca3af; }

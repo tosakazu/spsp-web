@@ -41,7 +41,8 @@ test('数字: 人数・順位のある人数・上位の人数・中央値', () 
 test('順位の帯と Lv の人数。合計は人数と同じ', () => {
   const rows = St.joinEntrants(ev, index);
   const b = St.rankBands(rows);
-  assert.deepStrictEqual(plain(b.map((x) => [x.from, x.to, x.n])), [[1, 8, 1], [9, 16, 0], [17, 32, 0], [33, 64, 0], [65, 128, 1], [129, 256, 0], [257, 512, 0], [513, 1024, 0], [1025, 2048, 0], [2049, 4096, 1], [null, null, 2]]);
+  assert.deepStrictEqual(plain(b.map((x) => [x.from, x.to, x.n])), [[1, 8, 1], [9, 16, 0], [17, 32, 0], [33, 64, 0], [65, 128, 1], [129, 256, 0], [257, 384, 0], [385, 512, 0], [513, 768, 0], [769, 1024, 0], [1025, 1536, 0], [1537, 2048, 0], [2049, 3072, 0], [3073, null, 1], [null, null, 2]]);
+  assert.deepStrictEqual(plain([1, 256, 257, 512, 513, 1025, 2049, 3073].map(St.lvOfRank)), [5, 5, 4, 4, 3, 2, 1, 1]);
   assert.deepStrictEqual(plain(St.rankBands(rows.filter((r) => r.uid !== 1 && r.uid !== 3)).map((x) => [x.from, x.to, x.n])), [[65, 128, 1], [null, null, 2]], '人のいる帯の範囲だけ');
   assert.strictEqual(b.reduce((a, x) => a + x.n, 0), rows.length);
   const l = St.lvCounts(rows);

@@ -2,7 +2,7 @@
 // src/pages/upcoming_entrants.js — site/upcoming/entrants.html のスクリプト。今後の大会 1 つの参加予定者 (?e=<event id>)。
 // 見た目は大会ページ (t/) と同じ (HTML の形・CSS とも t/index.html のもの): hero → 上位 3 人 → 見出しつきの欄。
 //   上位 3 人     総合評価の順位が高い 3 人 (大会ページの表彰台と同じ箱)
-//   実力分布      順位の帯と Lv ごとの人数
+//   実力分布      Lv の表記と同じ区切りの帯ごとの人数
 //   使い手・地域  人数の多い順に 5 件ずつ (ページ送りは js/pager.js)。行を押すとその組の人が開く
 //   参加予定者    順位の高い順の全員 (大会ページの全順位表と同じ行)。名前の検索、キャラ・地域の絞り込み
 // データと小さい部品は js/upcoming_common.js、集計は js/upcoming_stats.js。シード (entrants の seed) は公開前のことがあるので出さない。
@@ -36,7 +36,7 @@ function playerRow(r) {
   const place = r.rank === null ? '<span class="place" style="color:#9ca3af">—</span>' : `<span class="place"><span class="num">${r.rank}</span></span>`;
   return `<div class="tour-group"><div class="tour-item" style="cursor:default">${place}
     <div class="meta">${Up.playerLink(r)}</div>
-    <div class="v-stats">${chip('Lv', lv ? `<span class="val">${escapeHtml(lv)}</span>` : dash)}${
+    <div class="v-stats">${chip('Lv', lv ? `<span class="lv-pill lv-${r.lv}">${escapeHtml(lv)}</span>` : dash)}${
       chip(i18n('upcoming.chip.char'), r.char === null ? dash : `<span class="val">${escapeHtml(Up.charLabel(r.char))}</span>`)}${
       chip(i18n('upcoming.chip.pref'), r.pref === null ? dash : `<span class="val">${escapeHtml(Up.prefLabel(r.pref))}</span>`)}</div>
   </div></div>`;
@@ -75,18 +75,17 @@ function setupGroups(key) {
 function distHtml() {
   const total = ST.rows.length;
   if (!total) return `<div class="empty-msg" style="padding:12px">${escapeHtml(i18n('upcoming.no_entrants'))}</div>`;
-  /** @param {{ label: string, n: number, none?: boolean }[]} items */
-  const bars = items => {
-    const max = Math.max(1, ...items.map(x => x.n));
-    return `<div class="up-bars">${items.map(x => `<span class="lb">${escapeHtml(x.label)}</span>
+  // 帯は Lv の表記と同じ区切り。ラベル = Lv のバッジ (プレイヤーページと同じ lv-pill) + 順位の範囲
+  const items = Stats.rankBands(ST.rows).map(b => {
+    if (b.from === null) return { n: b.n, none: true, label: `<span class="lv-pill lv-0">${escapeHtml(i18n('upcoming.no_rank'))}</span>` };
+    const lv = Stats.lvOfRank(b.from);
+    const range = b.to === null ? i18n('upcoming.band_from', { from: b.from.toLocaleString() }) : i18n('upcoming.band', { from: b.from.toLocaleString(), to: b.to.toLocaleString() });
+    return { n: b.n, none: false, label: `<span class="lv-pill lv-${lv}">${escapeHtml(SPSPFormat.lvLabel(lv, b.from))}</span><small>${escapeHtml(range)}</small>` };
+  });
+  const max = Math.max(1, ...items.map(x => x.n));
+  return `<div class="up-bars">${items.map(x => `<span class="lb">${x.label}</span>
       <span class="bar${x.none ? ' none' : ''}"><i style="width:${(x.n / max * 100).toFixed(1)}%"></i></span>
       <span class="n">${x.n}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`).join('')}</div>`;
-  };
-  const bands = Stats.rankBands(ST.rows).map(b => ({ n: b.n, none: b.from === null,
-    label: b.from === null ? i18n('upcoming.no_rank') : b.to === null ? i18n('upcoming.band_from', { from: b.from.toLocaleString() })
-      : i18n('upcoming.band', { from: b.from.toLocaleString(), to: b.to.toLocaleString() }) }));
-  const lvs = Stats.lvCounts(ST.rows).map(x => ({ n: x.n, none: x.lv === null, label: x.lv === null ? i18n('upcoming.no_lv') : 'Lv' + x.lv }));
-  return `<h3>${escapeHtml(i18n('upcoming.dist.rank'))}</h3>${bars(bands)}<h3>${escapeHtml(i18n('upcoming.dist.lv'))}</h3>${bars(lvs)}`;
 }
 
 function renderList() {

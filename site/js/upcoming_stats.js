@@ -11,8 +11,10 @@ const global = typeof window !== 'undefined' ? window : globalThis;
 
 /** @typedef {{ uid: number, name: string, rank: number | null, lv: number | null, char: number | null, pref: number | null, ovs: boolean }} UpRow */
 
-/** 順位の帯の上端 (この順位まで)。Lv の区切りと同じ 2 のべき (js/format.js の lvSuffix)。最後の帯はそれより下 */
-export const BANDS = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+/** 順位の帯の上端 (この順位まで)。Lv の表記の区切りと同じ (js/format.js の lvSuffix: Lv5 は 👑8 🥇16 🥈32 🥉64 +128 256、Lv4 以下は + と無印)。最後の帯はそれより下 (Lv1) */
+export const BANDS = [8, 16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072];
+/** 帯の Lv (帯の先頭の順位で決まる) @param {number} from */
+export const lvOfRank = from => (from <= 256 ? 5 : from <= 512 ? 4 : from <= 1024 ? 3 : from <= 2048 ? 2 : 1);
 
 /** @param {{ entrants?: { uid?: number | null, tag?: string | null }[] } | null | undefined} ev
  *  @param {{ get: (uid: number) => any } | null | undefined} index @returns {UpRow[]} */
@@ -92,6 +94,6 @@ export function groupBy(rows, key) {
 /** @param {UpRow[]} rows @param {number} n */
 export const topOf = (rows, n) => rows.slice(0, n);
 
-const api = { BANDS, joinEntrants, summary, rankBands, lvCounts, groupBy, topOf };
+const api = { BANDS, lvOfRank, joinEntrants, summary, rankBands, lvCounts, groupBy, topOf };
 /** @type {any} */ (global).SpspUpcomingStats = api;
 export default api;
