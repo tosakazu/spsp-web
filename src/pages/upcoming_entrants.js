@@ -189,8 +189,6 @@ function render(/** @type {any} */ ev) {
   const chips = [SPSPTags.dayTag(ev, { wk: 'chip wk', wd: 'chip wd' }), ...SPSPTags.flagTags(ev, { pre: 'chip pre', res: 'chip res', lc: 'chip lc', rs: 'chip rs' })];
   $('meta-line').innerHTML = `${escapeHtml(i18n('upcoming.date_time', { ymd: w.ymd, wd: w.wd, hm: w.hm }))} · ${Up.cityOf(ev) ? '📍' + escapeHtml(Up.cityOf(ev)) + ' · ' : ''}`
     + `<b style="color:#111827">${Math.max(ST.rows.length, Up.nentOf(ev))}</b> ${escapeHtml(i18n('common.unit_people'))} ${chips.join('')}`;
-  const s = Stats.summary(ST.rows);
-  $('up-summary').textContent = s.ranked ? i18n('upcoming.summary', { top100: s.top100, top1000: s.top1000, median: s.median === null ? '—' : s.median.toLocaleString() }) : '';
   $('up-dist').innerHTML = distHtml();
   setupGroups('char');
   setupGroups('pref');
