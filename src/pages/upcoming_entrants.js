@@ -61,12 +61,11 @@ function setupGroups(key) {
   const elId = key === 'char' ? 'up-chars' : 'up-prefs';
   $(key === 'char' ? 'up-char-n' : 'up-pref-n').textContent = String(groups.filter(g => g.key !== null).length);
   SPSPPager.setupPaginated(groups, elId, elId + '-pager', (/** @type {{ key: number | null, rows: UpRow[] }[]} */ arr) => arr.map(g => {
-    const best = g.rows[0].rank;
     return `<div class="tour-group" data-key="${g.key === null ? 'none' : g.key}">
       <div class="tour-item up-g" style="grid-template-columns:46px 1fr auto;grid-template-rows:auto">
         <span class="place" style="grid-row:1"><span class="num">${g.rows.length}</span><span class="frac">${escapeHtml(i18n('common.unit_people'))}</span></span>
         <div class="meta" style="grid-row:1"><span class="nm">${escapeHtml(label(g.key))}</span><div class="sub">${escapeHtml(g.rows.slice(0, 3).map(Up.shortName).join(' / '))}${g.rows.length > 3 ? ' …' : ''}</div></div>
-        <div class="v rk" style="grid-column:3;grid-row:1">${best === null ? '—' : '#' + best}<span class="frac">${escapeHtml(i18n('upcoming.best'))}</span> <span class="chevron">▶</span></div>
+        <div class="v rk" style="grid-column:3;grid-row:1"><span class="chevron">▶</span></div>
       </div>
       <div class="tour-matches"></div>
     </div>`;
