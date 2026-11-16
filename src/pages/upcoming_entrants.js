@@ -8,7 +8,9 @@
 //                 サブで使う人 (data/character_index.json の sub_by_char) も数える・絞り込みに入れる
 //   参加予定者    ランキングの表 (js/ranking_page.js。行は js/views.js の rowsByUids)。順位は全国の順位のまま (大会の中で付け直さない)。
 //                 ランキングに居ない人は名前だけの行で後ろに並ぶ
-// データと小さい部品は js/upcoming_common.js、集計は js/upcoming_stats.js。シード (entrants の seed) は公開前のことがあるので出さない。
+//                 start.gg でトーナメントとシードが公開されている大会は、シード・ウェーブ・プールの列 (Stats.seedInfo。プールが 1 つならプールの列は無し) と
+//                 ウェーブ・プールの絞り込み。スマホは行の 3 段目に 1 行で
+// データと小さい部品は js/upcoming_common.js、集計は js/upcoming_stats.js。
 import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPFormat from '../../site/js/format.js';
@@ -33,8 +35,9 @@ const S = /** @type {any} */ (window).SPSP;
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** @typedef {import('../../site/js/upcoming_stats.js').UpRow} UpRow */
 /** char: '' = すべて、'none' = 不明、それ以外はキャラ id。sub = サブ使用も含める。subs = uid → サブで使うキャラ id (読めるまで空)
- * @type {{ rows: UpRow[], byUid: Map<number, UpRow>, char: string, pref: string, sub: boolean, subs: Map<number, Set<number>>, table: any, advance: number | null }} */
-const ST = { rows: [], byUid: new Map(), char: '', pref: '', sub: false, subs: new Map(), table: null, advance: null };
+ * pool: '' = すべて、'w:<ウェーブ>' = そのウェーブ、それ以外はプールの id
+ * @type {{ rows: UpRow[], byUid: Map<number, UpRow>, char: string, pref: string, pool: string, sub: boolean, subs: Map<number, Set<number>>, table: any, advance: number | null, seed: ReturnType<typeof Stats.seedInfo> }} */
+const ST = { rows: [], byUid: new Map(), char: '', pref: '', pool: '', sub: false, subs: new Map(), table: null, advance: null, seed: null };
 
 /** 絞り込みの値: '' = すべて、'none' = 不明、それ以外は id の数字 */
 const matches = (/** @type {number | null} */ v, /** @type {string} */ f) => !f || (f === 'none' ? v === null : v === Number(f));
@@ -173,10 +176,60 @@ function applyFilter() {
   chip.classList.toggle('on', !!ST.char);
   chip.textContent = ST.char ? i18n('upcoming.char_chip', { char: ST.char === 'none' ? i18n('upcoming.unknown') : Up.charLabel(Number(ST.char)) }) : '';
   if (!ST.table) return;
-  ST.table.setRowFilter(!ST.char && !ST.pref ? null : (/** @type {any} */ rec) => {
+  ST.table.setRowFilter(!ST.char && !ST.pref && !ST.pool ? null : (/** @type {any} */ rec) => {
     const r = ST.byUid.get(rec.user_id);
-    return !!r && usesChar(r, ST.char) && matches(r.pref, ST.pref);
+    return !!r && usesChar(r, ST.char) && matches(r.pref, ST.pref) && inPool(rec.user_id);
   });
+}
+/** ウェーブ・プールの絞り込みに合うか @param {number} uid */
+function inPool(uid) {
+  if (!ST.pool) return true;
+  const x = ST.seed && ST.seed.byUid.get(uid);
+  const p = x && x.pool;
+  if (!p) return false;
+  return ST.pool.startsWith('w:') ? p.wave === ST.pool.slice(2) : p.id === ST.pool;
+}
+const waveLabel = (/** @type {{ id: string, startAt: number | null }} */ w) => i18n('upcoming.wave', { id: w.id }) + (w.startAt ? ' ' + i18n('upcoming.from_time', { hm: Up.when(w.startAt).hm }) : '');
+
+/** シード・ウェーブ・プールの列 (公開されている大会だけ)。並べ替えはシード順、ウェーブ・プールは その順の中でシード順 */
+function seedColumns() {
+  const si = ST.seed;
+  if (!si) return [];
+  const of = (/** @type {any} */ rec) => si.byUid.get(rec.user_id) || null;
+  const BIG = 1e12;
+  const multi = si.pools.length > 1;
+  const poolHtml = (/** @type {import('../../site/js/upcoming_stats.js').UpPool} */ p) => (p.url
+    ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener" class="up-pool-a">${escapeHtml(p.ident)}</a>` : escapeHtml(p.ident));
+  /** @type {any[]} */
+  const cols = [{
+    id: 'up_seed', label: escapeHtml(i18n('upcoming.col.seed')), sortable: true, sortKey: 'up_seed', css: 'col-up col-up-seed',
+    value: (/** @type {any} */ rec) => { const x = of(rec); return x ? x.seed : BIG; },
+    cell: (/** @type {any} */ rec) => { const x = of(rec); return x ? String(x.seed) : '–'; },
+  }];
+  if (si.waves.length) cols.push({
+    id: 'up_wave', label: escapeHtml(i18n('upcoming.col.wave')), sortable: true, sortKey: 'up_wave', css: 'col-up col-up-wave',
+    value: (/** @type {any} */ rec) => { const x = of(rec); return x && x.pool && x.pool.wave !== null ? si.waves.findIndex(w => w.id === /** @type {any} */ (x.pool).wave) * 1e7 + x.seed : BIG; },
+    cell: (/** @type {any} */ rec) => { const x = of(rec); return x && x.pool && x.pool.wave !== null ? escapeHtml(x.pool.wave) : '–'; },
+  });
+  if (multi) cols.push({
+    id: 'up_pool', label: escapeHtml(i18n('upcoming.col.pool')), sortable: true, sortKey: 'up_pool', css: 'col-up col-up-pool',
+    value: (/** @type {any} */ rec) => { const x = of(rec); return x && x.pool ? x.pool.order * 1e7 + x.seed : BIG; },
+    cell: (/** @type {any} */ rec) => { const x = of(rec); return x && x.pool && x.pool.ident ? poolHtml(x.pool) : '–'; },
+  });
+  // スマホ (行がカードの形) 用: 3 段目に「シード 12 | ウェーブ A 10:30〜 | プール A100」
+  cols.push({
+    id: 'up_seed_m', label: '', css: 'col-up-m',
+    cell: (/** @type {any} */ rec) => {
+      const x = of(rec);
+      if (!x) return '';
+      const parts = [escapeHtml(i18n('upcoming.seed_n', { n: x.seed }))];
+      const p = x.pool;
+      if (p && p.wave !== null) parts.push(escapeHtml(waveLabel({ id: p.wave, startAt: p.startAt })));
+      if (p && multi && p.ident) parts.push(escapeHtml(i18n('upcoming.col.pool')) + ' ' + poolHtml(p));
+      return parts.join('<span class="sep">|</span>');
+    },
+  });
+  return cols;
 }
 
 /** 参加予定者の表 (ランキングのページと同じ)。行は views の rowsByUids、ランキングに居ない人は名前だけの行 */
@@ -197,7 +250,7 @@ async function setupTable() {
     rows: data, method: 'ensemble', sort: { key: 'rank', dir: 'asc' }, pageSize: 100,
     totalForRankFrac: () => (manifest && manifest.n_players) || data.length,
     playerHrefPrefix: S.langRoot,
-    columns: ['rank', 'display', BT_SCORE_COL, TJPR_SCORE_COL, 'tour_count', 'rank_tjpr', 'rank_bt_gated'],
+    columns: ['rank', 'display', ...seedColumns(), BT_SCORE_COL, TJPR_SCORE_COL, 'tour_count', 'rank_tjpr', 'rank_bt_gated'],
     rankCaretExpand: false,
   });
   RP.applyState(ST.table, { rows: data, method: 'ensemble', filterText: /** @type {HTMLInputElement} */ ($('search')).value, sort: { key: 'rank', dir: 'asc' } });
@@ -277,6 +330,18 @@ function render(/** @type {any} */ ev) {
   fpref.innerHTML = `<option value="">${escapeHtml(i18n('upcoming.all_prefs'))}</option>` + Stats.groupBy(ST.rows, 'pref').map(g =>
     `<option value="${g.key === null ? 'none' : g.key}">${escapeHtml(Up.prefLabel(g.key))} (${g.rows.length})</option>`).join('');
   fpref.addEventListener('change', () => { ST.pref = fpref.value; applyFilter(); });
+  // ウェーブ・プールの絞り込み (シードが公開されていて、プールが 2 つ以上の大会だけ)
+  ST.seed = Stats.seedInfo(ev);
+  const fpool = /** @type {HTMLSelectElement} */ ($('up-fpool'));
+  if (ST.seed && ST.seed.pools.length > 1) {
+    fpool.innerHTML = `<option value="">${escapeHtml(i18n('upcoming.all_pools'))}</option>`
+      + ST.seed.waves.map(w => `<option value="w:${escapeHtml(w.id)}">${escapeHtml(waveLabel(w))} (${w.n})</option>`).join('')
+      + ST.seed.pools.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(i18n('upcoming.pool_n', { id: p.ident }))} (${p.n})</option>`).join('');
+    fpool.hidden = false;
+    fpool.addEventListener('change', () => { ST.pool = fpool.value; applyFilter(); });
+  }
+  // プールのリンク (start.gg) は行のクリック (簡易戦績を開く) に渡さない
+  $('ranktable').addEventListener('click', e => { if (/** @type {HTMLElement} */ (e.target).closest('.up-pool-a')) e.stopPropagation(); }, true);
   setupTable().catch(e => { console.error(e); $('tbody').innerHTML = `<tr><td colspan="11" class="empty-msg">${escapeHtml(i18n('upcoming.load_failed'))}</td></tr>`; });
 }
 
