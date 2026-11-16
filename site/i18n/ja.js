@@ -45,6 +45,8 @@ window.SPSP_I18N.ja = {
   'upcoming.char_chip': '{char} の使い手 ✕',
   'upcoming.band': '{from}〜{to} 位',
   'upcoming.band_from': '{from} 位〜',
+  'upcoming.cut_note': '予選通過は {n} 人。総合評価の順位が高い順に数えると、ラインは {band} の帯 ({m} 人のうち {k} 人目まで) です。',
+  'upcoming.cut_line': '予選通過ライン ({n} 人)',
   'upcoming.chip.char': '使い手',
   'upcoming.chip.pref': '地域',
   'upcoming.sec.dist': '📊 実力分布',

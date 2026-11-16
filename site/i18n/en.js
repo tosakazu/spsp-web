@@ -44,6 +44,8 @@ window.SPSP_I18N.en = {
   'upcoming.char_chip': '{char} players ✕',
   'upcoming.band': '{from}–{to}',
   'upcoming.band_from': '{from}+',
+  'upcoming.cut_note': '{n} players advance from pools. Counting from the highest overall rank, the line falls in the {band} band ({k} of its {m}).',
+  'upcoming.cut_line': 'Advance line ({n})',
   'upcoming.chip.char': 'Main',
   'upcoming.chip.pref': 'Region',
   'upcoming.sec.dist': '📊 Strength distribution',

@@ -49,6 +49,17 @@ test('順位の帯と Lv の人数。合計は人数と同じ', () => {
   assert.deepStrictEqual(plain(l.map((x) => [x.lv, x.n])), [[5, 1], [4, 1], [3, 0], [2, 0], [1, 1], [null, 2]]);
 });
 
+test('予選通過のラインが掛かる帯', () => {
+  const bands = [{ n: 3 }, { n: 0 }, { n: 5 }, { n: 2 }];
+  assert.deepStrictEqual(plain(St.cutBand(bands, 2)), { index: 0, within: 2 });
+  assert.deepStrictEqual(plain(St.cutBand(bands, 3)), { index: 0, within: 3 }, '帯の最後の人まで');
+  assert.deepStrictEqual(plain(St.cutBand(bands, 4)), { index: 2, within: 1 }, '0 人の帯は飛ばす');
+  assert.deepStrictEqual(plain(St.cutBand(bands, 9)), { index: 3, within: 1 });
+  assert.strictEqual(St.cutBand(bands, 10), null, '全員通過');
+  assert.strictEqual(St.cutBand(bands, 0), null);
+  assert.strictEqual(St.cutBand(bands, undefined), null);
+});
+
 test('使い手・地域ごと: 人数の多い順、同数は最上位の人の順位順、不明は最後。組の中は順位順', () => {
   const rows = St.joinEntrants(ev, index);
   const c = St.groupBy(rows, 'char');

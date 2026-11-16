@@ -4,6 +4,7 @@
 //                             総合評価の順位の高い順 (順位の無い人は後ろ、名前順)。同じ uid は 1 回だけ
 //   summary(rows)             人数・順位のある人数・上位の人数・順位の中央値
 //   rankBands(rows)           順位の帯ごとの人数 (BANDS の順、最後が「順位なし」)。参加者のいる帯の範囲だけ (上と下の 0 人の帯は出さない)
+//   cutBand(bands, n)         予選通過 n 人のラインが掛かる帯 (順位の高い順に数える)
 //   lvCounts(rows)            Lv ごとの人数 (5 → 1、最後が Lv なし)
 //   groupBy(rows, key)        'char' / 'pref' ごとにまとめる (人数の多い順、同数は最上位の人の順位順。値の無い人は最後の 1 組 key = null)
 //   topOf(rows, n)            上から n 人
@@ -65,6 +66,20 @@ export function rankBands(rows) {
   return [.../** @type {{ from: number | null, to: number | null, n: number }[]} */ (a < 0 ? [] : out.slice(a, b + 1)), none];
 }
 
+/** 予選通過の人数 n を順位の高い順に数えたとき、ラインが掛かる帯。index = bands の位置、within = その帯のうちラインの内側の人数。
+ *  n が無い・全員通過 (n ≥ 人数) なら null
+ *  @param {{ n: number }[]} bands rankBands の結果 @param {number | null | undefined} n @returns {{ index: number, within: number } | null} */
+export function cutBand(bands, n) {
+  const total = bands.reduce((a, b) => a + b.n, 0);
+  if (!n || !(n > 0) || n >= total) return null;
+  let cum = 0;
+  for (let i = 0; i < bands.length; i++) {
+    if (cum + bands[i].n >= n) return { index: i, within: n - cum };
+    cum += bands[i].n;
+  }
+  return null;
+}
+
 /** @param {UpRow[]} rows @returns {{ lv: number | null, n: number }[]} */
 export function lvCounts(rows) {
   const out = [5, 4, 3, 2, 1].map(lv => ({ lv: /** @type {number | null} */ (lv), n: 0 }));
@@ -94,6 +109,6 @@ export function groupBy(rows, key) {
 /** @param {UpRow[]} rows @param {number} n */
 export const topOf = (rows, n) => rows.slice(0, n);
 
-const api = { BANDS, lvOfRank, joinEntrants, summary, rankBands, lvCounts, groupBy, topOf };
+const api = { BANDS, lvOfRank, joinEntrants, summary, rankBands, cutBand, lvCounts, groupBy, topOf };
 /** @type {any} */ (global).SpspUpcomingStats = api;
 export default api;
