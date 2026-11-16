@@ -208,7 +208,10 @@
   .v-stats .chip .val { white-space: nowrap; }
   /* 分布: 横棒 (1 色。数は棒の右) */
   .up-dist h3 { font-size: 11px; color: #6b7280; font-weight: 600; margin: 10px 0 6px; }
-  .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; font-size: 12px; }
+  .up-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; font-size: 12px; }
+  /* 1 帯 = 1 行。列の幅は外の grid に揃える (subgrid)。古いブラウザは決まった幅 */
+  .up-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: 8px; }
+  @supports not (grid-template-columns: subgrid) { .up-row { grid-template-columns: 150px 1fr 78px; } }
   .up-bars .lb { color: #374151; white-space: nowrap; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
   .up-bars .lb small { color: #9ca3af; font-size: 10px; }
   /* Lv のバッジ (プレイヤーページ p/index.html と同じ) */
@@ -228,16 +231,14 @@
   .up-bars .bar.none i { background: #9ca3af; }
   .up-bars .n { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; text-align: right; }
   .up-bars .n small { font-weight: 400; color: #9ca3af; margin-left: 6px; font-size: 10px; }
-  /* 予選通過のライン: 掛かる帯の行に色と札、ラインの外側の棒は薄く */
+  /* 予選通過のライン: 掛かる帯の行ごと色、札は行の 2 段目。ラインの外側の棒は薄く */
   .up-bars .bar { display: flex; }
   .up-bars .bar i.out { background: #fecaca; }
   .up-bars .bar.none i.out { background: #e5e7eb; }
   .up-bars .bar i + i.out { border-radius: 0 3px 3px 0; }
-  .up-bars .cut { background: #fffbeb; outline: 4px solid #fffbeb; }
-  .up-bars .bar.cut { background: #fde68a; border-radius: 0; }
-  .up-bars .lb.cut { flex-wrap: wrap; row-gap: 3px; }
-  .up-bars .lb.cut .up-cut-tag { order: 3; margin-right: auto; }
-  .up-bars .lb.cut::after { content: ""; flex-basis: 100%; order: 2; }
+  .up-row.cut { background: #fffbeb; border-radius: 8px; padding: 6px; margin: 0 -6px; row-gap: 5px; }
+  .up-row.cut .bar { background: #fde68a; }
+  .up-row.cut .up-cut-tag { grid-column: 1 / -1; justify-self: start; }
   .up-cut-tag { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
 </style>
 <link rel="stylesheet" href="../region/site.css">
