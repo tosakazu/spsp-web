@@ -46,6 +46,20 @@ const norm = (/** @type {string} */ s) => s.normalize('NFKC').toLowerCase().repl
 const dash = '<span class="val dim">—</span>';
 const chip = (/** @type {string} */ lbl, /** @type {string} */ valHtml) => `<div class="chip"><span class="lbl">${escapeHtml(lbl)}</span>${valHtml}</div>`;
 
+/** シード・ウェーブ・プールの値 (公開されている大会だけ。表の列と同じ出し分け) @param {number} uid */
+function seedChips(uid) {
+  const si = ST.seed;
+  if (!si) return '';
+  const x = si.byUid.get(uid);
+  const p = x && x.pool;
+  const val = (/** @type {string} */ html) => `<span class="val">${html}</span>`;
+  let out = chip(i18n('upcoming.col.seed'), x ? val(String(x.seed)) : dash);
+  if (si.waves.length) out += chip(i18n('upcoming.col.wave'), p && p.wave !== null ? val(escapeHtml(p.wave)) : dash);
+  if (si.pools.length > 1) out += chip(i18n('upcoming.col.pool'), p && p.ident
+    ? val(p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener" class="up-pool-a">${escapeHtml(p.ident)}</a>` : escapeHtml(p.ident)) : dash);
+  return out;
+}
+
 /** 1 人の行 (大会ページの全順位表と同じ: 左 = 順位、名前、下に 3 つの値) @param {UpRow} r */
 function playerRow(r) {
   const lv = SPSPFormat.lvLabel(r.lv, r.rank);
@@ -54,7 +68,7 @@ function playerRow(r) {
     <div class="meta">${Up.playerLink(r)}</div>
     <div class="v-stats">${chip('Lv', lv ? `<span class="lv-pill lv-${r.lv}">${escapeHtml(lv)}</span>` : dash)}${
       chip(i18n('upcoming.chip.char'), r.char === null ? dash : `<span class="val">${escapeHtml(Up.charLabel(r.char))}</span>`)}${
-      chip(i18n('upcoming.chip.pref'), r.pref === null ? dash : `<span class="val">${escapeHtml(Up.prefLabel(r.pref))}</span>`)}</div>
+      chip(i18n('upcoming.chip.pref'), r.pref === null ? dash : `<span class="val">${escapeHtml(Up.prefLabel(r.pref))}</span>`)}${seedChips(r.uid)}</div>
   </div></div>`;
 }
 
