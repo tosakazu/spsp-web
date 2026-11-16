@@ -39,7 +39,7 @@ window.SPSP_I18N.ja = {
   'upcoming.load_failed': '読み込めませんでした。少しおいてからもう一度開いてください。',
   'upcoming.not_found': 'この大会は今後の大会の一覧にありません (終了したか、取得の対象外です)。',
   'upcoming.all_prefs': '地域: すべて',
-  'upcoming.char_note': 'キャラを押すと、下の参加予定者をそのキャラの使い手に絞ります。',
+  'upcoming.char_pick': '🎮 キャラ選択',
   'upcoming.char_search': 'キャラ名で入力して絞り込み',
   'upcoming.include_sub': 'サブ使用も含める',
   'upcoming.char_chip': '{char} の使い手 ✕',

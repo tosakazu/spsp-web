@@ -38,7 +38,7 @@ window.SPSP_I18N.en = {
   'upcoming.load_failed': 'Could not load. Please try again in a moment.',
   'upcoming.not_found': 'This tournament is not in the upcoming list (it has ended or is not tracked).',
   'upcoming.all_prefs': 'All regions',
-  'upcoming.char_note': 'Tap a character to filter the entrant list below.',
+  'upcoming.char_pick': '🎮 Pick a character',
   'upcoming.char_search': 'Type a character name to filter',
   'upcoming.include_sub': 'Include secondaries',
   'upcoming.char_chip': '{char} players ✕',

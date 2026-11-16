@@ -2,8 +2,8 @@
 // src/pages/upcoming_entrants.js — site/upcoming/entrants.html のスクリプト。今後の大会 1 つの参加予定者 (?e=<event id>)。
 // 上 (hero・実力分布・地域・使い手) は大会ページ (t/) と同じ形 (HTML・CSS とも t/index.html のもの)、下の参加予定者はランキングのページと同じ表。
 //   実力分布      Lv の表記と同じ区切りの帯ごとの人数
-//   地域          人数の多い順に 5 件ずつ (ページ送りは js/pager.js)。行を押すとその組の人が開く
-//   使い手        キャラ投票 (vote.html) と同じキャラ選択。押すと下の表をそのキャラの使い手に絞る。「サブ使用も含める」で
+//   使い手・地域  人数の多い順に 5 件ずつ (メインキャラ。ページ送りは js/pager.js)。行を押すとその組の人が開く
+//   キャラ選択    表の上の「キャラ選択」で開く、キャラ投票 (vote.html) と同じ選択。選ぶと表をそのキャラの使い手に絞る。「サブ使用も含める」で
 //                 サブで使う人 (data/character_index.json の sub_by_char) も数える・絞り込みに入れる
 //   参加予定者    ランキングの表 (js/ranking_page.js。行は js/views.js の rowsByUids)。順位は全国の順位のまま (大会の中で付け直さない)。
 //                 ランキングに居ない人は名前だけの行で後ろに並ぶ
@@ -122,7 +122,6 @@ function renderChars() {
     for (const c of ids) n.set(c, (n.get(c) || 0) + 1);
   }
   const list = [...n.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
-  $('up-char-n').textContent = String(list.length);
   const btn = (/** @type {string} */ id, /** @type {string} */ em, /** @type {string} */ name, /** @type {number} */ cnt) =>
     `<button type="button" class="vt-char${ST.char === id ? ' sel' : ''}" data-id="${id}" data-name="${escapeHtml(name)}">
       <span class="em">${escapeHtml(em)}</span><span class="nm">${escapeHtml(name)}</span><span class="ct">${cnt}</span></button>`;
@@ -152,7 +151,7 @@ function applyFilter() {
 async function setupTable() {
   const RP = SPSPRankingPage;
   const tbody = $('tbody');
-  if (!ST.rows.length) { tbody.innerHTML = `<tr><td colspan="11" class="empty-msg">${escapeHtml(i18n('upcoming.no_entrants'))}</td></tr>`; $('status').textContent = ''; return; }
+  if (!ST.rows.length) { tbody.innerHTML = `<tr><td colspan="11" class="empty-msg">${escapeHtml(i18n('upcoming.no_entrants'))}</td></tr>`; return; }
   const manifest = await SPSPViews.manifest().catch(() => null);
   /** @type {any[]} */
   let recs = [];
@@ -168,7 +167,6 @@ async function setupTable() {
     playerHrefPrefix: S.langRoot,
     columns: ['rank', 'display', BT_SCORE_COL, TJPR_SCORE_COL, 'tour_count', 'rank_tjpr', 'rank_bt_gated'],
     rankCaretExpand: false,
-    statusEl: $('status'), statusTotal: () => data.length,
   });
   RP.applyState(ST.table, { rows: data, method: 'ensemble', filterText: /** @type {HTMLInputElement} */ ($('search')).value, sort: { key: 'rank', dir: 'asc' } });
   RP.bindSearch((/** @type {string} */ text) => ST.table.setFilterText(text, RP.searchById()));
@@ -195,11 +193,15 @@ function render(/** @type {any} */ ev) {
   const s = Stats.summary(ST.rows);
   $('up-summary').textContent = s.ranked ? i18n('upcoming.summary', { top100: s.top100, top1000: s.top1000, median: s.median === null ? '—' : s.median.toLocaleString() }) : '';
   $('up-dist').innerHTML = distHtml();
+  setupGroups('char');
   setupGroups('pref');
   for (const r of ST.rows) ST.byUid.set(r.uid, r);
   $('up-rank').style.display = '';
   $('up-rank-n').textContent = String(ST.rows.length);
-  // 使い手: キャラ投票と同じ選択。もう一度押すと外れる
+  // キャラ選択: 表の上の「キャラ選択」で開く (キャラ投票と同じ選択)。選ぶと閉じる。もう一度押すと外れる
+  const panel = $('up-char-panel'), pick = $('up-char-btn');
+  const openPanel = (/** @type {boolean} */ on) => { panel.hidden = !on; pick.setAttribute('aria-expanded', String(on)); };
+  pick.addEventListener('click', () => openPanel(!!panel.hidden));
   renderChars();
   $('up-char-grid').addEventListener('click', e => {
     const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('.vt-char'));
@@ -207,6 +209,7 @@ function render(/** @type {any} */ ev) {
     ST.char = ST.char === String(b.dataset.id) ? '' : String(b.dataset.id);
     for (const c of $('up-char-grid').children) c.classList.toggle('sel', /** @type {HTMLElement} */ (c).dataset.id === ST.char);
     applyFilter();
+    openPanel(false);
   });
   $('up-char-search').addEventListener('input', applyCharSearch);
   $('up-char-chip').addEventListener('click', () => { ST.char = ''; renderChars(); applyFilter(); });
