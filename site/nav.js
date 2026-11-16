@@ -101,6 +101,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     if (/\/pref\/ranking(\.html)?$/.test(p)) return 'pref-ranking';
     if (/\/pref\//.test(p))          return 'pref-list';
     if (/\/events\//.test(p))        return 'events';
+    if (/\/upcoming\//.test(p))      return 'upcoming';
     if (/\/sim\//.test(p))           return 'sim';
     if (/\/blog\//.test(p))          return 'blog';
     if (/\/news\//.test(p))          return 'news';
@@ -110,7 +111,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
     return 'ranking';
   }
   const cur = currentPage();
-  const isRanking = cur === 'ranking' || cur === 'local-series' || cur === 'local-ranking' || cur === 'char-list' || cur === 'char-ranking' || cur === 'pref-list' || cur === 'pref-ranking' || cur === 'events' || cur === 'sim';
+  const isRanking = cur === 'ranking' || cur === 'local-series' || cur === 'local-ranking' || cur === 'char-list' || cur === 'char-ranking' || cur === 'pref-list' || cur === 'pref-ranking' || cur === 'events' || cur === 'upcoming' || cur === 'sim';
   const isSeeding = cur === 'seed' || cur === 'seed-upload' || cur === 'priority' || cur === 'class' || cur === 'dupes' || cur === 'report';
   const isMethod  = ['overview', 'details', 'eval', 'math', 'blog'].includes(cur);
 
@@ -155,6 +156,7 @@ import SpspMyNotice from './js/my_notice.js';   // 本人へのお知らせ (順
           <a href="${prefix}c/"${cur === 'char-list' || cur === 'char-ranking' ? ' class="current"' : ''} role="menuitem">${t('nav.ranking.char')}</a>
           <a href="${prefix}pref/"${cur === 'pref-list' || cur === 'pref-ranking' ? ' class="current"' : ''} role="menuitem">${t('nav.ranking.pref')}</a>
           <a href="${prefix}events/"${cur === 'events' ? ' class="current"' : ''} role="menuitem">${t('nav.ranking.events')}</a>
+          ${SITE && SITE.features.upcoming ? `<a href="${prefix}upcoming/"${cur === 'upcoming' ? ' class="current"' : ''} role="menuitem">${t('nav.ranking.upcoming')}</a>` : ''}
           <a href="${prefix}sim/"${cur === 'sim' ? ' class="current"' : ''} role="menuitem">${t('nav.ranking.sim')}</a>
         </div>
       </div>
