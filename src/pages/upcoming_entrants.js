@@ -128,7 +128,7 @@ function distHtml() {
   const tag = `<span class="up-cut-tag">${escapeHtml(i18n('upcoming.cut_line', { n: /** @type {number} */ (ST.advance) }))}</span>`;
   return `<div class="up-bars">${items.map((x, i) => { const c = cut && i === cut.index ? ' cut' : ''; return `<span class="lb${c}">${x.label}${c ? tag : ''}</span>
       <span class="bar${x.none ? ' none' : ''}${c}">${bar(x, i)}</span>
-      <span class="n${c}">${x.n}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`; }).join('')}</div>`;
+      <span class="n${c}">${escapeHtml(i18n('upcoming.n_people', { n: x.n }))}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`; }).join('')}</div>`;
 }
 
 /** その人がキャラ f の使い手か (サブ込みのときはサブも) @param {UpRow} r @param {string} f */

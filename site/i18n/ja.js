@@ -46,6 +46,7 @@ window.SPSP_I18N.ja = {
   'upcoming.band': '{from}〜{to} 位',
   'upcoming.band_from': '{from} 位〜',
   'upcoming.cut_line': '予選通過ライン ({n} 人)',
+  'upcoming.n_people': '{n}人',
   'upcoming.chip.char': '使い手',
   'upcoming.chip.pref': '地域',
   'upcoming.sec.dist': '📊 実力分布',
