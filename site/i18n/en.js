@@ -805,6 +805,7 @@ window.SPSP_I18N.en = {
   'player.ach.collapse': 'Collapse',
   'player.no_uid': 'The URL has no uid parameter.',
   'player.disc_not_found': 'No player with discriminator {d}.',
+  'player.guest_opponent': 'Entrant without an account',
   'player.not_in_db': 'This player (uid={uid}) has no history in the SPSP database, so there are no details to show.',
   'player.national_then': 'national rank then',
   'player.lv_none': 'n/a',

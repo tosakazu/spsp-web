@@ -273,8 +273,10 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
     const winsBy = {}, lossBy = {};
     for (const m of matches) {
       const bucket = m.won ? winsBy : lossBy;
-      if (!bucket[m.opp_uid]) bucket[m.opp_uid] = [];
-      bucket[m.opp_uid].push(m);
+      // アカウントの無い相手 (opp_guest、opp_uid は null) は同じ人か分からないので試合ごとに 1 枚
+      const key = m.opp_uid != null ? m.opp_uid : `guest:${m.event_id}:${Object.keys(bucket).length}`;
+      if (!bucket[key]) bucket[key] = [];
+      bucket[key].push(m);
     }
     const paths = resolvePaths(cfg);
     const { ensembleRankOf, nameOf } = buildLookup(cfg);
@@ -300,7 +302,9 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
       }).join('');
       return `<div class="h2h-opp h2h-${kind}">
         <div class="h2h-head">
-          <a class="h2h-opp-name" href="${paths.pPath}?uid=${uid}">${escapeHtml(oName)}</a>
+          ${String(uid).startsWith('guest:')
+            ? `<span class="h2h-opp-name">${escapeHtml((msList[0] && msList[0].opp_display) || '')}</span>`
+            : `<a class="h2h-opp-name" href="${paths.pPath}?uid=${uid}">${escapeHtml(oName)}</a>`}
           <span class="h2h-rank">${rankBadge}</span>
         </div>
         ${rows}

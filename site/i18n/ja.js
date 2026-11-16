@@ -808,6 +808,7 @@ window.SPSP_I18N.ja = {
   'player.ach.collapse': '折りたたむ',
   'player.no_uid': 'URL に uid パラメータがありません。',
   'player.disc_not_found': 'discriminator {d} の選手が見つかりません。',
+  'player.guest_opponent': 'アカウント未登録の参加者',
   'player.not_in_db': 'このプレイヤー (uid={uid}) は SPSP の DB に履歴がないため、詳細を表示できません。',
   'player.national_then': '当時全国',
   'player.lv_none': '対象外',
