@@ -2,7 +2,7 @@
 // src/pages/upcoming_entrants.js — site/upcoming/entrants.html のスクリプト。今後の大会 1 つの参加予定者 (?e=<event id>)。
 // 上 (hero・実力分布・地域・使い手) は大会ページ (t/) と同じ形 (HTML・CSS とも t/index.html のもの)、下の参加予定者はランキングのページと同じ表。
 //   実力分布      Lv の表記と同じ区切りの帯ごとの人数。予選通過の人数 (bracket.advance) が分かっていて全員ではない大会は、
-//                 順位の高い順に数えたときのラインが掛かる帯に線
+//                 順位の高い順に数えたときのラインが掛かる帯に印
 //   使い手・地域  人数の多い順に 5 件ずつ (メインキャラ。ページ送りは js/pager.js)。行を押すとその組の人が開く
 //   キャラ選択    表の上の「キャラ選択」で開く、キャラ投票 (vote.html) と同じ選択。選ぶと表をそのキャラの使い手に絞る。「サブ使用も含める」で
 //                 サブで使う人 (data/character_index.json の sub_by_char) も数える・絞り込みに入れる
@@ -110,13 +110,13 @@ function distHtml() {
   // 帯は Lv の表記と同じ区切り。ラベル = Lv のバッジ (プレイヤーページと同じ lv-pill) + 順位の範囲
   const bands = Stats.rankBands(ST.rows);
   const items = bands.map(b => {
-    if (b.from === null) return { n: b.n, none: true, name: i18n('upcoming.no_rank'), label: `<span class="lv-pill lv-0">${escapeHtml(i18n('upcoming.no_rank'))}</span>` };
+    if (b.from === null) return { n: b.n, none: true, label: `<span class="lv-pill lv-0">${escapeHtml(i18n('upcoming.no_rank'))}</span>` };
     const lv = Stats.lvOfRank(b.from);
     const range = b.to === null ? i18n('upcoming.band_from', { from: b.from.toLocaleString() }) : i18n('upcoming.band', { from: b.from.toLocaleString(), to: b.to.toLocaleString() });
-    return { n: b.n, none: false, name: SPSPFormat.lvLabel(lv, b.from), label: `<span class="lv-pill lv-${lv}">${escapeHtml(SPSPFormat.lvLabel(lv, b.from))}</span><small>${escapeHtml(range)}</small>` };
+    return { n: b.n, none: false, label: `<span class="lv-pill lv-${lv}">${escapeHtml(SPSPFormat.lvLabel(lv, b.from))}</span><small>${escapeHtml(range)}</small>` };
   });
   const max = Math.max(1, ...items.map(x => x.n));
-  // 予選通過のライン (最初のフェーズから次に進む人数が分かっていて、全員ではないとき): 順位の高い順に数えて掛かる帯の下に線。
+  // 予選通過のライン (最初のフェーズから次に進む人数が分かっていて、全員ではないとき): 順位の高い順に数えて掛かる帯に印 (行に色と札)。
   // その帯の棒はラインの内側だけ濃く、外側と下の帯は薄く
   const cut = Stats.cutBand(bands, ST.advance);
   const pct = (/** @type {number} */ n) => (n / max * 100).toFixed(1);
@@ -125,11 +125,10 @@ function distHtml() {
     if (i > cut.index) return `<i class="out" style="width:${pct(x.n)}%"></i>`;
     return `<i style="width:${pct(cut.within)}%"></i><i class="out" style="width:${pct(x.n - cut.within)}%"></i>`;
   };
-  const note = cut ? `<div class="up-cut-note">${escapeHtml(i18n('upcoming.cut_note', { n: /** @type {number} */ (ST.advance), band: items[cut.index].name, k: cut.within, m: items[cut.index].n }))}</div>` : '';
-  return `${note}<div class="up-bars">${items.map((x, i) => `<span class="lb">${x.label}</span>
-      <span class="bar${x.none ? ' none' : ''}">${bar(x, i)}</span>
-      <span class="n">${x.n}<small>${(x.n / total * 100).toFixed(0)}%</small></span>${
-      cut && i === cut.index ? `<span class="up-cut"><span>${escapeHtml(i18n('upcoming.cut_line', { n: /** @type {number} */ (ST.advance) }))}</span></span>` : ''}`).join('')}</div>`;
+  const tag = `<span class="up-cut-tag">${escapeHtml(i18n('upcoming.cut_line', { n: /** @type {number} */ (ST.advance) }))}</span>`;
+  return `<div class="up-bars">${items.map((x, i) => { const c = cut && i === cut.index ? ' cut' : ''; return `<span class="lb${c}">${x.label}${c ? tag : ''}</span>
+      <span class="bar${x.none ? ' none' : ''}${c}">${bar(x, i)}</span>
+      <span class="n${c}">${x.n}<small>${(x.n / total * 100).toFixed(0)}%</small></span>`; }).join('')}</div>`;
 }
 
 /** その人がキャラ f の使い手か (サブ込みのときはサブも) @param {UpRow} r @param {string} f */
