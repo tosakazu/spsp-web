@@ -11,7 +11,6 @@ import SpspLogin from '../../site/js/login.js';
 import SpspStartggIdentity from '../../site/js/startgg_identity.js';
 import SpspReportAuth from '../../site/js/report_auth.js';
 import SpspStartggManager from '../../site/js/startgg_manager.js';
-import SpspAuth from '../../site/js/auth.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
@@ -2821,7 +2820,7 @@ async function renderSetup() {
     if (!grant) return false;
     const x = await api({ action: 'report_login_manager', grant });
     if (!x || !x.ok || !x.token || !x.user) return false;
-    SpspAuth.save({ token: x.token, user: x.user, exp: x.exp });
+    SpspLogin.adopt({ token: x.token, user: x.user, exp: x.exp });
     return true;
   };
   if (DEMO === 'setup_login') { loginView(''); return; }

@@ -3,6 +3,7 @@
 //   SPSP 側にアカウントは持たない: 名前などは start.gg のまま。セッションは Worker が署名したトークン (js/auth.js が localStorage に置く)。
 //   session()        今のセッション ({ token, user: { id, slug, gamerTag }, exp }) か null
 //   startLogin()     start.gg へ (戻り先 = 今のページ。戻ると ?login=1 が付く)
+//   adopt(s)         サーバが返したセッション ({ token, user, exp }) をこのブラウザのログインにする (結果報告: シード作成のログインの使い回し)
 //   logout()         セッションを消す (サーバは状態を持たないので、ブラウザから消すだけ)
 //   verify()         サーバでトークンを確かめ、無効 (期限切れ・鍵の入れ替え) なら消す。1 ページ 1 回
 //   isSelf(uid)      ログインしている人がこの選手か (選手 ID = start.gg のユーザー ID)
@@ -67,6 +68,9 @@ export function onChange(fn) { listeners.add(fn); return () => listeners.delete(
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', e => { if (e.key === SpspAuth.KEY) notify(); });   // 別のタブでのログイン・ログアウト
 }
+
+/** @param {{ token: string, user: any, exp?: number | null }} s */
+export function adopt(s) { SpspAuth.save(s); notify(); }
 
 // ログアウトでは start.gg のトークン (js/startgg_identity.js の KEY。import すると循環するので名前で消す) も消す
 export function logout() {
@@ -191,7 +195,7 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   }
 }
 
-const API = { session, startLogin, logout, verify, isSelf, onChange, apiAvailable, openEdit, api, claimHandoff, smatchReady, HANDOFF_KEY };
+const API = { session, startLogin, adopt, logout, verify, isSelf, onChange, apiAvailable, openEdit, api, claimHandoff, smatchReady, HANDOFF_KEY };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むときは import がグローバル参照になるため)
 if (typeof window !== 'undefined') {
   /** @type {any} */ (window).SpspLogin = API;
