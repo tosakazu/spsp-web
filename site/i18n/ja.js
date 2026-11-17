@@ -2377,7 +2377,7 @@ window.SPSP_I18N.ja = {
   'report.guide.start.title': '受付を始める',
   'report.guide.start.body': '押すと選手用の報告ページができて、運営の画面に移ります。そこに出る URL を選手に伝えてください。',
   'report.guide.share.title': '選手に URL を伝える',
-  'report.guide.share.body': 'この URL を選手に伝えます。選手は start.gg でログインして、自分の試合の結果を送ります。',
+  'report.guide.share.body': 'この URL を選手に伝えます。選手は start.gg でログインして、自分の試合の結果を送ります。SPSP にログインしている選手は、大会中は SPSP のトップページからも開けます。',
   'report.guide.admin_settings.title': '設定',
   'report.guide.admin_settings.body': '受付の開始時刻や報告の取り込み方、何先は、受付を始めたあともここで変えられます。',
   'report.guide.sets.title': '報告のあった試合',

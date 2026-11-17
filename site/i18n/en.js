@@ -2324,7 +2324,7 @@ window.SPSP_I18N.en = {
   'report.guide.start.title': 'Start accepting reports',
   'report.guide.start.body': 'This creates the report page for players and takes you to the organizer screen. Share the URL shown there with players.',
   'report.guide.share.title': 'Share the URL with players',
-  'report.guide.share.body': 'Share this URL with players. They log in with start.gg and send the results of their own matches.',
+  'report.guide.share.body': 'Share this URL with players. They log in with start.gg and send the results of their own matches. Players logged in to SPSP can also open it from the SPSP top page during the tournament.',
   'report.guide.admin_settings.title': 'Settings',
   'report.guide.admin_settings.body': 'You can still change the opening time, how reports are applied, and games to win here after reporting has started.',
   'report.guide.sets.title': 'Reported matches',
