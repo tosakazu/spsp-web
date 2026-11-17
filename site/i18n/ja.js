@@ -2364,6 +2364,7 @@ window.SPSP_I18N.ja = {
   'report.guide.next': '次へ',
   'report.guide.done': 'はじめる',
   'report.guide.skip': '閉じる',
+  'report.guide.live': 'この欄はガイドの途中でも操作できます',
   'report.guide.intro.title': '結果報告とは',
   'report.guide.intro.body': '選手が自分のスマホから試合の結果を送ると、start.gg に反映されます。運営は、結果が食い違った試合などだけ確かめれば済みます。',
   'report.guide.login.title': '運営としてログイン',

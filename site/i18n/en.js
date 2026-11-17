@@ -2311,6 +2311,7 @@ window.SPSP_I18N.en = {
   'report.guide.next': 'Next',
   'report.guide.done': 'Start',
   'report.guide.skip': 'Close',
+  'report.guide.live': 'You can use this section while the guide is open',
   'report.guide.intro.title': 'What is Result Reporting?',
   'report.guide.intro.body': 'Players send match results from their own phones and they are written to start.gg. Organizers only need to check matches where the two reports disagree.',
   'report.guide.login.title': 'Log in as an organizer',

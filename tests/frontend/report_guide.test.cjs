@@ -43,6 +43,11 @@ test('ガイド: ログイン前は 結果報告とは → ログイン → も�
   await new Promise((r) => setTimeout(r, 700));
   assert.strictEqual(d.querySelector('.spg-step').textContent, '1 / 4');
   assert.strictEqual(d.querySelector('.spg-title').textContent, 'report.guide.pick.title');
+  // 設定の段は欄を操作できる (案内の一文)。ほかの段は操作できない
+  assert.strictEqual(d.querySelector('.spg-live').hidden, true);
+  d.querySelector('.spg-next').click();
+  assert.strictEqual(d.querySelector('.spg-title').textContent, 'report.guide.settings.title');
+  assert.strictEqual(d.querySelector('.spg-live').hidden, false);
   d.querySelector('.spg-skip').click();
   assert.strictEqual(d.querySelector('.spg'), null);
   d.getElementById('rp-guide').click();   // ボタンからは全部
@@ -70,10 +75,10 @@ test('シードツールの案内は「結果報告とは」と同じキーに�
 
 test('ガイドの文言: ja / en に全部ある', () => {
   const src = fs.readFileSync(path.join(ROOT, 'src/pages/report_guide.js'), 'utf8');
-  const keys = [...src.matchAll(/step\('([a-z_]+)'/g)].flatMap((m) => ['report.guide.' + m[1] + '.title', 'report.guide.' + m[1] + '.body']);
+  const keys = [...src.matchAll(/[sS]tep\('([a-z_]+)'/g)].flatMap((m) => ['report.guide.' + m[1] + '.title', 'report.guide.' + m[1] + '.body']);
   assert.ok(keys.length >= 16);
   for (const lang of ['ja', 'en']) {
     const dict = fs.readFileSync(path.join(ROOT, 'site/i18n', lang + '.js'), 'utf8');
-    for (const k of new Set([...keys, 'report.guide.prev', 'report.guide.next', 'report.guide.done', 'report.guide.skip', 'report.guide.open'])) assert.ok(dict.includes("'" + k + "':"), lang + ' に ' + k + ' が無い');
+    for (const k of new Set([...keys, 'report.guide.prev', 'report.guide.next', 'report.guide.done', 'report.guide.skip', 'report.guide.live', 'report.guide.open'])) assert.ok(dict.includes("'" + k + "':"), lang + ' に ' + k + ' が無い');
   }
 });

@@ -1,20 +1,20 @@
 // @ts-check
 // src/pages/spot_guide.js — 使い方ガイドの共通の動き (カード編集の裏面のガイド card_back_guide.js と同じ形。2026-11-17)
 //   1 段ずつ、本物の欄を明るく切り抜いて (ほかは暗く) 説明の吹き出しを出す。欄の無い段 (targets なし) は画面の中央に出す
-//   ガイドの間は画面の操作は止める。閉じる・最後まで進むと見たことにする (端末ごと、localStorage の seenKey)
+//   ガイドの間は画面の操作は止める。live の段だけは、切り抜いた欄をそのまま操作できる (設定の欄など。吹き出しに labels.live を添える)。閉じる・最後まで進むと見たことにする (端末ごと、localStorage の seenKey)
 //   optional の段は、その欄が画面に無ければ飛ばす (ログイン前・後で欄が違う画面用)
 //   once の段 (ほかの画面・ガイドと同じ内容の段) は、一度出したら自動で出すときは飛ばす (localStorage の once のキー)。ボタンから出し直すときは全部
 //   見た目は css/spot_guide.css (.spg)
 const GAP = 12;
 
-/** @typedef {{ title: string, body: string, targets?: () => (Element | null)[], optional?: boolean, once?: string, block?: ScrollLogicalPosition }} SpotStep */
+/** @typedef {{ title: string, body: string, targets?: () => (Element | null)[], optional?: boolean, once?: string, live?: boolean, block?: ScrollLogicalPosition }} SpotStep */
 
 /** once の段を見たか・見たことにする (ガイドの外で同じ内容を見せたときにも使う) @param {string} key */
 export const onceSeen = key => { try { return localStorage.getItem(key) === '1'; } catch (e) { return false; } };
 /** @param {string} key */
 export const markOnce = key => { try { localStorage.setItem(key, '1'); } catch (e) { /* 次も出る */ } };
 
-/** @param {{ seenKey: string, steps: () => SpotStep[], labels: { prev: string, next: string, done: string, skip: string }, bottom?: number }} o */
+/** @param {{ seenKey: string, steps: () => SpotStep[], labels: { prev: string, next: string, done: string, skip: string, live?: string }, bottom?: number }} o */
 export function createGuide(o) {
   const BOTTOM = o.bottom || 0;
   const seen = () => { try { return localStorage.getItem(o.seenKey) === '1'; } catch (e) { return true; } };
@@ -32,11 +32,13 @@ export function createGuide(o) {
     root.className = 'spg';
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
-    root.innerHTML = '<div class="spg-hole"></div><div class="spg-tip" role="document"><div class="spg-step"></div><div class="spg-title"></div>' +
-      '<div class="spg-body"></div><div class="spg-btns"><button type="button" class="spg-skip"></button><span class="spg-sp"></span>' +
+    root.innerHTML = '<div class="spg-shield"></div><div class="spg-hole"></div><div class="spg-tip" role="document"><div class="spg-step"></div><div class="spg-title"></div>' +
+      '<div class="spg-body"></div><div class="spg-live" hidden></div><div class="spg-btns"><button type="button" class="spg-skip"></button><span class="spg-sp"></span>' +
       '<button type="button" class="spg-prev"></button><button type="button" class="spg-next"></button></div></div>';
     document.body.appendChild(root);
     const hole = /** @type {HTMLElement} */ (root.querySelector('.spg-hole'));
+    const shield = /** @type {HTMLElement} */ (root.querySelector('.spg-shield'));
+    const liveNote = /** @type {HTMLElement} */ (root.querySelector('.spg-live'));
     const tip = /** @type {HTMLElement} */ (root.querySelector('.spg-tip'));
     const prev = /** @type {HTMLButtonElement} */ (root.querySelector('.spg-prev'));
     const next = /** @type {HTMLButtonElement} */ (root.querySelector('.spg-next'));
@@ -63,6 +65,10 @@ export function createGuide(o) {
       hole.classList.toggle('spg-none', !r);
       if (r) Object.assign(hole.style, { left: r.l + 'px', top: r.t + 'px', width: r.w + 'px', height: r.h + 'px' });
       else Object.assign(hole.style, { left: vw / 2 + 'px', top: vh / 2 + 'px', width: '0px', height: '0px' });
+      // live の段: 切り抜きの中だけ、下の画面に届くようにする (覆いに穴を開ける)
+      const x0 = r ? Math.max(0, r.l) : 0, y0 = r ? Math.max(0, r.t) : 0, x1 = r ? r.l + r.w : 0, y1 = r ? r.t + r.h : 0;
+      shield.style.clipPath = r && STEPS[i].live
+        ? `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${x0}px ${y0}px, ${x1}px ${y0}px, ${x1}px ${y1}px, ${x0}px ${y1}px, ${x0}px ${y0}px)` : '';
       // 吹き出し: 切り抜きの下に入れば下、入らなければ上、どちらも無理なら画面の下寄せ。欄の無い段は中央
       const tw = Math.min(340, vw - 2 * 16);
       tip.style.width = tw + 'px';
@@ -82,6 +88,8 @@ export function createGuide(o) {
       /** @type {HTMLElement} */ (root.querySelector('.spg-step')).textContent = `${i + 1} / ${STEPS.length}`;
       /** @type {HTMLElement} */ (root.querySelector('.spg-title')).textContent = s.title;
       /** @type {HTMLElement} */ (root.querySelector('.spg-body')).textContent = s.body;
+      liveNote.textContent = o.labels.live || '';
+      liveNote.hidden = !(s.live && o.labels.live);
       prev.style.visibility = i ? '' : 'hidden';
       next.textContent = i === STEPS.length - 1 ? o.labels.done : o.labels.next;
       const first = els()[0];
@@ -96,10 +104,15 @@ export function createGuide(o) {
       window.removeEventListener('resize', layout);
       window.removeEventListener('scroll', layout, true);
       document.removeEventListener('keydown', onKey, true);
+      for (const t of ['click', 'change', 'input']) document.removeEventListener(t, relayout, true);
       closeCur = null;
     };
+    /** 欄を操作して形が変わったら、切り抜きを置き直す */
+    const relayout = () => { setTimeout(layout, 60); setTimeout(layout, 400); };
     /** @param {KeyboardEvent} e */
     const onKey = e => {
+      // live の段で欄の中を操作しているキーはそのまま通す (Esc だけはガイドを閉じる)
+      if (e.key !== 'Escape' && STEPS[i].live && els().some(x => /** @type {Element} */ (x).contains(/** @type {Node} */ (e.target)))) return;
       const onBtn = !!(/** @type {HTMLElement} */ (e.target)).closest && !!(/** @type {HTMLElement} */ (e.target)).closest('.spg button');
       if (e.key === 'Escape') close();
       else if (e.key === 'Enter' && onBtn) { e.stopPropagation(); return; }
@@ -120,6 +133,7 @@ export function createGuide(o) {
     window.addEventListener('resize', layout);
     window.addEventListener('scroll', layout, true);
     document.addEventListener('keydown', onKey, true);
+    for (const t of ['click', 'change', 'input']) document.addEventListener(t, relayout, true);
     closeCur = close;
     show();
   }

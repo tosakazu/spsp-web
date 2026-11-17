@@ -11,11 +11,13 @@ import { createGuide } from './spot_guide.js';
 const i18n = (/** @type {string} */ k) => SPSPI18n.t(k);
 const $ = (/** @type {string} */ id) => document.getElementById(id);
 const q = (/** @type {string} */ sel) => document.querySelector(sel);
-const labels = () => ({ prev: i18n('report.guide.prev'), next: i18n('report.guide.next'), done: i18n('report.guide.done'), skip: i18n('report.guide.skip') });
+const labels = () => ({ prev: i18n('report.guide.prev'), next: i18n('report.guide.next'), done: i18n('report.guide.done'), skip: i18n('report.guide.skip'), live: i18n('report.guide.live') });
 export const INTRO_KEY = 'spsp_report_intro_seen_v1';   // site/seeding/app/40_startgg.js の showReportPromo も同じキーに書く
 const AGAIN_KEY = 'spsp_report_guide_again_v1';
 /** @param {string} k @param {(() => (Element | null)[]) | null} targets @param {boolean} [optional] @param {string} [once] */
 const step = (k, targets, optional, once) => { const tk = k + '.title', bk = k + '.body'; return { title: i18n('report.guide.' + tk), body: i18n('report.guide.' + bk), ...(targets ? { targets } : {}), optional: !!optional, ...(once ? { once } : {}) }; };
+/** ガイド中もそのまま操作できる段 (設定の欄) @param {string} k @param {() => (Element | null)[]} targets */
+const liveStep = (k, targets) => ({ ...step(k, targets, true), live: true });
 const intro = () => step('intro', null, false, INTRO_KEY);
 const again = () => step('again', () => [$('rp-guide')], true, AGAIN_KEY);
 
@@ -29,8 +31,8 @@ export const setupGuide = createGuide({
   steps: () => [
     intro(),
     step('pick', () => [q('#rp-setup .rp-tours'), q('#rp-setup .rp-ev-url')], true),
-    step('settings', () => [q('#rp-setup .rp-settings')], true),
-    step('ft', () => [$('rp-ft-set')], true),
+    liveStep('settings', () => [q('#rp-setup .rp-settings')]),
+    liveStep('ft', () => [$('rp-ft-set')]),
     step('start', () => [$('rp-start')], true),
     again(),
   ],
@@ -40,7 +42,7 @@ export const adminGuide = createGuide({
   seenKey: 'spsp_report_guide_admin_v1', labels: labels(),
   steps: () => [
     step('share', () => [q('#rp-admin .rp-share')], true),
-    step('admin_settings', () => [q('#rp-admin .rp-settings')], true),
+    liveStep('admin_settings', () => [q('#rp-admin .rp-settings')]),
     step('sets', () => [$('rp-adm-sets')]),
     step('stop', () => [$('rp-stop')], true),
     again(),
