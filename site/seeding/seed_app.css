@@ -488,3 +488,18 @@
   .ev-pane { padding: 10px 12px 12px; }
   .ev-pane[hidden] { display: none; }
   .ev-note { font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
+
+/* 結果報告の案内 (シードを適用できたとき、プールが 1 つの大会。画面の中央に重ねる。40_startgg.js showReportPromo) */
+.report-promo { position: fixed; inset: 0; z-index: 1000; background: rgba(17, 24, 39, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.report-promo .rpm-box { position: relative; background: #fff; border-radius: 14px; padding: 22px 22px 18px; width: 100%; max-width: 440px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); }
+.report-promo .rpm-done { font-size: 12px; color: #15803d; font-weight: 600; margin-bottom: 10px; }
+.report-promo .rpm-t { font-size: 17px; font-weight: 700; color: #111827; line-height: 1.45; padding-right: 24px; }
+.report-promo .rpm-b { font-size: 13px; color: #374151; margin-top: 8px; line-height: 1.7; }
+.report-promo .rpm-a { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-top: 18px; }
+.report-promo .rpm-go { background: #2563eb; color: #fff; text-decoration: none; padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+.report-promo .rpm-go:hover { background: #1d4ed8; }
+.report-promo .rpm-demo { color: #2563eb; font-size: 13px; }
+.report-promo .rpm-close { margin-left: auto; border: 1px solid #e5e7eb; background: #fff; color: #374151; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.report-promo .rpm-close:hover { background: #f9fafb; }
+.report-promo .rpm-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: none; background: none; color: #6b7280; font-size: 15px; cursor: pointer; border-radius: 6px; font-family: inherit; }
+.report-promo .rpm-x:hover { background: #f3f4f6; }

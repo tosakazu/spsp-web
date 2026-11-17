@@ -506,6 +506,7 @@ export async function uploadToStartgg() {
     if (status) status.textContent = `${i18n('seed.startgg.t8')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, S.EVENT_CONTEXT.phaseId, r.count, methodLabel, false);
     appliedPreviewButton(status, token, S.EVENT_CONTEXT.phaseId);
+    if (S.EVENT_CONTEXT.poolCount === 1) showReportPromo();
   } else {
     showError(r.error || 'unknown error');
   }
@@ -524,6 +525,36 @@ function appliedPreviewButton(status, token, phaseId) {
   b.textContent = i18n('seed.startgg.applied_preview');
   b.addEventListener('click', () => document.dispatchEvent(new CustomEvent('spsp:preview-applied', { detail: { token, phaseId } })));
   status.append(' ', b);
+}
+
+/**
+ * 結果報告 (report/) の案内。シードを適用できたとき、プールが 1 つの大会にだけ、画面の中央に重ねて出す。
+ * 「受付を始める」= 結果報告管理、「選手の画面の見本」= 見本 (?demo=match)。「閉じる」・✕・外側・Esc で閉じる (覚えない)。
+ * 流れを確かめるときは ?sample=report_promo (99_bootstrap.js: 「シード適用」を押すと送らずに完了の表示とこの案内だけ出す)
+ */
+export function showReportPromo() {
+  const old = document.getElementById('report-promo');
+  if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'report-promo';
+  wrap.className = 'report-promo';
+  const href = new URL(SPSP.langRoot + 'report/', location.href).toString();
+  wrap.innerHTML = `<div class="rpm-box" role="dialog" aria-modal="true" aria-labelledby="rpm-t">
+    <button type="button" class="rpm-x" data-close aria-label="${escapeHtml(i18n('common.close'))}">✕</button>
+    <div class="rpm-done">${escapeHtml(i18n('seed.report_promo.done'))}</div>
+    <div class="rpm-t" id="rpm-t">${escapeHtml(i18n('seed.report_promo.title'))}</div>
+    <div class="rpm-b">${escapeHtml(i18n('seed.report_promo.body'))}</div>
+    <div class="rpm-a"><a class="rpm-go" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.start'))}</a>
+      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match&simple=1')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a>
+      <button type="button" class="rpm-close" data-close>${escapeHtml(i18n('common.close'))}</button></div>
+  </div>`;
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') close(); };
+  wrap.addEventListener('click', e => { const t = /** @type {HTMLElement} */ (e.target); if (t === wrap || t.closest('[data-close]')) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(wrap);
+  // 結果報告のガイドの「結果報告とは」は同じ内容なので、ここで見せたら飛ばす (src/pages/report_guide.js の INTRO_KEY)
+  try { localStorage.setItem('spsp_report_intro_seen_v1', '1'); } catch (e) { /* ガイドでもう一度出るだけ */ }
 }
 
 const UPSERT_PHASE_MUTATION = `
@@ -615,6 +646,7 @@ async function createPhaseThenUpload(token) {
     status.textContent = `${i18n('seed.startgg.t20')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, phase.id, r.count, uploadOrderLabel(), true);
     appliedPreviewButton(status, token, phase.id);
+    if (groupCount === 1) showReportPromo();
     const metaInfo = document.getElementById('meta-info');
     if (metaInfo) metaInfo.textContent = `${S.EVENT_CONTEXT.eventName} (phase ${phase.id})`;
     // phase はもう存在するので自動作成の設定 UI は閉じる

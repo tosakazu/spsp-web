@@ -1,0 +1,18 @@
+/* 使い方ガイド (src/pages/spot_guide.js): 本物の欄を切り抜いて明るく (ほかは暗く)、横に説明。カード編集の裏面のガイド (badge_edit.css の .bzg) と同じ見た目 */
+.spg { position: fixed; inset: 0; z-index: 1200; touch-action: pan-y; pointer-events: none; }
+/* 覆い: 画面の操作を止める。live の段は切り抜きの所だけ穴を開ける (clip-path は spot_guide.js) */
+.spg-shield { position: fixed; inset: 0; pointer-events: auto; }
+.spg-live { margin-top: 4px; font-size: 12px; color: #2563eb; }
+.spg-hole { position: fixed; border-radius: 10px; box-shadow: 0 0 0 200vmax rgba(17, 24, 39, .62); outline: 2px solid #fff; pointer-events: none;
+  transition: left .2s, top .2s, width .2s, height .2s; }
+.spg-hole.spg-none { outline: none; }
+.spg-tip { position: fixed; pointer-events: auto; box-sizing: border-box; background: #fff; color: #111827; border-radius: 12px; padding: 12px 14px 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+  font-size: 13px; line-height: 1.6; transition: top .2s, left .2s; }
+.spg-step { font-size: 11px; color: #6b7280; font-variant-numeric: tabular-nums; }
+.spg-title { font-size: 15px; font-weight: 700; margin: 2px 0 4px; }
+.spg-btns { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.spg-sp { flex: 1; }
+.spg-btns button { font: inherit; font-size: 13px; font-weight: 600; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer; }
+.spg-btns .spg-skip { border-color: transparent; color: #6b7280; padding: 0 6px; }
+.spg-btns .spg-next { background: #111827; border-color: #111827; color: #fff; }
+@media (prefers-reduced-motion: reduce) { .spg-hole, .spg-tip { transition: none; } }

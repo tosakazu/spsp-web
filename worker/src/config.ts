@@ -61,8 +61,9 @@ export const GQL_URL = 'https://api.start.gg/gql/alpha';
 
 /** 認可リクエストと token 交換で同じ値を送る必要がある。 */
 export const SCOPE = 'user.identity';
-/** 大会運営用のログイン (flow 'manager'、シード作成・下位クラス作成で API キーの代わり)。自分が管理する大会のシード・トーナメント設定だけ。 */
-export const MANAGER_SCOPE = 'user.identity tournament.manager';
+/** 大会運営用のログイン (flow 'manager'、シード作成・下位クラス作成で API キーの代わり)。自分が管理する大会のシード・トーナメント設定と、
+ *  試合の報告 (2026-11-17: 結果報告の受付を始める画面でこのログインを使い回せるように足した。report.ts の report_login_manager)。 */
+export const MANAGER_SCOPE = 'user.identity tournament.manager tournament.reporter';
 /** 試合結果の報告の受付 (flow 'reporter'、report.ts)。運営が大会ごとに 1 回許可する。自分が管理する大会の試合の報告だけ。 */
 export const REPORTER_SCOPE = 'user.identity tournament.reporter';
 

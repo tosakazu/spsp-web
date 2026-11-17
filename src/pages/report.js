@@ -10,6 +10,7 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspStartggIdentity from '../../site/js/startgg_identity.js';
 import SpspReportAuth from '../../site/js/report_auth.js';
+import SpspStartggManager from '../../site/js/startgg_manager.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
@@ -25,6 +26,7 @@ import SPSPLinks from '../../site/js/links.js';
 import SPSPLogo from '../../site/logo.js';
 import { showVictory, WIN_ANIMS } from './report_win.js';
 import { mountBracketView } from './report_bracket_view.js';
+import { wireGuide } from './report_guide.js';
 'use strict';
 
 const i18n = SPSPI18n.t;
@@ -37,6 +39,10 @@ const CODE = (Q.get('c') || '').toLowerCase();
 const WANT_ADMIN = Q.get('admin') === '1' || Q.get('demo') === 'admin' || Q.get('demo') === 'admin_outage';
 /** 見本の画面 (?demo=list|match|conflict|waiting|done|gate|challonge|admin|setup)。見本のデータで描くだけで、API にも start.gg にも送らない */
 const DEMO = Q.get('demo') || '';
+/** 見本の画面を簡素に (?simple=1): 上の帯は 1 行だけ。シードツールの案内などから開く見本用 */
+const DEMO_SIMPLE = Q.get('simple') === '1';
+/** 使い方ガイド (report_guide.js): 本物の画面では初めてのときだけ自動で出す。見本では ?guide=1 のときだけ出す */
+const guideFor = (/** @type {'login' | 'setup' | 'admin'} */ kind) => wireGuide(kind, Q.get('guide') === '1', !!DEMO);
 /** マッチングの演出 (?anim=… で固定。無ければ LINE_ANIMS から毎回ランダム、dark = 最初の暗い演出)。案を比べるための切り替え。
  * LINE_ANIMS = 線が先に走り (その間にカードを読む)、そのあとカードが入る案 (線の形・カードの入り方が違う) */
 const LINE_ANIMS = ['combo', 'cross', 'wipe', 'speed', 'flip', 'ring', 'bars', 'stamp', 'stripes'];
@@ -1877,6 +1883,7 @@ async function renderAdmin() {
     wireAdminShare();
     if (ev.kind === 'startgg') watchNotStarted();
     await adminSetsStart(r);
+    guideFor('admin');
     return;
   }
   root.innerHTML = `<div id="rp-adm-notstarted" hidden></div>
@@ -1966,6 +1973,7 @@ async function renderAdmin() {
     if (x && x.ok) location.reload(); else alert(errText(x));
   });
   await adminSetsStart(r);
+  guideFor('admin');
 }
 
 /** 試合の一覧を出して、定期的に読み直す (運営・報告管理者) */
@@ -2803,10 +2811,23 @@ async function renderSetup() {
       setStatus(st, i18n('report.setup.going'), 'busy');
       if (!(await SpspReportAuth.start(location.pathname))) setStatus(st, i18n('report.err.generic'), 'err');
     });
+    guideFor('login');
   };
-  if ((!DEMO && !sess()) || DEMO === 'setup_login') { loginView(''); return; }
+  // シード作成・下位クラス作成の start.gg ログイン (js/startgg_manager.js) が残っていれば、運営のログインの代わりに使う (2026-11-17。
+  // manager_login が返した封を Worker に渡す → Worker がトークンを預かってセッションを返す)。使えなければ今までどおりログインの画面
+  const viaManager = async () => {
+    const grant = DEMO ? '' : SpspStartggManager.reportGrant();
+    if (!grant) return false;
+    const x = await api({ action: 'report_login_manager', grant });
+    if (!x || !x.ok || !x.token || !x.user) return false;
+    SpspLogin.adopt({ token: x.token, user: x.user, exp: x.exp });
+    return true;
+  };
+  if (DEMO === 'setup_login') { loginView(''); return; }
   root.innerHTML = `<section class="rp-card-sec"><p class="rp-muted">${escapeHtml(i18n('report.setup.loading'))}</p></section>`;
-  const r = await api({ action: 'report_tournaments', token: tok() });
+  if (!DEMO && !sess() && !(await viaManager())) { loginView(''); return; }
+  let r = await api({ action: 'report_tournaments', token: tok() });
+  if (r && !r.ok && r.error && (r.error.code === 'no_grant' || r.error.code === 'auth_failed') && (await viaManager())) r = await api({ action: 'report_tournaments', token: tok() });
   if (!r || !r.ok) {
     const code = r && r.error && r.error.code;
     if (code === 'no_grant' || code === 'auth_failed') { loginView(''); return; }   // まだ運営としてログインしていない・切れた
@@ -2914,6 +2935,7 @@ async function renderSetup() {
     try { if (chosen && !(PHASES && PHASES.length)) sessionStorage.setItem(PRESET_PENDING, JSON.stringify(chosen)); else sessionStorage.removeItem(PRESET_PENDING); } catch (e) { /* 何先は後で入れ直す */ }
     location.href = pageUrl(x.report.code, true);
   });
+  guideFor('setup');
 }
 
 // ── 見本の画面 ─────────────────────────────────────────────────────
@@ -2972,6 +2994,13 @@ function demoBanner() {
   const anims = ANIMS.map((k) => '<a href="?demo=' + (DEMO === 'newcomer' ? 'newcomer' : 'match') + (k ? '&anim=' + k : '') + '"' + (k === ANIM ? ' class="on"' : '') + '>' + escapeHtml(animLabelOf(k)) + '</a>').join('');
   const el = document.createElement('div');
   el.className = 'rp-demo';
+  if (DEMO_SIMPLE) {   // 簡素な見本: 1 行だけ (場面の切り替えなどは出さない)
+    const other = DEMO === 'admin' ? 'match' : 'admin';
+    el.innerHTML = '<b>' + escapeHtml(i18n('report.demo.banner_simple')) + '</b> <a class="rp-demo-other" href="?demo=' + other + '&simple=1">' + escapeHtml(i18n('report.demo.simple_' + other)) + '</a>';
+    const m = document.querySelector('.rp-main');
+    if (m) m.insertBefore(el, m.firstChild);
+    return;
+  }
   // 選手を選んで試す (カードの読み込みの確かめ用。random は毎回ちがう 2 人 = たいていキャッシュに無い)
   const pq = (a, b) => '?demo=match' + an + '&p1=' + encodeURIComponent(a) + '&p2=' + encodeURIComponent(b);
   const pairs = [['r1', 'r2', 'report.demo.pick_top'], ['r300', 'r900', 'report.demo.pick_mid'], ['r6000', 'r15000', 'report.demo.pick_low'],
