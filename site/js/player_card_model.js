@@ -280,7 +280,7 @@ export function buildCardModel(data, settings, titleText) {
   const title = st.title ? { pre: textOf(st.title.pre, 'pre'), post: textOf(st.title.post, 'post') } : null;
   return {
     // 名前はチームタグ・「/name」無し (ランキング一覧・直対と同じ js/format.js shortName)
-    name: SPSPFormat.shortName(rec.display), nameLatin: cardLatinName(SPSPFormat.shortName(rec.display), st.latin, data.readings), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
+    name: SPSPFormat.shortName(rec.display), nameLatin: cardLatinName(SPSPFormat.headName(rec.display), st.latin, data.readings), title, loc, evalDate: meta.eval_date, chars, rank: rec.ranks.ensemble ?? null, pills,
     color: st.color, achMode: manual ? 'manual' : 'auto',
     achievements: (manual ? picked : all.slice(0, 12)).map(a => ({ label: /** @type {{ label: string }} */ (a).label, hidden: /** @type {any} */ (a).hidden })),
     latest,
@@ -356,7 +356,7 @@ export async function loadCardData(uid, opts = {}) {
   const { meta, overseas, charIdx, charEmoji, prefs, subranks } = shared;
   const p = /** @type {any} */ (player);
   // 漢字の名前だけ、裏面の英字名に使う読みの表を読む (js/latin_name.js)
-  const readings = opts.readings !== false && hasKanji(SPSPFormat.shortName(p.display || '')) ? await loadReadings() : null;
+  const readings = opts.readings !== false && hasKanji(SPSPFormat.headName(p.display || '')) ? await loadReadings() : null;
   return { uid, player: p, rec: p, meta, subranks, prefs, overseas: overseas ? new Set(overseas.uids || []) : null, charIdx, charEmoji, readings };
 }
 
@@ -364,7 +364,7 @@ export async function loadCardData(uid, opts = {}) {
  * @param {CardData} data @returns {Promise<boolean>} */
 export async function loadCardReadings(data) {
   const d = /** @type {any} */ (data);
-  if (d.readings || !hasKanji(SPSPFormat.shortName((d.rec && d.rec.display) || (d.player && d.player.display) || ''))) return true;
+  if (d.readings || !hasKanji(SPSPFormat.headName((d.rec && d.rec.display) || (d.player && d.player.display) || ''))) return true;
   const r = await loadReadings().catch(() => null);
   if (r) d.readings = r;
   return !!r;

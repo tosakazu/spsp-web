@@ -438,7 +438,7 @@ async function main() {
     // 裏面を編集したとき (裏のタブにいる・裏面を変えた) は英字名が必須。自動の英字名が使えない人 (読みの分からない漢字だけの名前など) は
     // 入れるまで適用しない: 裏のタブの欄へ案内する (2026-11-15。表だけの変更は止めない)
     const backTouched = curTab === 'back' || JSON.stringify(st.back ?? null) !== JSON.stringify((applied || DEFAULT_SETTINGS).back ?? null);
-    if (backOn && backTouched && latinMissing(SPSPFormat.shortName(data.rec.display), st.latin, data.readings)) {
+    if (backOn && backTouched && latinMissing(SPSPFormat.headName(data.rec.display), st.latin, data.readings)) {
       if (backEditor) { setTab('back'); backEditor.askLatin(); } else { askLatinPending = true; setTab('back'); }
       return;
     }

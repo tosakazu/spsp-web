@@ -220,7 +220,7 @@ export async function mountBackEditor(o) {
   //    大会で使うことがあるので、どちらか分かるようにしておく。2026-10-28)。正しい形のときだけカードと設定に、使えない文字のときは理由を出す ──
   const latinEl = /** @type {HTMLInputElement} */ ($('bz-latin'));
   const latinNote = $('bz-latin-note');
-  const auto = autoLatin(SPSPFormat.shortName(data.rec.display), data.readings);
+  const auto = autoLatin(SPSPFormat.headName(data.rec.display), data.readings);
   // 英字名は必須 (2026-11-15)。自動の英字名が使える人は最初から入っていて、そのままでよい。
   // 使えない人 (読みの分からない漢字だけの名前など) は空の欄から始めて、入れるまで適用できない (p_edit.js が askLatin を呼ぶ)
   const autoOk = autoLatinUsable(auto);

@@ -14,11 +14,28 @@ const SRC = require('../helpers/built.cjs').built('ranking-table.js');
 const FMT = fs.readFileSync(path.join(SITE, 'js', 'format.js'), 'utf8');
 const fnSrc = FMT.match(/function stripTeamTag\(name\) \{[\s\S]*?\n  \}/);
 const fixSrc = FMT.match(/var SHORT_NAME_FIX = .*;/);
+const headSrc = FMT.match(/function headName\(name\) \{[\s\S]*?\n  \}/);
+const jaSrc = FMT.match(/var JA_CHAR = .*;/);
 const shortSrc = FMT.match(/function shortName\(name\) \{[\s\S]*?\n  \}/);
 assert.ok(fnSrc && shortSrc, 'stripTeamTag / shortName が見つからない');
 assert.ok(/const displayName = SPSPFormat\.shortName;/.test(SRC), 'ranking-table.js の displayName は shortName (直対と同じ)');
 // eslint-disable-next-line no-eval
-const displayName = eval('(() => { ' + fnSrc[0] + '\n' + fixSrc[0] + '\n' + shortSrc[0] + '\n return shortName; })()');
+const FN = eval('(() => { ' + fnSrc[0] + '\n' + fixSrc[0] + '\n' + headSrc[0] + '\n' + jaSrc[0] + '\n' + shortSrc[0] + '\n return { shortName, headName }; })()');
+
+const displayName = FN.shortName;
+
+test('「英字/日本語」の順の人は日本語の側 (英字名のもとは / の前のまま)', () => {
+  assert.strictEqual(displayName('Reno/れの'), 'れの');
+  assert.strictEqual(displayName('ZETA | Taikei / たいけい'), 'たいけい');
+  assert.strictEqual(displayName('Tomisa／とみさ [休日]'), 'とみさ');
+  assert.strictEqual(displayName('abc/DEF/黒船'), '黒船');
+  assert.strictEqual(displayName('Reno/Leno'), 'Reno');               // 日本語の側が無ければ前
+  assert.strictEqual(displayName('れの/レノ'), 'れの');               // 前が日本語なら前
+  assert.strictEqual(displayName('Reno [a/あ]'), 'Reno');             // [ の中は見ない
+  assert.strictEqual(displayName('50(half/はーふ)'), '50(half');     // 括弧の中の / は触らない (今までどおり)
+  assert.strictEqual(FN.headName('Reno/れの'), 'Reno');
+  assert.strictEqual(FN.headName('PND/あまねこ'), 'あまねこ');
+});
 
 test('チームタグを落とす', () => {
   assert.strictEqual(displayName('ZETA | あcola'), 'あcola');

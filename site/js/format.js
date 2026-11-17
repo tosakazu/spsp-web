@@ -42,17 +42,34 @@ const global = typeof window !== 'undefined' ? window : globalThis;   // 互換:
   // # と ( は名前の一部のことが多いので切らない (「TG(トリグリ)」「sy#OKPG」はそのまま)
   // 区切りの前が名前でない人 (登録の書き方の都合) は手で直す。キーはチームタグを落とした表記 (改名したら効かなくなる)
   var SHORT_NAME_FIX = { 'PND/あまねこ': 'あまねこ' };   // 2026-11-02 ユーザー指定
-  function shortName(name) {
+  // 区切りの前まで (shortName の元の形)。カード裏面の英字名はこちらから作る (「Reno/れの」の英字名は「Reno」のまま)
+  function headName(name) {
     var s = stripTeamTag(name);
     if (Object.prototype.hasOwnProperty.call(SHORT_NAME_FIX, s)) return SHORT_NAME_FIX[s];
     var m = s.match(/^(.*?)[\/／\[［【]/);
     var head = m ? m[1].replace(/[\s\u3000]+$/, '') : '';
     return head || s;
   }
+  // かな・カナ・漢字
+  var JA_CHAR = /[\u3041-\u30ff\u3400-\u9fff\uf900-\ufaff\uff66-\uff9f々〆]/;
+  // 「英字/日本語」の順の人 (「Reno/れの」) は日本語の側を出す (2026-11-17)。/ の前に日本語が無く、後ろに日本語のある部分があればそれ。
+  // / が括弧の中 (「50(half/はーふ)」) なら触らない
+  function shortName(name) {
+    var head = headName(name);
+    var s = stripTeamTag(name);
+    if (Object.prototype.hasOwnProperty.call(SHORT_NAME_FIX, s) || JA_CHAR.test(head)) return head;
+    if (/[(（][^)）]*$/.test(head)) return head;
+    var parts = s.split(/[\[［【]/)[0].split(/[\/／]/);
+    for (var i = 1; i < parts.length; i++) {
+      var p = parts[i].replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
+      if (JA_CHAR.test(p)) return p;
+    }
+    return head;
+  }
 
-  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, stripTeamTag: stripTeamTag, shortName: shortName, PLUS_CUTOFF: PLUS_CUTOFF };
+  var api = { lvSuffix: lvSuffix, lvLabel: lvLabel, fmtRank: fmtRank, stripTeamTag: stripTeamTag, shortName: shortName, headName: headName, PLUS_CUTOFF: PLUS_CUTOFF };
   global.SPSPFormat = api;
   (global.SPSP = global.SPSP || {}).Format = api;   // window.SPSP.Format (名前空間。旧名 SPSPFormat も残す)
 
 export default api;
-export { lvSuffix, lvLabel, fmtRank, stripTeamTag, shortName, PLUS_CUTOFF };
+export { lvSuffix, lvLabel, fmtRank, stripTeamTag, shortName, headName, PLUS_CUTOFF };
