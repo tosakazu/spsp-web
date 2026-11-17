@@ -1653,6 +1653,7 @@ window.SPSP_I18N.en = {
   'seed.startgg.t8': '✅ Seeds applied (',
   'seed.startgg.t9': ')',
   'seed.startgg.applied_preview': '🏆 Preview the bracket as applied',
+  'seed.report_promo.done': '✅ Seeding applied',
   'seed.report_promo.title': '📱 Let players enter results on the day',
   'seed.report_promo.body': 'With Result Reporting, players send match results from their own phones and they go straight to start.gg.',
   'seed.report_promo.start': 'Start accepting reports',

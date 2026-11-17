@@ -1660,6 +1660,7 @@ window.SPSP_I18N.ja = {
   'seed.startgg.t8': '✅ シード適用成功 (',
   'seed.startgg.t9': '件)',
   'seed.startgg.applied_preview': '🏆 適用後のトーナメントをプレビュー',
+  'seed.report_promo.done': '✅ シードを適用しました',
   'seed.report_promo.title': '📱 当日の結果入力を選手にまかせませんか',
   'seed.report_promo.body': '「結果報告」を使うと、選手が自分のスマホから試合の結果を送り、そのまま start.gg に反映されます。',
   'seed.report_promo.start': '受付を始める',

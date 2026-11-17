@@ -528,27 +528,31 @@ function appliedPreviewButton(status, token, phaseId) {
 }
 
 /**
- * 結果報告 (report/) の案内。シードを適用できたとき、プールが 1 つの大会にだけ出す (適用の結果の行のすぐ下)。
- * 「受付を始める」= 結果報告管理、「選手の画面の見本」= 見本 (?demo=match)。✕ で閉じる (覚えない)。
- * 見た目だけ確かめるときは ?sample=report_promo (99_bootstrap.js)
+ * 結果報告 (report/) の案内。シードを適用できたとき、プールが 1 つの大会にだけ、画面の中央に重ねて出す。
+ * 「受付を始める」= 結果報告管理、「選手の画面の見本」= 見本 (?demo=match)。「閉じる」・✕・外側・Esc で閉じる (覚えない)。
+ * 流れを確かめるときは ?sample=report_promo (99_bootstrap.js: 「シード適用」を押すと送らずに完了の表示とこの案内だけ出す)
  */
 export function showReportPromo() {
-  const status = document.getElementById('status');
-  const host = status && status.parentElement;
-  if (!host || !host.parentElement) return;
   const old = document.getElementById('report-promo');
   if (old) old.remove();
-  const box = document.createElement('div');
-  box.id = 'report-promo';
-  box.className = 'report-promo';
+  const wrap = document.createElement('div');
+  wrap.id = 'report-promo';
+  wrap.className = 'report-promo';
   const href = new URL(SPSP.langRoot + 'report/', location.href).toString();
-  box.innerHTML = `<button type="button" class="rpm-x" aria-label="${escapeHtml(i18n('common.close'))}">✕</button>
-    <div class="rpm-t">${escapeHtml(i18n('seed.report_promo.title'))}</div>
+  wrap.innerHTML = `<div class="rpm-box" role="dialog" aria-modal="true" aria-labelledby="rpm-t">
+    <button type="button" class="rpm-x" data-close aria-label="${escapeHtml(i18n('common.close'))}">✕</button>
+    <div class="rpm-done">${escapeHtml(i18n('seed.report_promo.done'))}</div>
+    <div class="rpm-t" id="rpm-t">${escapeHtml(i18n('seed.report_promo.title'))}</div>
     <div class="rpm-b">${escapeHtml(i18n('seed.report_promo.body'))}</div>
     <div class="rpm-a"><a class="rpm-go" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.start'))}</a>
-      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a></div>`;
-  /** @type {HTMLElement} */ (box.querySelector('.rpm-x')).addEventListener('click', () => box.remove());
-  host.insertAdjacentElement('afterend', box);
+      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a>
+      <button type="button" class="rpm-close" data-close>${escapeHtml(i18n('common.close'))}</button></div>
+  </div>`;
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') close(); };
+  wrap.addEventListener('click', e => { const t = /** @type {HTMLElement} */ (e.target); if (t === wrap || t.closest('[data-close]')) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(wrap);
 }
 
 const UPSERT_PHASE_MUTATION = `

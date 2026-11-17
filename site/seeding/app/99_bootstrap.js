@@ -308,8 +308,22 @@ export async function ensureGeoForSeed() {
   return geo;
 }
 
-// 結果報告の案内の見本 (?sample=report_promo): シードを適用しなくても案内だけ出して見た目を確かめる
-if (new URLSearchParams(location.search).get('sample') === 'report_promo') showReportPromo();
+// 結果報告の案内の見本 (?sample=report_promo): 「シード適用」を押すと、start.gg には何も送らずに、適用完了の表示 → 案内 の流れだけ見せる
+if (new URLSearchParams(location.search).get('sample') === 'report_promo') {
+  const ub = /** @type {HTMLButtonElement | null} */ (document.getElementById('upload-btn'));
+  const st = document.getElementById('status');
+  if (ub && st) {
+    ub.style.display = '';
+    ub.disabled = false;
+    document.addEventListener('click', e => {
+      if (!(/** @type {HTMLElement} */ (e.target)).closest('#upload-btn')) return;
+      e.stopPropagation();
+      e.preventDefault();
+      st.textContent = `${i18n('seed.startgg.t6')} 32 ${i18n('seed.startgg.t7')}`;
+      setTimeout(() => { st.textContent = `${i18n('seed.startgg.t8')}32 ${i18n('seed.startgg.t9')}`; showReportPromo(); }, 900);
+    }, true);
+  }
+}
 
 (function wireSeedOptSettings() {
   const panel = document.getElementById('seedopt-panel');
