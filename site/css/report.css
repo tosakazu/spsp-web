@@ -75,6 +75,7 @@ body {
 .rp-state { border-radius: 10px; padding: 8px 10px; margin: 8px 0; font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; }
 .rp-state-agreed, .rp-tag.rp-state-agreed { background: #ecfdf5; border-color: #a7f3d0; }
 .rp-state-conflict, .rp-tag.rp-state-conflict, .rp-state-review, .rp-tag.rp-state-review { background: #fff7ed; border-color: #fdba74; }
+.rp-tag.rp-sample { background: #fef3c7; border-color: #fcd34d; color: #92400e; font-weight: 700; vertical-align: middle; }
 .rp-tag { display: inline-block; font-size: 11px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0 6px; background: #f9fafb; }
 .rp-gate { font-size: 13px; color: #9a3412; background: #fff7ed; border-radius: 8px; padding: 8px 10px; }
 

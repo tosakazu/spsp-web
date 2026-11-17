@@ -2900,6 +2900,8 @@ window.SPSP_I18N.ja = {
   'report.demo.anim_stripes': '案 L 斜めのしま',
   'report.demo.anim_cards': '案 C カード',
   'report.demo.title': '結果報告の見本',
+  'report.demo.sample': '見本',
+  'report.demo.sample_sets': '下の試合と報告は見本です。実際の大会のものではありません。',
   'report.demo.match': '試合が決まった',
   'report.demo.newcomer': '初参加の相手',
   'report.demo.newcomer_name': 'はじめてのひと',
