@@ -4,7 +4,8 @@
 //   scope に tournament.manager (自分が管理する大会のシード・トーナメント設定) を足して認可してもらい、Worker (action manager_login) が
 //   交換した start.gg のアクセストークンをこのブラウザ (localStorage) に置く。サーバには保存しない。
 //   ログインも、どちらを使うか (mode) も localStorage なので 3 ページで共通 (どれかでログイン・ログアウトすると全部に効く。開いている別のタブにも)。
-//   load()                 保存しているログイン ({ token, exp, user }) か null (期限切れは消して null)
+//   load()                 保存しているログイン ({ token, exp, user, grant }) か null (期限切れは消して null)
+//   reportGrant()          結果報告の受付でこのログインを使い回すための封 (manager_login が返す grant。Worker だけが開けられる。2026-11-17 より前のログインには無い → '')
 //   mode() / setMode(m)    使う認証 'login' | 'key'
 //   pick(keyValue)         start.gg に送るトークン: mode が login ならログインのトークン (無ければ '')、key なら keyValue
 //   start(returnPath)      start.gg の許可画面へ (戻ると callback.js が save して元のページに戻る)。始められなかったら false
@@ -22,7 +23,7 @@ const MARGIN_MS = 10 * 60 * 1000;
 /** start.gg が expires_in を返さなかったときの見込み (説明では 7 日) */
 const DEFAULT_TTL_MS = 7 * 24 * 3600 * 1000;
 
-/** @typedef {{ token: string, exp: number, user: { id: string, slug: string, gamerTag: string } | null }} ManagerLogin */
+/** @typedef {{ token: string, exp: number, user: { id: string, slug: string, gamerTag: string } | null, grant?: string | null }} ManagerLogin */
 /** @typedef {'login' | 'key'} AuthMode */
 
 /** @param {string} k */
@@ -38,16 +39,18 @@ export function load() {
   return o;
 }
 
-/** @param {{ access_token: string, expires_in?: number | null, user?: any }} r manager_login の応答 */
+/** @param {{ access_token: string, expires_in?: number | null, user?: any, grant?: string | null }} r manager_login の応答 */
 export function save(r) {
   const ttl = Number(r.expires_in) > 0 ? Number(r.expires_in) * 1000 : DEFAULT_TTL_MS;
-  const o = { token: r.access_token, exp: Date.now() + ttl, user: r.user || null };
+  const o = { token: r.access_token, exp: Date.now() + ttl, user: r.user || null, grant: typeof r.grant === 'string' ? r.grant : null };
   try {
     localStorage.setItem(KEY, JSON.stringify(o));
     localStorage.setItem(MODE_KEY, 'login');   // ログインしたらログインで使う
     return true;
   } catch (e) { return false; }
 }
+
+export function reportGrant() { const o = load(); return o && typeof o.grant === 'string' ? o.grant : ''; }
 
 export function logout() { try { localStorage.removeItem(KEY); } catch (e) { /* 何もしない */ } }
 
@@ -207,6 +210,6 @@ function maybeNotice(opts) {
   q('[data-a="login"]').focus();
 }
 
-const API = { KEY, load, save, logout, mode, setMode, pick, start, mount };
+const API = { KEY, load, save, reportGrant, logout, mode, setMode, pick, start, mount };
 if (typeof window !== 'undefined') (/** @type {any} */ (window).SPSP = /** @type {any} */ (window).SPSP || {}).StartggManager = API;
 export default API;

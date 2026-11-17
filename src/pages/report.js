@@ -10,6 +10,8 @@ import '../../site/nav.js';
 import SpspLogin from '../../site/js/login.js';
 import SpspStartggIdentity from '../../site/js/startgg_identity.js';
 import SpspReportAuth from '../../site/js/report_auth.js';
+import SpspStartggManager from '../../site/js/startgg_manager.js';
+import SpspAuth from '../../site/js/auth.js';
 import SPSPCharEmoji from '../../site/js/char_emoji.js';
 import { CHAR_MERGE_CANONICAL, charName, HIDDEN_CHAR_IDS } from '../../site/js/chars.js';
 import FIGHTER_NUMBER from '../../site/js/fighter_number.js';
@@ -2812,9 +2814,21 @@ async function renderSetup() {
     });
     guideFor('login');
   };
-  if ((!DEMO && !sess()) || DEMO === 'setup_login') { loginView(''); return; }
+  // シード作成・下位クラス作成の start.gg ログイン (js/startgg_manager.js) が残っていれば、運営のログインの代わりに使う (2026-11-17。
+  // manager_login が返した封を Worker に渡す → Worker がトークンを預かってセッションを返す)。使えなければ今までどおりログインの画面
+  const viaManager = async () => {
+    const grant = DEMO ? '' : SpspStartggManager.reportGrant();
+    if (!grant) return false;
+    const x = await api({ action: 'report_login_manager', grant });
+    if (!x || !x.ok || !x.token || !x.user) return false;
+    SpspAuth.save({ token: x.token, user: x.user, exp: x.exp });
+    return true;
+  };
+  if (DEMO === 'setup_login') { loginView(''); return; }
   root.innerHTML = `<section class="rp-card-sec"><p class="rp-muted">${escapeHtml(i18n('report.setup.loading'))}</p></section>`;
-  const r = await api({ action: 'report_tournaments', token: tok() });
+  if (!DEMO && !sess() && !(await viaManager())) { loginView(''); return; }
+  let r = await api({ action: 'report_tournaments', token: tok() });
+  if (r && !r.ok && r.error && (r.error.code === 'no_grant' || r.error.code === 'auth_failed') && (await viaManager())) r = await api({ action: 'report_tournaments', token: tok() });
   if (!r || !r.ok) {
     const code = r && r.error && r.error.code;
     if (code === 'no_grant' || code === 'auth_failed') { loginView(''); return; }   // まだ運営としてログインしていない・切れた

@@ -1475,3 +1475,25 @@ test('お知らせ: 参加者 (report_entrants) で本人の受付を開始時�
   await e.store.purgeReportEntrants(now);
   assert.strictEqual(e.store.reportEntrants.length, 0);
 });
+
+test('大会運営用のログイン (シード作成) を運営のログインとして使う: manager_login の封 → report_login_manager', async () => {
+  const fake = fakeStartgg();
+  const e = await envWith(fake);
+  const b = await e.call({ action: 'manager_begin', nonce: 'N', returnPath: '/jp/seed/' });
+  const m = await e.call({ action: 'manager_login', code: 'C', state: new URL(b.url).searchParams.get('state') });
+  assert.strictEqual(m.ok, true, JSON.stringify(m));
+  assert.ok(m.grant && !m.grant.includes(m.access_token));
+  assert.strictEqual((e.store.reportGrants || []).length, 0, 'シードのログインだけでは Worker に預けない');
+  // 封が無い・壊れている・ブラウザが作ったものは使えない
+  assert.strictEqual((await e.call({ action: 'report_login_manager' })).error.code, 'bad_request');
+  assert.strictEqual((await e.call({ action: 'report_login_manager', grant: m.access_token })).error.code, 'no_grant');
+  assert.strictEqual((await e.call({ action: 'report_login_manager', grant: m.grant.slice(0, -4) + 'AAAA' })).error.code, 'no_grant');
+  const l = await e.call({ action: 'report_login_manager', grant: m.grant });
+  assert.strictEqual(l.ok, true, JSON.stringify(l));
+  assert.strictEqual(l.user.id, '4242');
+  assert.ok(!JSON.stringify(l).includes(m.access_token), 'トークンは返さない');
+  const g = e.store.reportGrants[0];
+  assert.ok(g && g.user_id === '4242' && !g.token_enc.includes(m.access_token));
+  const r = await e.call({ action: 'report_tournaments', token: l.token });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+});

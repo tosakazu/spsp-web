@@ -91,7 +91,9 @@ export async function handleStartggRefresh(cfg: Config, fetchFn: FetchFn, req: R
 /*
  * 大会運営用の start.gg ログイン (シード作成・下位クラス作成で API キーの代わりに使う)。
  *   action: "manager_begin" { nonce, returnPath } → { url }  (scope = MANAGER_SCOPE の認可画面。state は f='manager')
- *   action: "manager_login" { code, state }       → { token, user, exp, access_token, expires_in }
+ *   action: "manager_login" { code, state }       → { token, user, exp, access_token, expires_in, grant }
+ *     grant = 結果報告の受付でこのログインを使い回すための封 (トークンと更新用トークンを Worker の鍵で暗号化したもの。ブラウザは中を読めない。
+ *             Worker には保存しない。report.ts の report_login_manager に渡すと運営のログインの代わりになる)
  * 普段のログインと違い、start.gg のアクセストークンをブラウザに返す (ページが start.gg の API を直接呼ぶため)。
  * Worker はトークンを保存しない・ログに出さない。普段のログインのセッションも同時に発行する。
  */
@@ -128,5 +130,6 @@ export async function handleManagerLogin(cfg: Config, store: Store, fetchFn: Fet
     exp: sess ? sess.exp : null,
     access_token: ex.token,
     expires_in: ex.expiresIn,
+    grant: await sealJson(cfg, { k: 'mgr', uid: user.id, at: ex.token, rt: ex.refreshToken ?? null, exp: now + (ex.expiresIn ? ex.expiresIn * 1000 : 24 * 3600 * 1000) }),
   });
 }

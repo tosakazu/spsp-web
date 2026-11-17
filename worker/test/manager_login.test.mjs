@@ -17,7 +17,7 @@ test('manager_begin は運営用の scope と f=manager の state を載せた�
   const r = await rawPost(e, { action: 'manager_begin', nonce: 'NM', returnPath: '/jp/class/' });
   const u = new URL(r.url);
   assert.strictEqual(u.origin + u.pathname, 'https://start.gg/oauth/authorize');
-  assert.strictEqual(u.searchParams.get('scope'), 'user.identity tournament.manager');
+  assert.strictEqual(u.searchParams.get('scope'), 'user.identity tournament.manager tournament.reporter');
   assert.strictEqual(u.searchParams.get('client_id'), 'test-client-id');
   assert.strictEqual(u.searchParams.get('redirect_uri'), e.cfg.redirectUri);
   const p = b64urlJson(u.searchParams.get('state').split('.')[0]);
@@ -38,7 +38,8 @@ test('manager_login はセッションと start.gg のアクセストークン�
   assert.deepStrictEqual(r.user, { id: '4242', slug: 'user/abcd1234', gamerTag: 'Toko' });
   assert.ok(typeof r.token === 'string' && r.token.length > 0);
   const ex = e.fetches.find(f => f.url.indexOf('/oauth/') !== -1);
-  assert.strictEqual(JSON.parse(ex.init.body).scope, 'user.identity tournament.manager');
+  assert.strictEqual(JSON.parse(ex.init.body).scope, 'user.identity tournament.manager tournament.reporter');
+  assert.ok(typeof r.grant === 'string' && r.grant && !r.grant.includes('AT-manager'), '結果報告で使い回すための封 (中は読めない)');
   // アクセストークンも秘密も記録に残らない
   assert.ok(!JSON.stringify(e.store.errors || []).includes('AT-manager'));
 });

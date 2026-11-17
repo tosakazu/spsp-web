@@ -26,7 +26,7 @@
  */
 import type { Config } from '../config.ts';
 import {
-  REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
+  MANAGER_SCOPE, REPORTER_SCOPE, REPORT_ADMIN_MAX_PER_DAY, REPORT_MAX_OPEN_MS, REPORT_MAX_PER_DAY, REPORT_MIN_INTERVAL_MS,
   REPORT_GRANT_MS, REPORT_MIN_OPEN_MS,
 } from '../config.ts';
 import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, ReportStartRow, Store } from '../store.ts';
@@ -63,7 +63,8 @@ const MSG_LOGIN = 'ログインが切れています。もう一度ログイン�
 const MSG_CLOSED = 'この大会の結果報告の受付は終わっています。結果は運営に伝えてください。';
 
 /** 暗号化して置くトークン */
-interface Sealed { at: string; rt: string | null; exp: number }
+/** sc = トークンをもらったときの scope (更新のときも同じ値が要る)。無ければ REPORTER_SCOPE (大会運営用のログインを使い回したときだけ MANAGER_SCOPE) */
+interface Sealed { at: string; rt: string | null; exp: number; sc?: string }
 
 /** 報告ページの URL に入る 10 文字 (紛らわしい字を除く) */
 export function newReportCode(): string {
@@ -170,6 +171,30 @@ export async function handleReportLogin(cfg: Config, store: Store, fetchFn: Fetc
   return ok({ token, user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag }, exp: sess ? sess.exp : null });
 }
 
+/** action: "report_login_manager" { grant } — 大会運営用のログイン (シード作成・下位クラス作成、manager_login) を運営のログインとして使う (2026-11-17)。
+ *  grant は manager_login が返した封 (Worker の鍵で暗号化、ブラウザは作れない・読めない)。開けて、トークンが今も本人のものか start.gg に確かめてから預かる。
+ *  切れていれば更新用トークンで延長。だめなら no_grant (画面は普段の運営のログインを出す) */
+export async function handleReportLoginManager(cfg: Config, store: Store, fetchFn: FetchFn, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  if (typeof req.grant !== 'string' || !req.grant || req.grant.length > 8192) return err('bad_request', 'ログインの情報がありません。');
+  const g = await openJson<{ k?: string; uid?: string; at?: string; rt?: string | null; exp?: number }>(cfg, req.grant);
+  if (!g || g.k !== 'mgr' || !g.uid || !g.at) return err('no_grant', MSG_GRANT, 'unreadable');
+  let sealed: Sealed = { at: g.at, rt: g.rt ?? null, exp: Number(g.exp) || 0, sc: MANAGER_SCOPE };
+  if (sealed.exp - now < 10 * 60 * 1000) {
+    if (!sealed.rt) return err('no_grant', MSG_GRANT, 'expired');
+    const r = await refreshAccessToken(cfg, sealed.rt, fetchFn, MANAGER_SCOPE);
+    if (!r.token) return err('no_grant', MSG_GRANT, 'refresh:' + (r.reason || ''));
+    sealed = { at: r.token, rt: r.refreshToken || sealed.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY), sc: MANAGER_SCOPE };
+  }
+  const user = await fetchCurrentUser(sealed.at, fetchFn);
+  if (!user || String(user.id) !== String(g.uid)) return err('no_grant', MSG_GRANT, user ? 'user_mismatch' : 'no_user');
+  await store.purgeReportTokens(now);
+  await store.putReportGrant({ user_id: user.id, token_enc: await sealJson(cfg, sealed), token_exp_ms: sealed.exp, expires_ms: now + REPORT_GRANT_MS });
+  const token = await issueSessionToken(cfg, user, now);
+  const sess = await verifySessionToken(cfg, token, now);
+  await logLogin(store, user.id, 'reporter', now);
+  return ok({ token, user: { id: user.id, slug: user.slug, gamerTag: user.gamerTag }, exp: sess ? sess.exp : null });
+}
+
 /** 預かっている運営のトークン (切れそうなら更新して置き直す) */
 async function grantOf(cfg: Config, store: Store, fetchFn: FetchFn, uid: string, now: number): Promise<Sealed | null> {
   const g = await store.getReportGrant(uid, now);
@@ -178,9 +203,9 @@ async function grantOf(cfg: Config, store: Store, fetchFn: FetchFn, uid: string,
   if (!s || !s.at) return null;
   if (s.exp - now >= 10 * 60 * 1000) return s;
   if (!s.rt) return null;
-  const r = await refreshAccessToken(cfg, s.rt, fetchFn, REPORTER_SCOPE);
+  const r = await refreshAccessToken(cfg, s.rt, fetchFn, s.sc || REPORTER_SCOPE);
   if (!r.token) return null;
-  const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY) };
+  const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY), ...(s.sc ? { sc: s.sc } : {}) };
   await store.putReportGrant({ ...g, token_enc: await sealJson(cfg, next), token_exp_ms: next.exp });
   return next;
 }
@@ -336,11 +361,11 @@ async function openEvent(cfg: Config, store: Store, fetchFn: FetchFn, code: unkn
   if (!s || !s.at) return { ok: false, res: err('report_closed', MSG_CLOSED, 'token_unreadable') };
   if (ev.kind === 'startgg' && s.exp - now < 10 * 60 * 1000) {
     if (!s.rt) return { ok: false, res: err('report_closed', MSG_CLOSED, 'token_expired') };
-    const r = await refreshAccessToken(cfg, s.rt, fetchFn, REPORTER_SCOPE);
+    const r = await refreshAccessToken(cfg, s.rt, fetchFn, s.sc || REPORTER_SCOPE);
     // start.gg に繋がらないだけなら受付は閉じない (報告は D1 に残し、復旧後に延長して送る。2026-11-04)
     if (!r.token && (r.reason === 'network' || r.reason === 'startgg_down')) return { ok: true, ev, token: s.at };
     if (!r.token) return { ok: false, res: err('report_closed', MSG_CLOSED, 'refresh:' + (r.reason || '')) };
-    const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY) };
+    const next: Sealed = { at: r.token, rt: r.refreshToken || s.rt, exp: now + (r.expiresIn ? r.expiresIn * 1000 : DAY), ...(s.sc ? { sc: s.sc } : {}) };
     await store.updateReportEventToken(ev.code, await sealJson(cfg, next), next.exp);
     await refreshSggAdmins(store, fetchFn, ev, next.at, now, false).catch(() => null);
     return { ok: true, ev, token: next.at };
