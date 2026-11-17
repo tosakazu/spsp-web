@@ -2373,7 +2373,7 @@ window.SPSP_I18N.ja = {
   'report.guide.settings.title': '設定',
   'report.guide.settings.body': '受付の開始時刻、選手が報告できる範囲、報告の取り込み方を決めます。迷ったらそのままで大丈夫です。あとから変えられます。',
   'report.guide.ft.title': '何先',
-  'report.guide.ft.body': 'イベントを選ぶと、フェーズごとに何本先取かを決められます。選手の画面はこの本数で入力する形になります。',
+  'report.guide.ft.body': 'イベントを選ぶと、フェーズごとに何本先取かを決められます。選手の画面はこの本数で入力する形になります。設定しなくても問題なく使えます。',
   'report.guide.start.title': '受付を始める',
   'report.guide.start.body': '押すと選手用の報告ページができて、運営の画面に移ります。そこに出る URL を選手に伝えてください。',
   'report.guide.share.title': '選手に URL を伝える',

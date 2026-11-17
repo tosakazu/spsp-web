@@ -553,6 +553,8 @@ export function showReportPromo() {
   wrap.addEventListener('click', e => { const t = /** @type {HTMLElement} */ (e.target); if (t === wrap || t.closest('[data-close]')) close(); });
   document.addEventListener('keydown', onKey);
   document.body.appendChild(wrap);
+  // 結果報告のガイドの「結果報告とは」は同じ内容なので、ここで見せたら飛ばす (src/pages/report_guide.js の INTRO_KEY)
+  try { localStorage.setItem('spsp_report_intro_seen_v1', '1'); } catch (e) { /* ガイドでもう一度出るだけ */ }
 }
 
 const UPSERT_PHASE_MUTATION = `

@@ -3,10 +3,16 @@
 //   1 段ずつ、本物の欄を明るく切り抜いて (ほかは暗く) 説明の吹き出しを出す。欄の無い段 (targets なし) は画面の中央に出す
 //   ガイドの間は画面の操作は止める。閉じる・最後まで進むと見たことにする (端末ごと、localStorage の seenKey)
 //   optional の段は、その欄が画面に無ければ飛ばす (ログイン前・後で欄が違う画面用)
+//   once の段 (ほかの画面・ガイドと同じ内容の段) は、一度出したら自動で出すときは飛ばす (localStorage の once のキー)。ボタンから出し直すときは全部
 //   見た目は css/spot_guide.css (.spg)
 const GAP = 12;
 
-/** @typedef {{ title: string, body: string, targets?: () => (Element | null)[], optional?: boolean, block?: ScrollLogicalPosition }} SpotStep */
+/** @typedef {{ title: string, body: string, targets?: () => (Element | null)[], optional?: boolean, once?: string, block?: ScrollLogicalPosition }} SpotStep */
+
+/** once の段を見たか・見たことにする (ガイドの外で同じ内容を見せたときにも使う) @param {string} key */
+export const onceSeen = key => { try { return localStorage.getItem(key) === '1'; } catch (e) { return false; } };
+/** @param {string} key */
+export const markOnce = key => { try { localStorage.setItem(key, '1'); } catch (e) { /* 次も出る */ } };
 
 /** @param {{ seenKey: string, steps: () => SpotStep[], labels: { prev: string, next: string, done: string, skip: string }, bottom?: number }} o */
 export function createGuide(o) {
@@ -17,9 +23,10 @@ export function createGuide(o) {
   let closeCur = null;
   const shown = (/** @type {Element | null} */ e) => !!e && !e.closest('[hidden]');
 
-  function start() {
+  /** @param {boolean} [auto] 自動で出すとき = 一度見た once の段は飛ばす */
+  function start(auto) {
     if (closeCur) closeCur();
-    const STEPS = o.steps().filter(s => !s.optional || !s.targets || s.targets().some(shown));
+    const STEPS = o.steps().filter(s => (!s.optional || !s.targets || s.targets().some(shown)) && !(auto && s.once && onceSeen(s.once)));
     if (!STEPS.length) return;
     const root = document.createElement('div');
     root.className = 'spg';
@@ -71,6 +78,7 @@ export function createGuide(o) {
     };
     const show = () => {
       const s = STEPS[i];
+      if (s.once) markOnce(s.once);
       /** @type {HTMLElement} */ (root.querySelector('.spg-step')).textContent = `${i + 1} / ${STEPS.length}`;
       /** @type {HTMLElement} */ (root.querySelector('.spg-title')).textContent = s.title;
       /** @type {HTMLElement} */ (root.querySelector('.spg-body')).textContent = s.body;
@@ -121,7 +129,7 @@ export function createGuide(o) {
   function maybeStart(delay) {
     if (pending || closeCur || seen()) return;
     pending = true;
-    setTimeout(() => { pending = false; if (!closeCur && !seen()) start(); }, delay === undefined ? 500 : delay);
+    setTimeout(() => { pending = false; if (!closeCur && !seen()) start(true); }, delay === undefined ? 500 : delay);
   }
   return { seen, start, maybeStart, close: () => { if (closeCur) closeCur(); } };
 }

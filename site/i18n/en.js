@@ -2320,7 +2320,7 @@ window.SPSP_I18N.en = {
   'report.guide.settings.title': 'Settings',
   'report.guide.settings.body': 'Set when reporting opens, how far players can report, and how reports are applied. The defaults are fine if you are unsure. You can change them later.',
   'report.guide.ft.title': 'Games to win',
-  'report.guide.ft.body': 'After you pick an event, set the number of games to win for each phase. The player screen uses this number.',
+  'report.guide.ft.body': 'After you pick an event, set the number of games to win for each phase. The player screen uses this number. Reporting works fine without setting it.',
   'report.guide.start.title': 'Start accepting reports',
   'report.guide.start.body': 'This creates the report page for players and takes you to the organizer screen. Share the URL shown there with players.',
   'report.guide.share.title': 'Share the URL with players',

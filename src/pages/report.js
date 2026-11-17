@@ -41,7 +41,7 @@ const DEMO = Q.get('demo') || '';
 /** 見本の画面を簡素に (?simple=1): 上の帯は 1 行だけ。シードツールの案内などから開く見本用 */
 const DEMO_SIMPLE = Q.get('simple') === '1';
 /** 使い方ガイド (report_guide.js): 本物の画面では初めてのときだけ自動で出す。見本では ?guide=1 のときだけ出す */
-const guideFor = (/** @type {'setup' | 'admin'} */ kind) => wireGuide(kind, Q.get('guide') === '1', !!DEMO);
+const guideFor = (/** @type {'login' | 'setup' | 'admin'} */ kind) => wireGuide(kind, Q.get('guide') === '1', !!DEMO);
 /** マッチングの演出 (?anim=… で固定。無ければ LINE_ANIMS から毎回ランダム、dark = 最初の暗い演出)。案を比べるための切り替え。
  * LINE_ANIMS = 線が先に走り (その間にカードを読む)、そのあとカードが入る案 (線の形・カードの入り方が違う) */
 const LINE_ANIMS = ['combo', 'cross', 'wipe', 'speed', 'flip', 'ring', 'bars', 'stamp', 'stripes'];
@@ -2810,7 +2810,7 @@ async function renderSetup() {
       setStatus(st, i18n('report.setup.going'), 'busy');
       if (!(await SpspReportAuth.start(location.pathname))) setStatus(st, i18n('report.err.generic'), 'err');
     });
-    guideFor('setup');
+    guideFor('login');
   };
   if ((!DEMO && !sess()) || DEMO === 'setup_login') { loginView(''); return; }
   root.innerHTML = `<section class="rp-card-sec"><p class="rp-muted">${escapeHtml(i18n('report.setup.loading'))}</p></section>`;
