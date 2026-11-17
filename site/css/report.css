@@ -645,3 +645,6 @@ button.rp-mgr-it:hover, button.rp-mgr-it:focus { background: #f3f4f6; }
 .rp-prog { margin: 8px 0; }
 .rp-prog-g { margin: 8px 0; }
 .rp-prog-g h4 { margin: 4px 0; }
+
+/* 簡素な見本 (?simple=1) の帯のリンク */
+.rp-demo-other { color: #1d4ed8; margin-left: 8px; white-space: nowrap; }

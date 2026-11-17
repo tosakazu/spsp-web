@@ -545,7 +545,7 @@ export function showReportPromo() {
     <div class="rpm-t" id="rpm-t">${escapeHtml(i18n('seed.report_promo.title'))}</div>
     <div class="rpm-b">${escapeHtml(i18n('seed.report_promo.body'))}</div>
     <div class="rpm-a"><a class="rpm-go" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.start'))}</a>
-      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a>
+      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match&simple=1')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a>
       <button type="button" class="rpm-close" data-close>${escapeHtml(i18n('common.close'))}</button></div>
   </div>`;
   const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
