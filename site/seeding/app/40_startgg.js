@@ -506,6 +506,7 @@ export async function uploadToStartgg() {
     if (status) status.textContent = `${i18n('seed.startgg.t8')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, S.EVENT_CONTEXT.phaseId, r.count, methodLabel, false);
     appliedPreviewButton(status, token, S.EVENT_CONTEXT.phaseId);
+    if (S.EVENT_CONTEXT.poolCount === 1) showReportPromo();
   } else {
     showError(r.error || 'unknown error');
   }
@@ -524,6 +525,30 @@ function appliedPreviewButton(status, token, phaseId) {
   b.textContent = i18n('seed.startgg.applied_preview');
   b.addEventListener('click', () => document.dispatchEvent(new CustomEvent('spsp:preview-applied', { detail: { token, phaseId } })));
   status.append(' ', b);
+}
+
+/**
+ * 結果報告 (report/) の案内。シードを適用できたとき、プールが 1 つの大会にだけ出す (適用の結果の行のすぐ下)。
+ * 「受付を始める」= 結果報告管理、「選手の画面の見本」= 見本 (?demo=match)。✕ で閉じる (覚えない)。
+ * 見た目だけ確かめるときは ?sample=report_promo (99_bootstrap.js)
+ */
+export function showReportPromo() {
+  const status = document.getElementById('status');
+  const host = status && status.parentElement;
+  if (!host || !host.parentElement) return;
+  const old = document.getElementById('report-promo');
+  if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'report-promo';
+  box.className = 'report-promo';
+  const href = new URL(SPSP.langRoot + 'report/', location.href).toString();
+  box.innerHTML = `<button type="button" class="rpm-x" aria-label="${escapeHtml(i18n('common.close'))}">✕</button>
+    <div class="rpm-t">${escapeHtml(i18n('seed.report_promo.title'))}</div>
+    <div class="rpm-b">${escapeHtml(i18n('seed.report_promo.body'))}</div>
+    <div class="rpm-a"><a class="rpm-go" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.start'))}</a>
+      <a class="rpm-demo" href="${escapeHtml(href + '?demo=match')}" target="_blank" rel="noopener">${escapeHtml(i18n('seed.report_promo.demo'))}</a></div>`;
+  /** @type {HTMLElement} */ (box.querySelector('.rpm-x')).addEventListener('click', () => box.remove());
+  host.insertAdjacentElement('afterend', box);
 }
 
 const UPSERT_PHASE_MUTATION = `
@@ -615,6 +640,7 @@ async function createPhaseThenUpload(token) {
     status.textContent = `${i18n('seed.startgg.t20')}${r.count} ${i18n('seed.startgg.t9')}`;
     logSeedingUse(token, phase.id, r.count, uploadOrderLabel(), true);
     appliedPreviewButton(status, token, phase.id);
+    if (groupCount === 1) showReportPromo();
     const metaInfo = document.getElementById('meta-info');
     if (metaInfo) metaInfo.textContent = `${S.EVENT_CONTEXT.eventName} (phase ${phase.id})`;
     // phase はもう存在するので自動作成の設定 UI は閉じる

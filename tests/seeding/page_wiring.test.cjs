@@ -475,6 +475,7 @@ function uploadSetup(HTML) {
     function confirm() { return true; }
     async function createPhaseThenUpload() { calls.createPhase++; }
     function logSeedingUse(token, phaseId, count) { calls.logged = { phaseId: phaseId, count: count }; }   // 使用記録 (js/tool_log.js) は送ったことだけ見る
+    function showReportPromo() { calls.promo = (calls.promo || 0) + 1; }   // 結果報告の案内 (プールが 1 つの大会)
     var SmashSeed = { uploadSeeding: async function (phaseId, token, mapping) { calls.upload = { phaseId: phaseId, mapping: mapping }; return { ok: true, count: mapping.length }; } };
     ${extractFn(HTML, 'uploadOrderLabel')}
     ${extractFn(HTML, 'appliedPreviewButton')}
@@ -512,6 +513,7 @@ test('jsdom: 自動実行 ON → 最適化の完了を待ってから、反映�
   assert.match(win.document.getElementById('status').textContent, /シード適用成功/);
   assert.strictEqual(c.errors.length, 0);
   assert.deepStrictEqual(JSON.parse(JSON.stringify(c.logged)), { phaseId: 77, count: 3 }, '書き込めたら使用記録を送る');
+  assert.strictEqual(c.promo, 1, 'プールが 1 つの大会は、適用できたら結果報告の案内を出す');
   // 反映済みなので、もう一度押しても回し直さない。
   await win.eval('uploadToStartgg()');
   assert.strictEqual(win.eval('calls').optimize, 1, '反映済みなのに最適化を回し直した');
@@ -527,6 +529,12 @@ test('jsdom: 自動実行 OFF → 最適化せず今の並びで送る', { skip:
   assert.strictEqual(c.optimize, 0);
   assert.strictEqual(JSON.stringify(c.upload.mapping), JSON.stringify([{ seedId: 11, seedNum: 1 }, { seedId: 12, seedNum: 2 }, { seedId: 13, seedNum: 3 }]));
   assert.strictEqual(win.document.getElementById('seedopt-details').open, false, 'OFF なのにパネルを開いた');
+  // プールが 2 つ以上の大会には結果報告の案内を出さない
+  const w2 = newUploadWin();
+  w2.eval('EVENT_CONTEXT.poolCount = 4');
+  await w2.eval('uploadToStartgg()');
+  assert.ok(w2.eval('calls').upload);
+  assert.strictEqual(w2.eval('calls').promo, undefined);
 });
 
 test('jsdom: 最適化が完了しなければ適用しない (事前チェック停止 / worker エラー)', { skip: !JSDOM ? 'jsdom 未導入' : false }, async () => {
