@@ -2847,6 +2847,8 @@ window.SPSP_I18N.en = {
   'report.demo.anim_stripes': 'L: stripes',
   'report.demo.anim_cards': 'C: cards',
   'report.demo.title': 'Match report samples',
+  'report.demo.sample': 'Sample',
+  'report.demo.sample_sets': 'The matches and reports below are samples, not from a real tournament.',
   'report.demo.match': 'Match ready',
   'report.demo.newcomer': 'First-timer opponent',
   'report.demo.newcomer_name': 'First Timer',

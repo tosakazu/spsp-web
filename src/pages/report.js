@@ -2699,7 +2699,8 @@ function renderAdminSets(sets, force) {
   ADMIN_SIG = sig;
   const order = { review: 0, conflict: 1, queued: 2, pending: 3, reported: 4, reset: 5, agreed: 6, fixed: 7 };
   sets.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || b.updated_ms - a.updated_ms);
-  let h = `<h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}</h2>`;
+  let h = `<h2>${escapeHtml(i18n('report.admin.sets', { n: sets.length }))}${DEMO ? ` <span class="rp-tag rp-sample">${escapeHtml(i18n('report.demo.sample'))}</span>` : ''}</h2>`;
+  if (DEMO) h += `<p class="rp-muted">${escapeHtml(i18n('report.demo.sample_sets'))}</p>`;
   if (!sets.length) h += `<p class="rp-muted">${escapeHtml(i18n('report.admin.empty'))}</p>`;
   for (const s of sets) {
     const names = (s.slots || []).map((x) => (x ? x.name : '?'));
@@ -3191,7 +3192,8 @@ async function demoApi(body) {
         role: 'admin', managers: DEMO_MGRS, outage: { since_ms: Date.now() - 25 * 60000, last_ok_ms: Date.now() - 26 * 60000, note: 'timeout' },
         manual: DEMO_MANUAL, snapshot: { synced_ms: Date.now() - 26 * 60000, sets: 31, full: true }, ...demoOps(P), unsynced: demoUnsynced(P) };
     }
-    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
+    // 簡素な見本 (ガイドから開く) は設定を既定のまま見せる
+    return { ok: true, report: { code: 'demo', kind: 'startgg', expires_ms: Date.now() + 86400e3, settings: DEMO_SIMPLE ? { top_cut: null, classes_only: false } : { top_cut: null, classes_only: false, ft: DEMO_FT, apply: 'delay', notify: 'action' } },
       sets: [row('101', 'review', R20, L12, 0), row('102', 'conflict', R21, L12, 2), Object.assign(row('106', 'pending', R21, null, 6), { note: 'wait_delay' }), row('103', 'reported', R21, null, 4), row('104', 'agreed', R20, R20, 6), row('105', 'fixed', R21, null, 8)],
       role: Q.get('role') === 'manager' ? 'manager' : 'admin', managers: DEMO_MGRS, ...demoOps(P), unsynced: [] };
   }

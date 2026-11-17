@@ -36,6 +36,10 @@ export function createGuide(o) {
       '<div class="spg-body"></div><div class="spg-live" hidden></div><div class="spg-btns"><button type="button" class="spg-skip"></button><span class="spg-sp"></span>' +
       '<button type="button" class="spg-prev"></button><button type="button" class="spg-next"></button></div></div>';
     document.body.appendChild(root);
+    // 覆いは CSS が古い (キャッシュ) ときにも効くように、ここでも置く。live でない段はどのボタンも押せない
+    root.style.pointerEvents = 'none';
+    for (const sel of ['.spg-shield', '.spg-tip']) /** @type {HTMLElement} */ (root.querySelector(sel)).style.pointerEvents = 'auto';
+    Object.assign(/** @type {HTMLElement} */ (root.querySelector('.spg-shield')).style, { position: 'fixed', inset: '0' });
     const hole = /** @type {HTMLElement} */ (root.querySelector('.spg-hole'));
     const shield = /** @type {HTMLElement} */ (root.querySelector('.spg-shield'));
     const liveNote = /** @type {HTMLElement} */ (root.querySelector('.spg-live'));

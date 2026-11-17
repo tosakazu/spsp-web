@@ -41,7 +41,7 @@ export const setupGuide = createGuide({
 export const adminGuide = createGuide({
   seenKey: 'spsp_report_guide_admin_v1', labels: labels(),
   steps: () => [
-    step('share', () => [q('#rp-admin .rp-share')], true),
+    liveStep('share', () => [q('#rp-admin .rp-share')]),   // URL のコピーを押せる
     liveStep('admin_settings', () => [q('#rp-admin .rp-settings')]),
     step('sets', () => [$('rp-adm-sets')]),
     step('stop', () => [$('rp-stop')], true),
