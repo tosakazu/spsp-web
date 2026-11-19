@@ -43,6 +43,8 @@ export interface Env {
   SMATCH_IMPORT_URL?: string;
   SMATCH_IMPORT_TOKEN?: string;
   SMATCH_EXPORT_TOKENS?: string;
+  /** Hivee (hivee.jp) が SPSP の一覧を読むトークン (カンマ区切り、docs/hivee_partner.md) */
+  HIVEE_EXPORT_TOKENS?: string;
   /** 結果報告の運営への通知 (Web Push) の VAPID 鍵 (worker/scripts/gen_vapid.mjs で作る)。公開鍵は secret でなくてよいが、対で入れる */
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -211,6 +213,7 @@ export interface Config {
   smatchImportUrl?: string;
   smatchImportToken?: string;
   smatchExportTokens?: string[];
+  hiveeExportTokens?: string[];
 }
 
 function intOr(v: string | undefined, dflt: number): number {
@@ -251,6 +254,7 @@ export function configFromEnv(env: Env): Config {
     smatchImportUrl: /^https:\/\//.test(String(env.SMATCH_IMPORT_URL || '')) ? String(env.SMATCH_IMPORT_URL) : undefined,
     smatchImportToken: env.SMATCH_IMPORT_TOKEN || undefined,
     smatchExportTokens: String(env.SMATCH_EXPORT_TOKENS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    hiveeExportTokens: String(env.HIVEE_EXPORT_TOKENS || '').split(',').map((s) => s.trim()).filter(Boolean),
   };
 }
 

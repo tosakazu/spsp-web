@@ -23,6 +23,7 @@ import { formatIso } from './time.ts';
 
 export const SMATCH_IMPORT = 'smatch_import';
 export const SMATCH_EXPORT = 'smatch_export';
+export const HIVEE_EXPORT = 'hivee_export';
 /** 取り込みの間隔 (前に成功してからこれだけ経ったら読む) と、失敗したあと次に試すまで */
 export const SMATCH_IMPORT_EVERY_MS = 20 * 3600e3;
 export const SMATCH_RETRY_MS = 30 * 60e3;
@@ -270,25 +271,38 @@ export async function runSmatchImport(cfg: Config, store: Store, fetchFn: Fetch,
   return { code: 'ok', n: payload.players.length };
 }
 
-/** Authorization: Bearer <token> が SMATCH_EXPORT_TOKENS のどれかと一致するか (入れ替えの間は新旧 2 本を並べる) */
-export function exportTokenOk(cfg: Config, authorization: string | null): boolean {
+/** Authorization: Bearer <token> が tokens のどれかと一致するか (入れ替えの間は新旧 2 本を並べる) */
+function bearerIn(tokens: string[] | undefined, authorization: string | null): boolean {
   const m = /^Bearer\s+(\S+)$/.exec(String(authorization || ''));
   if (!m) return false;
   let hit = false;
-  for (const t of cfg.smatchExportTokens || []) if (t && timingSafeEq(m[1], t)) hit = true;
+  for (const t of tokens || []) if (t && timingSafeEq(m[1], t)) hit = true;
   return hit;
 }
+export function exportTokenOk(cfg: Config, authorization: string | null): boolean {
+  return bearerIn(cfg.smatchExportTokens, authorization);
+}
 
-/** GET /api/partner/smatch/players — ビルドが書いた一覧をそのまま返す。読みに来た時刻を残す (来なくなったら気づけるように) */
-export async function handleSmatchExport(cfg: Config, store: Store, dataFetch: DataFetch, authorization: string | null, nowMs: number): Promise<Response> {
+/** 連携先に渡す一覧 (ビルドが書いた data/partner_smatch.json) をそのまま返す。読みに来た時刻を name で残す (来なくなったら気づけるように) */
+async function partnerExport(tokens: string[] | undefined, name: string, store: Store, dataFetch: DataFetch, authorization: string | null, nowMs: number): Promise<Response> {
   const json = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
-  if (!cfg.smatchExportTokens || !cfg.smatchExportTokens.length) return json(404, { error: 'not_configured' });
-  if (!exportTokenOk(cfg, authorization)) return json(401, { error: 'unauthorized' });
+  if (!tokens || !tokens.length) return json(404, { error: 'not_configured' });
+  if (!bearerIn(tokens, authorization)) return json(401, { error: 'unauthorized' });
   let res: Response;
   try { res = await dataFetch('/data/partner_smatch.json'); } catch (_) { return json(503, { error: 'unavailable' }); }
   if (res.status !== 200) return json(503, { error: 'unavailable' });
-  await store.putPartnerSync(SMATCH_EXPORT, { ok_ms: nowMs, try_ms: nowMs }).catch(() => {});
+  await store.putPartnerSync(name, { ok_ms: nowMs, try_ms: nowMs }).catch(() => {});
   return new Response(res.body, { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+/** GET /api/partner/smatch/players (Bearer SMATCH_EXPORT_TOKENS) */
+export function handleSmatchExport(cfg: Config, store: Store, dataFetch: DataFetch, authorization: string | null, nowMs: number): Promise<Response> {
+  return partnerExport(cfg.smatchExportTokens, SMATCH_EXPORT, store, dataFetch, authorization, nowMs);
+}
+
+/** GET /api/partner/hivee/players (Bearer HIVEE_EXPORT_TOKENS) — Hivee (hivee.jp) に渡す一覧。中身はスマッチに渡すものと同じ (docs/hivee_partner.md) */
+export function handleHiveeExport(cfg: Config, store: Store, dataFetch: DataFetch, authorization: string | null, nowMs: number): Promise<Response> {
+  return partnerExport(cfg.hiveeExportTokens, HIVEE_EXPORT, store, dataFetch, authorization, nowMs);
 }
 
 /** GET /api/partner/smatch/status — 経過時間と件数だけ (理由の文字や URL は出さない) */

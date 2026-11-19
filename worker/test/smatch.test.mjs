@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { MemStore } from './_mem_store.mjs';
 import {
   parseSmatchPayload, runSmatchImport, smatchViewOf, smatchImportDue, exportTokenOk, handleSmatchExport, handleSmatchStatus,
-  handleProfileGet, handleProfilePut, validateProfile, validUrlTemplate, SMATCH_IMPORT, SMATCH_EXPORT, SMATCH_STALE_MS,
+  handleProfileGet, handleProfilePut, validateProfile, validUrlTemplate, SMATCH_IMPORT, SMATCH_EXPORT, handleHiveeExport, HIVEE_EXPORT, SMATCH_STALE_MS,
 } from '../src/api/smatch.ts';
 import { handleCardGet } from '../src/api/card.ts';
 
@@ -165,6 +165,17 @@ test('受け渡し (SPSP → スマッチ): Bearer トークン (新旧 2 本)�
   const res = await handleSmatchExport(cfg(), store, dataFetch, 'Bearer OUT-1', NOON);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), { version: 1, players: [] });
+  assert.strictEqual((await store.getPartnerSync(SMATCH_EXPORT)).ok_ms, NOON);
+  // Hivee 向け: トークンは別 (スマッチのトークンでは読めない・逆も)。読みに来た時刻も別に残す
+  assert.strictEqual((await handleHiveeExport(cfg(), store, dataFetch, 'Bearer HV-1', NOON)).status, 404, '未設定');
+  const hv = cfg({ hiveeExportTokens: ['HV-1'] });
+  assert.strictEqual((await handleHiveeExport(hv, store, dataFetch, 'Bearer OUT-1', NOON)).status, 401);
+  assert.strictEqual((await handleSmatchExport(hv, store, dataFetch, 'Bearer HV-1', NOON)).status, 401);
+  assert.strictEqual(await store.getPartnerSync(HIVEE_EXPORT), null);
+  const hres = await handleHiveeExport(hv, store, dataFetch, 'Bearer HV-1', NOON + 1000);
+  assert.strictEqual(hres.status, 200);
+  assert.deepStrictEqual(await hres.json(), { version: 1, players: [] });
+  assert.strictEqual((await store.getPartnerSync(HIVEE_EXPORT)).ok_ms, NOON + 1000);
   assert.strictEqual((await store.getPartnerSync(SMATCH_EXPORT)).ok_ms, NOON);
   const st = (await handleSmatchStatus(cfg(), store, NOON + 3 * 3600e3)).body;
   assert.deepStrictEqual(st.export, { read_age_h: 3 });

@@ -21,7 +21,7 @@ import type { Store } from '../store.ts';
 import { handleBracketStructure } from './bracket_sim.ts';
 import { handleBracketShareCreate, handleBracketShareGet } from './bracket_share.ts';
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
-import { handleProfileGet, handleProfilePut, handleSmatchExport, handleSmatchImportNow, handleSmatchStatus } from './smatch.ts';
+import { handleHiveeExport, handleProfileGet, handleProfilePut, handleSmatchExport, handleSmatchImportNow, handleSmatchStatus } from './smatch.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
 import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
@@ -328,6 +328,9 @@ export async function handleApiRequest(ctx: ApiContext, request: Request): Promi
     // スマッチとの受け渡し (api/smatch.ts)。一覧は Bearer トークン、状態はだれでも (経過時間と件数だけ)
     if (sub === 'partner/smatch/players') {
       return handleSmatchExport(ctx.cfg, ctx.store, ctx.dataFetch, request.headers.get('authorization'), ctx.now());
+    }
+    if (sub === 'partner/hivee/players') {
+      return handleHiveeExport(ctx.cfg, ctx.store, ctx.dataFetch, request.headers.get('authorization'), ctx.now());
     }
     if (sub === 'partner/smatch/status') {
       return jsonResponse(await dispatch(ctx, { action: 'smatch_status' }));
