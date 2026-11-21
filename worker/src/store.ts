@@ -80,6 +80,8 @@ export interface ClassBracketRow {
   seeding: string;
   entrant_count: number;
   registered_by: string;
+  /** 作った Challonge アプリの番号 (0 = 最初からあるもの。0032) */
+  challonge_app: number;
 }
 
 /** 取得待ちの一覧 (class_waitlist) に出す欄。公開してよいものだけ。 */
@@ -92,6 +94,8 @@ export interface ClassWaitItem {
   challonge_id: number;
   challonge_url: string;
   created_at: string;
+  /** 作った Challonge アプリの番号。取得側はこのアプリの client credentials で読む */
+  challonge_app: number;
 }
 
 /** class_mine に返す欄 (自分が作ったもの)。 */
@@ -107,6 +111,8 @@ export interface ClassMineItem {
   status: string;
   created_at: string;
   entrant_count: number;
+  /** 作った Challonge アプリの番号。削除・結果報告の受付には、このアプリでログインしたトークンが要る */
+  challonge_app: number;
 }
 
 /** class_delete が見る欄。 */
@@ -116,6 +122,7 @@ export interface ClassRecord {
   challonge_id: number;
   registered_by: string;
   status: string;
+  challonge_app: number;
 }
 
 export type ClassInsertResult = { status: 'ok'; id: number } | { status: 'duplicate' } | { status: 'rate_limited' };
@@ -252,6 +259,10 @@ export interface Store {
   classRateOk(guard: RateGuard): Promise<boolean>;
   /** 連投条件 (registered_by ごと) を満たし、challonge_id が未登録なら 1 行追加する。 */
   insertClassBracket(row: ClassBracketRow, guard: RateGuard): Promise<ClassInsertResult>;
+  /** その大会 (parent_tournament_id) でいちばん新しい、削除していない下位クラスの Challonge アプリの番号 (無ければ null)。 */
+  classAppOfTournament(tournamentId: number): Promise<number | null>;
+  /** ts_ms >= sinceMs に作った (削除していない) 下位クラスの人数の合計を、Challonge アプリの番号ごとに。 */
+  classAppLoads(sinceMs: number): Promise<{ app: number; load: number }[]>;
   /** counted = 1 かつ status = 'waiting' の行 (id 順)。 */
   listClassWaitlist(): Promise<ClassWaitItem[]>;
   /** status を done にする。行が無ければ 'missing'、削除済みなら 'deleted' (変えない)、それ以外は 'done'。 */

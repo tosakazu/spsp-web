@@ -31,7 +31,7 @@ import {
 } from '../config.ts';
 import type { ReportDqRow, ReportEventRow, ReportManualRow, ReportSetRow, ReportStartRow, Store } from '../store.ts';
 import { checkStartggAdmin, startggCurrentUser, startggGql } from './class_bracket.ts';
-import { challongeApi } from './challonge.ts';
+import { MSG_WRONG_APP, challongeApi, tokenApp } from './challonge.ts';
 import { handleManagerBegin, logLogin } from './login.ts';
 import type { FetchFn } from './oauth.ts';
 import { checkSnap, projectFull, snapHasStructure } from './report_bracket.ts';
@@ -326,6 +326,10 @@ export async function handleReportEnableClass(cfg: Config, store: Store, fetchFn
     const adm = await checkStartggAdmin(fetchFn, req.startgg_token, cls.parent_event_id);
     if (!adm.ok) return err('not_admin', 'この下位クラスを作った人か、本戦の大会の管理者だけが受付を始められます。', adm.note);
   }
+  // 預かるトークンは、その下位クラスを作った Challonge アプリのものでないと読み書きできない
+  const app = await tokenApp(cfg, req, req.challonge_token);
+  if (app === null) return err('bad_request', '入力の形式が不正です。', 'bad:challonge_app');
+  if (app !== (cls.challonge_app || 0)) return err('challonge_auth', MSG_WRONG_APP, 'wrong_app');
   const t = await challongeApi(fetchFn, req.challonge_token, '/tournaments/' + cls.challonge_id + '.json', null, 'GET');
   if (!t.ok) return err(t.code, t.message, 'tournament:' + t.note);
   const attrs = ((t.json.data || {}) as { attributes?: Record<string, unknown> }).attributes || {};

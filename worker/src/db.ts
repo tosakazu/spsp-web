@@ -241,14 +241,15 @@ export class D1Store implements Store {
     try {
       res = await this.db.prepare(
         `INSERT INTO class_brackets (created_at, ts_ms, day, parent_event_id, parent_tournament_id, class_letter, name,
-           challonge_id, challonge_url, format, counted, place_min, place_max, seeding, entrant_count, registered_by)
-         SELECT ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+           challonge_id, challonge_url, format, counted, place_min, place_max, seeding, entrant_count, registered_by,
+           challonge_app)
+         SELECT ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
          WHERE NOT EXISTS (SELECT 1 FROM class_brackets WHERE registered_by = ?1 AND ts_ms > ?2 - ?3)
            AND (SELECT COUNT(*) FROM class_brackets WHERE registered_by = ?1 AND day = ?4) < ?5`)
         .bind(g.userId, g.nowMs, g.minIntervalMs, g.dayKey, g.maxPerDay,
           row.created_at, row.ts_ms, row.day, row.parent_event_id, row.parent_tournament_id, row.class_letter, row.name,
           row.challonge_id, row.challonge_url, row.format, row.counted, row.place_min, row.place_max, row.seeding,
-          row.entrant_count, row.registered_by)
+          row.entrant_count, row.registered_by, row.challonge_app || 0)
         .run();
     } catch (ex) {
       if (/UNIQUE/i.test(ex instanceof Error ? ex.message : String(ex))) return { status: 'duplicate' };
@@ -260,10 +261,25 @@ export class D1Store implements Store {
 
   async listClassWaitlist(): Promise<ClassWaitItem[]> {
     const r = await this.db.prepare(
-      `SELECT id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at
+      `SELECT id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at, challonge_app
        FROM class_brackets WHERE counted = 1 AND status = 'waiting' ORDER BY id ASC`).all<ClassWaitItem>();
     return (r.results || []).map((x) => ({ ...x, id: Number(x.id), parent_event_id: Number(x.parent_event_id),
-      parent_tournament_id: Number(x.parent_tournament_id), challonge_id: Number(x.challonge_id) }));
+      parent_tournament_id: Number(x.parent_tournament_id), challonge_id: Number(x.challonge_id),
+      challonge_app: Number(x.challonge_app) || 0 }));
+  }
+
+  async classAppOfTournament(tournamentId: number): Promise<number | null> {
+    const r = await this.db.prepare(
+      "SELECT challonge_app FROM class_brackets WHERE parent_tournament_id = ? AND status <> 'deleted' ORDER BY id DESC LIMIT 1")
+      .bind(tournamentId).first<{ challonge_app: number }>();
+    return r ? Number(r.challonge_app) || 0 : null;
+  }
+
+  async classAppLoads(sinceMs: number): Promise<{ app: number; load: number }[]> {
+    const r = await this.db.prepare(
+      `SELECT challonge_app AS app, SUM(entrant_count) AS load FROM class_brackets
+       WHERE ts_ms >= ? AND status <> 'deleted' GROUP BY challonge_app`).bind(sinceMs).all<{ app: number; load: number }>();
+    return (r.results || []).map((x) => ({ app: Number(x.app) || 0, load: Number(x.load) || 0 }));
   }
 
   async markClassDone(id: number): Promise<'done' | 'deleted' | 'missing'> {
@@ -276,22 +292,22 @@ export class D1Store implements Store {
 
   async getClassBracket(id: number): Promise<ClassRecord | null> {
     const r = await this.db.prepare(
-      'SELECT id, parent_event_id, challonge_id, registered_by, status FROM class_brackets WHERE id = ?').bind(id).first<ClassRecord>();
+      'SELECT id, parent_event_id, challonge_id, registered_by, status, challonge_app FROM class_brackets WHERE id = ?').bind(id).first<ClassRecord>();
     return r ? { id: Number(r.id), parent_event_id: Number(r.parent_event_id), challonge_id: Number(r.challonge_id),
-      registered_by: String(r.registered_by), status: String(r.status) } : null;
+      registered_by: String(r.registered_by), status: String(r.status), challonge_app: Number(r.challonge_app) || 0 } : null;
   }
 
   async listClassMine(userId: string, sinceMs: number): Promise<ClassMineItem[]> {
     const r = await this.db.prepare(
       `SELECT id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, counted, status,
-              created_at, entrant_count
+              created_at, entrant_count, challonge_app
        FROM class_brackets WHERE registered_by = ? AND ts_ms >= ? AND status <> 'deleted' ORDER BY id DESC`)
       .bind(userId, sinceMs).all<Record<string, unknown>>();
     return (r.results || []).map((x) => ({
       id: Number(x.id), parent_event_id: Number(x.parent_event_id), parent_tournament_id: Number(x.parent_tournament_id),
       class_letter: String(x.class_letter), name: String(x.name), challonge_id: Number(x.challonge_id),
       challonge_url: String(x.challonge_url), counted: Number(x.counted) === 1, status: String(x.status),
-      created_at: String(x.created_at), entrant_count: Number(x.entrant_count),
+      created_at: String(x.created_at), entrant_count: Number(x.entrant_count), challonge_app: Number(x.challonge_app) || 0,
     }));
   }
 

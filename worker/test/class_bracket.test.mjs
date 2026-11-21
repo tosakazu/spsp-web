@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { makeEnv, post, http, beginState } from './_env.mjs';
 import { parseClassCreate, challongeSlug } from '../src/api/class_bracket.ts';
-import { challongeErrorText } from '../src/api/challonge.ts';
+import { challongeAppFor, challongeAppTag, challongeErrorText } from '../src/api/challonge.ts';
 import { signState } from '../src/api/session.ts';
 import { CLASS_RATE_MIN_INTERVAL_MS, CHALLONGE_SCOPE } from '../src/config.ts';
 
@@ -67,7 +67,8 @@ test('challonge_token: code を換えて access_token を返す (form・Accept �
   const begin = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/' });
   const state = new URL(begin.url).searchParams.get('state');
   const r = await post(e, { action: 'challonge_token', code: 'CODE-1', state });
-  assert.deepStrictEqual(r, { ok: true, access_token: CH_TOKEN, expires_in: 604800, username: 'tosakazu_to' });
+  assert.deepStrictEqual(r, { ok: true, access_token: CH_TOKEN, expires_in: 604800, username: 'tosakazu_to',
+    app: 0, app_tag: await challongeAppTag(e.cfg, 0, CH_TOKEN) });
   const me = e.calls.find((x) => x.kind === 'me');
   assert.strictEqual(me.init.method, 'GET');
   assert.strictEqual(me.init.headers.Authorization, 'Bearer ' + CH_TOKEN);
@@ -278,7 +279,7 @@ test('class_waitlist: counted でないもの・done のものは出ない。GET
   assert.strictEqual(g.headers.get('Cache-Control'), 'no-store');
   assert.deepStrictEqual(g.json.items.map((x) => x.challonge_id), [103]);
   assert.deepStrictEqual(Object.keys(g.json.items[0]).sort(),
-    ['challonge_id', 'challonge_url', 'class_letter', 'created_at', 'id', 'name', 'parent_event_id', 'parent_tournament_id']);
+    ['challonge_app', 'challonge_id', 'challonge_url', 'class_letter', 'created_at', 'id', 'name', 'parent_event_id', 'parent_tournament_id']);
 });
 
 test('class_done: 鍵違いは auth_failed、id 不正は bad_request、無い id は not_found、鍵が未設定なら internal', async () => {
@@ -403,7 +404,7 @@ test('class_mine: 本人が作った直近 60 日・削除していないもの�
   const r = await post(e, { action: 'class_mine', startgg_token: SG_KEY });
   assert.strictEqual(r.ok, true);
   assert.deepStrictEqual(r.items.map((x) => x.id), [3, 2]);
-  assert.deepStrictEqual(Object.keys(r.items[0]).sort(), ['challonge_id', 'challonge_url', 'class_letter', 'counted', 'created_at',
+  assert.deepStrictEqual(Object.keys(r.items[0]).sort(), ['challonge_app', 'challonge_id', 'challonge_url', 'class_letter', 'counted', 'created_at',
     'entrant_count', 'id', 'name', 'parent_event_id', 'parent_tournament_id', 'status'].sort());
   assert.strictEqual(r.items[0].counted, false);
   assert.strictEqual(r.items[1].counted, true);
@@ -661,4 +662,129 @@ test('class_create / class_delete: 使用記録 (tool_logs) に start.gg で確�
   const d = e.store.toolLogs[1];
   assert.deepStrictEqual([d.tool, d.action, d.user_id, d.verified, d.auth], ['class', 'delete', '111', 1, 'key']);
   assert.strictEqual(JSON.parse(d.detail).by_creator, true);
+});
+
+
+// ── Challonge アプリを複数使う (0032) ──────────────────────────────────
+
+const MORE = [{ n: 1, clientId: 'ch-client-1', clientSecret: 'ch-secret-1-DO-NOT-LEAK' }, { n: 2, clientId: 'ch-client-2', clientSecret: 'ch-secret-2-DO-NOT-LEAK' }];
+const multi = (h, cfg) => env(h, { cfg: Object.assign({ classDoneKey: DONE_KEY, challongeClientId: 'ch-client', challongeClientSecret: CH_SECRET,
+  challongeRedirectUri: 'https://spsp-web-preview.tosakazu.workers.dev/callback.html', challongeMoreApps: MORE }, cfg || {}) });
+const stateOf = (url) => JSON.parse(Buffer.from(new URL(url).searchParams.get('state').split('.')[0], 'base64url').toString());
+const classRow = (o) => Object.assign({ id: 1, parent_event_id: 1, parent_tournament_id: 777, challonge_id: 1, registered_by: '111', status: 'waiting',
+  counted: 1, ts_ms: Date.now(), entrant_count: 32, challonge_app: 0 }, o);
+
+test('アプリの割り当て: 大会にもう下位クラスがあれば同じアプリ、無ければ直近 30 日の人数の合計が少ないアプリ', async () => {
+  const e = multi({});
+  const now = Date.parse('2026-11-22T03:00:00Z');
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 777, now), 0, '何も無ければ番号の小さいほう');
+  e.store.classes.push(classRow({ id: 1, parent_tournament_id: 777, challonge_app: 0, ts_ms: now - 86400e3, entrant_count: 32 }));
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 777, now), 0, '同じ大会は同じアプリ');
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 778, now), 1, '別の大会は空いているアプリ');
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, null, now), 1, '大会が分からなくても空いているアプリ');
+  e.store.classes.push(classRow({ id: 2, parent_tournament_id: 778, challonge_id: 2, challonge_app: 1, ts_ms: now - 3600e3, entrant_count: 64 }));
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 779, now), 2);
+  e.store.classes.push(classRow({ id: 3, parent_tournament_id: 779, challonge_id: 3, challonge_app: 2, ts_ms: now - 3600e3, entrant_count: 40 }));
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 780, now), 0, '32 < 40 < 64');
+  // 30 日より前のものは数えない / 削除したものは数えない
+  e.store.classes[0].ts_ms = now - 31 * 86400e3;
+  e.store.classes.push(classRow({ id: 4, parent_tournament_id: 781, challonge_id: 4, challonge_app: 0, ts_ms: now, entrant_count: 500, status: 'deleted' }));
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 780, now), 0);
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 781, now), 0, '削除した下位クラスのアプリには縛られない');
+  // 新しい大会に割り当ててよい番号 (CHALLONGE_NEW_APPS)。もうある大会はそのまま
+  e.cfg.challongeNewApps = [1, 2];
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 780, now), 2);
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 777, now), 0);
+  e.cfg.challongeNewApps = [7];
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 780, now), 0, '使える番号が 1 つも無い指定は無視');
+  // 設定から外れたアプリの大会は、割り当て直す
+  e.cfg.challongeNewApps = undefined;
+  e.cfg.challongeMoreApps = [MORE[0]];
+  assert.strictEqual(await challongeAppFor(e.cfg, e.store, 779, now), 0);
+  // アプリが 1 つなら D1 を読まない
+  const one = env({});
+  one.store.classAppOfTournament = () => { throw new Error('読まないはず'); };
+  assert.strictEqual(await challongeAppFor(one.cfg, one.store, 777, now), 0);
+});
+
+test('challonge_begin: 大会のアプリの client_id で始める・app を返す・state に番号。app の指定もできる', async () => {
+  const e = multi({});
+  e.store.classes.push(classRow({ parent_tournament_id: 777, challonge_app: 2 }));
+  const a = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/', tournament_id: 777 });
+  assert.strictEqual(a.app, 2);
+  assert.strictEqual(new URL(a.url).searchParams.get('client_id'), 'ch-client-2');
+  assert.strictEqual(stateOf(a.url).a, 2);
+  const b = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/', tournament_id: '999' });
+  assert.strictEqual(b.app, 0);
+  assert.strictEqual(new URL(b.url).searchParams.get('client_id'), 'ch-client');
+  const c = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/', app: 1 });
+  assert.strictEqual(new URL(c.url).searchParams.get('client_id'), 'ch-client-1');
+  assert.strictEqual((await post(e, { action: 'challonge_begin', nonce: 'N', app: 5 })).error.code, 'bad_request', '設定に無い番号');
+  assert.strictEqual((await post(e, { action: 'challonge_begin', nonce: 'N', app: 'x' })).error.code, 'bad_request');
+  assert.ok(![a, b, c].some((r) => /DO-NOT-LEAK/.test(JSON.stringify(r))));
+  // challonge_app: 読むだけ
+  assert.deepStrictEqual(await post(e, { action: 'challonge_app', tournament_id: 777 }), { ok: true, app: 2 });
+  assert.strictEqual((await post(e, { action: 'challonge_app' })).error.code, 'bad_request');
+  assert.strictEqual(e.store.errors.length, 0, 'begin・challonge_app は記録しない');
+});
+
+test('challonge_token: 始めたアプリの client_id・secret で code を換え、app と印を返す', async () => {
+  const e = multi({ token: () => resp(200, { access_token: CH_TOKEN, expires_in: 604800 }), me: () => resp(200, { data: { attributes: { username: 'to' } } }) });
+  const begin = await post(e, { action: 'challonge_begin', nonce: 'N', returnPath: '/jp/class/', app: 2 });
+  const r = await post(e, { action: 'challonge_token', code: 'CODE-2', state: new URL(begin.url).searchParams.get('state') });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.app, 2);
+  assert.strictEqual(r.app_tag, await challongeAppTag(e.cfg, 2, CH_TOKEN));
+  assert.notStrictEqual(r.app_tag, await challongeAppTag(e.cfg, 1, CH_TOKEN), '番号が違えば印も違う');
+  assert.notStrictEqual(r.app_tag, await challongeAppTag(e.cfg, 2, CH_TOKEN + 'x'), 'トークンが違えば印も違う');
+  assert.ok(!r.app_tag.includes(CH_TOKEN));
+  const form = new URLSearchParams(e.calls.find((x) => x.kind === 'token').init.body);
+  assert.strictEqual(form.get('client_id'), 'ch-client-2');
+  assert.strictEqual(form.get('client_secret'), 'ch-secret-2-DO-NOT-LEAK');
+  // 始めた後にそのアプリが設定から外れた
+  const begin2 = await post(e, { action: 'challonge_begin', nonce: 'N2', returnPath: '/jp/class/', app: 1 });
+  e.cfg.challongeMoreApps = [MORE[1]];
+  const gone = await post(e, { action: 'challonge_token', code: 'CODE-3', state: new URL(begin2.url).searchParams.get('state') });
+  assert.strictEqual(gone.error.code, 'challonge_error');
+  assert.strictEqual(e.calls.filter((x) => x.kind === 'token').length, 1, 'Challonge には聞かない');
+});
+
+test('class_create: トークンのアプリを行に残す (印が無ければ 0・印が合わなければ bad_request)。取得待ちの一覧・class_mine に出る', async () => {
+  const e = multi(okHandlers());
+  const tag2 = await challongeAppTag(e.cfg, 2, CH_TOKEN);
+  const r = await post(e, body({ challonge_app: 2, challonge_app_tag: tag2 }));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(e.store.classes[0].challonge_app, 2);
+  assert.strictEqual((await post(e, { action: 'class_waitlist' })).items[0].challonge_app, 2);
+  assert.strictEqual((await post(e, { action: 'class_mine', startgg_token: SG_KEY })).items[0].challonge_app, 2);
+  // 印が合わない (番号だけ変えた / 別のトークンの印 / 印が無い): Challonge に作る前に弾く
+  const n = e.calls.length;
+  for (const o of [{ challonge_app: 1, challonge_app_tag: tag2 }, { challonge_app: 2, challonge_app_tag: await challongeAppTag(e.cfg, 2, 'other') },
+    { challonge_app: 2 }, { challonge_app: 99, challonge_app_tag: tag2 }, { challonge_app_tag: tag2 }]) {
+    const bad = await post(e, body(o));
+    assert.strictEqual(bad.error.code, 'bad_request', JSON.stringify(Object.keys(o)));
+  }
+  assert.strictEqual(e.calls.length, n, 'start.gg にも Challonge にも聞かない');
+  // 印も番号も無い = アプリが 1 つだった頃のトークン → 0
+  const e2 = multi(okHandlers());
+  assert.strictEqual((await post(e2, body())).ok, true);
+  assert.strictEqual(e2.store.classes[0].challonge_app, 0);
+  assert.ok(!leaked(e) && !leaked(e2));
+});
+
+test('class_delete: 別のアプリのトークンでは Challonge を呼ばずに challonge_auth (ログインし直してもらう)', async () => {
+  const e = multi(Object.assign(okHandlers(), { delete: () => new Response(null, { status: 204 }) }));
+  const tag1 = await challongeAppTag(e.cfg, 1, CH_TOKEN);
+  assert.strictEqual((await post(e, body({ challonge_app: 1, challonge_app_tag: tag1 }))).ok, true);
+  const del = (o) => post(e, Object.assign({ action: 'class_delete', startgg_token: SG_KEY, challonge_token: CH_TOKEN, id: 1 }, o));
+  e.nowMs = Date.now() + 3600e3;
+  const wrong = await del({});                                  // 印なし = 0 番のトークン
+  assert.strictEqual(wrong.error.code, 'challonge_auth');
+  assert.strictEqual(e.calls.filter((x) => x.kind === 'delete').length, 0);
+  assert.strictEqual(e.store.classes[0].status, 'waiting');
+  e.nowMs += 3600e3;
+  assert.strictEqual((await del({ challonge_app: 1, challonge_app_tag: 'x' })).error.code, 'bad_request');
+  e.nowMs += 3600e3;
+  assert.strictEqual((await del({ challonge_app: 1, challonge_app_tag: tag1 })).ok, true);
+  assert.strictEqual(e.store.classes[0].status, 'deleted');
 });
