@@ -5,7 +5,7 @@ const vm = require('vm');
 const { built } = require('../helpers/built.cjs');
 
 function load() {
-  const ctx = { console };
+  const ctx = { console, canonicalCharId: (id) => ({ 1277: 1317 })[id] || Number(id) };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(built('js/upcoming_stats.js'), ctx);
@@ -21,6 +21,13 @@ const INDEX = new Map([
 const index = { get: (uid) => INDEX.get(uid) || null };
 const ev = { entrants: [{ uid: 3, tag: 'う' }, { uid: 9, tag: '新人' }, { uid: 2, tag: 'い' }, { uid: 1, tag: 'あ' }, { uid: 4, tag: 'え' }, { uid: 2, tag: '重複' }, { uid: null, tag: 'x' }] };
 const plain = (v) => JSON.parse(JSON.stringify(v));
+
+test('ダッシュファイターは使い手ランキングと同じ組にまとめる (デイジー → ピーチ / デイジー)', () => {
+  const idx = { get: (uid) => ({ uid, name: 'd' + uid, ens: uid, lv: 3, char: uid === 1 ? 1277 : 1317, pref: 13 }) };
+  const rows = St.joinEntrants({ entrants: [{ uid: 1 }, { uid: 2 }] }, idx);
+  assert.deepStrictEqual(plain(rows.map((r) => r.char)), [1317, 1317]);
+  assert.strictEqual(St.groupBy(rows, 'char').length, 1);
+});
 
 test('参加予定者に順位などを付けて、順位の高い順に並べる。順位の無い人は後ろ・同じ人は 1 回', () => {
   const rows = St.joinEntrants(ev, index);
