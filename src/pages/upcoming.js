@@ -7,6 +7,7 @@ import { escapeHtml } from '../../site/js/html.js';
 import SPSPI18n from '../../site/js/i18n.js';
 import SPSPTags from '../../site/js/tags.js';
 import Stats from '../../site/js/upcoming_stats.js';
+import { shown as upcomingShown } from '../../site/js/upcoming_until.js';
 import Up from '../../site/js/upcoming_common.js';
 import '../../site/nav.js';
 
@@ -21,7 +22,7 @@ function render() {
   const now = Date.now() / 1000;
   const q = LIST.q.trim().toLowerCase();
   // 始まって半日たった大会は出さない (データには終わった大会が少し残る)
-  const all = Object.entries(Up.DATA.events).map(([eid, ev]) => ({ eid, ev })).filter(x => Number(x.ev.start_at) > now - 12 * 3600);
+  const all = Object.entries(Up.DATA.events).map(([eid, ev]) => ({ eid, ev })).filter(x => upcomingShown(x.ev, now));   // 大会が終わるまで出す (js/upcoming_until.js)
   const list = all.filter(({ ev }) => {
     if (Up.nentOf(ev) < LIST.minNent) return false;
     if (q && !`${ev.tournament_name} ${ev.event_name || ''} ${Up.cityOf(ev)}`.toLowerCase().includes(q)) return false;

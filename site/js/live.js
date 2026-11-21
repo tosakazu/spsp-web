@@ -40,10 +40,12 @@ const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
  * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
  * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化、
+ * pool = 「部門の id → プールの欄の HTML (フェーズ・プール・シードとプールのプレイヤー。参加予定の大会と同じ部品)」を返す Promise、
  * reflected = 「その部門の結果がもう選手の記録 (最新の大会結果・出場履歴) に入っているか」(event_id, 下位クラスにいるか)。入っていれば出さない
  * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
  *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any>,
              reflected?: (eventId: string, inClass: boolean) => boolean,
+ *             pool?: Promise<((eventId: string) => string) | null>,
  *             browser?: { pick: (doc: any) => any, refresh: (doc: any) => Promise<any>, status: () => string } }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
@@ -310,8 +312,9 @@ async function fillRank(box, eid, opts) {
 
 /** カードは「最新の大会結果」と同じ形 (大会アイコンは start.gg の画像をそのまま)
  * @param {HTMLElement} el @param {number | string} uid @param {{summary: any, doc: any}[]} items
- * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] @param {any[]} [preds] items と同じ並びの予想 (無ければ null) */
-export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
+ * @param {LiveOpts} [opts] @param {((uid: number) => boolean) | null} [hasPage] @param {any[]} [preds] items と同じ並びの予想 (無ければ null)
+ * @param {((eventId: string) => string) | null} [poolHtml] プールの欄 (opts.pool の結果) */
+export function render(el, uid, items, opts = {}, hasPage = null, preds = [], poolHtml = null) {
   const cards = [];
   lastPreds.clear();
   items.forEach(({ doc }, i) => { if (preds[i]) lastPreds.set(String(doc.event_id ?? ''), preds[i]); });
@@ -338,7 +341,8 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
     const sets = setsHtml(doc, String(myId), opts, hasPage, pred);
     const eid = escapeHtml(String(doc.event_id ?? ''));
     const predBlock = predHtml(pred, eid, !!opts.rankChange);
-    const canOpen = !!(sets || predBlock);
+    const poolBlock = poolHtml ? poolHtml(String(doc.event_id ?? '')) : '';
+    const canOpen = !!(sets || predBlock || poolBlock);
     cards.push(
       `<div class="tour-group live-group${canOpen && opened.has(eid) ? ' expanded' : ''}" data-eid="${eid}">` +
         `<div class="tour-item tour-item-nohover${canOpen ? ' live-toggle' : ''} latestres-card" style="border-bottom:none">` +
@@ -350,6 +354,7 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = []) {
         `</div>` +
         sets +
         (predBlock ? `<div class="live-detail">${predBlock}</div>` : '') +
+        (poolBlock ? `<div class="live-detail pool-ev live-pool">${poolBlock}</div>` : '') +
         `<div class="live-foot">${t('live.updated', { time: hhmm(doc.updated_at || 0) })}</div>` +
       `</div>`);
   }
@@ -416,7 +421,8 @@ export function start(section, uid, opts = {}) {
     const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
     const predict = opts.predict;
     const preds = predict ? await Promise.all(items.map(({ doc }) => predict(doc).catch(() => null))) : [];
-    const n = render(body, uid, items, opts, hasPage, preds);
+    const poolHtml = opts.pool ? await opts.pool.catch(() => null) : null;
+    const n = render(body, uid, items, opts, hasPage, preds, poolHtml);
     section.style.display = n ? '' : 'none';
     clearTimeout(timer);
     if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, fast ? BROWSER_MS : REFRESH_MS);
