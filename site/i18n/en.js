@@ -532,6 +532,7 @@ window.SPSP_I18N.en = {
   'player.sec.achievements': '🏆 Achievements',
   'player.sec.latest': '🎮 Latest result',
   'player.sec.live': '🔴 Playing now',
+  'live.loading': 'Loading…',
   'live.on': 'Live',
   'live.notice_label': '🔴 Playing now',
   'live.ended': 'Ended',
