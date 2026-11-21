@@ -135,10 +135,12 @@ export interface StatePayload {
   t: number;
   /** ログインの引き継ぎ (login.ts): 始めたブラウザの乱数 s の SHA-256 (base64url)。普段のログインだけ */
   h?: string;
+  /** Challonge のログイン (challonge.ts): どの Challonge アプリで始めたか (番号)。無ければ 0 */
+  a?: number;
 }
 
 /** state を発行する。payload = { n, r, f, t }。f (flow) を署名に含める。 */
-export async function signState(cfg: Config, nonce: unknown, returnPath: unknown, flow: unknown, now: number = Date.now(), handoffHash: string | null = null): Promise<string> {
+export async function signState(cfg: Config, nonce: unknown, returnPath: unknown, flow: unknown, now: number = Date.now(), handoffHash: string | null = null, challongeApp: number | null = null): Promise<string> {
   const payload: StatePayload = {
     n: String(nonce || ''),
     r: String(returnPath || ''),
@@ -146,6 +148,7 @@ export async function signState(cfg: Config, nonce: unknown, returnPath: unknown
     t: now,
   };
   if (handoffHash && payload.f === 'login') payload.h = handoffHash;
+  if (challongeApp !== null && payload.f === 'challonge') payload.a = challongeApp;
   const body = utf8ToBase64Url(JSON.stringify(payload));
   return body + '.' + (await signPayload(cfg, body));
 }

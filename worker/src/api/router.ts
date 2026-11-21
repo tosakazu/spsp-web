@@ -23,7 +23,7 @@ import { handleBracketShareCreate, handleBracketShareGet } from './bracket_share
 import { handleCardGet, handleCardPut, handleMe } from './card.ts';
 import { handleHiveeExport, handleProfileGet, handleProfilePut, handleSmatchExport, handleSmatchImportNow, handleSmatchStatus } from './smatch.ts';
 import { handleTitleExport, handleTitleGet, handleTitleSync } from './title_owned.ts';
-import { handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
+import { handleChallongeApp, handleChallongeBegin, handleChallongeMe, handleChallongeToken } from './challonge.ts';
 import { handleClassCreate, handleClassDelete, handleClassDone, handleClassMine, handleClassWaitlist } from './class_bracket.ts';
 import { handleCspExport, recordCspReport } from './csp.ts';
 import { handleClientError, logError } from './errlog.ts';
@@ -122,7 +122,9 @@ export async function dispatch(ctx: ApiContext, req: unknown): Promise<ApiBody> 
       case 'class_delete':
         res = await handleClassDelete(ctx.cfg, ctx.store, ctx.fetch, r, now); break;
       case 'challonge_begin':
-        return (await handleChallongeBegin(ctx.cfg, r, now)).body;   // 署名 state を配るだけ。記録しない
+        return (await handleChallongeBegin(ctx.cfg, ctx.store, r, now)).body;   // 署名 state を配るだけ。記録しない
+      case 'challonge_app':
+        return (await handleChallongeApp(ctx.cfg, ctx.store, r, now)).body;     // 読むだけ (だれでも)。記録しない
       case 'challonge_me':
         res = await handleChallongeMe(ctx.fetch, r); break;
       case 'challonge_token':

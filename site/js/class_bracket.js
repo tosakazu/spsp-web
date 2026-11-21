@@ -6,8 +6,15 @@
 //   seedOrder(targets, method, rankOf, rand)  シード順に並べる (random / main_result = 本戦の順位、同率はランダム /
 //                                         main_spsp = 本戦の順位、同率は SPSP の順位 (無い人はその中で後ろにランダム) / spsp = SPSP の順位、無い人は後ろにランダム)
 //   participantName(p)                    Challonge の参加者名 = 「start.gg の名前 (discriminator)」
-//   CHALLONGE_TOKEN_KEY / challongeToken()  Challonge でログインしたトークン (callback.js が sessionStorage に置く。期限切れは null)
-//   challongeUser()                        そのログインの Challonge のアカウント名 (表示用。分からなければ null)
+//   CHALLONGE_TOKEN_KEY                    Challonge のログインを置く sessionStorage のキー (callback.js が置く)
+//   challongeLogin(app) / challongeLogins()  Challonge のログイン (アプリの番号ごと。期限切れは無い扱い)
+//   saveChallongeLogin(app, v) / dropChallongeLogin(app)
+//   challongeToken() / challongeUser()     0 番のアプリのトークン・アカウント名 (前からある形)
+//
+// Challonge アプリを複数使う (worker/src/api/challonge.ts): トークンはログインしたアプリのもので、そのアプリで作った下位クラスにしか
+// 使えない。どのアプリを使うかは大会ごとに Worker が決めるので、ログインはアプリの番号ごとに持つ。
+// sessionStorage の形: { apps: { "<番号>": { token, exp, user, tag } } }。tag = どのアプリのトークンかの印 (Worker が返す。作成のときに添える)。
+// 前の形 { token, exp, user } は 0 番として読む
 
 /** 本戦の 1 人 (start.gg の standings の 1 件を平たくしたもの)
  * extra = 本戦に出ていない人を手で足した (シードは本戦の最速敗退と同じ、SPSP には常に集計しない。Challonge の misc に :nocount)
@@ -71,25 +78,67 @@ export function participantName(p) {
 
 export const CHALLONGE_TOKEN_KEY = 'spsp_challonge_token';
 
-/** @param {number} [now] @returns {string | null} */
-export function challongeToken(now = Date.now()) {
+/** Challonge のログイン 1 つ。app = アプリの番号、tag = どのアプリのトークンかの印 (無ければ null)
+ * @typedef {{ app: number, token: string, exp: number, user: string | null, tag: string | null }} ChallongeLogin */
+
+/** 置いてあるものを番号ごとに (期限は見ない) @returns {Record<string, any>} */
+function storedLogins() {
   try {
     const j = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
+    if (!j || typeof j !== 'object') return {};
+    if (j.apps && typeof j.apps === 'object') return j.apps;
+    return typeof j.token === 'string' ? { 0: j } : {};   // 前の形 = 0 番
+  } catch (e) { return {}; }
+}
+
+/** 今使えるログイン (番号の小さい順) @param {number} [now] @returns {ChallongeLogin[]} */
+export function challongeLogins(now = Date.now()) {
+  const apps = storedLogins();
+  /** @type {ChallongeLogin[]} */
+  const out = [];
+  for (const k of Object.keys(apps)) {
+    const v = apps[k];
+    const app = Number(k);
     // 期限の 1 分前からは使わない (作成の途中で切れないように)
-    return j && typeof j.token === 'string' && j.exp > now + 60 * 1000 ? j.token : null;
-  } catch (e) { return null; }
+    if (!Number.isInteger(app) || app < 0 || !v || typeof v.token !== 'string' || !v.token || !(v.exp > now + 60 * 1000)) continue;
+    out.push({ app, token: v.token, exp: v.exp, user: typeof v.user === 'string' && v.user ? v.user : null, tag: typeof v.tag === 'string' && v.tag ? v.tag : null });
+  }
+  return out.sort((a, b) => a.app - b.app);
+}
+
+/** その番号のアプリのログイン (無い・期限切れは null) @param {number} app @param {number} [now] @returns {ChallongeLogin | null} */
+export function challongeLogin(app, now = Date.now()) {
+  return challongeLogins(now).find(x => x.app === app) || null;
+}
+
+/** @param {number} app @param {{ token: string, exp: number, user?: string | null, tag?: string | null }} v */
+export function saveChallongeLogin(app, v) {
+  const apps = storedLogins();
+  apps[String(app)] = { token: v.token, exp: v.exp, user: v.user || null, tag: v.tag || null };
+  sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ apps }));
+}
+
+/** @param {number} app */
+export function dropChallongeLogin(app) {
+  const apps = storedLogins();
+  delete apps[String(app)];
+  try { sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ apps })); } catch (e) { /* 表示だけ変わる */ }
+}
+
+/** @param {number} [now] @returns {string | null} */
+export function challongeToken(now = Date.now()) {
+  const l = challongeLogin(0, now);
+  return l ? l.token : null;
 }
 
 /** @param {number} [now] @returns {string | null} */
 export function challongeUser(now = Date.now()) {
-  if (!challongeToken(now)) return null;
-  try {
-    const j = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
-    return j && typeof j.user === 'string' && j.user ? j.user : null;
-  } catch (e) { return null; }
+  const l = challongeLogin(0, now);
+  return l ? l.user : null;
 }
 
-const API = { parseStartggUrl, challongeUser, pickEvents, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken };
+const API = { parseStartggUrl, challongeUser, pickEvents, selectTargets, seedOrder, participantName, CHALLONGE_TOKEN_KEY, challongeToken,
+  challongeLogins, challongeLogin, saveChallongeLogin, dropChallongeLogin };
 // ほかの共通モジュールと同じく window にも置く (テストが古典 script の形で読むため)
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspClassBracket = API;
 export default API;

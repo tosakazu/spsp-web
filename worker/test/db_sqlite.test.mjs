@@ -24,7 +24,7 @@ function d1Like(db) {
 
 function fresh() {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql', '0022_report_snapshot_meta.sql', '0023_report_ended.sql', '0024_bracket_shares.sql', '0025_bracket_shares_owner.sql', '0026_report_auto_start.sql', '0027_login_handoffs.sql', '0028_report_snapshot_checked.sql', '0029_report_entrants.sql', '0030_smatch.sql', '0031_smatch_seasons.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_card_settings.sql', '0003_class_brackets.sql', '0004_class_delete.sql', '0005_title_owned.sql', '0006_csp_reports.sql', '0007_title_owned_without_rowid.sql', '0008_title_owned_draw_counts.sql', '0009_tool_logs.sql', '0010_login_log.sql', '0011_csp_sample.sql', '0012_reports.sql', '0013_report_presets.sql', '0014_report_grants.sql', '0015_report_push.sql', '0016_report_managers.sql', '0017_report_outage.sql', '0018_report_dq_noshow.sql', '0019_report_start_sync.sql', '0020_report_sgg_admins.sql', '0021_report_prog_ok.sql', '0022_report_snapshot_meta.sql', '0023_report_ended.sql', '0024_bracket_shares.sql', '0025_bracket_shares_owner.sql', '0026_report_auto_start.sql', '0027_login_handoffs.sql', '0028_report_snapshot_checked.sql', '0029_report_entrants.sql', '0030_smatch.sql', '0031_smatch_seasons.sql', '0032_class_challonge_app.sql']) db.exec(fs.readFileSync(new URL('../migrations/' + m, import.meta.url), 'utf8'));
   return { db, store: new D1Store(d1Like(db)) };
 }
 
@@ -110,16 +110,22 @@ test('class_brackets: 追加 (id を返す)・重複は duplicate・連投は ra
   assert.strictEqual(await store.classRateOk(g(t0 + 20000)), true);
   assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 5000), g(t0 + 5000)), { status: 'rate_limited' });
   assert.deepStrictEqual(await store.insertClassBracket(row(2, t0 + 20000, 0), g(t0 + 20000)), { status: 'ok', id: 2 });
-  assert.deepStrictEqual(await store.insertClassBracket(row(3, t0 + 40000), g(t0 + 40000)), { status: 'ok', id: 3 });
+  // 0032: 作った Challonge アプリの番号 (無ければ 0)
+  assert.deepStrictEqual(await store.insertClassBracket({ ...row(3, t0 + 40000), challonge_app: 2 }, g(t0 + 40000)), { status: 'ok', id: 3 });
+  assert.strictEqual(await store.classAppOfTournament(777), 2, 'いちばん新しい行のアプリ');
+  assert.strictEqual(await store.classAppOfTournament(778), null);
+  assert.deepStrictEqual((await store.classAppLoads(t0)).sort((a, b) => a.app - b.app), [{ app: 0, load: 64 }, { app: 2, load: 32 }]);
+  assert.deepStrictEqual(await store.classAppLoads(t0 + 30000), [{ app: 2, load: 32 }]);
   const w = await store.listClassWaitlist();
   assert.deepStrictEqual(w.map((x) => x.id), [1, 3]);
   assert.deepStrictEqual(w[0], { id: 1, parent_event_id: 1234567, parent_tournament_id: 777, class_letter: 'B', name: 'n1',
-    challonge_id: 1, challonge_url: 'https://challonge.com/1', created_at: 'C1' });
+    challonge_id: 1, challonge_url: 'https://challonge.com/1', created_at: 'C1', challonge_app: 0 });
+  assert.strictEqual(w[1].challonge_app, 2);
   assert.strictEqual(await store.markClassDone(1), 'done');
   assert.strictEqual(await store.markClassDone(99), 'missing');
   assert.deepStrictEqual((await store.listClassWaitlist()).map((x) => x.id), [3]);
   // 削除 (0004): done は消さない、waiting は deleted に、deleted に done は付かない
-  assert.deepStrictEqual(await store.getClassBracket(3), { id: 3, parent_event_id: 1234567, challonge_id: 3, registered_by: '111', status: 'waiting' });
+  assert.deepStrictEqual(await store.getClassBracket(3), { id: 3, parent_event_id: 1234567, challonge_id: 3, registered_by: '111', status: 'waiting', challonge_app: 2 });
   assert.strictEqual(await store.getClassBracket(42), null);
   assert.strictEqual(await store.markClassDeleted(1, 'D'), 'done');
   assert.strictEqual(await store.markClassDeleted(3, 'D3'), 'deleted');

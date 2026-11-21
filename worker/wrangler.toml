@@ -8,6 +8,9 @@
 #   EXPORT_KEY             (任意) エクスポート API の追加鍵。未設定なら GAS と同じ
 #                          HMAC(client secret, EXPORT_KEY_LABEL) の導出鍵だけを受け付ける
 #   CHALLONGE_CLIENT_ID / CHALLONGE_CLIENT_SECRET  Challonge OAuth アプリ (下位クラスを TO の Challonge アカウントで作る)
+#   CHALLONGE_CLIENT_ID_<n> / CHALLONGE_CLIENT_SECRET_<n>  (任意、n = 1〜9) 追加の Challonge アプリ。回数の上限がアプリごとなので
+#                          大会ごとに使い分ける (docs/class_bracket_design.md「Challonge アプリを複数使う」)。
+#                          取得側 (smash_database) にも同じ名前で入れる。[vars] CHALLONGE_NEW_APPS = "1,2" で新しい大会に使う番号を絞れる
 #   CLASS_DONE_KEY         下位クラスの取得側 (smash_database) が class_done で送る鍵。取得側の secret と同じ値。
 #                          未設定なら class_done は internal (取得済みにできないだけで、登録と一覧は動く)
 #

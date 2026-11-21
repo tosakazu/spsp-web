@@ -18,7 +18,7 @@ import SPSPLogo from '../logo.js';   // 処理中のロゴ (外部リソース�
 import SpspLogin from './login.js';
 import SpspStartggManager from './startgg_manager.js';   // 大会運営用の start.gg ログイン (manager フロー、シード作成・下位クラス作成)
 import SpspStartggIdentity from './startgg_identity.js';   // 普段のログインの start.gg のトークン (参加中の大会をブラウザが読み直す)
-import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
+import { saveChallongeLogin } from './class_bracket.js';   // 下位クラス作成の Challonge ログイン (challonge フロー)   // 失敗したときの「もう一度ログイン」(元のページを戻り先にして start.gg へ)
 (function () {
   'use strict';
   var i18n = function (k, p) { return SPSPI18n.t(k, p); };   // 文言 (i18n/ja.js、js/i18n.js を先に読む)
@@ -376,7 +376,8 @@ import { CHALLONGE_TOKEN_KEY } from './class_bracket.js';   // 下位クラス�
     }).then(function (json) {
       if (json && json.ok && json.access_token) {
         var exp = Date.now() + (Number(json.expires_in) > 0 ? Number(json.expires_in) * 1000 : 3600 * 1000);
-        try { sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify({ token: json.access_token, exp: exp, user: json.username || null })); } catch (_) { /* 下で失敗として出す */ }
+        // どの Challonge アプリでログインしたか (json.app、古い Worker は返さない = 0) ごとに置く。app_tag は作成のときに添える印
+        try { saveChallongeLogin(Number(json.app) || 0, { token: json.access_token, exp: exp, user: json.username || null, tag: json.app_tag || null }); } catch (_) { /* 下で失敗として出す */ }
         location.replace(S.withFlag(back, 'challonge'));
         return;
       }

@@ -567,6 +567,20 @@ function fakeChallonge() {
   return st;
 }
 
+test('Challonge の下位クラスの受付: 作ったのと別の Challonge アプリのトークンは預からない (challonge_auth)', async () => {
+  const { challongeAppTag } = await import('../src/api/challonge.ts');
+  const fake = fakeChallonge();
+  const e = await envWith(fake);
+  e.store.classes.push({ id: 3, parent_event_id: 9, challonge_id: 77, registered_by: '4242', status: 'waiting', challonge_app: 1 });
+  e.store.getClassBracket = async (id) => e.store.classes.find((c) => c.id === id) || null;
+  const req = { action: 'report_enable_class', startgg_token: 'K', challonge_token: 'CT', challonge_exp: Date.now() + 86400e3, class_id: 3 };
+  const wrong = await e.call(req);                                   // 印なし = 0 番のトークン
+  assert.strictEqual(wrong.error.code, 'challonge_auth');
+  assert.strictEqual(await e.store.getReportEventByTarget('challonge', '77'), null, '受付は作らない');
+  const ok = await e.call({ ...req, challonge_app: 1, challonge_app_tag: await challongeAppTag(e.cfg, 1, 'CT') });
+  assert.strictEqual(ok.ok, true, JSON.stringify(ok));
+});
+
 test('Challonge の下位クラス: 作った本人が受付 → 選手の報告を Challonge に送り、食い違えば reopen', async () => {
   const fake = fakeChallonge();
   const e = await envWith(fake);
