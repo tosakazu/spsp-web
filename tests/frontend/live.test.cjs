@@ -240,3 +240,14 @@ test('次の相手が未定: 枠の前の試合をさかのぼって候補をシ
   L.render(e2, 11, [{ summary: {}, doc: doc() }]);
   assert.doesNotMatch(e2.innerHTML, /live-cand/);
 });
+
+test('プールの欄 (参加予定の大会と同じ部品) をカードを開いた中に出す。無い部門には出さない', () => {
+  const L = load();
+  const e = el();
+  const d = { ...doc(), event_id: 5 };
+  L.render(e, 11, [{ summary: {}, doc: d }], {}, null, [], (eid) => (eid === '5' ? '<div class="pe-body">POOL</div>' : ''));
+  assert.match(e.innerHTML, /<div class="live-detail pool-ev live-pool"><div class="pe-body">POOL<\/div><\/div>/);
+  const e2 = el();
+  L.render(e2, 11, [{ summary: {}, doc: { ...doc(), event_id: 6 } }], {}, null, [], (eid) => (eid === '5' ? 'x' : ''));
+  assert.doesNotMatch(e2.innerHTML, /live-pool/);
+});
