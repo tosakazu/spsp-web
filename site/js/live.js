@@ -382,6 +382,40 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = [], po
   return cards.length;
 }
 
+// 前に読んだもの (その選手の分の小さい doc) をこのブラウザに置いておき、次に開いたときはまずそれで描く (2026-11-21)。
+// 結果は後から直されることがあるので、描いたあと必ず読み直して差し替える。置くのは新しい CACHE_MAX 人分・CACHE_KEEP_MS まで
+const CACHE_PREFIX = 'spsp_live_quick_';
+const CACHE_KEEP_MS = 12 * 3600 * 1000;
+const CACHE_MAX = 6;
+const CACHE_MAX_CHARS = 400000;   // これより大きいもの (分けていない大きめの部門) は置かない
+/** @param {number | string} uid @returns {{summary: any, doc: any}[] | null} */
+function readCache(uid) {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_PREFIX + uid) || 'null');
+    return c && Array.isArray(c.items) && Date.now() - (c.at || 0) < CACHE_KEEP_MS ? c.items : null;
+  } catch (e) { return null; }
+}
+/** @param {number | string} uid @param {{summary: any, doc: any}[] | null} items null = 消す */
+function writeCache(uid, items) {
+  try {
+    if (!items || !items.length) { localStorage.removeItem(CACHE_PREFIX + uid); return; }
+    const text = JSON.stringify({ at: Date.now(), items });
+    if (text.length > CACHE_MAX_CHARS) { localStorage.removeItem(CACHE_PREFIX + uid); return; }
+    localStorage.setItem(CACHE_PREFIX + uid, text);
+    // 古いもの・多すぎる分を消す
+    /** @type {[string, number][]} */
+    const all = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(CACHE_PREFIX) !== 0) continue;
+      let at = 0;
+      try { at = (JSON.parse(localStorage.getItem(k) || 'null') || {}).at || 0; } catch (e) { /* 壊れていれば消す */ }
+      all.push([k, at]);
+    }
+    all.sort((a, b) => b[1] - a[1]).forEach(([k, at], i) => { if (i >= CACHE_MAX || Date.now() - at >= CACHE_KEEP_MS) localStorage.removeItem(k); });
+  } catch (e) { /* 置けなければ次も読み込みから */ }
+}
+
 /** @param {HTMLElement} section @param {number | string} uid @param {LiveOpts} [opts] */
 export function start(section, uid, opts = {}) {
   const body = /** @type {HTMLElement | null} */ (section.querySelector('.live-body'));
@@ -434,13 +468,16 @@ export function start(section, uid, opts = {}) {
   if (opts.hasPage) opts.hasPage.then((fn) => { view.hasPage = fn; if (painted) paint(); }).catch(() => {});
   if (opts.pool) opts.pool.then((fn) => { view.pool = fn; if (painted) paint(); }).catch(() => {});
   const idOf = (/** @type {{summary: any, doc: any}} */ it) => String((it.summary && it.summary.event_id) ?? it.doc.event_id ?? '');
+  // 前に読んだものがあれば、読み直す前にまずそれで描く (読み込み中の表示は出さない)
+  const cached = readCache(uid);
+  if (cached) { view.items = cached; if (!paint()) painted = false; }
   const tick = async () => {
     const br = opts.browser || null;
     const st = br ? br.status() : null;
     // ブラウザが start.gg から読み直しているあいだは、サーバの速報 (一覧と小さいファイル) を見直すのは SERVER_MS ごと
     const reuse = st === 'on' && lastQuick.length > 0 && Date.now() - quickAt < SERVER_MS;
     const sums = reuse ? lastQuick.map((q) => q.summary) : await summariesOf(uid);
-    if (!sums.length) { section.style.display = 'none'; clearTimeout(timer); return; }
+    if (!sums.length) { section.style.display = 'none'; writeCache(uid, null); clearTimeout(timer); return; }
     // ① 読み込み中 (最新の大会結果にもう入っている部門だけなら出さない)
     if (!painted && sums.some((sm) => !(opts.reflected && opts.reflected(String(sm.event_id), false)))) {
       section.style.display = '';
@@ -449,7 +486,7 @@ export function start(section, uid, opts = {}) {
     // ② 小さいファイルで描く (前の回の doc が古くなければそちら: 予想が付いている)
     const quick = reuse ? lastQuick
       : (await Promise.all(sums.map(async (summary) => ({ summary, doc: await loadDoc(summary, uid, true) })))).filter((x) => x.doc);
-    if (!reuse) { lastQuick = quick; quickAt = Date.now(); }
+    if (!reuse) { lastQuick = quick; quickAt = Date.now(); writeCache(uid, quick); }
     view.items = quick.map((q) => { const p = shown.get(idOf(q)); return p && (p.doc.updated_at || 0) >= (q.doc.updated_at || 0) ? { summary: q.summary, doc: p.doc } : q; });
     view.preds = view.items.map((it) => { const p = shown.get(idOf(it)); return p && p.doc === it.doc ? p.pred : null; });
     if (!paint()) { clearTimeout(timer); return; }

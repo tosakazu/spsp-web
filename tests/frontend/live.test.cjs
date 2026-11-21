@@ -300,3 +300,36 @@ test('分けていない部門は部門のファイルをそのまま読む (小
   assert.strictEqual(items.length, 1);
   assert.deepStrictEqual(urls, ['index.json', 'events/5.json']);
 });
+
+test('前に読んだものがあれば、読み直す前にまずそれで描き、届いたら差し替える (読み込み中は出さない)', async () => {
+  const store = new Map();
+  const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k),
+    get length() { return store.size; }, key: (i) => [...store.keys()][i] ?? null };
+  const old = { ...doc(), event_id: 5, tournament_name: 'OLD', updated_at: 1800000000 };
+  store.set('spsp_live_quick_11', JSON.stringify({ at: Date.now(), items: [{ summary: { event_id: 5 }, doc: old }] }));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetch = async (url) => {
+    await gate;
+    return { ok: true, json: async () => (/index\.json$/.test(url) ? { events: [{ event_id: 5 }], players: { 11: [5] } } : { ...doc(), event_id: 5, tournament_name: 'NEW', updated_at: 1800000300 }) };
+  };
+  const body = { innerHTML: '', textContent: '', addEventListener() {}, querySelectorAll: () => [] };
+  const section = { style: { display: 'none' }, querySelector: () => body, appendChild() {} };
+  const document = { visibilityState: 'hidden', addEventListener() {}, createElement: () => ({ addEventListener() {}, hidden: true, className: '' }) };
+  const L = load('', 'spsp.games', { fetch, document, clearTimeout, setTimeout, localStorage, SpspLogin: { apiAvailable: () => false } });
+  let loading = 0;
+  L.start(section, 11, { loading: () => { loading++; } });
+  assert.match(body.innerHTML, /OLD/, '読む前に前の内容で描く');
+  assert.strictEqual(section.style.display, '');
+  release();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.match(body.innerHTML, /NEW/);
+  assert.strictEqual(loading, 0);
+  assert.match(store.get('spsp_live_quick_11'), /NEW/, '読んだものを置き直す');
+  // 古すぎるものは使わない
+  store.set('spsp_live_quick_11', JSON.stringify({ at: Date.now() - 13 * 3600 * 1000, items: [{ summary: { event_id: 5 }, doc: old }] }));
+  const body2 = { innerHTML: '', textContent: '', addEventListener() {}, querySelectorAll: () => [] };
+  const L2 = load('', 'spsp.games', { fetch: async () => new Promise(() => {}), document, clearTimeout, setTimeout, localStorage, SpspLogin: { apiAvailable: () => false } });
+  L2.start({ style: { display: 'none' }, querySelector: () => body2, appendChild() {} }, 11, {});
+  assert.strictEqual(body2.innerHTML, '');
+});
