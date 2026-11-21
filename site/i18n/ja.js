@@ -536,6 +536,7 @@ window.SPSP_I18N.ja = {
   'player.sec.latest': '🎮 最新の大会結果',
   'player.sec.live': '🔴 参加中の大会',
   'live.on': '開催中',
+  'live.loading': '読み込み中…',
   'live.notice_label': '🔴 参加中',
   'live.ended': '終了',
   'live.place': '{n} 位',

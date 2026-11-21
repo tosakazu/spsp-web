@@ -40,12 +40,13 @@ const lastPreds = new Map();
 /** プレイヤーページから渡すもの: name = 本人の表示名 (試合の見出し)、emojiOf = uid → メインキャラの絵文字、
  * hasPage = 「uid → SPSP にページがあるか」を返す Promise (あれば相手の名前をリンクにする)、
  * predict = 部門の予想 (js/live_predict.js の LivePrediction + perfInfo)、rankChange = 予想から全国順位の変化、
+ * loading = 読み込み中の表示を el に置く (プレイヤーページは SPSP ロゴ。無ければ文字)、
  * pool = 「部門の id → プールの欄の HTML (フェーズ・プール・シードとプールのプレイヤー。参加予定の大会と同じ部品)」を返す Promise、
  * reflected = 「その部門の結果がもう選手の記録 (最新の大会結果・出場履歴) に入っているか」(event_id, 下位クラスにいるか)。入っていれば出さない
  * @typedef {{ name?: string, emojiOf?: (uid: number) => string, hasPage?: Promise<((uid: number) => boolean) | null>,
  *             predict?: (doc: any) => Promise<any>, rankChange?: (pred: any) => Promise<any>,
              reflected?: (eventId: string, inClass: boolean) => boolean,
- *             pool?: Promise<((eventId: string) => string) | null>,
+ *             pool?: Promise<((eventId: string) => string) | null>, loading?: (el: HTMLElement) => void,
  *             browser?: { pick: (doc: any) => any, refresh: (doc: any) => Promise<any>, status: () => string } }} LiveOpts */
 /** @param {string} k @param {any} [p] */
 const t = (k, p) => SPSPI18n.t(k, p);
@@ -61,23 +62,36 @@ async function getJson(url) {
   return r.json();
 }
 
-/** @param {number | string} uid @returns {Promise<{summary: any, doc: any}[]>} */
-export async function load(uid) {
+/** 一覧 (index.json) で、その選手が出ている部門の概要 (無ければ []) @param {number | string} uid @returns {Promise<any[]>} */
+async function summariesOf(uid) {
   const root = liveRoot();
   if (!root || !uid) return [];
   let index;
   try { index = await getJson(root + 'index.json'); } catch (e) { return []; }
   const ids = ((index && index.players) || {})[String(uid)] || [];
-  if (!ids.length) return [];
   const byId = new Map(((index && index.events) || []).map((/** @type {any} */ s) => [String(s.event_id), s]));
-  const out = [];
-  for (const id of ids) {
-    try {
-      const doc = await getJson(`${root}events/${id}.json`);
-      out.push({ summary: byId.get(String(id)) || {}, doc });
-    } catch (e) { /* 間で消えた部門は飛ばす */ }
+  return ids.map((/** @type {any} */ id) => byId.get(String(id)) || { event_id: id });
+}
+
+/** 1 部門を読む。quick = 選手ごとの小さいファイル (summary.slices 個に分けてある。その人の試合と相手だけ、doc.slice あり) が
+ * あればそれ。無い・読めなければ部門のファイル (大きい部門は 1 MB を超える)。読めなければ null
+ * @param {any} summary @param {number | string} uid @param {boolean} quick */
+async function loadDoc(summary, uid, quick) {
+  const root = liveRoot();
+  const id = summary.event_id;
+  const n = Number(summary.slices) || 0;
+  if (quick && n > 0 && Number.isFinite(Number(uid))) {
+    try { return await getJson(`${root}slices/${id}/${n}-${Number(uid) % n}.json`); } catch (e) { /* 部門のファイルで */ }
   }
-  return out;
+  try { return await getJson(`${root}events/${id}.json`); } catch (e) { return null; }   // 間で消えた部門は飛ばす
+}
+
+/** その選手が出ている部門 [{summary, doc}]。quick = 選手ごとの小さいファイルで (予想には使えない。loadDoc)
+ * @param {number | string} uid @param {boolean} [quick] @returns {Promise<{summary: any, doc: any}[]>} */
+export async function load(uid, quick = false) {
+  const sums = await summariesOf(uid);
+  const docs = await Promise.all(sums.map((sm) => loadDoc(sm, uid, quick)));
+  return sums.map((summary, i) => ({ summary, doc: docs[i] })).filter((x) => x.doc);
 }
 
 /** @param {any} doc @param {number | string} uid */
@@ -398,32 +412,74 @@ export function start(section, uid, opts = {}) {
     b.disabled = true;
     SpspLogin.startLogin().then((ok) => { if (!ok) b.disabled = false; });
   });
+  // 出すまでを速く (2026-11-21): ① 一覧で出ていると分かったら欄を出して読み込み中の表示、② 選手ごとの小さいファイルで
+  // カードを描く、③ 部門のファイル (予想・ブラウザの読み直しに要る) と、相手のリンク・プールの欄は届いた順に描き足す。
+  // 部門のファイルは、小さいファイルの更新時刻が進んだときだけ読み直す (サーバの更新は 5 分ごと)
+  /** サーバの部門のファイル (event_id → doc) @type {Map<string, any>} */
+  const serverFull = new Map();
+  /** 前の回に描いたもの (event_id → 部門のファイルから作った doc と予想) @type {Map<string, { doc: any, pred: any }>} */
+  const shown = new Map();
+  /** @type {{ items: {summary: any, doc: any}[], preds: any[], hasPage: ((uid: number) => boolean) | null, pool: ((eventId: string) => string) | null }} */
+  const view = { items: [], preds: [], hasPage: null, pool: null };
+  let painted = false;
   /** @type {{summary: any, doc: any}[]} */
-  let serverItems = [];
-  let serverAt = 0;
+  let lastQuick = [];
+  let quickAt = 0;
+  const paint = () => {
+    painted = true;
+    const n = render(body, uid, view.items, opts, view.hasPage, view.preds, view.pool);
+    section.style.display = n ? '' : 'none';
+    return n;
+  };
+  if (opts.hasPage) opts.hasPage.then((fn) => { view.hasPage = fn; if (painted) paint(); }).catch(() => {});
+  if (opts.pool) opts.pool.then((fn) => { view.pool = fn; if (painted) paint(); }).catch(() => {});
+  const idOf = (/** @type {{summary: any, doc: any}} */ it) => String((it.summary && it.summary.event_id) ?? it.doc.event_id ?? '');
   const tick = async () => {
     const br = opts.browser || null;
     const st = br ? br.status() : null;
-    if (!serverItems.length || st !== 'on' || Date.now() - serverAt >= SERVER_MS) { serverItems = await load(uid); serverAt = Date.now(); }
-    let items = serverItems;
-    if (br) {
-      items = serverItems.map(({ summary, doc }) => ({ summary, doc: br.pick(doc) }));
-      if (st === 'on') {
-        items = await Promise.all(items.map(async (it) => (it.summary.ended || isOut(it.doc, uid) ? it
-          : { summary: it.summary, doc: (await br.refresh(it.doc).catch(() => null)) || it.doc })));
-      }
+    // ブラウザが start.gg から読み直しているあいだは、サーバの速報 (一覧と小さいファイル) を見直すのは SERVER_MS ごと
+    const reuse = st === 'on' && lastQuick.length > 0 && Date.now() - quickAt < SERVER_MS;
+    const sums = reuse ? lastQuick.map((q) => q.summary) : await summariesOf(uid);
+    if (!sums.length) { section.style.display = 'none'; clearTimeout(timer); return; }
+    // ① 読み込み中 (最新の大会結果にもう入っている部門だけなら出さない)
+    if (!painted && sums.some((sm) => !(opts.reflected && opts.reflected(String(sm.event_id), false)))) {
+      section.style.display = '';
+      if (opts.loading) opts.loading(body); else body.textContent = t('live.loading');
     }
+    // ② 小さいファイルで描く (前の回の doc が古くなければそちら: 予想が付いている)
+    const quick = reuse ? lastQuick
+      : (await Promise.all(sums.map(async (summary) => ({ summary, doc: await loadDoc(summary, uid, true) })))).filter((x) => x.doc);
+    if (!reuse) { lastQuick = quick; quickAt = Date.now(); }
+    view.items = quick.map((q) => { const p = shown.get(idOf(q)); return p && (p.doc.updated_at || 0) >= (q.doc.updated_at || 0) ? { summary: q.summary, doc: p.doc } : q; });
+    view.preds = view.items.map((it) => { const p = shown.get(idOf(it)); return p && p.doc === it.doc ? p.pred : null; });
+    if (!paint()) { clearTimeout(timer); return; }
+    // ③ 部門のファイル (分けていない部門は ② で読んだものがそれ)
+    const items = await Promise.all(quick.map(async (q) => {
+      const id = idOf(q);
+      let sdoc = q.doc.slice ? serverFull.get(id) : q.doc;
+      if (q.doc.slice && (!sdoc || (sdoc.updated_at || 0) < (q.doc.updated_at || 0))) sdoc = (await loadDoc(q.summary, uid, false)) || sdoc;
+      if (!sdoc) return q;   // 読めなければ小さいファイルのまま (予想なし)
+      serverFull.set(id, sdoc);
+      let doc = br ? br.pick(sdoc) : sdoc;
+      if (br && st === 'on' && !(q.summary.ended || isOut(doc, uid))) doc = (await br.refresh(doc).catch(() => null)) || doc;
+      return { summary: q.summary, doc };
+    }));
     const st2 = br ? br.status() : null;
     // 読み直す部門が残っていなければ、サーバの速報だけを REFRESH_MS ごとに見る
     const fast = st2 === 'on' && items.some((it) => !it.summary.ended && !it.doc.ended_at && !isOut(it.doc, uid));
     note.hidden = !items.length || !br || st2 === 'on' || !SpspLogin.apiAvailable();
     if (!note.hidden) note.innerHTML = `<span>${st2 === 'relogin' ? t('live.browser.relogin') : t('live.browser.login')}</span><button type="button">${t('live.browser.login_btn')}</button>`;
-    const hasPage = opts.hasPage ? await opts.hasPage.catch(() => null) : null;
     const predict = opts.predict;
-    const preds = predict ? await Promise.all(items.map(({ doc }) => predict(doc).catch(() => null))) : [];
-    const poolHtml = opts.pool ? await opts.pool.catch(() => null) : null;
-    const n = render(body, uid, items, opts, hasPage, preds, poolHtml);
-    section.style.display = n ? '' : 'none';
+    const keep = (/** @type {{summary: any, doc: any}} */ it) => { const p = shown.get(idOf(it)); return p && p.doc === it.doc ? p.pred : null; };
+    view.items = items;
+    view.preds = items.map(keep);
+    paint();
+    // 予想は部門のファイルから (小さいファイルには全員のセットが無い)。doc が前の回と同じなら計算し直さない
+    const preds = predict ? await Promise.all(items.map((it) => (it.doc.slice ? null : (keep(it) || predict(it.doc).catch(() => null))))) : [];
+    view.preds = preds;
+    shown.clear();
+    items.forEach((it, i) => { if (!it.doc.slice) shown.set(idOf(it), { doc: it.doc, pred: preds[i] || null }); });
+    const n = paint();
     clearTimeout(timer);
     if (n && typeof document !== 'undefined' && document.visibilityState !== 'hidden') timer = W.setTimeout(tick, fast ? BROWSER_MS : REFRESH_MS);
   };
@@ -463,7 +519,7 @@ export async function showNotice(el, opts = {}) {
     if (!sess) return;
     uid = String(sess.user.id);
   }
-  const [items, skip] = await Promise.all([load(uid), Promise.resolve(opts.skip).catch(() => null)]);
+  const [items, skip] = await Promise.all([load(uid, true), Promise.resolve(opts.skip).catch(() => null)]);   // 帯は名前と順位だけ: 小さいファイルで
   const links = [];
   /** @type {string[]} */
   const hrefs = [];

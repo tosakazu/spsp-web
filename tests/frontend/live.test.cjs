@@ -251,3 +251,52 @@ test('プールの欄 (参加予定の大会と同じ部品) をカードを開�
   L.render(e2, 11, [{ summary: {}, doc: { ...doc(), event_id: 6 } }], {}, null, [], (eid) => (eid === '5' ? 'x' : ''));
   assert.doesNotMatch(e2.innerHTML, /live-pool/);
 });
+
+test('出すまでを速く: 一覧で分かったら読み込み中、選手ごとの小さいファイルで描いてから部門のファイルで予想', async () => {
+  const urls = [];
+  const events = [];
+  let releaseFull;
+  const fullGate = new Promise((r) => { releaseFull = r; });
+  const full = { ...doc(), event_id: 5, updated_at: 1800000000 };
+  const slice = { ...full, slice: [2, 1], entrants: { 1: full.entrants[1], 2: full.entrants[2], 3: full.entrants[3] } };
+  const fetch = async (url) => {
+    urls.push(url.replace('https://data.spsp.games/live/jp/', ''));
+    if (/index\.json$/.test(url)) return { ok: true, json: async () => ({ events: [{ event_id: 5, slices: 2 }], players: { 11: [5] } }) };
+    if (/slices\/5\/2-1\.json$/.test(url)) return { ok: true, json: async () => slice };
+    if (/events\/5\.json$/.test(url)) { await fullGate; return { ok: true, json: async () => full }; }
+    return { ok: false, status: 404, json: async () => null };
+  };
+  const body = { innerHTML: '', textContent: '', addEventListener() {}, querySelectorAll: () => [] };
+  Object.defineProperty(body, 'innerHTML', { set(v) { this._h = v; events.push('paint'); }, get() { return this._h || ''; } });
+  const section = { style: { display: 'none' }, querySelector: () => body, appendChild() {} };
+  const document = { visibilityState: 'hidden', addEventListener() {}, createElement: () => ({ addEventListener() {}, hidden: true, className: '' }) };
+  const L = load('', 'spsp.games', { fetch, document, clearTimeout, setTimeout, SpspLogin: { apiAvailable: () => false } });
+  const preds = [];
+  L.start(section, 11, {
+    loading: () => { events.push('loading:' + section.style.display); },
+    predict: async (d) => { preds.push(!!d.slice); return null; },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  // 部門のファイルが届く前に、小さいファイルでカードが出ている
+  assert.deepStrictEqual(urls, ['index.json', 'slices/5/2-1.json', 'events/5.json']);
+  assert.strictEqual(events[0], 'loading:');
+  assert.ok(events.includes('paint'));
+  assert.match(body.innerHTML, /live-group/);
+  assert.strictEqual(section.style.display, '');
+  assert.deepStrictEqual(preds, []);
+  releaseFull();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(preds, [false], '予想は部門のファイルで 1 回');
+});
+
+test('分けていない部門は部門のファイルをそのまま読む (小さいファイルを探さない)', async () => {
+  const urls = [];
+  const fetch = async (url) => {
+    urls.push(url.replace('https://data.spsp.games/live/jp/', ''));
+    return { ok: true, json: async () => (/index\.json$/.test(url) ? { events: [{ event_id: 5 }], players: { 11: [5] } } : { ...doc(), event_id: 5 }) };
+  };
+  const L = load('', 'spsp.games', { fetch });
+  const items = await L.load(11, true);
+  assert.strictEqual(items.length, 1);
+  assert.deepStrictEqual(urls, ['index.json', 'events/5.json']);
+});

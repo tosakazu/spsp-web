@@ -1592,6 +1592,7 @@ function render() {
       ...livePredictOpts(),
       browser: SpspLiveBrowser,   // ログインしていればブラウザが start.gg から 15 秒ごとに読み直す
       reflected: liveReflected(),
+      loading: (el) => SPSPLogo.inline(el, { sub: true }),   // 出ていると分かってからカードが描けるまで
       pool: livePool(),   // 参加予定の大会と同じプールの欄 (フェーズ・プール・シード・プールのプレイヤー)
     });
     bindPoolPager(/** @type {HTMLElement | null} */ (liveSec.querySelector('.live-body')));
