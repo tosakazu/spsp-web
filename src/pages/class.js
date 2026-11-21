@@ -21,7 +21,7 @@ import SPSPSeedData from '../../site/seeding/seed_data.js';
 import SPSPPublishedSeeds from '../../site/seeding/published_seeds.js';
 import SPSPPublishedSeedsUI from '../../site/seeding/published_seeds_ui.js';
 import { isAdminTournament, readAdminTournaments } from '../../site/js/my_tournaments.js';
-import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeToken, challongeUser, CHALLONGE_TOKEN_KEY } from '../../site/js/class_bracket.js';
+import { parseStartggUrl, pickEvents, selectTargets, seedOrder, participantName, challongeLogin, challongeLogins, saveChallongeLogin, dropChallongeLogin } from '../../site/js/class_bracket.js';
 
 'use strict';
 const i18n = SPSPI18n.t;
@@ -383,6 +383,10 @@ async function load() {
     if (!st || !st.pageInfo || page >= st.pageInfo.totalPages) break;
   }
 
+  // 2.5 この大会で使う Challonge アプリ (回数の上限がアプリごとなので、大会ごとに Worker が決める)。ログインはそのアプリのものが要る
+  needApp = await appOfTournament(ev.tournament.id);
+  renderChallongeState();
+
   // 3. 設定の候補 (本戦の順位・DQ) を出し、対象と並びを作る
   loaded = { token, event: ev, standings, off: new Set(), targets: [], seeded: [], order: [], display: [], avoid: null, mainPairs: null,
     rngSeed: Math.floor(Math.random() * 0x7fffffff), touched: new Set(), extras: [] };
@@ -504,8 +508,9 @@ function className(ev) {
 
 async function create() {
   if (!loaded) return;
-  const chToken = challongeToken();
-  if (!chToken) { renderChallongeState(); return createStatus(i18n('class.err.challonge_login'), 'error'); }
+  const ch = challongeLogin(needApp === null ? 0 : needApp);
+  if (!ch) { renderChallongeState(); return createStatus(challongeLogins().length ? i18n('class.err.challonge_other') : i18n('class.err.challonge_login'), 'error'); }
+  const chToken = ch.token;
   // 作成前の確認: 特に「集計対象にするか」は既定がチェック付きで、再読み込みで戻ることがあるので、押す前に必ず見せる
   const counted = !!$('cb-counted').checked;
   if (!confirm(i18n('class.create_confirm', {
@@ -520,7 +525,7 @@ async function create() {
     createStatus(i18n('class.step.create'));
     const log = await classLog(loaded.token);
     const r = await SpspLogin.api({
-      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken, log,
+      action: 'class_create', startgg_token: loaded.token, challonge_token: chToken, ...appFields(ch), log,
       parent_event_id: loaded.event.id, class_letter: $('cb-letter').value, name: className(loaded.event),
       format: $('cb-format').value, counted,   // 確認で見せた値をそのまま送る
       place_min: parseInt($('cb-place-min').value, 10), place_max: $('cb-place-max').value ? parseInt($('cb-place-max').value, 10) : null,
@@ -540,7 +545,7 @@ async function create() {
     const code = (r && r.error && r.error.code) || 'unknown';
     const message = (r && r.error && r.error.message) || code;
     if (code === 'challonge_auth') {
-      try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e) { /* 表示だけ変える */ }
+      dropChallongeLogin(ch.app);
       renderChallongeState();
       return createStatus(i18n('class.err.challonge_auth'), 'error');
     }
@@ -555,27 +560,58 @@ async function create() {
  * (Challonge の API は実際の応答に CORS のヘッダが無く、ページから直接は読めない) */
 /** 聞きに行ったトークン (1 つのトークンにつき 1 回だけ。失敗しても繰り返さない) */
 let userTriedFor = '';
-async function fillChallongeUser() {
-  const tok = challongeToken();
-  if (!tok || challongeUser() || userTriedFor === tok || !SpspLogin.apiAvailable()) return;
+/** @param {import('../../site/js/class_bracket.js').ChallongeLogin} ch */
+async function fillChallongeUser(ch) {
+  const tok = ch.token;
+  if (ch.user || userTriedFor === tok || !SpspLogin.apiAvailable()) return;
   userTriedFor = tok;
   const r = await SpspLogin.api({ action: 'challonge_me', challonge_token: tok });
   try {
-    if (r && r.ok === false && r.error && r.error.code === 'challonge_auth') sessionStorage.removeItem(CHALLONGE_TOKEN_KEY);
+    if (r && r.ok === false && r.error && r.error.code === 'challonge_auth') dropChallongeLogin(ch.app);
     else if (r && r.ok && typeof r.username === 'string' && r.username) {
-      const cur = JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null');
-      if (cur && cur.token === tok) sessionStorage.setItem(CHALLONGE_TOKEN_KEY, JSON.stringify(Object.assign(cur, { user: r.username })));
+      const cur = challongeLogin(ch.app);
+      if (cur && cur.token === tok) saveChallongeLogin(ch.app, Object.assign(cur, { user: r.username }));
     }
   } catch (e) { /* 名前は出せないまま (ログイン済みの表示) */ }
   renderChallongeState();
 }
 
+/**
+ * 今の操作に要る Challonge アプリの番号 (Challonge の API は回数の上限がアプリごとなので、大会ごとに Worker が使い分ける)。
+ * 大会を読み込むと決まる (appOfTournament)。作った下位クラスの削除・結果報告の受付は、それを作ったアプリ。
+ * null = まだ決まっていない (大会を読み込む前。ログインすれば Worker が選んだアプリのものになる)
+ * @type {number | null} */
+let needApp = null;
+
+/** その大会で使うアプリの番号 (聞けなければ 0 = 前からあるアプリ) @param {number | string} tournamentId @returns {Promise<number>} */
+async function appOfTournament(tournamentId) {
+  if (!SpspLogin.apiAvailable()) return 0;
+  try {
+    const r = await SpspLogin.api({ action: 'challonge_app', tournament_id: Number(tournamentId) });
+    return r && r.ok && Number.isInteger(r.app) && r.app >= 0 ? r.app : 0;
+  } catch (e) { return 0; }
+}
+
+/** 作成・削除・結果報告の受付に添える、トークンのアプリの番号と印 (印の無いログイン = アプリが 1 つだった頃のものは添えない)
+ * @param {import('../../site/js/class_bracket.js').ChallongeLogin} ch */
+function appFields(ch) {
+  return ch.tag ? { challonge_app: ch.app, challonge_app_tag: ch.tag } : {};
+}
+
+/** 画面に出すログイン: 要るアプリが決まっていればそのアプリのもの、まだなら今あるもの */
+function shownLogin() {
+  return needApp === null ? (challongeLogins()[0] || null) : challongeLogin(needApp);
+}
+
 function renderChallongeState() {
-  const on = !!challongeToken();
-  if (on && !challongeUser()) fillChallongeUser();
+  const ch = shownLogin();
+  const on = !!ch;
+  if (ch && !ch.user) fillChallongeUser(ch);
   const st = $('cb-ch-state');
-  const user = challongeUser();
-  st.textContent = !on ? i18n('class.challonge_off') : user ? i18n('class.challonge_as', { name: user }) : i18n('class.challonge_on');
+  // 別の大会用のログインはある (この大会・この下位クラスには使えない) → ログインし直してもらう
+  const other = !on && challongeLogins().length > 0;
+  st.textContent = ch ? (ch.user ? i18n('class.challonge_as', { name: ch.user }) : i18n('class.challonge_on'))
+    : other ? i18n('class.challonge_other') : i18n('class.challonge_off');
   st.className = 'cb-connect-state' + (on ? ' on' : '');
   $('cb-ch-login').textContent = on ? i18n('class.challonge_relogin') : i18n('class.challonge_login');
 }
@@ -599,7 +635,7 @@ function restoreForm() {
 }
 
 /** SPSP のアプリとして Challonge にログイン (戻り先 = このページ。callback.js がトークンをこのタブに置く) */
-async function challongeLogin() {
+async function startChallongeLogin() {
   const b = $('cb-ch-login');
   b.disabled = true;
   try {
@@ -607,7 +643,8 @@ async function challongeLogin() {
     try { nonce = crypto.randomUUID(); } catch (e) { return status(i18n('class.err.challonge_start'), 'error'); }
     SpspOAuthState.saveNonce(nonce);
     try { sessionStorage.setItem(SpspOAuthState.INTENT_KEY, 'challonge'); } catch (e) { /* 署名 state 側で判断できる */ }
-    const r = await SpspLogin.api({ action: 'challonge_begin', nonce, returnPath: location.pathname });
+    // 要るアプリが決まっていればそのアプリで (大会を読み込んだ後・作った下位クラスの操作)。まだなら Worker が選ぶ
+    const r = await SpspLogin.api(Object.assign({ action: 'challonge_begin', nonce, returnPath: location.pathname }, needApp === null ? {} : { app: needApp }));
     if (!r || !r.ok || !r.url) return status(i18n('class.err.challonge_start'), 'error');
     saveForm();
     location.assign(r.url);
@@ -628,7 +665,7 @@ $('cb-load').addEventListener('click', startLoad);
 $('cb-create').addEventListener('click', () => {
   create().catch(e => { createStatus(i18n('class.err.create', { message: e.message }), 'error'); $('cb-create').disabled = false; });
 });
-$('cb-ch-login').addEventListener('click', () => { challongeLogin(); });
+$('cb-ch-login').addEventListener('click', () => { startChallongeLogin(); });
 $('cb-seeding').addEventListener('change', () => { recompute(); });
 for (const id of ['cb-av-published', 'cb-av-weekday']) $(id).addEventListener('change', () => { updatePublishedBox(); });
 $('cb-letter').addEventListener('change', () => { if (loaded) renderList(); });
@@ -807,8 +844,8 @@ async function loadMine() {
       <div class="cb-mine-meta">${escapeHtml(fmt(it.created_at))} · ${escapeHtml(i18n('class.mine.entrants', { n: it.entrant_count }))} · ${escapeHtml(stateText(it))}</div>
     </div>
     <button type="button" class="cb-sub-btn cb-copy-btn" data-copy="${escapeHtml(String(it.challonge_url || ''))}">${escapeHtml(i18n('class.copy'))}</button>
-    <button type="button" class="cb-sub-btn" data-report="${Number(it.id)}">${escapeHtml(i18n('class.report'))}</button>
-    <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
+    <button type="button" class="cb-sub-btn" data-report="${Number(it.id)}" data-app="${Number(it.challonge_app) || 0}">${escapeHtml(i18n('class.report'))}</button>
+    <button type="button" class="cb-sub-btn cb-del-btn" data-id="${Number(it.id)}" data-app="${Number(it.challonge_app) || 0}" data-name="${escapeHtml(String(it.name || ''))}"${it.status === 'done' ? ' disabled' : ''}>${escapeHtml(i18n('class.del'))}</button>
   </li>`).join('');
   box.hidden = false;
 }
@@ -844,42 +881,59 @@ function mineStatus(msg, kind = '') {
   el.className = 'cb-status' + (kind ? ' ' + kind : '');
 }
 
+/**
+ * 作った下位クラスの操作 (削除・結果報告の受付) に使うログイン = その下位クラスを作ったアプリのもの (ボタンの data-app)。
+ * 無ければ、そのアプリでログインし直してもらう (上の「Challonge でログイン」がそのアプリのログインになる) → null
+ * @param {HTMLButtonElement} btn */
+function mineLogin(btn) {
+  const app = Number(btn.dataset.app) || 0;
+  const ch = challongeLogin(app);
+  if (ch) return ch;
+  needApp = app;
+  renderChallongeState();
+  mineStatus(challongeLogins().length ? i18n('class.err.challonge_other') : i18n('class.err.challonge_login'), 'error');
+  return null;
+}
+
+/** Challonge のログインが切れていた・別のアプリのものだった: そのログインを捨てて、ログインし直してもらう @param {number} app */
+function mineAuthLost(app) {
+  dropChallongeLogin(app);
+  needApp = app;
+  renderChallongeState();
+  mineStatus(i18n('class.err.challonge_auth'), 'error');
+}
+
 $('cb-mine-list').addEventListener('click', async (/** @type {MouseEvent} */ e) => {
   const cp = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-copy]'));
   if (cp) { copyText(String(cp.dataset.copy || ''), cp); return; }
   // 選手の結果報告の受付 (report/、Challonge のトークンは Worker が暗号化して預かる)。設定は報告ページの運営の画面で変える
   const rb = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-report]'));
   if (rb) {
-    const chToken = challongeToken();
-    if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
+    const ch = mineLogin(rb);
+    if (!ch) return;
     if (!confirm(i18n('class.report_confirm'))) return;
-    let exp = null;
-    try { exp = (JSON.parse(sessionStorage.getItem(CHALLONGE_TOKEN_KEY) || 'null') || {}).exp || null; } catch (e2) { exp = null; }
     rb.disabled = true;
-    const r = await SpspLogin.api({ action: 'report_enable_class', startgg_token: sggToken(), challonge_token: chToken, challonge_exp: exp, class_id: Number(rb.dataset.report) });
+    const r = await SpspLogin.api({ action: 'report_enable_class', startgg_token: sggToken(), challonge_token: ch.token, ...appFields(ch), challonge_exp: ch.exp, class_id: Number(rb.dataset.report) });
     rb.disabled = false;
     if (r && r.ok && r.report) {
       const S = /** @type {any} */ (window).SPSP || {};
       location.href = (S.langRoot || '') + (typeof S.pageHref === 'function' ? S.pageHref('report/index.html') : 'report/') + '?c=' + encodeURIComponent(r.report.code) + '&admin=1';
       return;
     }
+    if (r && r.error && r.error.code === 'challonge_auth') return mineAuthLost(ch.app);
     return mineStatus(i18n('class.err.report', { message: (r && r.error && r.error.message) || 'unknown' }), 'error');
   }
   const b = /** @type {HTMLButtonElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('button[data-id]'));
   if (!b || b.disabled) return;
-  const chToken = challongeToken();
-  if (!chToken) { renderChallongeState(); return mineStatus(i18n('class.err.challonge_login'), 'error'); }
+  const ch = mineLogin(b);
+  if (!ch) return;
   if (!confirm(i18n('class.del_confirm', { name: b.dataset.name || '' }))) return;
   b.disabled = true;
-  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: chToken, id: Number(b.dataset.id), log: await classLog(sggToken()) });
+  const r = await SpspLogin.api({ action: 'class_delete', startgg_token: sggToken(), challonge_token: ch.token, ...appFields(ch), id: Number(b.dataset.id), log: await classLog(sggToken()) });
   if (r && r.ok) { mineStatus(i18n('class.del_done'), 'ok'); loadMine(); return; }
   b.disabled = false;
   const code = (r && r.error && r.error.code) || 'unknown';
-  if (code === 'challonge_auth') {
-    try { sessionStorage.removeItem(CHALLONGE_TOKEN_KEY); } catch (e2) { /* 表示だけ変える */ }
-    renderChallongeState();
-    return mineStatus(i18n('class.err.challonge_auth'), 'error');
-  }
+  if (code === 'challonge_auth') return mineAuthLost(ch.app);
   if (code === 'already_imported') return mineStatus(i18n('class.err.already_imported'), 'error');
   mineStatus(i18n('class.err.del', { message: (r && r.error && r.error.message) || code }), 'error');
 });

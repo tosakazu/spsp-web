@@ -101,4 +101,17 @@ test('challongeToken: sessionStorage のトークン。期限の 1 分前から�
   store.set(C.CHALLONGE_TOKEN_KEY, '{broken');
   assert.strictEqual(C.challongeUser(now), null);
   assert.strictEqual(C.challongeToken(now), null);
+  // アプリの番号ごと (前の形は 0 番として残る)
+  store.set(C.CHALLONGE_TOKEN_KEY, JSON.stringify({ token: 'tk', exp: now + 10 * 60 * 1000, user: 'tosa' }));
+  C.saveChallongeLogin(2, { token: 'tk2', exp: now + 10 * 60 * 1000, user: 'tosa2', tag: 'TAG2' });
+  C.saveChallongeLogin(1, { token: 'tk1', exp: now + 30 * 1000 });   // もうすぐ切れる
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(C.challongeLogins(now))), [
+    { app: 0, token: 'tk', exp: now + 10 * 60 * 1000, user: 'tosa', tag: null },
+    { app: 2, token: 'tk2', exp: now + 10 * 60 * 1000, user: 'tosa2', tag: 'TAG2' }]);
+  assert.strictEqual(C.challongeLogin(1, now), null);
+  assert.strictEqual(C.challongeLogin(2, now).tag, 'TAG2');
+  assert.strictEqual(C.challongeToken(now), 'tk');
+  C.dropChallongeLogin(0);
+  assert.strictEqual(C.challongeToken(now), null);
+  assert.strictEqual(C.challongeLogin(2, now).token, 'tk2');
 });

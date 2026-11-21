@@ -1,34 +1,127 @@
 /**
  * Challonge OAuth と API v2.1 (下位クラスを TO の Challonge アカウントで作る。docs/class_bracket_design.md)。
  *
- *   action: "challonge_begin"  { nonce, returnPath }  → { url }  (Challonge の認可画面。client_id と scope は Worker が持つ)
- *   action: "challonge_token"  { code, state }        → { access_token, expires_in }  (state は f='challonge' で単回使用)
+ *   action: "challonge_begin"  { nonce, returnPath, tournament_id? | app? }  → { url, app }
+ *                              (Challonge の認可画面。client_id と scope は Worker が持つ)
+ *   action: "challonge_token"  { code, state }        → { access_token, expires_in, app, app_tag }  (state は f='challonge' で単回使用)
+ *   action: "challonge_app"    { tournament_id }      → { app }  (その大会で使う Challonge アプリの番号)
+ *
+ * Challonge アプリを複数使う (2026-11): Challonge の API は 1 アプリあたりの回数の上限が小さい (30 日 500 回) ので、アプリを複数持ち、
+ * 大会ごとに使い分ける。トークンはログインしたアプリのもので、そのアプリで作ったトーナメントにしか使えない。
+ *   - どのアプリを使うか (challongeAppFor): その大会にもう下位クラスがあればそれと同じアプリ。無ければ、直近 30 日に作った
+ *     下位クラスの人数の合計がいちばん少ないアプリ (同じなら番号の小さいほう)
+ *   - challonge_token は、トークンがどのアプリのものかの印 (app_tag = アプリの番号とトークンの SHA-256 への署名) を返す。
+ *     ブラウザはトークンと一緒に持ち、class_create などに添える (Worker はトークンからアプリを知る方法が無い)
  *
  * TO の Challonge トークンは保存しない・ログに出さない (errors の note は http_401 などの符号だけ)。
  * SPSP のアプリ経由で作ったトーナメントは、取得側 (smash_database) が client credentials で読める。
  */
 import type { Config } from '../config.ts';
 import {
-  CHALLONGE_API, CHALLONGE_AUTHORIZE_URL, CHALLONGE_SCOPE, CHALLONGE_TIMEOUT_MS, CHALLONGE_TOKEN_URL, requireSecret,
+  CHALLONGE_API, CHALLONGE_APP_LOAD_DAYS, CHALLONGE_APPS_MAX, CHALLONGE_AUTHORIZE_URL, CHALLONGE_SCOPE, CHALLONGE_TIMEOUT_MS,
+  CHALLONGE_TOKEN_URL, requireSecret,
 } from '../config.ts';
 import type { Store } from '../store.ts';
 import type { FetchFn } from './oauth.ts';
 import type { HandlerResult } from './respond.ts';
 import { err, ok } from './respond.ts';
-import { checkStateToken, signState } from './session.ts';
+import { base64UrlEncode, checkStateToken, signPayload, signState, timingSafeEq, utf8ToBase64Url } from './session.ts';
 
-/** action: "challonge_begin" — 署名 state (f='challonge') つきの認可 URL を返す。 */
-export async function handleChallongeBegin(cfg: Config, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+/** 使える Challonge アプリ (番号順)。0 = 最初からあるもの (CHALLONGE_CLIENT_ID)、1〜 = CHALLONGE_CLIENT_ID_<n> */
+export function challongeApps(cfg: Config): { n: number; clientId: string; clientSecret?: string }[] {
+  const out: { n: number; clientId: string; clientSecret?: string }[] = [];
+  if (cfg.challongeClientId) out.push({ n: 0, clientId: cfg.challongeClientId, clientSecret: cfg.challongeClientSecret });
+  for (const a of cfg.challongeMoreApps || []) if (a.n > 0 && !out.some((x) => x.n === a.n)) out.push(a);
+  return out.sort((a, b) => a.n - b.n);
+}
+
+/** アプリの番号 (0〜CHALLONGE_APPS_MAX-1 の整数。数字の文字列も可)。違えば null */
+export function appNumber(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,2}$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 0 && n < CHALLONGE_APPS_MAX ? n : null;
+}
+
+/**
+ * その大会 (start.gg の大会 ID。分からなければ null) で使う Challonge アプリの番号。
+ *   1. その大会にもう下位クラスがあれば、それを作ったアプリ (設定から外れていなければ)
+ *   2. 無ければ、新しい大会に割り当ててよいアプリ (CHALLONGE_NEW_APPS、無ければ全部) のうち、直近 CHALLONGE_APP_LOAD_DAYS 日に
+ *      作った下位クラスの人数の合計がいちばん少ないもの (同じなら番号の小さいほう)。人数 ≒ 試合の数 ≒ 結果報告で Challonge を呼ぶ回数
+ * アプリが 1 つなら D1 は読まない。
+ */
+export async function challongeAppFor(cfg: Config, store: Store, tournamentId: number | null, now: number): Promise<number> {
+  const apps = challongeApps(cfg);
+  if (apps.length <= 1) return apps.length ? apps[0].n : 0;
+  if (tournamentId !== null) {
+    const sticky = await store.classAppOfTournament(tournamentId);
+    if (sticky !== null && apps.some((a) => a.n === sticky)) return sticky;
+  }
+  const allow = cfg.challongeNewApps;
+  const pool = allow ? apps.filter((a) => allow.includes(a.n)) : apps;
+  const cand = pool.length ? pool : apps;
+  if (cand.length === 1) return cand[0].n;
+  const loads = new Map((await store.classAppLoads(now - CHALLONGE_APP_LOAD_DAYS * 24 * 3600 * 1000)).map((x) => [x.app, x.load]));
+  let best = cand[0];
+  for (const a of cand) if ((loads.get(a.n) || 0) < (loads.get(best.n) || 0)) best = a;
+  return best.n;
+}
+
+/** トークンがどのアプリのものかの印: アプリの番号とトークンの SHA-256 への署名 (トークンそのものは入らない) */
+export async function challongeAppTag(cfg: Config, app: number, token: string): Promise<string> {
+  const h = base64UrlEncode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))));
+  return signPayload(cfg, utf8ToBase64Url('chapp.' + app + '.' + h));
+}
+
+/**
+ * 要求に添えられた、トークンのアプリの番号 (challonge_app と challonge_app_tag)。
+ * どちらも無ければ 0 (アプリが 1 つだった頃にログインしたトークン・古い画面)。印が合わなければ null。
+ */
+export async function tokenApp(cfg: Config, req: Record<string, unknown>, token: string): Promise<number | null> {
+  if ((req.challonge_app === undefined || req.challonge_app === null) && !req.challonge_app_tag) return 0;
+  const app = appNumber(req.challonge_app);
+  if (app === null || typeof req.challonge_app_tag !== 'string' || req.challonge_app_tag.length > 200) return null;
+  return timingSafeEq(req.challonge_app_tag, await challongeAppTag(cfg, app, token)) ? app : null;
+}
+
+/** ログインしているアプリと、その下位クラスを作ったアプリが違うとき */
+export const MSG_WRONG_APP = 'この下位クラスは、今ログインしているものとは別の Challonge 連携で作られています。もう一度 Challonge でログインしてください。';
+
+function tournamentIdOf(v: unknown): number | null {
+  const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : '') : typeof v === 'string' ? v : '';
+  return /^[1-9]\d{0,11}$/.test(s) ? Number(s) : null;
+}
+
+/**
+ * action: "challonge_begin" — 署名 state (f='challonge'、a = アプリの番号) つきの認可 URL を返す。
+ * app (番号) があればそのアプリ (もうある下位クラスの削除・結果報告の受付のため)、無ければ tournament_id の大会で使うアプリ。
+ */
+export async function handleChallongeBegin(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
   const nonce = String(req && req.nonce ? req.nonce : '');
   const ret = String(req && req.returnPath ? req.returnPath : '');
   if (nonce.length > 128 || ret.length > 512) return err('bad_request', 'パラメータが長すぎます。');
-  const clientId = requireSecret(cfg.challongeClientId, 'CHALLONGE_CLIENT_ID');
+  requireSecret(cfg.challongeClientId, 'CHALLONGE_CLIENT_ID');
   if (!cfg.challongeRedirectUri) requireSecret(undefined, 'CHALLONGE_REDIRECT_URI');
-  const state = await signState(cfg, nonce, ret, 'challonge', now);
+  const apps = challongeApps(cfg);
+  let n: number;
+  if (req.app !== undefined && req.app !== null) {
+    const want = appNumber(req.app);
+    if (want === null || !apps.some((a) => a.n === want)) return err('bad_request', 'その Challonge 連携は使えません。', 'bad:app');
+    n = want;
+  } else {
+    n = await challongeAppFor(cfg, store, tournamentIdOf(req.tournament_id), now);
+  }
+  const app = apps.find((a) => a.n === n) || apps[0];
+  const state = await signState(cfg, nonce, ret, 'challonge', now, null, app.n);
   const q = new URLSearchParams({
-    client_id: clientId, redirect_uri: cfg.challongeRedirectUri || '', response_type: 'code', scope: CHALLONGE_SCOPE, state,
+    client_id: app.clientId, redirect_uri: cfg.challongeRedirectUri || '', response_type: 'code', scope: CHALLONGE_SCOPE, state,
   });
-  return ok({ url: CHALLONGE_AUTHORIZE_URL + '?' + q.toString(), ttlMs: cfg.stateTtlMs });
+  return ok({ url: CHALLONGE_AUTHORIZE_URL + '?' + q.toString(), ttlMs: cfg.stateTtlMs, app: app.n });
+}
+
+/** action: "challonge_app" — { tournament_id } → { app }。その大会で使う Challonge アプリの番号 (読むだけ・だれでも) */
+export async function handleChallongeApp(cfg: Config, store: Store, req: Record<string, unknown>, now: number): Promise<HandlerResult> {
+  const tid = tournamentIdOf(req.tournament_id);
+  if (tid === null) return err('bad_request', '入力の形式が不正です。', 'bad:tournament_id');
+  return ok({ app: await challongeAppFor(cfg, store, tid, now) });
 }
 
 const MSG_STATE = '認証の照合に失敗しました。認証を始めてから時間が経ちすぎたか、同じリンクを二度開いた可能性があります。'
@@ -41,10 +134,14 @@ export async function handleChallongeToken(cfg: Config, store: Store, fetchFn: F
   if ('reason' in st) return err('state_invalid', MSG_STATE, st.reason);
   if (st.payload.f !== 'challonge') return err('state_invalid', MSG_STATE, 'wrong_flow');
 
+  // どのアプリで始めたログインか (state の a。無ければ 0)。code はそのアプリでしか交換できない
+  const appN = appNumber(st.payload.a === undefined ? 0 : st.payload.a);
+  const app = appN === null ? undefined : challongeApps(cfg).find((a) => a.n === appN);
+  if (appN !== 0 && !app) return err('challonge_error', 'この Challonge 連携は今は使えません。もう一度 Challonge でログインしてください。', 'app_gone');
   const body = new URLSearchParams({
     grant_type: 'authorization_code', code: req.code,
-    client_id: requireSecret(cfg.challongeClientId, 'CHALLONGE_CLIENT_ID'),
-    client_secret: requireSecret(cfg.challongeClientSecret, 'CHALLONGE_CLIENT_SECRET'),
+    client_id: requireSecret(app ? app.clientId : cfg.challongeClientId, 'CHALLONGE_CLIENT_ID'),
+    client_secret: requireSecret(app ? app.clientSecret : cfg.challongeClientSecret, 'CHALLONGE_CLIENT_SECRET'),
     redirect_uri: cfg.challongeRedirectUri || '',
   });
   let res: Response;
@@ -78,7 +175,8 @@ export async function handleChallongeToken(cfg: Config, store: Store, fetchFn: F
   const me = await challongeMe(fetchFn, json.access_token);
   // 取れなかった理由は wrangler tail で見えるように符号だけ出す (トークン・名前は出さない)
   if ('note' in me) console.log('challonge_token: username unavailable: ' + me.note);
-  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null, username: 'username' in me ? me.username : null });
+  return ok({ access_token: json.access_token, expires_in: Number.isFinite(exp) ? exp : null, username: 'username' in me ? me.username : null,
+    app: appN || 0, app_tag: await challongeAppTag(cfg, appN || 0, json.access_token) });
 }
 
 /**

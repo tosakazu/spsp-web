@@ -16,7 +16,7 @@ import {
   CLASS_PARTICIPANTS_MAX, CLASS_PARTICIPANTS_MIN, CLASS_RATE_MAX_PER_DAY, CLASS_RATE_MIN_INTERVAL_MS, GQL_URL, STARTGG_TIMEOUT_MS,
   requireSecret,
 } from '../config.ts';
-import { challongeApi } from './challonge.ts';
+import { MSG_WRONG_APP, challongeApi, tokenApp } from './challonge.ts';
 import type { Store } from '../store.ts';
 import { keyMatches } from './export.ts';
 import type { FetchFn } from './oauth.ts';
@@ -228,6 +228,9 @@ export async function handleClassCreate(cfg: Config, store: Store, fetchFn: Fetc
   const parsed = parseClassCreate(req);
   if ('bad' in parsed) return err('bad_request', MSG_BAD, 'bad:' + parsed.bad);
   const inp = parsed.input;
+  // トークンがどの Challonge アプリのものか (challonge_token が返した印)。作ったアプリを行に残す: 取得側はそのアプリでしか読めない
+  const app = await tokenApp(cfg, req, inp.challongeToken);
+  if (app === null) return err('bad_request', MSG_BAD, 'bad:challonge_app');
 
   // 1. start.gg で TO か確かめ直す
   const adm = await checkStartggAdmin(fetchFn, inp.startggToken, inp.parentEventId);
@@ -279,7 +282,7 @@ export async function handleClassCreate(cfg: Config, store: Store, fetchFn: Fetc
     parent_event_id: inp.parentEventId, parent_tournament_id: adm.tournamentId,
     class_letter: inp.classLetter, name: inp.name, challonge_id: tid, challonge_url: turl,
     format: inp.format, counted: inp.counted ? 1 : 0, place_min: inp.placeMin, place_max: inp.placeMax,
-    seeding: inp.seeding, entrant_count: inp.participants.length, registered_by: adm.userId,
+    seeding: inp.seeding, entrant_count: inp.participants.length, registered_by: adm.userId, challonge_app: app,
   }, guard);
   if (ins.status !== 'ok') {
     const code = ins.status === 'duplicate' ? 'duplicate' : 'rate_limited';
@@ -289,7 +292,8 @@ export async function handleClassCreate(cfg: Config, store: Store, fetchFn: Fetc
   await recordClassLog(cfg, store, req, now, {
     action: 'create', userId: adm.userId, tournamentId: adm.tournamentId, eventId: inp.parentEventId, count: inp.participants.length,
     detail: { class_id: ins.id, class_letter: inp.classLetter, name: inp.name, format: inp.format, counted: inp.counted,
-      place_min: inp.placeMin, place_max: inp.placeMax, seeding: inp.seeding, challonge_id: tid, challonge_url: turl },
+      place_min: inp.placeMin, place_max: inp.placeMax, seeding: inp.seeding, challonge_id: tid, challonge_url: turl,
+      challonge_app: app },
   });
   return ok({ id: ins.id, challonge: t });
 }
@@ -371,6 +375,10 @@ export async function handleClassDelete(cfg: Config, store: Store, fetchFn: Fetc
   if (row.status === 'done') {
     return err('already_imported', 'この下位クラスはもう SPSP に取り込まれているため削除できません。', 'already_imported');
   }
+  // 別の Challonge アプリのトークンでは消せない (Challonge が 404 を返し、「もう無い」と見分けが付かない) ので、呼ぶ前に弾く
+  const app = await tokenApp(cfg, req, req.challonge_token);
+  if (app === null) return err('bad_request', MSG_BAD, 'bad:challonge_app');
+  if (app !== (row.challonge_app || 0)) return err('challonge_auth', MSG_WRONG_APP, 'wrong_app');
 
   const path = '/tournaments/' + row.challonge_id;
   let del = await challongeApi(fetchFn, req.challonge_token, path + '.json', null, 'DELETE');

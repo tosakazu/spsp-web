@@ -75,7 +75,7 @@ Challonge に作れるようにする。集計対象にしたものは smash_dat
 
 ### 取得待ちの一覧 (smash_database が読む)
 
-- `GET /api/class_waitlist` → `{ok:true, items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at}]}`
+- `GET /api/class_waitlist` → `{ok:true, items:[{id, parent_event_id, parent_tournament_id, class_letter, name, challonge_id, challonge_url, created_at, challonge_app}]}`
   (`counted = 1` かつ `status = 'waiting'` のもの)。中身は公開してよい情報だけ (キーは無い)
 - `POST /api {action:'class_done', key, id}` → status を `done` に (取得側が取り終えたら呼ぶ。`key` は取得側だけが持つ秘密 = Worker の secret と
   smash_database の Environment の secret)
@@ -88,6 +88,37 @@ Challonge に作れるようにする。集計対象にしたものは smash_dat
   (親 = `parent_event_id`、クラス = `class_letter`、is_lower_class) のイベントとして保存する
 - トーナメントが終わったら (Challonge の `state = complete`) 最後に取得して `class_done` を呼ぶ。途中なら次回また取得
 - 取得した結果が、ビルドの既存の下位クラスの扱い (本戦から切り出した仮想大会と同じ集計) に乗るようにする
+
+## Challonge アプリを複数使う (2026-11)
+
+Challonge の API は 1 アプリあたりの回数の上限が小さい (30 日 500 回。2026-11-10 ごろから 429 が返った)。数えるのはアプリ
+(client id) ごとなので、Challonge アプリを複数持ち、大会ごとに使い分ける。
+
+- **アプリの番号**: 0 = 最初からあるアプリ (secret `CHALLONGE_CLIENT_ID` / `CHALLONGE_CLIENT_SECRET`)、n = 1〜9 =
+  `CHALLONGE_CLIENT_ID_<n>` / `CHALLONGE_CLIENT_SECRET_<n>` (両方ある番号だけ使う)。どのアプリも Challonge に登録する戻り先は
+  同じ (`CHALLONGE_REDIRECT_URI`)。scope も同じ。
+- **割り当て** (`challongeAppFor`、`worker/src/api/challonge.ts`): その大会 (start.gg の大会 ID) にもう下位クラスがあれば、
+  それを作ったアプリ。無ければ、直近 30 日に作った下位クラスの人数の合計がいちばん少ないアプリ (同じなら番号の小さいほう)。
+  表は持たない (`class_brackets.challonge_app` から決める)。
+- **新しい大会に使わせないアプリ**: `[vars]` の `CHALLONGE_NEW_APPS` (例 `"1,2,3"`) に無い番号は、新しい大会には割り当てない
+  (上限に達したアプリを外すとき)。そのアプリで作った下位クラスの削除・結果報告の受付とログインは続けて使える。
+- **ログイン**: `challonge_begin` は `tournament_id` (その大会のアプリ) か `app` (番号の指定) を受け、`app` を返す。署名 state に
+  番号 (`a`) が入り、`challonge_token` はそのアプリの client id・secret で code を換える。応答に `app` と `app_tag`
+  (アプリの番号とトークンの SHA-256 への署名) が付く。Worker はトークンからアプリを知る方法が無いので、ブラウザがトークンと
+  一緒に持ち (`site/js/class_bracket.js`、アプリの番号ごと)、`class_create`・`class_delete`・`report_enable_class` に
+  `challonge_app`・`challonge_app_tag` を添える。どちらも無い要求は 0 番として扱う (アプリが 1 つだった頃のログイン)。
+- **作成**: `class_create` はトークンのアプリを `class_brackets.challonge_app` に残す (migration 0032)。
+- **削除・結果報告の受付**: トークンのアプリが行のアプリと違えば、Challonge を呼ばずに `challonge_auth`
+  (画面はそのアプリでのログインを求める)。
+- **画面** (`src/pages/class.js`): 大会を読み込むと `challonge_app` でその大会のアプリを聞き、そのアプリのログインが無ければ
+  ログインを求める。TO から見ると、初めて当たるアプリごとに Challonge の許可画面が 1 回出る。
+- **取得** (smash_database `scripts/common/challonge_classes.py`): `class_waitlist` の各行の `challonge_app` の番号の
+  client credentials で読む (作ったアプリでしか読めない)。secret は Environment `japan-data` に同じ名前で入れる。
+  入っていない番号のものは、警告を出して待ちに残る。
+
+**アプリを足す手順**: Challonge の開発者画面でアプリを作る (戻り先 = 本番は `https://spsp.games/callback.html`) →
+`wrangler secret put CHALLONGE_CLIENT_ID_<n>` / `CHALLONGE_CLIENT_SECRET_<n>` → smash_database の Environment `japan-data` に
+同じ名前の secret。**取得側を先に入れる** (Worker だけに入れると、そのアプリで作られた下位クラスを取得が読めない)。
 
 ## 確認のしかた
 

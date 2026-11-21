@@ -120,7 +120,7 @@ export class MemStore {
     if (mine.some((r) => r.ts_ms > g.nowMs - g.minIntervalMs)) return { status: 'rate_limited' };
     if (mine.filter((r) => r.day === g.dayKey).length >= g.maxPerDay) return { status: 'rate_limited' };
     const id = this.classes.length + 1;
-    this.classes.push({ ...row, id, status: 'waiting' });
+    this.classes.push({ ...row, challonge_app: row.challonge_app || 0, id, status: 'waiting' });
     return { status: 'ok', id };
   }
 
@@ -128,7 +128,21 @@ export class MemStore {
     return this.classes.filter((r) => r.counted === 1 && r.status === 'waiting').map((r) => ({
       id: r.id, parent_event_id: r.parent_event_id, parent_tournament_id: r.parent_tournament_id, class_letter: r.class_letter,
       name: r.name, challonge_id: r.challonge_id, challonge_url: r.challonge_url, created_at: r.created_at,
+      challonge_app: r.challonge_app || 0,
     }));
+  }
+
+  async classAppOfTournament(tournamentId) {
+    const rows = this.classes.filter((r) => r.parent_tournament_id === tournamentId && r.status !== 'deleted');
+    return rows.length ? rows[rows.length - 1].challonge_app || 0 : null;
+  }
+
+  async classAppLoads(sinceMs) {
+    const m = new Map();
+    for (const r of this.classes) {
+      if (r.ts_ms >= sinceMs && r.status !== 'deleted') m.set(r.challonge_app || 0, (m.get(r.challonge_app || 0) || 0) + r.entrant_count);
+    }
+    return [...m].map(([app, load]) => ({ app, load }));
   }
 
   async markClassDone(id) {
@@ -141,7 +155,7 @@ export class MemStore {
 
   async getClassBracket(id) {
     const r = this.classes.find((x) => x.id === id);
-    return r ? { id: r.id, parent_event_id: r.parent_event_id, challonge_id: r.challonge_id, registered_by: r.registered_by, status: r.status } : null;
+    return r ? { id: r.id, parent_event_id: r.parent_event_id, challonge_id: r.challonge_id, registered_by: r.registered_by, status: r.status, challonge_app: r.challonge_app || 0 } : null;
   }
 
   async listClassMine(userId, sinceMs) {
@@ -149,7 +163,7 @@ export class MemStore {
       .sort((a, b) => b.id - a.id).map((r) => ({
         id: r.id, parent_event_id: r.parent_event_id, parent_tournament_id: r.parent_tournament_id, class_letter: r.class_letter,
         name: r.name, challonge_id: r.challonge_id, challonge_url: r.challonge_url, counted: r.counted === 1, status: r.status,
-        created_at: r.created_at, entrant_count: r.entrant_count,
+        created_at: r.created_at, entrant_count: r.entrant_count, challonge_app: r.challonge_app || 0,
       }));
   }
 

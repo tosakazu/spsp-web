@@ -52,7 +52,7 @@ has no `action`. CORS is `*`; auth travels in the body (no cookies). Body limit 
 | Player card | `card_get` (`GET /api/card?uid=`), `card_put` | Anyone can read; only the token's own uid can write. Rate limited. (`card.ts`) |
 | Titles | `title_get` (`GET /api/titles?uid=&lang=`), `title_sync`, `title_export` | Owned titles per player; D1 is the source of truth. Sync/export are key-protected and used by the build. Title ids are validated against `site/js/titles.js`. (`title_owned.ts`, `titles.ts`) |
 | Character votes | `vote` | Eligibility is checked against public player data from `DATA_ORIGIN`. (`vote.ts`) |
-| Class brackets (Challonge) | `challonge_begin`, `challonge_token`, `challonge_me`, `class_create`, `class_mine`, `class_delete`, `class_waitlist` (`GET /api/class_waitlist`), `class_done` | TOs create lower-class brackets on their own Challonge account. start.gg and Challonge tokens are used per request and never stored. `class_done` is key-protected and called by the data importer. See [docs/class_bracket_design.md](../docs/class_bracket_design.md). |
+| Class brackets (Challonge) | `challonge_begin`, `challonge_token`, `challonge_me`, `challonge_app`, `class_create`, `class_mine`, `class_delete`, `class_waitlist` (`GET /api/class_waitlist`), `class_done` | TOs create lower-class brackets on their own Challonge account. start.gg and Challonge tokens are used per request and never stored. `class_done` is key-protected and called by the data importer. See [docs/class_bracket_design.md](../docs/class_bracket_design.md). |
 | Posts | `post` | Ported but not public yet. (`post.ts`) |
 | Logging / export | `client_error`, `export_votes` (`GET /api/export/votes`), `export_errors` (`GET /api/export/errors`) | Failures are logged to D1 with codes only (no tokens or secrets). Exports are key-protected and read by the build. |
 | CSP reports | `POST /api/csp-report` (sent by browsers), `csp_export` | Violations of the site CSP are counted per (directive, blocked origin or inline/eval, path); query strings are not stored. Capped at 500 keys and 60 reports per IP per minute. `csp_export` uses the export key. (`csp.ts`) |
@@ -80,7 +80,7 @@ applied to the remote database by a maintainer before (or together with) the dep
   `CHALLONGE_REDIRECT_URI`, `CSP_MODE` (`report-only` / `enforce`, the site CSP; the string is `SITE_CSP` in `src/index.ts`, and `scripts/assemble_dist.sh` writes it into `_headers` for static assets), `DATA_ORIGIN` (URL, or `assets:/<prefix>` to read from the Worker's own
   assets), `SITE_PREFIX`, `TS_OFFSET`, `SESSION_TTL_MS`, `STATE_TTL_MS`, `VOTE_TESTER_UIDS`.
 - **Secrets** (set with `wrangler secret put`, never committed): `STARTGG_CLIENT_SECRET`,
-  `SESSION_SECRET`, `EXPORT_KEY` (optional), `CHALLONGE_CLIENT_ID`, `CHALLONGE_CLIENT_SECRET`,
+  `SESSION_SECRET`, `EXPORT_KEY` (optional), `CHALLONGE_CLIENT_ID`, `CHALLONGE_CLIENT_SECRET` (and optionally `CHALLONGE_CLIENT_ID_<n>` / `CHALLONGE_CLIENT_SECRET_<n>`, n = 1–9: more Challonge apps, one per tournament, because Challonge limits requests per app),
   `TITLE_SYNC_KEY`, `CLASS_DONE_KEY`. A missing secret makes only the dependent actions return `internal`.
 - **Environments**: default = production (`spsp-web`, custom domain `spsp.games`);
   `preview` = `spsp-web-preview` on workers.dev with its own D1 and start.gg app;

@@ -37,6 +37,14 @@ export interface Env {
   /** Challonge OAuth アプリ (下位クラスを TO の Challonge アカウントで作る) */
   CHALLONGE_CLIENT_ID?: string;
   CHALLONGE_CLIENT_SECRET?: string;
+  /**
+   * 追加の Challonge アプリ (回数の上限がアプリごとなので、大会ごとに使い分ける)。番号 n = 1〜CHALLONGE_APPS_MAX-1:
+   * secret CHALLONGE_CLIENT_ID_<n> / CHALLONGE_CLIENT_SECRET_<n> (両方ある番号だけ使う。Env には名前を並べず configFromEnv が読む)。
+   * どのアプリも戻り先は CHALLONGE_REDIRECT_URI。
+   * CHALLONGE_NEW_APPS ([vars]、任意): 新しい大会に割り当ててよい番号 (カンマ区切り、例 "1,2,3")。無ければ全部。
+   * 外した番号も、そのアプリで作った下位クラスの操作 (削除・結果報告) とログインには使える
+   */
+  CHALLONGE_NEW_APPS?: string;
   /** 毎日の「持っている二つ名」の記録 (title_sync) の鍵 */
   TITLE_SYNC_KEY?: string;
   /** スマッチとの連携 (api/smatch.ts)。URL は [vars]、トークン 2 つは secret。EXPORT_TOKENS はカンマ区切り (入れ替えの間は新旧 2 本) */
@@ -125,6 +133,10 @@ export const REPORT_CH_LIMIT_MS = 15 * 60 * 1000;         //   429 (回数の上
 export const CHALLONGE_AUTHORIZE_URL = 'https://challonge.com/oauth/authorize';
 export const CHALLONGE_TOKEN_URL = 'https://api.challonge.com/oauth/token';
 export const CHALLONGE_API = 'https://api.challonge.com/v2.1';
+/** Challonge アプリの数の上限 (番号 0〜9)。取得側 (smash_database の download-japan.yml) が渡す secret の数と合わせる */
+export const CHALLONGE_APPS_MAX = 10;
+/** 新しい大会に割り当てるアプリを選ぶとき、この日数の間に作った下位クラスの人数の合計が少ないアプリにする (回数の上限が 30 日あたりなので) */
+export const CHALLONGE_APP_LOAD_DAYS = 30;
 export const CHALLONGE_SCOPE = 'me tournaments:read tournaments:write participants:read participants:write matches:read matches:write application:organizer';
 /** CSP の違反報告 (POST /api/csp-report)。 */
 export const CSP_REPORT_MAX_KEYS = 500;              // まとめた組の数の上限 (超えた新しい組は捨てる)
@@ -192,6 +204,10 @@ export interface Config {
   challongeClientId?: string;
   challongeClientSecret?: string;
   challongeRedirectUri?: string;
+  /** 追加の Challonge アプリ (番号 1〜)。番号 0 は challongeClientId / challongeClientSecret */
+  challongeMoreApps?: ChallongeAppCfg[];
+  /** 新しい大会に割り当ててよいアプリの番号 (未設定なら全部) */
+  challongeNewApps?: number[];
   /** 二つ名の一覧の言語 (日本 ja / 北米 en)。SITE_PREFIX から決める */
   titleLang?: string;
   titleSyncKey?: string;
@@ -240,6 +256,8 @@ export function configFromEnv(env: Env): Config {
     challongeClientId: env.CHALLONGE_CLIENT_ID || undefined,
     challongeClientSecret: env.CHALLONGE_CLIENT_SECRET || undefined,
     challongeRedirectUri: String(env.CHALLONGE_REDIRECT_URI || ''),
+    challongeMoreApps: moreChallongeApps(env),
+    challongeNewApps: parseAppList(env.CHALLONGE_NEW_APPS),
     titleSyncKey: env.TITLE_SYNC_KEY || undefined,
     vapid: env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY
       ? { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: String(env.VAPID_SUBJECT || 'https://spsp.games/') } : undefined,
@@ -262,6 +280,27 @@ export function configFromEnv(env: Env): Config {
  * secret を取得する。未設定なら例外 (呼び出し側が internal で返す)。
  * GAS の requireProp_ に対応。値そのものはログにもレスポンスにも出さない。
  */
+/** Challonge アプリ 1 つ (n = 番号。0 = 最初からあるもの) */
+export interface ChallongeAppCfg { n: number; clientId: string; clientSecret: string }
+
+/** 追加の Challonge アプリ: CHALLONGE_CLIENT_ID_<n> と CHALLONGE_CLIENT_SECRET_<n> が両方ある番号 (1〜) */
+function moreChallongeApps(env: Env): ChallongeAppCfg[] {
+  const e = env as unknown as Record<string, unknown>;
+  const out: ChallongeAppCfg[] = [];
+  for (let n = 1; n < CHALLONGE_APPS_MAX; n++) {
+    const id = e['CHALLONGE_CLIENT_ID_' + n];
+    const secret = e['CHALLONGE_CLIENT_SECRET_' + n];
+    if (typeof id === 'string' && id && typeof secret === 'string' && secret) out.push({ n, clientId: id, clientSecret: secret });
+  }
+  return out;
+}
+
+/** "1,2,3" → [1, 2, 3] (番号でないものは捨てる)。空・未設定は undefined */
+function parseAppList(s: string | undefined): number[] | undefined {
+  const out = String(s || '').split(',').map((x) => x.trim()).filter((x) => /^\d{1,2}$/.test(x)).map(Number);
+  return out.length ? out : undefined;
+}
+
 export function requireSecret(value: string | undefined, name: string): string {
   if (!value) throw new Error('secret not set: ' + name);
   return value;
