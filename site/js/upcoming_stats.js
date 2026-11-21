@@ -1,4 +1,5 @@
 // @ts-check
+import { canonicalCharId } from './chars.js';
 // js/upcoming_stats.js — 今後の大会のページ (src/pages/upcoming.js) の集計。画面に触らない計算だけ (tests/frontend/upcoming_stats.test.cjs)。
 //   joinEntrants(ev, index)   参加予定者 (data/upcoming_entrants.json の entrants) に、選手の一覧 (js/views.js の index) の順位・Lv・キャラ・地域を付ける。
 //                             総合評価の順位の高い順 (順位の無い人は後ろ、名前順)。同じ uid は 1 回だけ
@@ -30,7 +31,7 @@ export function joinEntrants(ev, index) {
     const r = index ? index.get(uid) : null;
     const num = (/** @type {any} */ v) => (typeof v === 'number' && v > 0 ? v : null);
     out.push({ uid, name: String((r && r.name) || (e && e.tag) || ''), rank: r ? num(r.ens) : null, lv: r ? num(r.lv) : null,
-               char: r ? num(r.char) : null, pref: r ? num(r.pref) : null, ovs: !!(r && r.ovs) });
+               char: r && num(r.char) ? canonicalCharId(r.char) : null, pref: r ? num(r.pref) : null, ovs: !!(r && r.ovs) });
   }
   return out.sort(byRank);
 }
