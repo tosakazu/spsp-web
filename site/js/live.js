@@ -126,6 +126,31 @@ function placeHtml(e) {
   return '<span class="ph-place">—</span>';
 }
 
+/** 順位の区切り (1,2,3,4,5,7,9,13,17,25,…) の何番目か。ビルドの placement_to_w2w と同じ区切り @param {number} place */
+function placeTier(place) {
+  let w = 0;
+  for (let n = 1; n <= 40; n++) {
+    const lo = n === 1 ? 2 : n % 2 === 0 ? 2 ** (n / 2) + 1 : 3 * 2 ** ((n - 3) / 2) + 1;
+    if (lo > place) break;
+    w = n;
+  }
+  return w;
+}
+
+/** シードどおりの順位をもう満たしているか (SPR が 0 以上)。「シード達成」「シード +N 達成」の文字、満たしていなければ ''。
+ * 残っている人は「最悪でもこの順位」(place_min) で数える。下位クラス・DQ でない勝ちが 1 つも無い人は出さない (ビルドの SPR と同じ)
+ * @param {any} doc @param {string} myId @param {any} e */
+function seedMetHtml(doc, myId, e) {
+  if (e.seed == null || e.in_class) return '';
+  const place = e.placement != null && e.final ? e.placement : e.place_min;
+  if (place == null) return '';
+  const spr = placeTier(e.seed) - placeTier(place);
+  if (spr < 0) return '';
+  const won = (doc.sets || []).some((/** @type {any} */ s) => s.winner != null && String(s.winner) === myId && !(s.score || []).includes(-1));
+  if (!won) return '';
+  return `<span class="live-spr">${spr > 0 ? t('live.seed_over', { n: spr }) : t('live.seed_met')}</span>`;
+}
+
 /** @param {number} ts */
 function hhmm(ts) {
   try {
@@ -364,7 +389,7 @@ export function render(el, uid, items, opts = {}, hasPage = null, preds = [], po
             `${badge}<span class="lr-badge ng">${t('live.unreflected')}</span></div>` +
           `<div class="live-event">${escapeHtml(doc.event_name || '')}</div>` +
           `<div class="perf-hero">${img}${hero}${canOpen ? '<span class="chevron lr-chev">▶</span>' : ''}</div>` +
-          `<div class="live-links">${cls}${poolLink}</div>` +
+          `<div class="live-links">${cls}${seedMetHtml(doc, String(myId), e)}${poolLink}</div>` +
         `</div>` +
         sets +
         (predBlock ? `<div class="live-detail">${predBlock}</div>` : '') +
@@ -574,6 +599,6 @@ export async function showNotice(el, opts = {}) {
   el.style.display = '';
 }
 
-const api = { liveRoot, load, render, start, showNotice, myEvents, isOut };
+const api = { placeTier, liveRoot, load, render, start, showNotice, myEvents, isOut };
 export default api;
 if (typeof window !== 'undefined') /** @type {any} */ (window).SpspLive = api;

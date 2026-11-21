@@ -50,6 +50,26 @@ test('残っている人は「N 位以上」、対戦中のセットが上、い
   assert.ok(e.innerHTML.indexOf('live.playing') < e.innerHTML.indexOf('2-1'));
 });
 
+test('シードどおりの順位を満たした人には「シード達成」「シード +N 達成」をトーナメントのリンクの隣に', () => {
+  const L = load();
+  assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 17, 25, 33, 49, 65, 97, 1537].map(L.placeTier),
+    [0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7, 8, 9, 10, 11, 12, 13, 21]);
+  const one = (seed, over) => {
+    const d = doc(); Object.assign(d.entrants[1], { seed }, over || {});
+    const e = el(); L.render(e, 11, [{ summary: {}, doc: d }]);
+    return e.innerHTML;
+  };
+  assert.doesNotMatch(one(1), /live-spr/);                                            // シード 1 で 2 位以上 → まだ
+  assert.match(one(2), /<span class="live-spr">live\.seed_met\{\}<\/span><a class="live-link"/);
+  assert.match(one(4), /<span class="live-spr">live\.seed_over\{"n":2\}<\/span>/);
+  assert.match(one(3, { placement: 3, final: true, place_min: null }), /live\.seed_met/);   // 確定した順位でも
+  const noWin = doc(); noWin.entrants[1].seed = 4; noWin.sets[0].score = [0, -1];       // 勝ちが DQ だけ
+  const e2 = el(); L.render(e2, 11, [{ summary: {}, doc: noWin }]);
+  assert.doesNotMatch(e2.innerHTML, /live-spr/);
+  const e3 = el(); L.render(e3, 22, [{ summary: {}, doc: doc() }]);                     // 下位クラスには出さない
+  assert.doesNotMatch(e3.innerHTML, /live-spr/);
+});
+
 test('試合の行は最新の大会結果と同じ形 (ラウンドの位置・スコア・相手の絵文字とリンク・シード)', () => {
   const L = load();
   const e = el();
