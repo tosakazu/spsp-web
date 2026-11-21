@@ -547,6 +547,8 @@ window.SPSP_I18N.en = {
   'live.or_better_unit': '{n, selectordinal, one{st} two{nd} few{rd} other{th}} or better',
   'live.unreflected': 'Not in the ranking yet',
   'live.view_bracket': 'View bracket',
+  'live.seed_met': 'Seed met',
+  'live.seed_over': 'Seed +{n}',
   'live.next': 'Next',
   'live.playing': 'Playing',
   'live.tbd': 'TBD',

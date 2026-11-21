@@ -550,6 +550,8 @@ window.SPSP_I18N.ja = {
   'live.or_better_unit': '位以上',
   'live.unreflected': 'ランキング未反映',
   'live.view_bracket': 'トーナメントを見る',
+  'live.seed_met': 'シード達成',
+  'live.seed_over': 'シード +{n} 達成',
   'live.next': '次',
   'live.playing': '対戦中',
   'live.tbd': '未定',
