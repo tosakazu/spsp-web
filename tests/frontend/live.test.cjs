@@ -252,7 +252,7 @@ test('次の相手が未定: 枠の前の試合をさかのぼって候補をシ
   L.render(e, 11, [{ summary: {}, doc: d }]);
   const m = /<div class="live-cand">([\s\S]*?)<\/div>/.exec(e.innerHTML);
   assert.ok(m, 'candidates shown');
-  assert.match(m[1], /live\.cand\{&quot;n&quot;:3\}/);
+  assert.match(m[1], /live\.cand\{\}/);
   const order = [...m[1].matchAll(/live-cand-p">(?:[^<]*<a[^>]*>)?([A-Z])/g)].map((x) => x[1]);
   assert.deepStrictEqual(order, ['E', 'D', 'F']);   // シード 4, 9, 12
   // 相手が決まった試合には候補を出さない
