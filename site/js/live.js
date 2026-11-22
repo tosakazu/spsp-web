@@ -243,7 +243,7 @@ function setsHtml(doc, myId, opts, hasPage, pred) {
           const link = c.uid != null && hasPage && hasPage(c.uid) ? SPSPLinks.playerLink(SPSPLinks.SELF, c.uid, name) : name;
           return `<span class="live-cand-p">${emoji ? emoji + ' ' : ''}${link}${c.seed != null ? ` <span class="m-seed">#${c.seed}</span>` : ''}</span>`;
         });
-        candHtml = `<div class="live-cand"><span class="dim">${escapeHtml(t('live.cand', { n: cands.length }))}</span> ${chips.join('<span class="dim"> · </span>')}</div>`;
+        candHtml = `<div class="live-cand"><span class="dim">${escapeHtml(t('live.cand'))}</span> ${chips.join('<span class="dim"> · </span>')}</div>`;
       }
     }
     if (opp) {
