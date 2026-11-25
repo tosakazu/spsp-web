@@ -40,7 +40,7 @@ import { exchangeCodeForToken, fetchCurrentUser, oauthErrorMessage, refreshAcces
 import { openJson, sealJson } from './report_crypto.ts';
 import type { CData, CMatch, ChCtx } from './report_challonge.ts';
 import { cSetOf, challongeData, challongeProvider } from './report_challonge.ts';
-import type { Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
+import type { ApplyMode, Decision, Latest, NSet, ReportState, Result, Side } from './report_logic.ts';
 import { managersOf, MANAGERS_MAX } from './report_logic.ts';
 import type { ManagerRole, ReportManager } from './report_logic.ts';
 import { adminDecision, applyDelayMs, ftOf, mergeResults, parsePreset, parseResult, parseSettings, playerGate, presetName, PRESETS_MAX, reconcile, score } from './report_logic.ts';
@@ -484,6 +484,41 @@ async function settle(store: Store, p: Provider, code: string, first: NSet, seen
   return { ok: false, why: 'busy', note: 'busy' };
 }
 
+/** 送信の失敗で確認待ちになった試合を確かめ直した時刻 (同じ Worker のあいだだけ。start.gg は 1 回読むごとに API を呼ぶので間を空ける) */
+const errRecheck = new Map<string, number>();
+const ERR_RECHECK_MS = 60 * 1000;
+
+/**
+ * 送信の失敗 (error:…) で確認待ちになった試合を、あとで start.gg / Challonge に報告と同じ結果が入っていたら片付ける
+ * (運営が直接入れた等。送り直しはしない。2026-11-26: Challonge に断られた試合が、結果が入ったあとも確認待ちに残っていた)。
+ * 結果が入っていない・違う結果なら確認待ちのまま。1 回に max 件まで
+ */
+async function clearSettledErrors(store: Store, p: Provider, ev: ReportEventRow, now: number, mode: ApplyMode, max = 2): Promise<number> {
+  const due = (await store.listReportSets(ev.code)).filter((r) => r.state === 'review' && r.note.startsWith('error:') && !isManualId(r.set_id)
+    && now - (errRecheck.get(ev.code + ':' + r.set_id) || 0) >= ERR_RECHECK_MS);
+  let n = 0;
+  for (const row of due.slice(0, max)) {
+    errRecheck.set(ev.code + ':' + row.set_id, now);
+    if (errRecheck.size > 500) errRecheck.clear();
+    const rs = await p.readSet(row.set_id);
+    if (!rs.ok || !rs.set.complete) continue;
+    const settled = (cur: ReportSetRow | null, latest: [Latest | null, Latest | null], set: NSet): Decision | null => {
+      if (!cur || cur.state !== 'review' || !cur.note.startsWith('error:') || !set.complete) return null;
+      const d = reconcile({ state: 'reported', applied: parseApplied(cur.applied), note: '' }, latest, set, mode, now);
+      return d.op === 'none' && (d.state === 'agreed' || d.state === 'reported') ? d : null;
+    };
+    // 片付かないときは行を書き直さない (settle は判定のたびに行を書くので、先にここで確かめる)
+    const subs = (await store.listReportSubmissions(ev.code, row.set_id)).filter((x) => (x.id || 0) > row.floor_id && x.side >= 0);
+    const now2: [Latest | null, Latest | null] = [null, null];
+    for (const x of subs) { const q = parseApplied(x.result); if (q) now2[x.side as Side] = { result: q, ts: x.ts_ms }; }
+    if (!settled(row, now2, rs.set)) continue;
+    const r = await settle(store, p, ev.code, rs.set, row.version, now, null,
+      (cur, latest, set) => settled(cur, latest, set) || { op: 'none', state: (cur ? cur.state : 'review') as ReportState, result: null, note: cur ? cur.note : '' });
+    if (r.ok && r.d.state !== 'review') n++;
+  }
+  return n;
+}
+
 const prevOf = (row: ReportSetRow | null) => (row ? { state: row.state as ReportState, applied: parseApplied(row.applied), note: row.note } : null);
 
 /**
@@ -492,6 +527,7 @@ const prevOf = (row: ReportSetRow | null) => (row ? { state: row.state as Report
  */
 export async function flushPending(store: Store, p: Provider, ev: ReportEventRow, now: number, max = 3): Promise<number> {
   const mode = parseSettings(ev.settings).apply || 'auto';
+  await clearSettledErrors(store, p, ev, now, mode).catch(() => 0);
   if (mode === 'both' || mode === 'approve') return 0;   // 待つ理由が時間ではない (報告・承認で動く)
   const due = (await store.listReportSets(ev.code)).filter((r) => r.state === 'pending'
     && (mode === 'auto' || (r.note === 'wait_delay' && now - r.updated_ms >= applyDelayMs(mode)) || r.note !== 'wait_delay'));
