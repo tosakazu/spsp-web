@@ -33,7 +33,8 @@ export interface CMatch {
 export interface CData { participants: Map<string, CParticipant>; matches: CMatch[] }
 
 const MISC_RE = /^startgg:([1-9]\d{0,11})(:nocount)?$/;
-const str = (v: unknown): string | null => (v === null || v === undefined || v === '' ? null : String(v));
+// 'null' = まだ決まっていない側 (Challonge が ID を文字列にして返すことがある。2026-11-25 に相手の決まっていない試合の報告が通って HTTP 422 になった)
+const str = (v: unknown): string | null => (v === null || v === undefined || v === '' || v === 'null' || v === 'undefined' ? null : String(v));
 
 export function parseParticipant(p: unknown): CParticipant | null {
   const x = p as { id?: unknown; attributes?: Record<string, unknown> } | null;
@@ -54,7 +55,7 @@ export function parseMatch(m: unknown): CMatch | null {
   const pbp = Array.isArray(a.points_by_participant) ? a.points_by_participant : [];
   for (const e of pbp) {
     const o = e as { participant_id?: unknown; scores?: unknown };
-    if (o && o.participant_id !== undefined) points[String(o.participant_id)] = Array.isArray(o.scores) ? o.scores.reduce((s: number, v) => s + (Number(v) || 0), 0) : 0;
+    if (o && str(o.participant_id)) points[String(o.participant_id)] = Array.isArray(o.scores) ? o.scores.reduce((s: number, v) => s + (Number(v) || 0), 0) : 0;
   }
   let p: [string | null, string | null] = [pid('player1'), pid('player2')];
   if (!p[0] && !p[1] && pbp.length === 2) p = [Object.keys(points)[0] || null, Object.keys(points)[1] || null];
@@ -136,6 +137,7 @@ export function cSetOf(d: CData, m: CMatch, double = false): NSet {
   const slot = (id: string | null): NSlot | null => {
     if (!id) return null;
     const p = d.participants.get(id);
+    if (!p && d.participants.size) return null;   // 参加者に居ない ID = まだ決まっていない側 (相手が決まるまで報告できない)
     return { id, name: p ? p.name : '', users: p && p.uid ? [p.uid] : [], seed: p ? p.seed : null };
   };
   const slots: [NSlot | null, NSlot | null] = [slot(m.p[0]), slot(m.p[1])];

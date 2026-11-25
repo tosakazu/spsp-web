@@ -191,6 +191,16 @@ test('Challonge の試合: 両方の形 (player1_id / relationships) を読み�
   assert.strictEqual(cSetOf(d, ms[1]).slots[0].id, '2');
   assert.strictEqual(cLPlacement(d, ms[0], false), 3);   // 4 人のシングル: 1 回戦の負け = 3 位
   assert.strictEqual(cLPlacement(d, ms[2], false), 2);   // 決勝
+  // まだ決まっていない側: ID が無い・文字列の 'null'・参加者に居ない ID は空き (相手が決まるまで報告できない)
+  for (const m of [
+    { id: '60', attributes: { state: 'pending', round: 2, player1_id: 1, player2_id: 'null' } },
+    { id: '61', attributes: { state: 'pending', round: 2, player1_id: 1 }, relationships: { player2: { data: { id: 'null' } } } },
+    { id: '62', attributes: { state: 'pending', round: 2, player1_id: 1, player2_id: 999 } },
+    { id: '63', attributes: { state: 'pending', round: 2, player1_id: 1, player2_id: null, points_by_participant: [{ participant_id: 1, scores: [] }, { participant_id: null, scores: [] }] } },
+  ]) {
+    const q = cSetOf(d, parseMatch(m));
+    assert.deepStrictEqual([q.slots[0] && q.slots[0].id, q.slots[1]], ['1', null], m.id);
+  }
 });
 
 test('Challonge の負けた人の順位: シングル・ダブル (8 人) は start.gg と同じ 1,2,3,4,5,5,7,7', () => {
@@ -534,6 +544,28 @@ test('start.gg への送信に失敗したら review にして理由を残す', 
   const row = await e.store.getReportSet(e.code, '100');
   assert.strictEqual(row.state, 'review');
   assert.match(row.note, /^error:gql:Not authorized/);
+});
+
+test('送信の失敗で確認待ちになった試合: あとで start.gg に報告と同じ結果が入っていれば片付ける。違う結果・結果なしなら確認待ちのまま', async () => {
+  for (const [winner, want] of [[1, 'agreed'], [2, 'review'], [null, 'review']]) {
+    const fake = fakeStartgg();
+    const e = await enabled(fake);
+    const orig = fake.fetch;
+    e.ctx.fetch = async (url, init) => (init && init.body && init.body.includes('reportBracketSet')
+      ? new Response(JSON.stringify({ errors: [{ message: 'Not authorized' }] }), { status: 200 }) : orig(url, init));
+    await e.call({ action: 'report_submit', token: await e.tok(11), code: e.code, set_id: '100', result: { w: 0, g: [{ w: 0 }, { w: 0 }] } });
+    assert.strictEqual((await e.store.getReportSet(e.code, '100')).state, 'review');
+    // 運営が start.gg で直接入れた
+    if (winner) { fake.set.state = 3; fake.set.winnerId = winner; fake.set.games = [{ orderNum: 1, winnerId: winner }, { orderNum: 2, winnerId: winner }]; }
+    const before = fake.calls.filter((c) => /BracketSet|UpdateSet|ResetSet/.test(c)).length;
+    e.tick(2 * 60 * 1000);
+    assert.strictEqual((await e.call({ action: 'report_view', token: await e.tok(11), code: e.code })).ok, true);
+    const row = await e.store.getReportSet(e.code, '100');
+    assert.strictEqual(row.state, want, 'winner=' + winner);
+    if (want === 'review') assert.match(row.note, /^error:/);
+    else assert.strictEqual(row.note, '');
+    assert.strictEqual(fake.calls.filter((c) => /BracketSet|UpdateSet|ResetSet/.test(c)).length, before, '送り直さない');
+  }
 });
 
 // ── Challonge ──
