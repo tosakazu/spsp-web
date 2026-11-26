@@ -2086,8 +2086,16 @@ function renderScoreChart(which) {
     // 大会名・順位・delta lookup: tournament_entries を date で索引
     /** @type {Record<string, PTour>} */
     const tEntryByDate = {};
+    // 同じ日に複数ある (本戦 + 下位クラス、または 2 大会) ときは、点の動きと合うように変動を合計する.
+    // 見出し (大会名・順位) は本戦の行を使う.
     for (const t of (PLAYER.tournaments || [])) {
-      if (t.bt_used && t.date) tEntryByDate[t.date] = t;
+      if (!t.bt_used || !t.date) continue;
+      const cur = tEntryByDate[t.date];
+      if (!cur) { tEntryByDate[t.date] = t; continue; }
+      const head = (cur.parent_event_id != null && t.parent_event_id == null) ? t : cur;
+      tEntryByDate[t.date] = { ...head,
+        bt_d: (cur.bt_d || 0) + (t.bt_d || 0),
+        bt_internal_d: (cur.bt_internal_d || 0) + (t.bt_internal_d || 0) };
     }
     // 候補日 = tl の各 date + 大会の +180+1 日 後 (= rolloff 候補) のうち eval_date 以下.
     // 内部レート/直対評価スコアの両 dataset を同じ X 配列に揃え、mouseover で同位置を hover できるようにする.
